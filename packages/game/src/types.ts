@@ -14,6 +14,11 @@ export type BuildingId =
 
 export type ShipId = "scout" | "hauler" | "interceptor";
 
+/** Basics-first missions: peaceful deploy (round-trip) and raid/attack. */
+export type MissionType = "deploy" | "raid";
+
+export type FleetPhase = "outbound" | "returning";
+
 export interface Resources {
   metal: number;
   crystal: number;
@@ -47,6 +52,14 @@ export interface ShipDef {
   /** Minimum shipyard level required */
   shipyardLevel: number;
   cargo: number;
+  /** Combat / travel (invented — not scraped genre values) */
+  attack: number;
+  shield: number;
+  hull: number;
+  /** Higher = faster travel */
+  speed: number;
+  /** Deuterium burned per distance unit (one-way) */
+  fuelPerDistance: number;
 }
 
 export interface BuildQueueItem {
@@ -69,6 +82,46 @@ export interface Coordinates {
   galaxy: number;
   system: number;
   slot: number;
+}
+
+export type FleetShips = Record<ShipId, number>;
+
+export interface FleetMission {
+  id: string;
+  ownerPlayerId: string;
+  originPlanetId: string;
+  targetPlanetId: string;
+  targetPlayerId: string;
+  mission: MissionType;
+  ships: FleetShips;
+  /** Loot or cargo carried on the return leg */
+  cargo: Resources;
+  departedAt: number;
+  /** Next phase transition (arrival or return home) */
+  arrivesAt: number;
+  phase: FleetPhase;
+  /** Set when raid resolves at the target */
+  reportId: string | null;
+}
+
+export type CombatOutcome = "attacker_win" | "defender_win" | "draw";
+
+export interface CombatReport {
+  id: string;
+  at: number;
+  missionId: string;
+  attackerPlayerId: string;
+  defenderPlayerId: string;
+  attackerName: string;
+  defenderName: string;
+  targetCoords: Coordinates;
+  attackerBefore: FleetShips;
+  attackerAfter: FleetShips;
+  defenderBefore: FleetShips;
+  defenderAfter: FleetShips;
+  loot: Resources;
+  outcome: CombatOutcome;
+  summary: string;
 }
 
 export interface PlanetState {
@@ -96,9 +149,13 @@ export interface UniverseState {
   name: string;
   /** Economy speed factor (1 = realtime) */
   speed: number;
+  /** Fleet travel speed factor (defaults to economy speed when omitted in older saves) */
+  fleetSpeed: number;
   createdAt: number;
   players: Record<string, PlayerState>;
   planets: Record<string, PlanetState>;
+  fleets: Record<string, FleetMission>;
+  reports: Record<string, CombatReport>;
 }
 
 /** Snapshot returned to a specific player (full own planet + public roster). */
@@ -108,12 +165,17 @@ export interface PlayerView {
     id: string;
     name: string;
     speed: number;
+    fleetSpeed: number;
   };
   player: PlayerState;
   planet: PlanetState;
   /** Derived production / energy for UI */
   economy: EconomySnapshot;
   roster: PublicPlayer[];
+  /** Own active fleets (outbound / returning) */
+  fleets: FleetMission[];
+  /** Recent combat reports involving this player (newest first) */
+  reports: CombatReport[];
 }
 
 export interface PublicPlayer {
@@ -121,6 +183,7 @@ export interface PublicPlayer {
   name: string;
   coords: Coordinates;
   pointsHint: number;
+  planetId: string;
 }
 
 export interface EconomySnapshot {
