@@ -2,11 +2,16 @@ import {
   BUILDINGS,
   MINE_BASE_PER_HOUR,
   MINE_GROWTH,
+  MIN_FLIGHT_SECONDS,
+  RAID_LOOT_SHARE,
   SHIPS,
 } from "./catalog.js";
 import type {
   BuildingId,
+  CombatOutcome,
+  Coordinates,
   EconomySnapshot,
+  FleetShips,
   PlanetState,
   Resources,
   ShipId,
@@ -184,4 +189,192 @@ export function economySnapshot(
     },
     storage: storageFor(planet),
   };
+}
+
+export function emptyFleetShips(): FleetShips {
+  return { scout: 0, hauler: 0, interceptor: 0 };
+}
+
+export function normalizeFleetShips(ships: Partial<FleetShips>): FleetShips {
+  return {
+    scout: Math.max(0, Math.floor(ships.scout ?? 0)),
+    hauler: Math.max(0, Math.floor(ships.hauler ?? 0)),
+    interceptor: Math.max(0, Math.floor(ships.interceptor ?? 0)),
+  };
+}
+
+export function fleetShipCount(ships: FleetShips): number {
+  return ships.scout + ships.hauler + ships.interceptor;
+}
+
+export function fleetCargoCapacity(ships: FleetShips): number {
+  let cap = 0;
+  for (const id of Object.keys(SHIPS) as ShipId[]) {
+    cap += (ships[id] ?? 0) * SHIPS[id].cargo;
+  }
+  return cap;
+}
+
+/**
+ * Map distance in abstract units.
+ * Formula: |Δgalaxy|×100 + |Δsystem|×10 + |Δslot|
+ */
+export function coordDistance(a: Coordinates, b: Coordinates): number {
+  return (
+    Math.abs(a.galaxy - b.galaxy) * 100 +
+    Math.abs(a.system - b.system) * 10 +
+    Math.abs(a.slot - b.slot)
+  );
+}
+
+/** Slowest hull in the fleet sets cruise speed (empty fleet → 1). */
+export function fleetCruiseSpeed(ships: FleetShips): number {
+  let min = Infinity;
+  for (const id of Object.keys(SHIPS) as ShipId[]) {
+    const n = ships[id] ?? 0;
+    if (n > 0) min = Math.min(min, SHIPS[id].speed);
+  }
+  return Number.isFinite(min) ? min : 1;
+}
+
+/**
+ * One-way flight seconds.
+ * time ≈ max(MIN, ceil(distance × 1_000_000 / (cruiseSpeed × fleetSpeed)))
+ * fleetSpeed mirrors universe economy speed in the prototype (8×).
+ */
+export function flightSecondsOneWay(
+  origin: Coordinates,
+  target: Coordinates,
+  ships: FleetShips,
+  fleetSpeed: number,
+): number {
+  const distance = Math.max(1, coordDistance(origin, target));
+  const cruise = fleetCruiseSpeed(ships);
+  const raw = Math.ceil((distance * 1_000_000) / (cruise * Math.max(0.1, fleetSpeed)));
+  return Math.max(MIN_FLIGHT_SECONDS, raw);
+}
+
+/** Deuterium fuel for one-way leg. */
+export function fuelCostOneWay(
+  origin: Coordinates,
+  target: Coordinates,
+  ships: FleetShips,
+): number {
+  const distance = Math.max(1, coordDistance(origin, target));
+  let fuel = 0;
+  for (const id of Object.keys(SHIPS) as ShipId[]) {
+    fuel += (ships[id] ?? 0) * SHIPS[id].fuelPerDistance * distance;
+  }
+  return Math.max(1, Math.ceil(fuel));
+}
+
+/**
+ * Combat power score (invented):
+ * power = Σ count × (attack + 0.5×shield + 0.3×hull)
+ */
+export function fleetCombatPower(ships: FleetShips): number {
+  let power = 0;
+  for (const id of Object.keys(SHIPS) as ShipId[]) {
+    const n = ships[id] ?? 0;
+    if (n <= 0) continue;
+    const d = SHIPS[id];
+    power += n * (d.attack + 0.5 * d.shield + 0.3 * d.hull);
+  }
+  return power;
+}
+
+function scaleFleet(ships: FleetShips, keepRatio: number): FleetShips {
+  const ratio = Math.min(1, Math.max(0, keepRatio));
+  return {
+    scout: Math.floor((ships.scout ?? 0) * ratio),
+    hauler: Math.floor((ships.hauler ?? 0) * ratio),
+    interceptor: Math.floor((ships.interceptor ?? 0) * ratio),
+  };
+}
+
+export interface CombatResolution {
+  outcome: CombatOutcome;
+  attackerAfter: FleetShips;
+  defenderAfter: FleetShips;
+  summary: string;
+}
+
+/**
+ * Deterministic raid resolution (basics-first):
+ * - If attacker power ≥ defender × 1.1 → attacker win (defender keeps 30%, attacker 80%)
+ * - If defender power ≥ attacker × 1.1 → defender win (attacker keeps 30%, defender 80%)
+ * - Else draw (both keep 60%)
+ * Empty defender hangar still allows an attacker win (garrison absent).
+ */
+export function resolveCombat(
+  attacker: FleetShips,
+  defender: FleetShips,
+): CombatResolution {
+  const atk = fleetCombatPower(attacker);
+  const def = fleetCombatPower(defender);
+
+  if (def <= 0 && atk > 0) {
+    return {
+      outcome: "attacker_win",
+      attackerAfter: { ...attacker },
+      defenderAfter: emptyFleetShips(),
+      summary: `Unopposed landing (atk ${atk.toFixed(0)}). Hangar empty.`,
+    };
+  }
+
+  if (atk >= def * 1.1) {
+    return {
+      outcome: "attacker_win",
+      attackerAfter: scaleFleet(attacker, 0.8),
+      defenderAfter: scaleFleet(defender, 0.3),
+      summary: `Attacker breakthrough (atk ${atk.toFixed(0)} vs def ${def.toFixed(0)}).`,
+    };
+  }
+
+  if (def >= atk * 1.1) {
+    return {
+      outcome: "defender_win",
+      attackerAfter: scaleFleet(attacker, 0.3),
+      defenderAfter: scaleFleet(defender, 0.8),
+      summary: `Defenders held (atk ${atk.toFixed(0)} vs def ${def.toFixed(0)}).`,
+    };
+  }
+
+  return {
+    outcome: "draw",
+    attackerAfter: scaleFleet(attacker, 0.6),
+    defenderAfter: scaleFleet(defender, 0.6),
+    summary: `Inconclusive clash (atk ${atk.toFixed(0)} vs def ${def.toFixed(0)}).`,
+  };
+}
+
+/**
+ * Loot on attacker win: RAID_LOOT_SHARE of each resource, capped by surviving cargo.
+ * Priority fill: metal → crystal → deuterium.
+ */
+export function computeRaidLoot(
+  defenderResources: Resources,
+  survivingAttacker: FleetShips,
+): Resources {
+  const capacity = fleetCargoCapacity(survivingAttacker);
+  if (capacity <= 0) {
+    return { metal: 0, crystal: 0, deuterium: 0 };
+  }
+
+  const available = {
+    metal: Math.floor(Math.floor(defenderResources.metal) * RAID_LOOT_SHARE),
+    crystal: Math.floor(Math.floor(defenderResources.crystal) * RAID_LOOT_SHARE),
+    deuterium: Math.floor(
+      Math.floor(defenderResources.deuterium) * RAID_LOOT_SHARE,
+    ),
+  };
+
+  let remaining = capacity;
+  const loot: Resources = { metal: 0, crystal: 0, deuterium: 0 };
+  for (const key of ["metal", "crystal", "deuterium"] as const) {
+    const take = Math.min(available[key], remaining);
+    loot[key] = take;
+    remaining -= take;
+  }
+  return loot;
 }
