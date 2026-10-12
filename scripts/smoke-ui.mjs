@@ -128,9 +128,11 @@ async function apiSmoke() {
     throw new Error(`expected outbound fleet: ${JSON.stringify(launch.fleets)}`);
   }
 
-  // Wait for combat resolve + return (short flights at 8×)
+  // Wait for combat resolve + return. ETA scales with map distance (crowded uni → longer).
+  const outboundMs = Math.max(0, launch.fleets[0].arrivesAt - Date.now());
+  const deadline = Date.now() + Math.max(90_000, outboundMs * 3 + 20_000);
   let reportSeen = false;
-  for (let i = 0; i < 120; i++) {
+  while (Date.now() < deadline) {
     const st = await apiJson(`/api/state/${playerId}`);
     if ((st.reports?.length ?? 0) >= 1) reportSeen = true;
     if (reportSeen && (st.fleets?.length ?? 0) === 0) {
@@ -144,7 +146,9 @@ async function apiSmoke() {
     }
     await new Promise((r) => setTimeout(r, 500));
   }
-  throw new Error("raid never resolved / returned");
+  throw new Error(
+    `raid never resolved / returned (outboundEtaMs≈${outboundMs}, reportSeen=${reportSeen})`,
+  );
 }
 
 async function uiSmoke() {
