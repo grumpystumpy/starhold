@@ -1,8 +1,12 @@
 import type {
   BuildingId,
+  Coordinates,
+  DefenseId,
   FleetShips,
   MissionType,
   PlayerView,
+  ResearchId,
+  Resources,
   ShipId,
 } from "@starhold/game";
 
@@ -23,8 +27,18 @@ export async function joinGame(name: string): Promise<PlayerView> {
   return parse<PlayerView>(res);
 }
 
-export async function fetchState(playerId: string): Promise<PlayerView> {
-  const res = await fetch(`/api/state/${encodeURIComponent(playerId)}`);
+export async function fetchState(
+  playerId: string,
+  galaxy?: number,
+  system?: number,
+): Promise<PlayerView> {
+  const params = new URLSearchParams();
+  if (galaxy) params.set("galaxy", String(galaxy));
+  if (system) params.set("system", String(system));
+  const q = params.toString();
+  const res = await fetch(
+    `/api/state/${encodeURIComponent(playerId)}${q ? `?${q}` : ""}`,
+  );
   return parse<PlayerView>(res);
 }
 
@@ -53,16 +67,57 @@ export async function buildShip(
   return parse<PlayerView>(res);
 }
 
+export async function buildDefense(
+  playerId: string,
+  defenseId: DefenseId,
+  count: number,
+): Promise<PlayerView> {
+  const res = await fetch("/api/build-defense", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, defenseId, count }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function researchTech(
+  playerId: string,
+  researchId: ResearchId,
+): Promise<PlayerView> {
+  const res = await fetch("/api/research", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, researchId }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function selectPlanet(
+  playerId: string,
+  planetId: string,
+): Promise<PlayerView> {
+  const res = await fetch("/api/select-planet", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, planetId }),
+  });
+  return parse<PlayerView>(res);
+}
+
 export async function launchFleetMission(
   playerId: string,
-  targetPlanetId: string,
-  mission: MissionType,
-  ships: Partial<FleetShips>,
+  opts: {
+    mission: MissionType;
+    ships: Partial<FleetShips>;
+    targetPlanetId?: string;
+    targetCoords?: Coordinates;
+    cargo?: Partial<Resources>;
+  },
 ): Promise<PlayerView> {
   const res = await fetch("/api/launch-fleet", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ playerId, targetPlanetId, mission, ships }),
+    body: JSON.stringify({ playerId, ...opts }),
   });
   return parse<PlayerView>(res);
 }
