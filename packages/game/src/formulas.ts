@@ -131,14 +131,16 @@ export function productionPerHour(
 }
 
 export function canAfford(have: Resources, cost: Resources): boolean {
+  // Compare whole units so spend matches floored UI stocks.
   return (
-    have.metal >= cost.metal &&
-    have.crystal >= cost.crystal &&
-    have.deuterium >= cost.deuterium
+    Math.floor(have.metal) >= cost.metal &&
+    Math.floor(have.crystal) >= cost.crystal &&
+    Math.floor(have.deuterium) >= cost.deuterium
   );
 }
 
 export function spend(have: Resources, cost: Resources): Resources {
+  // Deduct from the live (possibly fractional) accumulator.
   return {
     metal: have.metal - cost.metal,
     crystal: have.crystal - cost.crystal,

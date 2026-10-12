@@ -147,6 +147,8 @@ export function advancePlanet(
     const rates = productionPerHour(state, universeSpeed);
     const hours = elapsedMs / 3_600_000;
     const caps = storageFor(state);
+    // Keep fractional stockpiles so frequent tick-on-read (multi-client polls)
+    // does not discard sub-unit income. Floor only in UI / spend gates as needed.
     state.resources = clampToStorage(
       {
         metal: state.resources.metal + rates.metal * hours,
@@ -155,12 +157,6 @@ export function advancePlanet(
       },
       caps,
     );
-    // Keep displayed stockpiles stable; production still accrues via lastTickAt.
-    state.resources = {
-      metal: Math.floor(state.resources.metal),
-      crystal: Math.floor(state.resources.crystal),
-      deuterium: Math.floor(state.resources.deuterium),
-    };
     state.lastTickAt = now;
   }
 
