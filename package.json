@@ -12,6 +12,7 @@
     "build": "npm run build -w @starhold/game && npm run build -w @starhold/server && npm run build -w @starhold/web",
     "typecheck": "npm run typecheck -w @starhold/game && npm run typecheck -w @starhold/server && npm run typecheck -w @starhold/web",
     "test": "npm run test -w @starhold/game",
+    "smoke": "node scripts/smoke-ui.mjs",
     "start": "npm run start -w @starhold/server"
   },
   "devDependencies": {
