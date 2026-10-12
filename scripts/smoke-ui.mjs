@@ -1,1 +1,1 @@
-PLACEHOLDER
+__LOAD_FROM__:/tmp/mcp-file-3.txt
