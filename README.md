@@ -35,6 +35,7 @@ Open two browser tabs, join with different commander names — you share one uni
 |---------|----------------|
 | `npm run dev` | Build shared package, then API + Vite together |
 | `npm run build` | Production build of all workspaces |
+| `npm run test` | Game package unit tests (incl. short-tick production accrual) |
 | `npm run typecheck` | Strict TypeScript across packages |
 
 ## Legal
