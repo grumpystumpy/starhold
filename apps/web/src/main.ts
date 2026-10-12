@@ -1,5 +1,17 @@
-import type { BuildingId, PlayerView, ShipId } from "@starhold/game";
-import { buildShip, fetchState, joinGame, upgradeBuilding } from "./api";
+import type {
+  BuildingId,
+  FleetShips,
+  MissionType,
+  PlayerView,
+  ShipId,
+} from "@starhold/game";
+import {
+  buildShip,
+  fetchState,
+  joinGame,
+  launchFleetMission,
+  upgradeBuilding,
+} from "./api";
 import { renderApp } from "./ui/render";
 import "./ui/styles.css";
 
@@ -66,6 +78,8 @@ function paint(): void {
       onJoin: (name) => void doJoin(name),
       onUpgrade: (id) => void doUpgrade(id),
       onBuildShip: (id, count) => void doBuild(id, count),
+      onLaunchFleet: (target, mission, ships) =>
+        void doLaunchFleet(target, mission, ships),
       onRefresh: () => void doRefresh(),
       onDismissFlash: () => {
         clearFlash();
@@ -83,6 +97,30 @@ function schedulePaint(): void {
   }
   paintQueued = false;
   paint();
+}
+
+function readFleetForm(): {
+  targetPlanetId: string;
+  mission: MissionType;
+  ships: Partial<FleetShips>;
+} | null {
+  const form = root.querySelector<HTMLFormElement>("#fleet-form");
+  if (!form) return null;
+  const target = form.querySelector<HTMLSelectElement>("#fleet-target");
+  const missionEl = form.querySelector<HTMLInputElement>(
+    'input[name="fleet-mission"]:checked',
+  );
+  if (!target?.value) return null;
+  const ships: Partial<FleetShips> = {};
+  for (const id of ["scout", "hauler", "interceptor"] as ShipId[]) {
+    const input = form.querySelector<HTMLInputElement>(
+      `[data-fleet-count="${id}"]`,
+    );
+    ships[id] = Math.max(0, Math.floor(Number(input?.value) || 0));
+  }
+  const mission: MissionType =
+    missionEl?.value === "raid" ? "raid" : "deploy";
+  return { targetPlanetId: target.value, mission, ships };
 }
 
 function ensureDelegatedHandlers(): void {
@@ -148,12 +186,27 @@ function ensureDelegatedHandlers(): void {
 
   root.addEventListener("submit", (ev) => {
     const form = ev.target;
-    if (!(form instanceof HTMLFormElement) || form.id !== "join-form") return;
-    ev.preventDefault();
-    const input = form.querySelector<HTMLInputElement>("#commander");
-    const value = input?.value ?? joinDraft;
-    joinDraft = value;
-    void doJoin(value);
+    if (!(form instanceof HTMLFormElement)) return;
+
+    if (form.id === "join-form") {
+      ev.preventDefault();
+      const input = form.querySelector<HTMLInputElement>("#commander");
+      const value = input?.value ?? joinDraft;
+      joinDraft = value;
+      void doJoin(value);
+      return;
+    }
+
+    if (form.id === "fleet-form") {
+      ev.preventDefault();
+      const draft = readFleetForm();
+      if (!draft) {
+        setFlash("error", "Pick a target and ships.");
+        schedulePaint();
+        return;
+      }
+      void doLaunchFleet(draft.targetPlanetId, draft.mission, draft.ships);
+    }
   });
 
   root.addEventListener("input", (ev) => {
@@ -296,6 +349,40 @@ async function doBuild(shipId: ShipId, count: number): Promise<void> {
   }
 }
 
+async function doLaunchFleet(
+  targetPlanetId: string,
+  mission: MissionType,
+  ships: Partial<FleetShips>,
+): Promise<void> {
+  if (!view || busy) return;
+  busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    view = await launchFleetMission(
+      view.player.id,
+      targetPlanetId,
+      mission,
+      ships,
+    );
+    const live = view.fleets?.[0];
+    setFlash(
+      "notice",
+      live
+        ? `Fleet ${live.mission} launched · ETA ${Math.ceil((live.arrivesAt - view.now) / 1000)}s.`
+        : `Fleet ${mission} launched.`,
+    );
+  } catch (err) {
+    setFlash(
+      "error",
+      err instanceof Error ? err.message : "Launch failed.",
+    );
+  } finally {
+    busy = false;
+    schedulePaint();
+  }
+}
+
 function stripJoinParams(): void {
   const url = new URL(window.location.href);
   if (!url.searchParams.has("commander") && !url.searchParams.has("playerId")) {
@@ -366,6 +453,11 @@ declare global {
       join: (name: string) => Promise<void>;
       upgrade: (buildingId: BuildingId) => Promise<void>;
       buildShip: (shipId: ShipId, count?: number) => Promise<void>;
+      launchFleet: (
+        targetPlanetId: string,
+        mission: MissionType,
+        ships: Partial<FleetShips>,
+      ) => Promise<void>;
       refresh: () => Promise<void>;
       getState: () => {
         playerId: string | null;
@@ -373,6 +465,9 @@ declare global {
         error: string | null;
         notice: string | null;
         ships: PlayerView["planet"]["ships"] | null;
+        fleets: PlayerView["fleets"] | null;
+        reports: PlayerView["reports"] | null;
+        roster: PlayerView["roster"] | null;
       };
     };
   }
@@ -382,6 +477,8 @@ window.starhold = {
   join: (name) => doJoin(name),
   upgrade: (buildingId) => doUpgrade(buildingId),
   buildShip: (shipId, count = 1) => doBuild(shipId, count),
+  launchFleet: (targetPlanetId, mission, ships) =>
+    doLaunchFleet(targetPlanetId, mission, ships),
   refresh: () => doRefresh(),
   getState: () => ({
     playerId: view?.player.id ?? null,
@@ -389,6 +486,9 @@ window.starhold = {
     error,
     notice,
     ships: view?.planet.ships ?? null,
+    fleets: view?.fleets ?? null,
+    reports: view?.reports ?? null,
+    roster: view?.roster ?? null,
   }),
 };
 
