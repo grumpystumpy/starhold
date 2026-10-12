@@ -85,32 +85,53 @@ export const SHIPS: Record<ShipId, ShipDef> = {
   scout: {
     id: "scout",
     name: "Scout Skiff",
-    description: "Fast recon hull. Tiny cargo — fleet/raid path later.",
+    description: "Fast recon hull. Light guns, tiny cargo.",
     // Session-tuned: after Shipyard L1, banking at early mines @ 8× — not sub-minute.
     cost: { metal: 220, crystal: 80, deuterium: 0 },
     buildSeconds: 15,
     shipyardLevel: 1,
     cargo: 50,
+    attack: 8,
+    shield: 4,
+    hull: 20,
+    speed: 12_000,
+    fuelPerDistance: 0.2,
   },
   hauler: {
     id: "hauler",
     name: "Ore Hauler",
-    description: "Moves resources between worlds (missions later).",
+    description: "Bulk cargo for loot and peaceful deploy runs.",
     cost: { metal: 480, crystal: 480, deuterium: 0 },
     buildSeconds: 25,
     shipyardLevel: 2,
     cargo: 5000,
+    attack: 4,
+    shield: 10,
+    hull: 60,
+    speed: 6_000,
+    fuelPerDistance: 0.8,
   },
   interceptor: {
     id: "interceptor",
     name: "Interceptor",
-    description: "Light combat hull for future raids.",
+    description: "Light combat hull — main raid striker.",
     cost: { metal: 900, crystal: 250, deuterium: 0 },
     buildSeconds: 40,
     shipyardLevel: 3,
     cargo: 100,
+    attack: 40,
+    shield: 16,
+    hull: 50,
+    speed: 9_000,
+    fuelPerDistance: 0.5,
   },
 };
+
+/** Share of defender stockpile eligible for loot on an attacker win (inspired, not cloned). */
+export const RAID_LOOT_SHARE = 0.5;
+
+/** Minimum one-way flight seconds after speed scaling (keeps ETA readable in playtests). */
+export const MIN_FLIGHT_SECONDS = 8;
 
 export const BUILDING_ORDER: BuildingId[] = [
   "metalMine",
@@ -128,7 +149,8 @@ export const SHIP_ORDER: ShipId[] = ["scout", "hauler", "interceptor"];
 export const STARTING_RESOURCES = {
   metal: 500,
   crystal: 500,
-  deuterium: 0,
+  /** Enough for a few early fleet launches before Deut Still comes online. */
+  deuterium: 100,
 } as const;
 
 /** Base hourly rates at level 1 before energy factor (invented curve). */
