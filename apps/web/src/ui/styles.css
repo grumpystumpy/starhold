@@ -306,20 +306,42 @@ button.ghost {
   justify-content: space-between;
   gap: 0.75rem;
   margin: 0 0 1rem;
-  padding: 0.55rem 0.75rem;
+  padding: 0.75rem 0.9rem;
   border-radius: 3px;
-  background: color-mix(in srgb, var(--bad) 18%, var(--bg1));
-  border: 1px solid color-mix(in srgb, var(--bad) 45%, var(--line));
+  font-weight: 600;
+  font-size: 0.98rem;
+  line-height: 1.35;
+  animation: flash-in 0.25s ease-out both;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--bad) 35%, transparent);
+}
+
+@keyframes flash-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .flash-error {
-  background: color-mix(in srgb, var(--bad) 18%, var(--bg1));
-  border-color: color-mix(in srgb, var(--bad) 45%, var(--line));
+  color: #ffe4e4;
+  background: color-mix(in srgb, var(--bad) 42%, var(--bg0));
+  border: 2px solid color-mix(in srgb, var(--bad) 80%, #fff);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--bad) 50%, transparent),
+    0 8px 24px color-mix(in srgb, var(--bad) 25%, transparent);
 }
 
 .flash-ok {
-  background: color-mix(in srgb, var(--ok) 16%, var(--bg1));
-  border-color: color-mix(in srgb, var(--ok) 40%, var(--line));
+  color: #e4fff0;
+  background: color-mix(in srgb, var(--ok) 34%, var(--bg0));
+  border: 2px solid color-mix(in srgb, var(--ok) 75%, #fff);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--ok) 40%, transparent),
+    0 8px 24px color-mix(in srgb, var(--ok) 18%, transparent);
 }
 
 .flash-dismiss {
@@ -327,12 +349,22 @@ button.ghost {
   padding: 0.1rem 0.45rem;
   line-height: 1.2;
   background: transparent;
-  color: var(--text);
-  border-color: var(--line);
+  color: inherit;
+  border-color: color-mix(in srgb, currentColor 35%, var(--line));
+  opacity: 0.85;
+}
+
+code {
+  font-size: 0.85em;
+  color: var(--accent);
 }
 
 .hint {
   color: var(--muted);
   font-size: 0.85rem;
   margin-top: 0.5rem;
+}
+
+[data-flash-slot]:empty {
+  display: none;
 }
