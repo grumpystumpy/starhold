@@ -1,4 +1,4 @@
-import type { BuildingId, ShipId } from "@starhold/game";
+import type { BuildingId, DefenseId, ShipId } from "@starhold/game";
 
 /** Public Vite paths for original SVG plates (see public/assets/README.md). */
 export const BUILDING_ART: Record<BuildingId, string> = {
@@ -10,12 +10,21 @@ export const BUILDING_ART: Record<BuildingId, string> = {
   crystalStorage: "/assets/buildings/crystal-storage.svg",
   deutTank: "/assets/buildings/deut-tank.svg",
   shipyard: "/assets/buildings/shipyard.svg",
+  researchLab: "/assets/buildings/research-lab.svg",
 };
 
 export const SHIP_ART: Record<ShipId, string> = {
   scout: "/assets/ships/scout.svg",
   hauler: "/assets/ships/hauler.svg",
   interceptor: "/assets/ships/interceptor.svg",
+  probe: "/assets/ships/probe.svg",
+  recycler: "/assets/ships/recycler.svg",
+  colonyShip: "/assets/ships/colony-ship.svg",
+};
+
+export const DEFENSE_ART: Record<DefenseId, string> = {
+  laserBattery: "/assets/defenses/laser-battery.svg",
+  shieldDome: "/assets/defenses/shield-dome.svg",
 };
 
 export const RESOURCE_ART = {
@@ -28,11 +37,6 @@ export const RESOURCE_ART = {
 export const PLANET_ART = {
   outpost: "/assets/planets/outpost.svg",
   rocky: "/assets/planets/rocky.svg",
-} as const;
-
-export const DEFENSE_ART = {
-  laser: "/assets/defenses/laser-battery.svg",
-  shield: "/assets/defenses/shield-dome.svg",
 } as const;
 
 export const UI_ART = {
