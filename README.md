@@ -43,7 +43,7 @@ Open two tabs with different commander names to unlock raid targets.
 
 | Method | Path | Body |
 |--------|------|------|
-| POST | `/api/launch-fleet` | `{ playerId, targetPlanetId, mission: "deploy"|"raid", ships }` |
+| POST | `/api/launch-fleet` | `{ playerId, targetPlanetId, mission: "deploy"\|"raid", ships }` |
 
 Player state (`/api/state/:id`) includes `fleets` and `reports`.
 
