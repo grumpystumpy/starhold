@@ -74,7 +74,8 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
     name: "Shipyard",
     description: "Unlocks and speeds hull construction.",
     // Metal/crystal only at L1 so the ships path is reachable before Deut Still.
-    baseCost: { metal: 400, crystal: 200, deuterium: 0 },
+    // 300/150 leaves starter metal just short of Scout — needs a few minutes of mining.
+    baseCost: { metal: 300, crystal: 150, deuterium: 0 },
     costGrowth: 2,
     baseBuildSeconds: 20,
   },
@@ -85,7 +86,8 @@ export const SHIPS: Record<ShipId, ShipDef> = {
     id: "scout",
     name: "Scout Skiff",
     description: "Fast recon hull. Tiny cargo — fleet/raid path later.",
-    cost: { metal: 3000, crystal: 1000, deuterium: 0 },
+    // Session-tuned: after Shipyard L1, banking at early mines @ 8× — not sub-minute.
+    cost: { metal: 220, crystal: 80, deuterium: 0 },
     buildSeconds: 15,
     shipyardLevel: 1,
     cargo: 50,
@@ -94,7 +96,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
     id: "hauler",
     name: "Ore Hauler",
     description: "Moves resources between worlds (missions later).",
-    cost: { metal: 2000, crystal: 2000, deuterium: 0 },
+    cost: { metal: 480, crystal: 480, deuterium: 0 },
     buildSeconds: 25,
     shipyardLevel: 2,
     cargo: 5000,
@@ -103,7 +105,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
     id: "interceptor",
     name: "Interceptor",
     description: "Light combat hull for future raids.",
-    cost: { metal: 6000, crystal: 1500, deuterium: 0 },
+    cost: { metal: 900, crystal: 250, deuterium: 0 },
     buildSeconds: 40,
     shipyardLevel: 3,
     cargo: 100,
