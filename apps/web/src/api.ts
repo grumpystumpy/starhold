@@ -1,4 +1,10 @@
-import type { BuildingId, PlayerView, ShipId } from "@starhold/game";
+import type {
+  BuildingId,
+  FleetShips,
+  MissionType,
+  PlayerView,
+  ShipId,
+} from "@starhold/game";
 
 async function parse<T>(res: Response): Promise<T> {
   const data = (await res.json()) as T & { error?: string };
@@ -43,6 +49,20 @@ export async function buildShip(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ playerId, shipId, count }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function launchFleetMission(
+  playerId: string,
+  targetPlanetId: string,
+  mission: MissionType,
+  ships: Partial<FleetShips>,
+): Promise<PlayerView> {
+  const res = await fetch("/api/launch-fleet", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, targetPlanetId, mission, ships }),
   });
   return parse<PlayerView>(res);
 }
