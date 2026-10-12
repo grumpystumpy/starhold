@@ -4,8 +4,15 @@ import {
   buildingUpgradeSeconds,
   canAfford,
   clampToStorage,
+  computeRaidLoot,
   economySnapshot,
+  emptyFleetShips,
+  fleetShipCount,
+  flightSecondsOneWay,
+  fuelCostOneWay,
+  normalizeFleetShips,
   productionPerHour,
+  resolveCombat,
   roughPoints,
   shipBuildSeconds,
   shipCost,
@@ -14,10 +21,15 @@ import {
 } from "./formulas.js";
 import type {
   BuildingId,
+  CombatReport,
+  FleetMission,
+  FleetShips,
+  MissionType,
   PlanetState,
   PlayerState,
   PlayerView,
   PublicPlayer,
+  Resources,
   ShipId,
   UniverseState,
 } from "./types.js";
@@ -39,15 +51,26 @@ function emptyShips(): PlanetState["ships"] {
   return { scout: 0, hauler: 0, interceptor: 0 };
 }
 
-export function createUniverse(name = "Alpha Drift", speed = 1): UniverseState {
+function emptyCargo(): Resources {
+  return { metal: 0, crystal: 0, deuterium: 0 };
+}
+
+export function createUniverse(
+  name = "Alpha Drift",
+  speed = 1,
+  fleetSpeed = speed,
+): UniverseState {
   const now = Date.now();
   return {
     id: `uni_${now.toString(36)}`,
     name,
     speed,
+    fleetSpeed,
     createdAt: now,
     players: {},
     planets: {},
+    fleets: {},
+    reports: {},
   };
 }
 
@@ -74,6 +97,7 @@ export function joinUniverse(
   playerName: string,
   now = Date.now(),
 ): { player: PlayerState; planet: PlanetState } {
+  ensureFleetCollections(universe);
   const trimmed = playerName.trim().slice(0, 24);
   if (!trimmed) {
     throw new Error("Commander name is required.");
@@ -120,13 +144,25 @@ export function joinUniverse(
   return { player, planet };
 }
 
+/** Older in-memory shapes may lack fleets/reports/fleetSpeed. */
+function ensureFleetCollections(universe: UniverseState): void {
+  if (!universe.fleets) universe.fleets = {};
+  if (!universe.reports) universe.reports = {};
+  if (!universe.fleetSpeed) universe.fleetSpeed = universe.speed || 1;
+}
+
 /** Apply due queues + resource production up to `now` (tick-on-read). */
 export function advancePlanet(
   planet: PlanetState,
   universeSpeed: number,
   now: number,
 ): PlanetState {
-  let state = { ...planet, resources: { ...planet.resources }, buildings: { ...planet.buildings }, ships: { ...planet.ships } };
+  let state = {
+    ...planet,
+    resources: { ...planet.resources },
+    buildings: { ...planet.buildings },
+    ships: { ...planet.ships },
+  };
 
   // Complete building queue if due.
   if (state.buildQueue && state.buildQueue.completesAt <= now) {
@@ -163,7 +199,122 @@ export function advancePlanet(
   return state;
 }
 
+function addShipsToPlanet(planet: PlanetState, ships: FleetShips): void {
+  for (const id of Object.keys(ships) as ShipId[]) {
+    planet.ships[id] = (planet.ships[id] ?? 0) + (ships[id] ?? 0);
+  }
+}
+
+function addCargoToPlanet(planet: PlanetState, cargo: Resources): void {
+  const caps = storageFor(planet);
+  planet.resources = clampToStorage(
+    {
+      metal: planet.resources.metal + cargo.metal,
+      crystal: planet.resources.crystal + cargo.crystal,
+      deuterium: planet.resources.deuterium + cargo.deuterium,
+    },
+    caps,
+  );
+}
+
+function subtractCargo(planet: PlanetState, cargo: Resources): void {
+  planet.resources = {
+    metal: Math.max(0, planet.resources.metal - cargo.metal),
+    crystal: Math.max(0, planet.resources.crystal - cargo.crystal),
+    deuterium: Math.max(0, planet.resources.deuterium - cargo.deuterium),
+  };
+}
+
+function resolveFleetArrival(
+  universe: UniverseState,
+  fleet: FleetMission,
+  now: number,
+): void {
+  const origin = universe.planets[fleet.originPlanetId];
+  const target = universe.planets[fleet.targetPlanetId];
+  if (!origin || !target) {
+    delete universe.fleets[fleet.id];
+    return;
+  }
+
+  if (fleet.phase === "outbound") {
+    if (fleet.mission === "raid") {
+      const defenderBefore = { ...target.ships };
+      const combat = resolveCombat(fleet.ships, defenderBefore);
+      target.ships = combat.defenderAfter;
+
+      let loot = emptyCargo();
+      if (combat.outcome === "attacker_win") {
+        loot = computeRaidLoot(target.resources, combat.attackerAfter);
+        subtractCargo(target, loot);
+      }
+
+      const attacker = universe.players[fleet.ownerPlayerId];
+      const defender = universe.players[fleet.targetPlayerId];
+      const reportId = `rpt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+      const report: CombatReport = {
+        id: reportId,
+        at: now,
+        missionId: fleet.id,
+        attackerPlayerId: fleet.ownerPlayerId,
+        defenderPlayerId: fleet.targetPlayerId,
+        attackerName: attacker?.name ?? "Unknown",
+        defenderName: defender?.name ?? "Unknown",
+        targetCoords: { ...target.coords },
+        attackerBefore: { ...fleet.ships },
+        attackerAfter: combat.attackerAfter,
+        defenderBefore,
+        defenderAfter: combat.defenderAfter,
+        loot,
+        outcome: combat.outcome,
+        summary: combat.summary,
+      };
+      universe.reports[reportId] = report;
+
+      fleet.ships = combat.attackerAfter;
+      fleet.cargo = loot;
+      fleet.reportId = reportId;
+    }
+    // deploy: no combat — ships turn around with empty cargo
+
+    const returnSecs = flightSecondsOneWay(
+      target.coords,
+      origin.coords,
+      fleet.ships,
+      universe.fleetSpeed,
+    );
+    // If the whole raid fleet died, nothing returns.
+    if (fleetShipCount(fleet.ships) <= 0) {
+      delete universe.fleets[fleet.id];
+      return;
+    }
+    fleet.phase = "returning";
+    fleet.arrivesAt = now + returnSecs * 1000;
+    universe.fleets[fleet.id] = fleet;
+    return;
+  }
+
+  // Returning home — dock survivors + cargo.
+  addShipsToPlanet(origin, fleet.ships);
+  addCargoToPlanet(origin, fleet.cargo);
+  delete universe.fleets[fleet.id];
+}
+
+function advanceFleets(universe: UniverseState, now: number): void {
+  ensureFleetCollections(universe);
+  const due = Object.values(universe.fleets)
+    .filter((f) => f.arrivesAt <= now)
+    .sort((a, b) => a.arrivesAt - b.arrivesAt);
+  for (const fleet of due) {
+    // Re-read — prior resolutions may have deleted this id.
+    const live = universe.fleets[fleet.id];
+    if (!live || live.arrivesAt > now) continue;
+    resolveFleetArrival(universe, live, now);
+  }
+}
+
 export function advanceUniverse(universe: UniverseState, now = Date.now()): void {
+  ensureFleetCollections(universe);
   for (const id of Object.keys(universe.planets)) {
     universe.planets[id] = advancePlanet(
       universe.planets[id],
@@ -171,10 +322,15 @@ export function advanceUniverse(universe: UniverseState, now = Date.now()): void
       now,
     );
   }
+  advanceFleets(universe, now);
 }
 
 export type ActionResult =
   | { ok: true; planet: PlanetState }
+  | { ok: false; error: string };
+
+export type FleetActionResult =
+  | { ok: true; fleet: FleetMission; planet: PlanetState }
   | { ok: false; error: string };
 
 export function queueBuildingUpgrade(
@@ -269,6 +425,104 @@ export function queueShipBuild(
   return { ok: true, planet };
 }
 
+/**
+ * Launch a fleet from the player's home hangar.
+ * - deploy: peaceful round-trip to another commander's planet (ships return intact).
+ * - raid: combat on arrival; survivors return with loot (if any).
+ */
+export function launchFleet(
+  universe: UniverseState,
+  playerId: string,
+  targetPlanetId: string,
+  mission: MissionType,
+  shipsInput: Partial<FleetShips>,
+  now = Date.now(),
+): FleetActionResult {
+  ensureFleetCollections(universe);
+  const player = universe.players[playerId];
+  if (!player) return { ok: false, error: "Unknown player." };
+  if (mission !== "deploy" && mission !== "raid") {
+    return { ok: false, error: "Mission must be deploy or raid." };
+  }
+
+  const ships = normalizeFleetShips(shipsInput);
+  if (fleetShipCount(ships) < 1) {
+    return { ok: false, error: "Select at least one ship." };
+  }
+
+  advanceUniverse(universe, now);
+  const origin = universe.planets[player.homePlanetId];
+  if (!origin) return { ok: false, error: "Planet missing." };
+
+  const target = universe.planets[targetPlanetId];
+  if (!target) return { ok: false, error: "Target planet not found." };
+  if (target.id === origin.id) {
+    return { ok: false, error: "Cannot send a fleet to your own planet." };
+  }
+
+  const targetOwner = Object.values(universe.players).find(
+    (p) => p.homePlanetId === target.id,
+  );
+  if (!targetOwner) {
+    return { ok: false, error: "Target has no commander." };
+  }
+
+  for (const id of Object.keys(ships) as ShipId[]) {
+    const need = ships[id] ?? 0;
+    const have = origin.ships[id] ?? 0;
+    if (need > have) {
+      return {
+        ok: false,
+        error: `Not enough ${SHIPS[id].name} in hangar (have ${have}, need ${need}).`,
+      };
+    }
+  }
+
+  const fuel = fuelCostOneWay(origin.coords, target.coords, ships);
+  if (Math.floor(origin.resources.deuterium) < fuel) {
+    return {
+      ok: false,
+      error: `Not enough deuterium for fuel (need ${fuel}).`,
+    };
+  }
+
+  // Deduct ships + fuel.
+  for (const id of Object.keys(ships) as ShipId[]) {
+    origin.ships[id] = (origin.ships[id] ?? 0) - (ships[id] ?? 0);
+  }
+  origin.resources = spend(origin.resources, {
+    metal: 0,
+    crystal: 0,
+    deuterium: fuel,
+  });
+
+  const oneWay = flightSecondsOneWay(
+    origin.coords,
+    target.coords,
+    ships,
+    universe.fleetSpeed,
+  );
+  const fleetId = `flt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  const fleet: FleetMission = {
+    id: fleetId,
+    ownerPlayerId: playerId,
+    originPlanetId: origin.id,
+    targetPlanetId: target.id,
+    targetPlayerId: targetOwner.id,
+    mission,
+    ships: { ...ships },
+    cargo: emptyCargo(),
+    departedAt: now,
+    arrivesAt: now + oneWay * 1000,
+    phase: "outbound",
+    reportId: null,
+  };
+
+  universe.fleets[fleetId] = fleet;
+  universe.planets[origin.id] = origin;
+  return { ok: true, fleet, planet: origin };
+}
+
 function publicRoster(universe: UniverseState): PublicPlayer[] {
   return Object.values(universe.players).map((p) => {
     const planet = universe.planets[p.homePlanetId];
@@ -277,6 +531,7 @@ function publicRoster(universe: UniverseState): PublicPlayer[] {
       name: p.name,
       coords: planet?.coords ?? { galaxy: 0, system: 0, slot: 0 },
       pointsHint: planet ? roughPoints(planet) : 0,
+      planetId: p.homePlanetId,
     };
   });
 }
@@ -287,10 +542,23 @@ export function playerView(
   now = Date.now(),
 ): PlayerView {
   advanceUniverse(universe, now);
+  ensureFleetCollections(universe);
   const player = universe.players[playerId];
   if (!player) throw new Error("Unknown player.");
   const planet = universe.planets[player.homePlanetId];
   if (!planet) throw new Error("Planet missing.");
+
+  const fleets = Object.values(universe.fleets)
+    .filter((f) => f.ownerPlayerId === playerId)
+    .sort((a, b) => a.arrivesAt - b.arrivesAt);
+
+  const reports = Object.values(universe.reports)
+    .filter(
+      (r) =>
+        r.attackerPlayerId === playerId || r.defenderPlayerId === playerId,
+    )
+    .sort((a, b) => b.at - a.at)
+    .slice(0, 12);
 
   return {
     now,
@@ -298,10 +566,13 @@ export function playerView(
       id: universe.id,
       name: universe.name,
       speed: universe.speed,
+      fleetSpeed: universe.fleetSpeed,
     },
     player,
     planet,
     economy: economySnapshot(planet, universe.speed),
     roster: publicRoster(universe),
+    fleets,
+    reports,
   };
 }
