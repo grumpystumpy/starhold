@@ -157,10 +157,209 @@ button.ghost {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem 1.25rem;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   margin-bottom: 1rem;
   animation: fade-up 0.55s ease-out both;
+}
+
+.topbar-brand,
+.join-hero {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.join-hero {
+  margin-bottom: 0.5rem;
+  animation: fade-up 0.55s ease-out both;
+}
+
+.thumb {
+  display: block;
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  background: var(--bg0);
+  object-fit: cover;
+}
+
+.thumb-lg {
+  width: 56px;
+  height: 56px;
+}
+
+.thumb-hero {
+  width: 72px;
+  height: 72px;
+}
+
+.icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.res-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.15rem;
+}
+
+.item-thumb {
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+}
+
+.item-thumb > .thumb {
+  grid-row: 1 / span 2;
+}
+
+.item-thumb > div:not(.actions) {
+  min-width: 0;
+}
+
+.item-thumb .actions {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+}
+
+.row-with-thumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.row-with-thumb .thumb {
+  width: 32px;
+  height: 32px;
+}
+
+.empty-hangar {
+  text-align: center;
+  padding: 0.5rem 0 0.25rem;
+}
+
+.empty-hangar img {
+  margin: 0 auto;
+  opacity: 0.9;
+}
+
+.fleet-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.fleet-form select {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg0);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0.5rem 0.65rem;
+}
+
+.mission-pick {
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  border-radius: 3px;
+  padding: 0.5rem 0.65rem;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.mission-pick legend {
+  padding: 0 0.25rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.fleet-ships {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.fleet-ship {
+  display: grid;
+  grid-template-columns: auto 1fr 4.5rem;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.fleet-ship .thumb {
+  width: 36px;
+  height: 36px;
+}
+
+.defense-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.subhead {
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0.85rem 0 0.4rem;
+}
+
+.reports {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.reports li {
+  padding: 0.45rem 0;
+  border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+  font-size: 0.9rem;
+}
+
+.reports li:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+@media (max-width: 560px) {
+  .item-thumb {
+    grid-template-columns: auto 1fr;
+  }
+
+  .item-thumb .actions {
+    grid-column: 1 / -1;
+    grid-row: auto;
+    justify-content: flex-start;
+    margin-top: 0.25rem;
+  }
+
+  .fleet-ship {
+    grid-template-columns: auto 1fr;
+  }
+
+  .fleet-ship input {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .thumb-hero {
+    width: 56px;
+    height: 56px;
+  }
 }
 
 .coords {
@@ -256,7 +455,15 @@ button.ghost {
   margin: 0.15rem 0 0;
   color: var(--muted);
   font-size: 0.88rem;
+}
+
+.item:not(.item-thumb) p {
   grid-column: 1 / -1;
+}
+
+.item-thumb > div p,
+.item-thumb > div .meta {
+  grid-column: auto;
 }
 
 .item .meta {
