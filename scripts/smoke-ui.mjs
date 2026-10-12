@@ -91,15 +91,60 @@ async function apiSmoke() {
   });
   if (ship.error) throw new Error(`build scout: ${ship.error}`);
 
+  let scoutReady = null;
   for (let i = 0; i < 30; i++) {
     const st = await apiJson(`/api/state/${playerId}`);
     if ((st.planet?.ships?.scout ?? 0) >= 1) {
-      console.log("API smoke OK", { name, playerId, scout: st.planet.ships.scout });
-      return { name, playerId };
+      scoutReady = st;
+      break;
     }
     await new Promise((r) => setTimeout(r, 400));
   }
-  throw new Error("scout never entered hangar");
+  if (!scoutReady) throw new Error("scout never entered hangar");
+
+  // Fleets: second commander as raid/deploy target
+  const victimName = `Vic${Date.now().toString(36).slice(-5)}`;
+  const victim = await apiJson("/api/join", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: victimName }),
+  });
+  if (!victim.player?.id || !victim.planet?.id) {
+    throw new Error(`victim join failed: ${JSON.stringify(victim)}`);
+  }
+
+  const launch = await apiJson("/api/launch-fleet", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      playerId,
+      targetPlanetId: victim.planet.id,
+      mission: "raid",
+      ships: { scout: 1 },
+    }),
+  });
+  if (launch.error) throw new Error(`launch raid: ${launch.error}`);
+  if (!Array.isArray(launch.fleets) || launch.fleets.length < 1) {
+    throw new Error(`expected outbound fleet: ${JSON.stringify(launch.fleets)}`);
+  }
+
+  // Wait for combat resolve + return (short flights at 8×)
+  let reportSeen = false;
+  for (let i = 0; i < 120; i++) {
+    const st = await apiJson(`/api/state/${playerId}`);
+    if ((st.reports?.length ?? 0) >= 1) reportSeen = true;
+    if (reportSeen && (st.fleets?.length ?? 0) === 0) {
+      console.log("API smoke OK", {
+        name,
+        playerId,
+        scout: st.planet.ships.scout,
+        reports: st.reports.length,
+      });
+      return { name, playerId, victimName };
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error("raid never resolved / returned");
 }
 
 async function uiSmoke() {
@@ -240,6 +285,52 @@ async function uiSmoke() {
     Number(await page.textContent('[data-testid="hangar-scout"] span:last-child')) >= 1;
   if (!noticeOrHangar) throw new Error("lost build feedback after poll");
   logs.push("build-feedback-ok");
+
+  // 7) Fleet panel + deep-link second commander → launch deploy via helper
+  const rivalName = `Riv${Date.now().toString(36).slice(-4)}`;
+  const rivalPage = await browser.newPage();
+  await rivalPage.goto(`${WEB}/?commander=${encodeURIComponent(rivalName)}`, {
+    waitUntil: "networkidle",
+  });
+  await rivalPage.waitForSelector('[data-testid="resources"]', { timeout: 15_000 });
+  logs.push(`rival-join:${rivalName}`);
+
+  // Refresh attacker page so roster includes rival; fleet form should appear
+  await page.reload({ waitUntil: "networkidle" });
+  // Session may resume via localStorage; if join screen, re-join buildName
+  const hasResources = await page.locator('[data-testid="resources"]').count();
+  if (!hasResources) {
+    await page.goto(`${WEB}/?commander=${encodeURIComponent(buildName)}`, {
+      waitUntil: "networkidle",
+    });
+    await page.waitForSelector('[data-testid="resources"]');
+  }
+  await page.waitForSelector('[data-testid="fleet-form"]', { timeout: 15_000 });
+  const thumb = await page.locator('[data-testid="building-metalMine"] img.thumb').count();
+  if (thumb < 1) throw new Error("building thumbnail missing");
+  logs.push("fleet-form-and-art");
+
+  const launched = await page.evaluate(async () => {
+    const st = window.starhold.getState();
+    const rival = st.roster?.find((r) => r.id !== st.playerId && r.name);
+    if (!rival?.planetId) return { ok: false, reason: "no rival" };
+    const scouts = st.ships?.scout ?? 0;
+    if (scouts < 1) return { ok: false, reason: `no scout (${scouts})` };
+    await window.starhold.launchFleet(rival.planetId, "deploy", { scout: 1 });
+    const after = window.starhold.getState();
+    return {
+      ok: (after.fleets?.length ?? 0) >= 1 || (after.error ?? "").length === 0,
+      fleets: after.fleets?.length ?? 0,
+      error: after.error,
+    };
+  });
+  if (!launched?.ok) {
+    throw new Error(`UI deploy launch failed: ${JSON.stringify(launched)}`);
+  }
+  await page.waitForSelector('[data-testid="fleets-live"], [data-testid="flash-ok"]', {
+    timeout: 10_000,
+  });
+  logs.push("ui-deploy-launch");
 
   await browser.close();
   console.log("UI smoke OK", logs);
