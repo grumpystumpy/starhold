@@ -214,7 +214,7 @@ app.post("/api/launch-fleet", async (c) => {
 // Optional: serve Vite production build from the same port.
 const here = path.dirname(fileURLToPath(import.meta.url));
 const webDist = path.resolve(here, "../../web/dist");
-ifa existsSync(webDist)) {
+if (existsSync(webDist)) {
   app.use("/*", serveStatic({ root: webDist }));
   app.get("*", serveStatic({ root: webDist, path: "index.html" }));
 }
