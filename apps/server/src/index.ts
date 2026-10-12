@@ -4,14 +4,21 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import {
   type BuildingId,
+  type Coordinates,
+  type DefenseId,
   type FleetShips,
   type MissionType,
+  type ResearchId,
+  type Resources,
   type ShipId,
   joinUniverse,
   launchFleet,
   playerView,
   queueBuildingUpgrade,
+  queueDefenseBuild,
+  queueResearch,
   queueShipBuild,
+  setActivePlanet,
 } from "@starhold/game";
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -35,6 +42,7 @@ app.get("/api/health", (c) =>
     speed: universe.speed,
     fleetSpeed: universe.fleetSpeed,
     fleets: Object.keys(universe.fleets ?? {}).length,
+    debris: Object.keys(universe.debris ?? {}).length,
   }),
 );
 
@@ -74,7 +82,11 @@ app.post("/api/join", async (c) => {
 
 app.get("/api/state/:playerId", (c) => {
   try {
-    return c.json(playerView(universe, c.req.param("playerId")));
+    const galaxy = Number(c.req.query("galaxy") || 0) || undefined;
+    const system = Number(c.req.query("system") || 0) || undefined;
+    return c.json(
+      playerView(universe, c.req.param("playerId"), Date.now(), galaxy, system),
+    );
   } catch (err) {
     return c.json(
       { error: err instanceof Error ? err.message : "State failed." },
@@ -87,11 +99,18 @@ app.post("/api/upgrade", async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as {
     playerId?: string;
     buildingId?: BuildingId;
+    planetId?: string;
   };
   if (!body.playerId || !body.buildingId) {
     return c.json({ error: "playerId and buildingId required." }, 400);
   }
-  const result = queueBuildingUpgrade(universe, body.playerId, body.buildingId);
+  const result = queueBuildingUpgrade(
+    universe,
+    body.playerId,
+    body.buildingId,
+    Date.now(),
+    body.planetId,
+  );
   if (!result.ok) return c.json({ error: result.error }, 400);
   return c.json(playerView(universe, body.playerId));
 });
@@ -101,6 +120,7 @@ app.post("/api/build-ship", async (c) => {
     playerId?: string;
     shipId?: ShipId;
     count?: number;
+    planetId?: string;
   };
   if (!body.playerId || !body.shipId) {
     return c.json({ error: "playerId and shipId required." }, 400);
@@ -110,7 +130,57 @@ app.post("/api/build-ship", async (c) => {
     body.playerId,
     body.shipId,
     body.count ?? 1,
+    Date.now(),
+    body.planetId,
   );
+  if (!result.ok) return c.json({ error: result.error }, 400);
+  return c.json(playerView(universe, body.playerId));
+});
+
+app.post("/api/build-defense", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as {
+    playerId?: string;
+    defenseId?: DefenseId;
+    count?: number;
+    planetId?: string;
+  };
+  if (!body.playerId || !body.defenseId) {
+    return c.json({ error: "playerId and defenseId required." }, 400);
+  }
+  const result = queueDefenseBuild(
+    universe,
+    body.playerId,
+    body.defenseId,
+    body.count ?? 1,
+    Date.now(),
+    body.planetId,
+  );
+  if (!result.ok) return c.json({ error: result.error }, 400);
+  return c.json(playerView(universe, body.playerId));
+});
+
+app.post("/api/research", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as {
+    playerId?: string;
+    researchId?: ResearchId;
+  };
+  if (!body.playerId || !body.researchId) {
+    return c.json({ error: "playerId and researchId required." }, 400);
+  }
+  const result = queueResearch(universe, body.playerId, body.researchId);
+  if (!result.ok) return c.json({ error: result.error }, 400);
+  return c.json(playerView(universe, body.playerId));
+});
+
+app.post("/api/select-planet", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as {
+    playerId?: string;
+    planetId?: string;
+  };
+  if (!body.playerId || !body.planetId) {
+    return c.json({ error: "playerId and planetId required." }, 400);
+  }
+  const result = setActivePlanet(universe, body.playerId, body.planetId);
   if (!result.ok) return c.json({ error: result.error }, 400);
   return c.json(playerView(universe, body.playerId));
 });
@@ -119,22 +189,24 @@ app.post("/api/launch-fleet", async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as {
     playerId?: string;
     targetPlanetId?: string;
+    targetCoords?: Coordinates;
     mission?: MissionType;
     ships?: Partial<FleetShips>;
+    cargo?: Partial<Resources>;
+    originPlanetId?: string;
   };
-  if (!body.playerId || !body.targetPlanetId || !body.mission) {
-    return c.json(
-      { error: "playerId, targetPlanetId, and mission required." },
-      400,
-    );
+  if (!body.playerId || !body.mission) {
+    return c.json({ error: "playerId and mission required." }, 400);
   }
-  const result = launchFleet(
-    universe,
-    body.playerId,
-    body.targetPlanetId,
-    body.mission,
-    body.ships ?? {},
-  );
+  const result = launchFleet(universe, {
+    playerId: body.playerId,
+    mission: body.mission,
+    ships: body.ships ?? {},
+    targetPlanetId: body.targetPlanetId,
+    targetCoords: body.targetCoords,
+    cargo: body.cargo,
+    originPlanetId: body.originPlanetId,
+  });
   if (!result.ok) return c.json({ error: result.error }, 400);
   return c.json(playerView(universe, body.playerId));
 });
@@ -142,7 +214,7 @@ app.post("/api/launch-fleet", async (c) => {
 // Optional: serve Vite production build from the same port.
 const here = path.dirname(fileURLToPath(import.meta.url));
 const webDist = path.resolve(here, "../../web/dist");
-if (existsSync(webDist)) {
+ifa existsSync(webDist)) {
   app.use("/*", serveStatic({ root: webDist }));
   app.get("*", serveStatic({ root: webDist, path: "index.html" }));
 }
