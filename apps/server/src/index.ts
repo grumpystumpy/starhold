@@ -4,8 +4,11 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import {
   type BuildingId,
+  type FleetShips,
+  type MissionType,
   type ShipId,
   joinUniverse,
+  launchFleet,
   playerView,
   queueBuildingUpgrade,
   queueShipBuild,
@@ -30,6 +33,8 @@ app.get("/api/health", (c) =>
     universe: universe.name,
     players: Object.keys(universe.players).length,
     speed: universe.speed,
+    fleetSpeed: universe.fleetSpeed,
+    fleets: Object.keys(universe.fleets ?? {}).length,
   }),
 );
 
@@ -40,12 +45,14 @@ app.get("/api/universe", (c) => {
     id: universe.id,
     name: universe.name,
     speed: universe.speed,
+    fleetSpeed: universe.fleetSpeed,
     players: Object.values(universe.players).map((p) => {
       const planet = universe.planets[p.homePlanetId];
       return {
         id: p.id,
         name: p.name,
         coords: planet?.coords ?? null,
+        planetId: p.homePlanetId,
       };
     }),
   });
@@ -108,6 +115,30 @@ app.post("/api/build-ship", async (c) => {
   return c.json(playerView(universe, body.playerId));
 });
 
+app.post("/api/launch-fleet", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as {
+    playerId?: string;
+    targetPlanetId?: string;
+    mission?: MissionType;
+    ships?: Partial<FleetShips>;
+  };
+  if (!body.playerId || !body.targetPlanetId || !body.mission) {
+    return c.json(
+      { error: "playerId, targetPlanetId, and mission required." },
+      400,
+    );
+  }
+  const result = launchFleet(
+    universe,
+    body.playerId,
+    body.targetPlanetId,
+    body.mission,
+    body.ships ?? {},
+  );
+  if (!result.ok) return c.json({ error: result.error }, 400);
+  return c.json(playerView(universe, body.playerId));
+});
+
 // Optional: serve Vite production build from the same port.
 const here = path.dirname(fileURLToPath(import.meta.url));
 const webDist = path.resolve(here, "../../web/dist");
@@ -118,5 +149,7 @@ if (existsSync(webDist)) {
 
 const port = Number(process.env.PORT ?? 3001);
 console.log(`Starhold API listening on http://localhost:${port}`);
-console.log(`Universe "${universe.name}" @ ${universe.speed}x economy speed`);
+console.log(
+  `Universe "${universe.name}" @ ${universe.speed}x economy / ${universe.fleetSpeed}x fleet`,
+);
 serve({ fetch: app.fetch, port });
