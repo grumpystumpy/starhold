@@ -13,18 +13,28 @@ const root: HTMLElement = rootEl;
 
 let view: PlayerView | null = null;
 let error: string | null = null;
+let notice: string | null = null;
 let busy = false;
+let joinDraft = "";
 let pollTimer: number | undefined;
 
 function paint(): void {
   renderApp(
     root,
-    { view, error, busy },
+    { view, error, notice, busy, joinDraft },
     {
+      onJoinDraft: (name) => {
+        joinDraft = name;
+      },
       onJoin: (name) => void doJoin(name),
       onUpgrade: (id) => void doUpgrade(id),
       onBuildShip: (id, count) => void doBuild(id, count),
       onRefresh: () => void doRefresh(),
+      onDismissFlash: () => {
+        error = null;
+        notice = null;
+        paint();
+      },
     },
   );
 }
@@ -46,7 +56,8 @@ function stopPolling(): void {
 async function silentRefresh(playerId: string): Promise<void> {
   try {
     view = await fetchState(playerId);
-    error = null;
+    // Do not clear error/notice here — polls used to wipe API reject messages
+    // before players could read them.
     paint();
   } catch {
     // Keep last good frame; next tick may recover.
@@ -54,12 +65,23 @@ async function silentRefresh(playerId: string): Promise<void> {
 }
 
 async function doJoin(name: string): Promise<void> {
+  const trimmed = name.trim();
+  joinDraft = name;
+  if (!trimmed) {
+    error = "Commander name is required.";
+    notice = null;
+    paint();
+    return;
+  }
   busy = true;
   error = null;
+  notice = null;
   paint();
   try {
-    view = await joinGame(name);
+    view = await joinGame(trimmed);
+    joinDraft = view.player.name;
     localStorage.setItem(SESSION_KEY, view.player.id);
+    notice = `Joined as ${view.player.name}.`;
     startPolling(view.player.id);
   } catch (err) {
     error = err instanceof Error ? err.message : "Could not join.";
@@ -89,9 +111,14 @@ async function doUpgrade(buildingId: BuildingId): Promise<void> {
   if (!view) return;
   busy = true;
   error = null;
+  notice = null;
   paint();
   try {
     view = await upgradeBuilding(view.player.id, buildingId);
+    const q = view.planet.buildQueue;
+    notice = q
+      ? `Queued upgrade → level ${q.targetLevel}.`
+      : "Upgrade complete.";
   } catch (err) {
     error = err instanceof Error ? err.message : "Upgrade failed.";
   } finally {
@@ -104,9 +131,14 @@ async function doBuild(shipId: ShipId, count: number): Promise<void> {
   if (!view) return;
   busy = true;
   error = null;
+  notice = null;
   paint();
   try {
     view = await buildShip(view.player.id, shipId, count);
+    const q = view.planet.shipQueue;
+    notice = q
+      ? `Queued ${q.count}× ship build.`
+      : "Ships added to hangar.";
   } catch (err) {
     error = err instanceof Error ? err.message : "Build failed.";
   } finally {

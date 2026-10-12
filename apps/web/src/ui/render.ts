@@ -5,6 +5,7 @@ import {
   SHIPS,
   buildingUpgradeCost,
   buildingUpgradeSeconds,
+  canAfford,
   type BuildingId,
   type PlayerView,
   type ShipId,
@@ -12,10 +13,12 @@ import {
 import { fmt, fmtCoords, fmtCost, fmtEta, remainingSeconds } from "./format";
 
 export type UiHandlers = {
+  onJoinDraft: (name: string) => void;
   onJoin: (name: string) => void;
   onUpgrade: (buildingId: BuildingId) => void;
   onBuildShip: (shipId: ShipId, count: number) => void;
   onRefresh: () => void;
+  onDismissFlash: () => void;
 };
 
 export function renderApp(
@@ -23,7 +26,9 @@ export function renderApp(
   state: {
     view: PlayerView | null;
     error: string | null;
+    notice: string | null;
     busy: boolean;
+    joinDraft: string;
   },
   handlers: UiHandlers,
 ): void {
@@ -33,27 +38,38 @@ export function renderApp(
         <h1 class="brand">Starhold</h1>
         <p class="tagline">Mine the crust, raise the yard, launch hulls. One shared universe — open another tab to meet a rival commander.</p>
       </header>
-      ${state.error ? `<p class="flash" role="alert">${escapeHtml(state.error)}</p>` : ""}
+      ${flashHtml(state.error, state.notice)}
       <section class="join-panel">
-        <label for="commander">Commander name</label>
-        <div class="join-row" style="margin-top:0.5rem">
-          <input id="commander" type="text" maxlength="24" placeholder="e.g. Mira Vale" autocomplete="nickname" />
-          <button type="button" id="join-btn" ${state.busy ? "disabled" : ""}>Enter universe</button>
-        </div>
-        <p class="hint">Prototype economy runs at 2× speed. Rejoin with the same name to resume.</p>
+        <form id="join-form">
+          <label for="commander">Commander name</label>
+          <div class="join-row" style="margin-top:0.5rem">
+            <input id="commander" name="commander" type="text" maxlength="24" placeholder="e.g. Mira Vale" autocomplete="nickname" value="${escapeAttr(state.joinDraft)}" />
+            <button type="submit" id="join-btn" ${state.busy ? "disabled" : ""}>Enter universe</button>
+          </div>
+        </form>
+        <p class="hint">Prototype economy runs faster than realtime so a short session can reach the shipyard. Rejoin with the same name to resume.</p>
       </section>
     `;
+    const form = root.querySelector<HTMLFormElement>("#join-form");
     const input = root.querySelector<HTMLInputElement>("#commander");
-    const btn = root.querySelector<HTMLButtonElement>("#join-btn");
-    const submit = () => {
-      if (!input) return;
-      handlers.onJoin(input.value);
-    };
-    btn?.addEventListener("click", submit);
-    input?.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") submit();
+    form?.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const value = input?.value ?? state.joinDraft;
+      handlers.onJoinDraft(value);
+      handlers.onJoin(value);
     });
+    input?.addEventListener("input", () => {
+      handlers.onJoinDraft(input.value);
+    });
+    // Keep draft if a re-render wiped mid-IME / automation setAttribute paths.
+    if (input && state.joinDraft && input.value !== state.joinDraft) {
+      input.value = state.joinDraft;
+    }
+    bindFlashDismiss(root, handlers);
     input?.focus();
+    if (input && state.joinDraft) {
+      input.selectionStart = input.selectionEnd = input.value.length;
+    }
     return;
   }
 
@@ -71,7 +87,7 @@ export function renderApp(
         <button type="button" class="ghost" id="refresh-btn" ${state.busy ? "disabled" : ""}>Refresh</button>
       </div>
     </header>
-    ${state.error ? `<p class="flash" role="alert">${escapeHtml(state.error)}</p>` : ""}
+    ${flashHtml(state.error, state.notice)}
     <section class="resources" aria-label="Resources">
       ${resBlock("metal", "Metal", planet.resources.metal, economy.productionPerHour.metal, economy.storage.metal)}
       ${resBlock("crystal", "Crystal", planet.resources.crystal, economy.productionPerHour.crystal, economy.storage.crystal)}
@@ -127,6 +143,7 @@ export function renderApp(
   `;
 
   root.querySelector("#refresh-btn")?.addEventListener("click", () => handlers.onRefresh());
+  bindFlashDismiss(root, handlers);
 
   root.querySelectorAll<HTMLButtonElement>("[data-upgrade]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -137,10 +154,30 @@ export function renderApp(
   root.querySelectorAll<HTMLButtonElement>("[data-ship]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const shipId = btn.dataset.ship as ShipId;
+      if (btn.dataset.locked === "1") {
+        handlers.onBuildShip(shipId, 1);
+        return;
+      }
       const input = root.querySelector<HTMLInputElement>(`[data-ship-count="${shipId}"]`);
       const count = Number(input?.value ?? 1);
       handlers.onBuildShip(shipId, count);
     });
+  });
+}
+
+function flashHtml(error: string | null, notice: string | null): string {
+  if (error) {
+    return `<p class="flash flash-error" role="alert">${escapeHtml(error)} <button type="button" class="flash-dismiss" data-dismiss-flash aria-label="Dismiss">×</button></p>`;
+  }
+  if (notice) {
+    return `<p class="flash flash-ok" role="status">${escapeHtml(notice)} <button type="button" class="flash-dismiss" data-dismiss-flash aria-label="Dismiss">×</button></p>`;
+  }
+  return "";
+}
+
+function bindFlashDismiss(root: HTMLElement, handlers: UiHandlers): void {
+  root.querySelector("[data-dismiss-flash]")?.addEventListener("click", () => {
+    handlers.onDismissFlash();
   });
 }
 
@@ -171,7 +208,12 @@ function buildingRow(
   const level = planet.buildings[id] ?? 0;
   const cost = buildingUpgradeCost(id, level);
   const secs = Math.ceil(buildingUpgradeSeconds(id, level) / speed);
-  const blocked = Boolean(planet.buildQueue) || busy;
+  const queueBusy = Boolean(planet.buildQueue);
+  const affordable = canAfford(planet.resources, cost);
+  const blocked = queueBusy || busy;
+  let label = "Upgrade";
+  if (queueBusy) label = "Queue busy";
+  else if (!affordable) label = "Can't afford";
   return `
     <article class="item">
       <div>
@@ -180,7 +222,13 @@ function buildingRow(
         <div class="meta">Next: ${fmtCost(cost)} · ${fmtEta(secs)}</div>
       </div>
       <div class="actions">
-        <button type="button" data-upgrade="${id}" ${blocked ? "disabled" : ""}>Upgrade</button>
+        <button type="button" data-upgrade="${id}" ${blocked ? "disabled" : ""} title="${escapeAttr(
+          queueBusy
+            ? "A building is already under construction."
+            : !affordable
+              ? "Not enough resources."
+              : `Upgrade to L${level + 1}`,
+        )}">${label}</button>
       </div>
     </article>
   `;
@@ -194,17 +242,34 @@ function shipRow(
   const def = SHIPS[id];
   const yard = planet.buildings.shipyard ?? 0;
   const locked = yard < def.shipyardLevel;
-  const blocked = locked || Boolean(planet.shipQueue) || busy;
+  const affordable = canAfford(planet.resources, def.cost);
+  const queueBusy = Boolean(planet.shipQueue);
+  const blocked = (!locked && (queueBusy || busy));
+  let label = "Build";
+  if (locked) label = "Locked";
+  else if (queueBusy) label = "Yard busy";
+  else if (!affordable) label = "Can't afford";
+  const lockMsg = `Needs Shipyard level ${def.shipyardLevel} (you have ${yard}).`;
   return `
     <article class="item">
       <div>
         <h3>${escapeHtml(def.name)}</h3>
         <p>${escapeHtml(def.description)}</p>
-        <div class="meta">${fmtCost(def.cost)} each · yard L${def.shipyardLevel}+ · cargo ${def.cargo}</div>
+        <div class="meta">${fmtCost(def.cost)} each · yard L${def.shipyardLevel}+ · cargo ${def.cargo}${
+          locked ? ` · ${escapeHtml(lockMsg)}` : ""
+        }</div>
       </div>
       <div class="actions">
-        <input type="number" min="1" max="50" value="1" data-ship-count="${id}" ${blocked ? "disabled" : ""} style="min-width:4rem;width:4.5rem" />
-        <button type="button" data-ship="${id}" ${blocked ? "disabled" : ""}>${locked ? "Locked" : "Build"}</button>
+        <input type="number" min="1" max="50" value="1" data-ship-count="${id}" ${locked || queueBusy || busy ? "disabled" : ""} style="min-width:4rem;width:4.5rem" />
+        <button type="button" data-ship="${id}" data-locked="${locked ? "1" : "0"}" ${blocked ? "disabled" : ""} title="${escapeAttr(
+          locked
+            ? lockMsg
+            : queueBusy
+              ? "Shipyard is already busy."
+              : !affordable
+                ? "Not enough resources."
+                : `Build ${def.name}`,
+        )}">${label}</button>
       </div>
     </article>
   `;
@@ -216,4 +281,8 @@ function escapeHtml(s: string): string {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+function escapeAttr(s: string): string {
+  return escapeHtml(s).replaceAll("'", "&#39;");
 }
