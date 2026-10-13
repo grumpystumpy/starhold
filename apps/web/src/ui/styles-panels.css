@@ -132,6 +132,14 @@
   border-color: var(--energy);
 }
 
+.res.energy.deficit {
+  border-color: var(--bad);
+}
+
+.res.energy.deficit .value {
+  color: var(--bad);
+}
+
 .res .label {
   display: block;
   font-size: 0.75rem;
