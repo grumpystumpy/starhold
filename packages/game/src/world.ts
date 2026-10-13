@@ -30,9 +30,11 @@ export {
   resolveExpeditionArrival,
 } from "./world-expedition.js";
 export {
+  inSensorPhalanxRange,
   moonChancePercent,
   moonRoll,
   ownedPlanetCount,
+  sensorPhalanxRange,
   tryFormMoon,
 } from "./world-moons.js";
 export { moonAtCoords } from "./world-bootstrap.js";
