@@ -1,9 +1,11 @@
 import {
+  EXPEDITION_SLOT,
   MAP_SYSTEMS,
   SHIP_ORDER,
   SHIPS,
   fuelCostOneWay,
   flightSecondsOneWay,
+  maxExpeditions,
   type Coordinates,
   type FleetShips,
   type MissionType,
@@ -56,6 +58,21 @@ export function fleetComposer(
         `<option value="coords:${s.coords.galaxy}:${s.coords.system}:${s.coords.slot}">Debris ${fmtCoords(s.coords)} (${fmt(s.debris!.metal)}/${fmt(s.debris!.crystal)})</option>`,
       );
     }
+  } else if (mission === "expedition") {
+    const systems = new Set<number>([
+      view.galaxy.system,
+      view.planet.coords.system,
+    ]);
+    for (const system of [...systems].sort((a, b) => a - b)) {
+      const c = {
+        galaxy: view.galaxy.galaxy,
+        system,
+        slot: EXPEDITION_SLOT,
+      };
+      options.push(
+        `<option value="coords:${c.galaxy}:${c.system}:${c.slot}">Deep space ${fmtCoords(c)}</option>`,
+      );
+    }
   } else {
     for (const r of rivals) {
       options.push(
@@ -96,18 +113,27 @@ export function fleetComposer(
         </div>`
       : "";
 
+  const expeditionCap = maxExpeditions(view.player.research.astrophysics ?? 0);
+  const expeditionActive = view.fleets.filter((f) => f.mission === "expedition")
+    .length;
   const needHint =
-    options.length === 0
-      ? mission === "transport"
-        ? `<p class="hint" data-testid="fleet-need-colony">Need a second world: research Astrophysics, build a Colony Ship, colonize an empty galaxy slot — then transport cargo there.</p>`
-        : mission === "deploy"
-          ? `<p class="hint" data-testid="fleet-need-deploy-target">Colonize for park targets, or join a second commander to visit rivals.</p>`
-          : mission === "colonize"
-            ? `<p class="hint">Browse the galaxy for an empty slot in this system (or change system).</p>`
-            : mission === "harvest"
-              ? `<p class="hint">No debris in this system yet — win a raid that destroys ships.</p>`
-              : `<p class="hint" data-testid="fleet-need-rival">Join a second commander (another tab) to unlock raid / spy targets.</p>`
-      : "";
+    mission === "expedition" && expeditionActive >= expeditionCap
+      ? `<p class="hint" data-testid="fleet-need-expedition-slot">Expedition slots full (${expeditionActive}/${expeditionCap}). Research Astrophysics for more.</p>`
+      : options.length === 0
+        ? mission === "transport"
+          ? `<p class="hint" data-testid="fleet-need-colony">Need a second world: research Astrophysics, build a Colony Ship, colonize an empty galaxy slot — then transport cargo there.</p>`
+          : mission === "deploy"
+            ? `<p class="hint" data-testid="fleet-need-deploy-target">Colonize for park targets, or join a second commander to visit rivals.</p>`
+            : mission === "colonize"
+              ? `<p class="hint">Browse the galaxy for an empty slot in this system (or change system).</p>`
+              : mission === "harvest"
+                ? `<p class="hint">No debris in this system yet — win a raid that destroys ships.</p>`
+                : `<p class="hint" data-testid="fleet-need-rival">Join a second commander (another tab) to unlock raid / spy targets.</p>`
+        : "";
+  const launchBlocked =
+    busy ||
+    options.length === 0 ||
+    (mission === "expedition" && expeditionActive >= expeditionCap);
 
   const sampleShips: FleetShips = {
     scout: 1,
@@ -141,6 +167,7 @@ export function fleetComposer(
       transport: "Transport cargo (own worlds)",
       colonize: "Colonize empty slot",
       harvest: "Harvest debris",
+      expedition: "Expedition (deep space)",
     };
     return `<label><input type="radio" name="fleet-mission" value="${m}" data-testid="mission-${m}" ${mission === m ? "checked" : ""} ${busy ? "disabled" : ""} /> ${labels[m]}</label>`;
   }).join("");
@@ -153,15 +180,15 @@ export function fleetComposer(
       </fieldset>
       <label>
         Target
-        <select id="fleet-target" data-testid="fleet-target" ${busy || options.length === 0 ? "disabled" : ""}>
+        <select id="fleet-target" data-testid="fleet-target" ${launchBlocked ? "disabled" : ""}>
           ${options.join("") || `<option value="">No targets</option>`}
         </select>
       </label>
       ${cargoBlock}
       <div class="fleet-ships">${shipInputs}</div>
       ${needHint}
-      <p class="hint">Example one-way ETA ~${fmtEta(sampleEta)} · fuel ~${sampleFuel} deut (1 scout). Fleet slots: ${1 + (view.player.research.computerTech ?? 0)}.</p>
-      <button type="submit" data-testid="launch-fleet" ${busy || options.length === 0 ? "disabled" : ""}>Launch fleet</button>
+      <p class="hint">Example one-way ETA ~${fmtEta(sampleEta)} · fuel ~${sampleFuel} deut (1 scout). Fleet slots: ${1 + (view.player.research.computerTech ?? 0)}${mission === "expedition" ? ` · expeditions ${expeditionActive}/${expeditionCap}` : ""}.</p>
+      <button type="submit" data-testid="launch-fleet" ${launchBlocked ? "disabled" : ""}>Launch fleet</button>
     </form>
   `;
 }
