@@ -27,19 +27,22 @@ let memoryUniverse: UniverseState | null = null;
 let redis: Redis | null | undefined;
 let resolvedMode: StorageMode | undefined;
 
-function redisCredentials(): {
+/** Pure env resolver — prefer UPSTASH_*, else Vercel integration KV_*. */
+export function redisCredentials(
+  env: NodeJS.ProcessEnv = process.env,
+): {
   url: string;
   token: string;
   mode: "upstash" | "kv";
 } | null {
-  const upstashUrl = process.env.UPSTASH_REDIS_REST_URL?.trim();
-  const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
+  const upstashUrl = env.UPSTASH_REDIS_REST_URL?.trim();
+  const upstashToken = env.UPSTASH_REDIS_REST_TOKEN?.trim();
   if (upstashUrl && upstashToken) {
     return { url: upstashUrl, token: upstashToken, mode: "upstash" };
   }
 
-  const kvUrl = process.env.KV_REST_API_URL?.trim();
-  const kvToken = process.env.KV_REST_API_TOKEN?.trim();
+  const kvUrl = env.KV_REST_API_URL?.trim();
+  const kvToken = env.KV_REST_API_TOKEN?.trim();
   if (kvUrl && kvToken) {
     return { url: kvUrl, token: kvToken, mode: "kv" };
   }
@@ -49,7 +52,7 @@ function redisCredentials(): {
 
 function getRedis(): Redis | null {
   if (redis !== undefined) return redis;
-  const creds = redisCredentials();
+  const creds = redisCredentials(process.env);
   if (!creds) {
     redis = null;
     resolvedMode = "memory";
@@ -62,7 +65,7 @@ function getRedis(): Redis | null {
 
 export function storageMode(): StorageMode {
   if (resolvedMode) return resolvedMode;
-  const creds = redisCredentials();
+  const creds = redisCredentials(process.env);
   return creds?.mode ?? "memory";
 }
 
