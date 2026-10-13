@@ -211,3 +211,30 @@ export const SLOT_PRODUCTION_MULT: Readonly<
   14: { metal: 1.0, crystal: 0.75, deuterium: 1.25, energy: 0.75 },
   15: { metal: 1.0, crystal: 0.7, deuterium: 1.3, energy: 0.7 },
 };
+
+/** ~1 pirate base per N systems (≈100 / 10×399 map). */
+export const PIRATE_SYSTEMS_PER_BASE = 40;
+
+/** Growth: tier +1 every interval, capped. */
+export const PIRATE_GROWTH_INTERVAL_MS = 6 * 60 * 60 * 1000;
+export const PIRATE_TIER_CAP = 8;
+
+/** After player destroy: respawn delay elsewhere (inclusive range). */
+export const PIRATE_RESPAWN_DELAY_MIN_MS = 12 * 60 * 60 * 1000;
+export const PIRATE_RESPAWN_DELAY_MAX_MS = 36 * 60 * 60 * 1000;
+
+/** NPC raid cadence (inclusive range). */
+export const PIRATE_RAID_INTERVAL_MIN_MS = 8 * 60 * 60 * 1000;
+export const PIRATE_RAID_INTERVAL_MAX_MS = 24 * 60 * 60 * 1000;
+
+/** Starshards: destroy base = base + per-tier; win defense vs pirate raid. */
+export const PIRATE_DESTROY_STARSHARDS_BASE = 40;
+export const PIRATE_DESTROY_STARSHARDS_PER_TIER = 5;
+export const PIRATE_DEFENSE_WIN_STARSHARDS = 10;
+
+/**
+ * Soft cap for NPC raid detachment vs small empires:
+ * raid power ≤ defenderPower × factor + floor (v1).
+ */
+export const PIRATE_RAID_POWER_FACTOR = 1.4;
+export const PIRATE_RAID_POWER_FLOOR = 40;
