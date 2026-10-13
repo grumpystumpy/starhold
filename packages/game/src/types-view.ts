@@ -167,4 +167,6 @@ export interface EconomySnapshot {
   productionPerHour: Resources;
   energy: { produced: number; used: number; factor: number };
   storage: Resources;
+  /** Building-level field budget (soft-cap). */
+  fields: { used: number; cap: number; remaining: number };
 }
