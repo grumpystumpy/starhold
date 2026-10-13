@@ -8,6 +8,18 @@ export {
   rapidFireFactor,
   type CombatUnitId,
 } from "./catalog-rapid-fire.js";
+export {
+  OFFICERS,
+  OFFICER_ORDER,
+  OFFICER_DURATION_MS,
+} from "./catalog-officers.js";
+export { SKILLS, SKILL_ORDER } from "./catalog-skills.js";
+
+/** Starshards earn (non-pirate; pirate amounts live next to PIRATE_* below). */
+export const STARSHARDS_DAILY_LOGIN = 15;
+export const STARSHARDS_HIGHSCORE_TOP3 = 50;
+/** Expedition table: 5% chance of a Starshard find. */
+export const EXPEDITION_STARSHARDS_CHANCE_PCT = 5;
 
 /** Max simultaneous fire exchanges in a raid. */
 export const MAX_COMBAT_ROUNDS = 6;
