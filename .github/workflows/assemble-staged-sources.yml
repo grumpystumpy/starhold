@@ -4,8 +4,30 @@ on:
     branches: [cursor/player-levels-on-f-8713]
     paths:
       - .github/workflows/assemble-staged-sources.yml
+      - decode_stage.py
 jobs:
   assemble:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - run: echo "waiting for chunked stage; no-op"
+      - uses: actions/checkout@v4
+        with:
+          ref: cursor/player-levels-on-f-8713
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Decode staged sources
+        run: |
+          set -euo pipefail
+          test -f decode_stage.py
+          test -f .cursor-stage/manifest.json
+          python3 decode_stage.py
+          rm -f .cursor-stage/*.gz.b64 || true
+          rmdir .cursor-stage 2>/dev/null || true
+          rm -f decode_stage.py
+          rm -f .github/workflows/assemble-staged-sources.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          if git diff --cached --quiet; then echo "nothing to commit"; exit 0; fi
+          git commit -m "chore(I): decode chunked staged sources for player levels"
+          git push
