@@ -34,6 +34,7 @@ import { pruneSpyReports } from "./world-spy-prune.js";
 import {
   addCargoToPlanet,
   addShipsToPlanet,
+  advanceFleetSwarmProduce,
   advancePlanet,
   advanceResearch,
   getDebris,
@@ -265,6 +266,9 @@ export function advanceUniverse(universe: UniverseState, now = Date.now()): void
       owner,
     );
     if (owner) universe.players[owner.id] = owner;
+  }
+  for (const fleet of Object.values(universe.fleets)) {
+    advanceFleetSwarmProduce(fleet, now);
   }
   advanceFleets(universe, now);
   tickPirates(universe, now);
