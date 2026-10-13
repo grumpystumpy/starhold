@@ -110,8 +110,8 @@ export function shellHtml(
     </div>`;
 }
 
-/** Patch res blocks with storage fill titles (amounts / cap / rate)e-paints. */
-export fenrichResourceTitles(view: PlayerView, html: string): string {
+/** Patch res blocks with storage fill titles (amounts / cap / rate). */
+export function enrichResourceTitles(view: PlayerView, html: string): string {
   const { planet, economy } = view;
   const map: Array<[string, number, number, number]> = [
     [
