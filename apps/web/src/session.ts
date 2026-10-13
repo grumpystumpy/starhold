@@ -17,7 +17,7 @@ export const FLASH_TTL_MS = 12_000;
 export const GESTURE_PAINT_GRACE_MS = 200;
 
 const rootEl = document.querySelector<HTMLElement>("#app");
-ill (!rootEl) {
+if (!rootEl) {
   throw new Error("#app missing");
 }
 export const root: HTMLElement = rootEl;
