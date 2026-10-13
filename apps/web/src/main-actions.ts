@@ -14,3 +14,8 @@ export {
   doResearch,
 } from "./main-actions-build.js";
 export { doLaunchFleet } from "./main-actions-fleet.js";
+export {
+  doActivateOfficer,
+  doClaimDaily,
+  doUnlockSkill,
+} from "./main-actions-starshards.js";
