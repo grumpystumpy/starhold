@@ -32,11 +32,19 @@ import { playerBoosts } from "./world-boosts.js";
 import { resolvePirateRaidArrival, tickPirates } from "./world-pirates.js";
 import { pruneSpyReports } from "./world-spy-prune.js";
 import {
+  clearOccupationIfFleetGone,
+  occupationForPlanet,
+  occupationMineShares,
+  pruneExpiredOccupations,
+} from "./world-occupation.js";
+import {
   addCargoToPlanet,
   addShipsToPlanet,
+  advanceFleetSwarmProduce,
   advancePlanet,
   advanceResearch,
   getDebris,
+  subtractCargo,
 } from "./world-tick.js";
 
 /** Effective fleet speed: universe × officers/skills ÷ level time factor. */
@@ -62,6 +70,7 @@ export function resolveFleetArrival(
 ): void {
   const origin = universe.planets[fleet.originPlanetId];
   if (!origin) {
+    clearOccupationIfFleetGone(universe, fleet);
     delete universe.fleets[fleet.id];
     return;
   }
@@ -207,6 +216,7 @@ export function resolveFleetArrival(
       drive,
     );
     if (fleetShipCount(fleet.ships) <= 0) {
+      clearOccupationIfFleetGone(universe, fleet);
       delete universe.fleets[fleet.id];
       return;
     }
@@ -216,6 +226,7 @@ export function resolveFleetArrival(
     return;
   }
 
+  clearOccupationIfFleetGone(universe, fleet);
   addShipsToPlanet(origin, fleet.ships);
   addCargoToPlanet(origin, fleet.cargo);
   delete universe.fleets[fleet.id];
@@ -231,6 +242,9 @@ export function fleetCargoCapacityForHarvest(ships: FleetShips): number {
 
 export function advanceFleets(universe: UniverseState, now: number): void {
   ensureUniverseShape(universe);
+  for (const fleet of Object.values(universe.fleets)) {
+    if (fleet.swarmProduce) advanceFleetSwarmProduce(fleet, now);
+  }
   const due = Object.values(universe.fleets)
     .filter((f) => f.arrivesAt <= now)
     .sort((a, b) => a.arrivesAt - b.arrivesAt);
@@ -243,6 +257,7 @@ export function advanceFleets(universe: UniverseState, now: number): void {
 
 export function advanceUniverse(universe: UniverseState, now = Date.now()): void {
   ensureUniverseShape(universe);
+  pruneExpiredOccupations(universe, now);
   for (const player of Object.values(universe.players)) {
     advanceResearch(universe, player, now);
   }
@@ -252,8 +267,9 @@ export function advanceUniverse(universe: UniverseState, now = Date.now()): void
     const energyTech = owner?.research.energyTech ?? 0;
     const boosts = playerBoosts(owner, now);
     const lb = levelBonuses(owner?.level ?? 1);
+    const before = { ...planet.resources };
     // Stack: base → research (energyTech) → level → officers → skills.
-    universe.planets[id] = advancePlanet(
+    const advanced = advancePlanet(
       planet,
       universe.speed,
       now,
@@ -265,6 +281,30 @@ export function advanceUniverse(universe: UniverseState, now = Date.now()): void
       owner,
     );
     if (owner) universe.players[owner.id] = owner;
+    const occ = occupationForPlanet(universe, id, now);
+    if (occ && occ.occupierPlayerId !== planet.ownerPlayerId) {
+      const gained = {
+        metal: Math.max(0, advanced.resources.metal - before.metal),
+        crystal: Math.max(0, advanced.resources.crystal - before.crystal),
+        deuterium: Math.max(
+          0,
+          advanced.resources.deuterium - before.deuterium,
+        ),
+      };
+      const shares = occupationMineShares(gained);
+      subtractCargo(advanced, {
+        metal: gained.metal - shares.owner.metal,
+        crystal: gained.crystal - shares.owner.crystal,
+        deuterium: gained.deuterium - shares.owner.deuterium,
+      });
+      const occupier = universe.players[occ.occupierPlayerId];
+      const payPlanetId =
+        occupier?.activePlanetId ?? occupier?.homePlanetId ?? null;
+      if (payPlanetId && universe.planets[payPlanetId]) {
+        addCargoToPlanet(universe.planets[payPlanetId], shares.occupier);
+      }
+    }
+    universe.planets[id] = advanced;
   }
   advanceFleets(universe, now);
   tickPirates(universe, now);
