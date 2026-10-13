@@ -74,6 +74,7 @@ export function resolveRaidArrival(
     loot,
     debrisCreated,
     outcome: combat.outcome,
+    rounds: combat.rounds,
     summary: combat.summary,
   };
   universe.reports[reportId] = report;

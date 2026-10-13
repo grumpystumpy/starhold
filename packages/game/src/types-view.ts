@@ -34,6 +34,8 @@ export interface CombatReport {
   loot: Resources;
   debrisCreated: Resources;
   outcome: CombatOutcome;
+  /** Fire exchanges resolved (0 = unopposed / empty attacker). */
+  rounds: number;
   summary: string;
 }
 

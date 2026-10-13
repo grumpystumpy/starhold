@@ -39,19 +39,21 @@ Resource income uses `universe.speed × PRODUCTION_MULT × (1 + 0.02 × Energy T
 fuel = max(1, ceil(Σ shipCount × fuelPerDistance × distance))
 ```
 
-## Combat power
+## Combat (multi-round + rapid fire)
+
+Raid fights run up to **6 simultaneous-fire rounds** (see [docs/design/combat-rounds.md](../../docs/design/combat-rounds.md)).
 
 ```
-unit = attack×(1+0.08×Weapons) + 0.5×shield×(1+0.08×Shielding) + 0.3×hull×(1+0.08×Armour)
-power = Σ ships + Σ defenses
+atk = attack×(1+0.08×Weapons)
+hp  = shield×(1+0.08×Shielding) + hull×(1+0.08×Armour)
+damage = count×atk×rapidFire(firer, focusTarget)
 ```
 
-Resolution (deterministic):
+Focus = enemy type with highest remaining count. Rapid-fire table in `catalog-rapid-fire.ts`.
 
-- Defender power ≤ 0 and attacker > 0 → **attacker_win**, no attacker losses
-- Attacker ≥ defender × 1.1 → **attacker_win** (attacker keeps 80%, defender ships/defenses 30%)
-- Defender ≥ attacker × 1.1 → **defender_win** (attacker keeps 30%, defender 80%)
-- Else → **draw** (both keep 60%)
+Outcomes: defender wiped → **attacker_win**; attacker wiped → **defender_win**; both alive after 6 rounds (or mutual wipe) → **draw**.
+
+`fleetCombatPower` remains a rough UI score only.
 
 ## Debris
 

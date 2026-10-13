@@ -60,7 +60,7 @@ export function reportsHtml(
             (r.debrisCreated?.metal ?? 0) + (r.debrisCreated?.crystal ?? 0) > 0
               ? ` · debris ${fmt(r.debrisCreated.metal)}/${fmt(r.debrisCreated.crystal)}`
               : "";
-          return `<li data-testid="report-${r.id}"><strong>${role}: ${escapeHtml(r.outcome)}</strong> vs ${escapeHtml(r.attackerPlayerId === selfId ? r.defenderName : r.attackerName)} @ ${fmtCoords(r.targetCoords)}${loot}${debris}<br/><span class="meta">${escapeHtml(r.summary)}</span></li>`;
+          return `<li data-testid="report-${r.id}"><strong>${role}: ${escapeHtml(r.outcome)}</strong>${typeof r.rounds === "number" ? ` · ${r.rounds}r` : ""} vs ${escapeHtml(r.attackerPlayerId === selfId ? r.defenderName : r.attackerName)} @ ${fmtCoords(r.targetCoords)}${loot}${debris}<br/><span class="meta">${escapeHtml(r.summary)}</span></li>`;
         })
         .join("")}
     </ul>
