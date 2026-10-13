@@ -138,6 +138,8 @@ export function ensureUniverseShape(universe: UniverseState): void {
   if (!universe.debris) universe.debris = {};
   if (!universe.asteroids) universe.asteroids = {};
   if (!universe.pirateBases) universe.pirateBases = {};
+  if (!universe.occupations) universe.occupations = {};
+  if (!universe.miniPlanetIds) universe.miniPlanetIds = [];
   if (!universe.fleetSpeed) universe.fleetSpeed = universe.speed || 1;
   if (!universe.seed) universe.seed = `seed_${universe.id}`;
   for (const player of Object.values(universe.players)) {
@@ -148,6 +150,7 @@ export function ensureUniverseShape(universe: UniverseState): void {
       player.activePlanetId = player.homePlanetId;
     }
     if (!player.research) player.research = emptyResearch();
+    if (player.research.swarmHold === undefined) player.research.swarmHold = 0;
     if (player.researchQueue === undefined) player.researchQueue = null;
     if (player.starshards === undefined) player.starshards = 0;
     if (!player.officers) player.officers = [];
