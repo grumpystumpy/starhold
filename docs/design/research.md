@@ -9,22 +9,22 @@ Empire-wide techs that gate flight, combat, espionage depth, colonies, and fleet
 | Piece | Rules |
 |-------|--------|
 | **Research Lab L0→L1** | Base `{ metal: 180, crystal: 120, deuterium: 0 }` so mines-first sessions unlock research before Deut Still. Growth ×2; ~18s base / universe speed. |
-| **Techs** | Catalog in `packages/game` `RESEARCH`. Cost growth ~×2 (Astrophysics ×1.8). Lab level gate per tech (`labLevel`). |
+| **Techs** | Catalog in `packages/game` `RESEARCH`. Cost growth ~×2 (Stellar Cartography ×1.8). Lab level gate per tech (`labLevel`). |
 | **Queue** | One empire-wide `researchQueue` on the player. Completing advances that tech level. |
 
 ## Formulas / ties
 
-- **Energy Tech:** +2% mine output per level (income only).
-- **Combustion Drive:** +10% fleet cruise speed per level.
-- **Weapons / Armour / Shielding:** +8% to matching combat terms.
-- **Espionage Tech:** spy report detail vs target lab (see [espionage.md](./espionage.md)).
-- **Astrophysics:** colony count = 1 + level.
-- **Computer Tech:** simultaneous fleet missions = 1 + level.
+- **Power Discipline:** +2% mine output per level (income only).
+- **Pulse Drive:** +10% fleet cruise speed per level.
+- **Ordnance Doctrine / Hull Weave / Aegis Lattice:** +8% to matching combat terms.
+- **Shadow Optics:** spy report detail vs target lab (see [espionage.md](./espionage.md)).
+- **Stellar Cartography:** colony count = 1 + level.
+- **Fleet OS:** simultaneous fleet missions = 1 + level.
 
 ## Balance notes
 
 - Lab must be reachable in a short playtest without deut farming.
-- First techs (Energy, Espionage, Combustion) stay cheap vs Interceptor / Colony Ship.
+- First techs (Power Discipline, Shadow Optics, Pulse Drive) stay cheap vs Interceptor / Outpost Cradle.
 
 ## Completeness
 

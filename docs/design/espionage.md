@@ -2,11 +2,11 @@
 
 ## Goal
 
-Spy Probe mission → text intel report. Depth scales with Espionage Tech vs target Research Lab.
+Whisper Probe mission → text intel report. Depth scales with Shadow Optics vs target Research Lab.
 
 ## Requirements
 
-- Ship: **Spy Probe** (yard L1, cheap crystal).
+- Ship: **Whisper Probe** (yard L1, cheap crystal).
 - Mission: `espionage` → target another commander’s planet.
 - Probes travel, write `spyReports`, return (v1: probes survive).
 
@@ -23,7 +23,7 @@ Spy Probe mission → text intel report. Depth scales with Espionage Tech vs tar
 
 ## Ties
 
-- Research tree: Espionage Tech.
+- Research tree: Shadow Optics.
 - Reports UI: spy report list (separate from combat reports).
 - Galaxy/roster: pick target planet.
 

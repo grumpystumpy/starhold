@@ -12,9 +12,9 @@ Send a fleet into **deep space** for a timed probe of the void: return with reso
 | Target | Deep-space coords: same galaxy/system as selected, **`slot = EXPEDITION_SLOT`** (`DEEP_SPACE_SLOT` = **16**). Not a planet. |
 | Ships | ≥1 any hull (haulers raise resource finds via cargo). |
 | Fuel | Outbound leg only (same as other missions). |
-| Caps | Concurrent expeditions per empire: **`maxExpeditions(astro) = 1 + astrophysics`**. Also bound by Computer Tech fleet slots. |
+| Caps | Concurrent expeditions per empire: **`maxExpeditions(astro) = 1 + astrophysics`**. Also bound by Fleet OS fleet slots. |
 
-Astrophysics copy updates to mention colony **and** expedition slots.
+Stellar Cartography copy updates to mention colony **and** expedition slots.
 
 ## Timeline
 
@@ -49,10 +49,10 @@ No dark-matter currency. No ACS / pathfinder.
 ## Tests
 
 - Launch to slot 9; reject occupied planet targets / bad slots.
-- Cap: second expedition blocked at Astrophysics 0.
+- Cap: second expedition blocked at Stellar Cartography 0.
 - Resource / pirate / nothing rolls via controlled timestamps.
 - Arrival writes report; ships return with cargo.
 
 ## Out of scope
 
-Highscores (next batch), hold-phase events, expedition tech beyond Astrophysics, moon finds.
+Highscores (next batch), hold-phase events, expedition tech beyond Stellar Cartography, moon finds.
