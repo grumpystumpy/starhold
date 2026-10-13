@@ -69,4 +69,4 @@ Fill cargo (surviving fleet capacity) in order **metal → crystal → deuterium
 
 ## Ship / defense / research catalogs
 
-See `catalog.ts`.
+Combat ladder (P1): Scout → Interceptor → **Aegis Cruiser** (yard 4) → **Breach Bomber** (yard 5), plus utility Probe / Recycler / Colony Ship / Hauler. See `catalog-units.ts` and [docs/design/combat-hulls.md](../../docs/design/combat-hulls.md).
