@@ -7,6 +7,7 @@ import { fmt, fmtCoords } from "./format";
 import { NAV_LABELS, NAV_PAGES, type NavPage } from "./nav";
 import { flashHtml, resBlock } from "./render-chrome";
 import { escapeAttr, escapeHtml } from "./render-escape";
+import { hrefForPage } from "./router";
 import { storageFillTitle } from "./render-tooltips";
 
 function resourceBar(view: PlayerView, busy: boolean): string {
@@ -32,14 +33,32 @@ function resourceBar(view: PlayerView, busy: boolean): string {
     </section>`;
 }
 
-function leftNav(active: NavPage): string {
+function navQuery(view: PlayerView): { playerId: string; planetId: string } {
+  return { playerId: view.player.id, planetId: view.planet.id };
+}
+
+function pageDropdown(view: PlayerView, active: NavPage): string {
+  return `
+    <label class="nav-dropdown-wrap" data-testid="nav-dropdown-wrap">
+      <span class="nav-dropdown-label">Page</span>
+      <select class="nav-dropdown" data-nav-select data-testid="nav-dropdown" aria-label="Game pages">
+        ${NAV_PAGES.map((id) => {
+          const href = hrefForPage(id, navQuery(view));
+          return `<option value="${id}" data-href="${escapeAttr(href)}"${id === active ? " selected" : ""}>${NAV_LABELS[id]}</option>`;
+        }).join("")}
+      </select>
+    </label>`;
+}
+
+function leftNav(view: PlayerView, active: NavPage): string {
+  const q = navQuery(view);
   return `
     <nav class="side-nav" aria-label="Game menu" data-testid="side-nav">
       <ul>
-        ${NAV_PAGES.map(
-          (id) =>
-            `<li><button type="button" class="nav-link${id === active ? " active" : ""}" data-nav="${id}" data-testid="nav-${id}">${NAV_LABELS[id]}</button></li>`,
-        ).join("")}
+        ${NAV_PAGES.map((id) => {
+          const href = hrefForPage(id, q);
+          return `<li><a href="${escapeAttr(href)}" class="nav-link${id === active ? " active" : ""}" data-nav="${id}" data-testid="nav-${id}">${NAV_LABELS[id]}</a></li>`;
+        }).join("")}
       </ul>
     </nav>`;
 }
@@ -89,6 +108,7 @@ export function shellHtml(
   return `
     <div class="game-shell" data-testid="game-shell" data-page="${activePage}">
       <header class="topbar shell-top">
+        ${pageDropdown(view, activePage)}
         <div class="topbar-brand">
           <img class="thumb thumb-lg" src="${heroArt}" alt="" width="56" height="56" />
           <div>
@@ -103,7 +123,7 @@ export function shellHtml(
       ${flashHtml(state.error, state.notice)}
       ${resourceBar(view, state.busy)}
       <div class="shell-body">
-        ${leftNav(activePage)}
+        ${leftNav(view, activePage)}
         <main class="shell-main" data-testid="page-${activePage}" id="page-main">
           ${mainHtml}
         </main>
