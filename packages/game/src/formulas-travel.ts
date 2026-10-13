@@ -2,7 +2,6 @@ import {
   BUILDINGS,
   DEFENSES,
   MIN_FLIGHT_SECONDS,
-  PLANET_FIELDS,
   RESEARCH,
   SHIPS,
   SHIP_ORDER,
@@ -26,6 +25,7 @@ import {
   energyFactor,
   energyProduced,
   energyUsed,
+  fieldsCap,
   fieldsRemaining,
   fieldsUsed,
   productionPerHour,
@@ -135,7 +135,7 @@ export function economySnapshot(
     storage: storageFor(planet),
     fields: {
       used,
-      cap: PLANET_FIELDS,
+      cap: fieldsCap(planet),
       remaining: fieldsRemaining(planet),
     },
   };
