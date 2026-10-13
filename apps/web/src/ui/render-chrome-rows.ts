@@ -28,16 +28,16 @@ export function shipRow(
   const yard = planet.buildings.shipyard ?? 0;
   const locked = yard < def.shipyardLevel;
   const affordable = canAfford(planet.resources, def.cost);
-  const queueBusy = Boolean(planet.shipQueue);
+  const queueFull = (planet.shipQueue?.length ?? 0) >= 8;
   let label = "Build";
   if (locked) label = "Locked";
-  else if (queueBusy) label = "Yard busy";
+  else if (queueFull) label = "Queue full";
   else if (!affordable) label = "Can't afford";
   const lockMsg = `Needs Shipyard level ${def.shipyardLevel} (you have ${yard}).`;
   const blocked = locked
     ? lockMsg
-    : queueBusy
-      ? "Shipyard is already busy."
+    : queueFull
+      ? "Ship queue is full."
       : !affordable
         ? "Not enough resources."
         : null;
@@ -78,15 +78,15 @@ export function defenseRow(
   const locked = yard < def.shipyardLevel;
   const cost = defenseCost(id, 1);
   const affordable = canAfford(planet.resources, cost);
-  const queueBusy = Boolean(planet.defenseQueue);
+  const queueFull = (planet.defenseQueue?.length ?? 0) >= 8;
   let label = "Build";
   if (locked) label = "Locked";
-  else if (queueBusy) label = "Busy";
+  else if (queueFull) label = "Queue full";
   else if (!affordable) label = "Can't afford";
   const blocked = locked
     ? `Needs Shipyard level ${def.shipyardLevel}`
-    : queueBusy
-      ? "Defense yard busy."
+    : queueFull
+      ? "Defense queue is full."
       : !affordable
         ? "Not enough resources."
         : null;
@@ -132,22 +132,22 @@ export function researchRow(
   const locked = lab < def.labLevel || level >= lab;
   const cost = researchUpgradeCost(id, level);
   const affordable = canAfford(view.planet.resources, cost);
-  const queueBusy = Boolean(view.player.researchQueue);
+  const queueFull = (view.player.researchQueue?.length ?? 0) >= 8;
   const secs = Math.ceil(
     researchUpgradeSeconds(id, level, Math.max(1, lab)) / view.universe.speed,
   );
   let label = "Research";
   if (lab < def.labLevel) label = "Needs lab";
   else if (level >= lab) label = "Lab cap";
-  else if (queueBusy) label = "Busy";
+  else if (queueFull) label = "Queue full";
   else if (!affordable) label = "Can't afford";
   const blocked =
     lab < def.labLevel
       ? `Needs Research Lab ${def.labLevel}`
       : level >= lab
         ? `Lab level ${lab} caps research at L${lab}`
-        : queueBusy
-          ? "Research already in progress."
+        : queueFull
+          ? "Research queue is full."
           : !affordable
             ? "Not enough resources on active planet."
             : null;

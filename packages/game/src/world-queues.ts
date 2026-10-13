@@ -8,13 +8,13 @@ import {
   buildingUpgradeCost,
   buildingUpgradeSeconds,
   canAfford,
-  defenseBuildSeconds,
   defenseCost,
+  defenseUnitBuildSeconds,
   fieldsRemaining,
   fieldsUsed,
   levelBonuses,
-  shipBuildSeconds,
   shipCost,
+  shipUnitBuildSeconds,
   spend,
 } from "./formulas.js";
 import type {
@@ -27,6 +27,11 @@ import type {
   UniverseState,
 } from "./types.js";
 import { advanceUniverse } from "./world-arrival.js";
+import { yardQueueCap } from "./world-queue-caps.js";
+import {
+  ensureQueueFrontStarted,
+  newQueueItemId,
+} from "./world-queue-normalize.js";
 
 export type ActionResult =
   | { ok: true; planet: PlanetState }
@@ -35,6 +40,15 @@ export type ActionResult =
 export type FleetActionResult =
   | { ok: true; fleet: FleetMission; planet: PlanetState }
   | { ok: false; error: string };
+
+/**
+ * Nanite Factory level hook (Thread J). Building id `naniteFactory` may land later;
+ * until then this returns 0 so constructionTimeMultiplier stays 1.
+ */
+export function naniteFactoryLevel(planet: PlanetState): number {
+  const buildings = planet.buildings as Record<string, number | undefined>;
+  return Math.max(0, Math.floor(buildings.naniteFactory ?? 0));
+}
 
 export function resolveActionPlanet(
   universe: UniverseState,
@@ -93,19 +107,34 @@ export function queueBuildingUpgrade(
   if (buildingId === "jumpGate" && (planet.buildings.lunarBase ?? 0) < 1) {
     return { ok: false, error: "Fold Bridge needs Crater Hab level 1." };
   }
-  if (planet.buildQueue) {
-    return { ok: false, error: "A building is already under construction." };
+
+  const cap = yardQueueCap(player, now);
+  if (planet.buildQueue.length >= cap) {
+    return {
+      ok: false,
+      error: `Building queue is full (${planet.buildQueue.length}/${cap}).`,
+    };
   }
 
-  const current = planet.buildings[buildingId] ?? 0;
+  const pendingSame = planet.buildQueue.filter(
+    (q) => q.buildingId === buildingId,
+  ).length;
+  const current = (planet.buildings[buildingId] ?? 0) + pendingSame;
+  const targetLevel = current + 1;
+
   if (buildingId === "lunarBase") {
     const nextCap =
-      MOON_FIELDS_BASE + (current + 1) * MOON_FIELDS_PER_LUNAR_BASE;
+      MOON_FIELDS_BASE + targetLevel * MOON_FIELDS_PER_LUNAR_BASE;
     if (nextCap < fieldsUsed(planet) + 1) {
       return { ok: false, error: "No free planet fields remaining." };
     }
-  } else if (fieldsRemaining(planet) < 1) {
-    return { ok: false, error: "No free planet fields remaining." };
+  } else {
+    const pendingFieldUsers = planet.buildQueue.filter(
+      (q) => q.buildingId !== "lunarBase",
+    ).length;
+    if (fieldsRemaining(planet) < pendingFieldUsers + 1) {
+      return { ok: false, error: "No free planet fields remaining." };
+    }
   }
 
   const cost = buildingUpgradeCost(buildingId, current);
@@ -114,21 +143,25 @@ export function queueBuildingUpgrade(
   }
 
   const lb = levelBonuses(player.level ?? 1);
-  const seconds = Math.max(
-    1,
-    Math.ceil(
-      (buildingUpgradeSeconds(buildingId, current) * lb.buildTime) /
-        universe.speed,
-    ),
-  );
+  const naniteLevel = naniteFactoryLevel(planet);
+  const seconds =
+    (buildingUpgradeSeconds(buildingId, current, naniteLevel) * lb.buildTime) /
+    universe.speed;
 
   planet.resources = spend(planet.resources, cost);
-  planet.buildQueue = {
+  const startNow = planet.buildQueue.length === 0;
+  planet.buildQueue.push({
+    id: newQueueItemId(now),
     kind: "building",
     buildingId,
-    targetLevel: current + 1,
+    targetLevel,
+    enqueuedAt: now,
+    workSeconds: seconds,
+    startedAt: startNow ? now : null,
     completesAt: now + seconds * 1000,
-  };
+    paidCost: { ...cost },
+  });
+  ensureQueueFrontStarted(planet.buildQueue, now);
   universe.planets[planet.id] = planet;
   return { ok: true, planet };
 }
@@ -153,8 +186,13 @@ export function queueShipBuild(
   advanceUniverse(universe, now);
   const planet = resolveActionPlanet(universe, player, planetId);
   if (!planet) return { ok: false, error: "Planet missing." };
-  if (planet.shipQueue) {
-    return { ok: false, error: "Shipyard is already busy." };
+
+  const cap = yardQueueCap(player, now);
+  if (planet.shipQueue.length >= cap) {
+    return {
+      ok: false,
+      error: `Ship queue is full (${planet.shipQueue.length}/${cap}).`,
+    };
   }
 
   const yard = planet.buildings.shipyard ?? 0;
@@ -171,21 +209,27 @@ export function queueShipBuild(
   }
 
   const lb = levelBonuses(player.level ?? 1);
-  const seconds = Math.max(
-    1,
-    Math.ceil(
-      (shipBuildSeconds(shipId, qty, yard) * lb.shipBuild) / universe.speed,
-    ),
-  );
+  const naniteLevel = naniteFactoryLevel(planet);
+  const unitSeconds =
+    (shipUnitBuildSeconds(shipId, yard, naniteLevel) * lb.shipBuild) /
+    universe.speed;
+  const seconds = unitSeconds * qty;
 
   planet.resources = spend(planet.resources, cost);
-  planet.shipQueue = {
+  const startNow = planet.shipQueue.length === 0;
+  planet.shipQueue.push({
+    id: newQueueItemId(now),
     kind: "ship",
     shipId,
     count: qty,
+    enqueuedAt: now,
+    workSeconds: seconds,
+    startedAt: startNow ? now : null,
     completesAt: now + seconds * 1000,
-    unitSeconds: Math.ceil(seconds / qty),
-  };
+    unitSeconds,
+    paidCost: { ...cost },
+  });
+  ensureQueueFrontStarted(planet.shipQueue, now);
   universe.planets[planet.id] = planet;
   return { ok: true, planet };
 }
@@ -210,8 +254,13 @@ export function queueDefenseBuild(
   advanceUniverse(universe, now);
   const planet = resolveActionPlanet(universe, player, planetId);
   if (!planet) return { ok: false, error: "Planet missing." };
-  if (planet.defenseQueue) {
-    return { ok: false, error: "Defense yard is already busy." };
+
+  const cap = yardQueueCap(player, now);
+  if (planet.defenseQueue.length >= cap) {
+    return {
+      ok: false,
+      error: `Defense queue is full (${planet.defenseQueue.length}/${cap}).`,
+    };
   }
 
   const yard = planet.buildings.shipyard ?? 0;
@@ -227,19 +276,28 @@ export function queueDefenseBuild(
     return { ok: false, error: "Not enough resources." };
   }
 
-  const seconds = Math.max(
-    1,
-    Math.ceil(defenseBuildSeconds(defenseId, qty, yard) / universe.speed),
-  );
+  const lb = levelBonuses(player.level ?? 1);
+  const naniteLevel = naniteFactoryLevel(planet);
+  const unitSeconds =
+    (defenseUnitBuildSeconds(defenseId, yard, naniteLevel) * lb.shipBuild) /
+    universe.speed;
+  const seconds = unitSeconds * qty;
 
   planet.resources = spend(planet.resources, cost);
-  planet.defenseQueue = {
+  const startNow = planet.defenseQueue.length === 0;
+  planet.defenseQueue.push({
+    id: newQueueItemId(now),
     kind: "defense",
     defenseId,
     count: qty,
+    enqueuedAt: now,
+    workSeconds: seconds,
+    startedAt: startNow ? now : null,
     completesAt: now + seconds * 1000,
-    unitSeconds: Math.ceil(seconds / qty),
-  };
+    unitSeconds,
+    paidCost: { ...cost },
+  });
+  ensureQueueFrontStarted(planet.defenseQueue, now);
   universe.planets[planet.id] = planet;
   return { ok: true, planet };
 }

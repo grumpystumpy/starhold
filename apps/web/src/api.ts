@@ -91,6 +91,34 @@ export async function researchTech(
   return parse<PlayerView>(res);
 }
 
+export async function cancelQueueItem(
+  playerId: string,
+  kind: "building" | "ship" | "defense" | "research",
+  itemId: string,
+  planetId?: string,
+): Promise<PlayerView> {
+  const res = await fetch("/api/queue/cancel", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, kind, itemId, planetId }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function reorderQueueItems(
+  playerId: string,
+  kind: "building" | "ship" | "defense" | "research",
+  orderedIds: string[],
+  planetId?: string,
+): Promise<PlayerView> {
+  const res = await fetch("/api/queue/reorder", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, kind, orderedIds, planetId }),
+  });
+  return parse<PlayerView>(res);
+}
+
 export async function selectPlanet(
   playerId: string,
   planetId: string,

@@ -12,8 +12,22 @@ export {
   queueBuildingUpgrade,
   queueShipBuild,
   queueDefenseBuild,
+  naniteFactoryLevel,
 } from "./world-queues.js";
 export { queueResearch } from "./world-research-queue.js";
+export {
+  cancelQueueItem,
+  reorderQueue,
+  stampQueueView,
+} from "./world-queue-manage.js";
+export {
+  queueCapForKind,
+  researchQueueCap,
+  yardQueueCap,
+} from "./world-queue-caps.js";
+export {
+  migrateUniverseV2ToV3,
+} from "./world-migrate.js";
 export type { LaunchFleetOpts } from "./world-launch.js";
 export { launchFleet } from "./world-launch.js";
 export {

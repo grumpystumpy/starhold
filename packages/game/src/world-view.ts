@@ -40,6 +40,7 @@ import {
   moonAtCoords,
   planetAtCoords,
 } from "./world-bootstrap.js";
+import { stampQueueView } from "./world-queue-manage.js";
 import { inSensorPhalanxRange, ownedPlanetCount } from "./world-moons.js";
 import { getDebris } from "./world-tick.js";
 
@@ -195,6 +196,9 @@ export function playerView(
   maybeGrantHighscoreStarshards(universe, playerId);
   const planet = activePlanet(universe, player);
   if (!planet) throw new Error("Planet missing.");
+  stampQueueView(player, planet, now);
+  universe.planets[planet.id] = planet;
+  universe.players[player.id] = player;
   const boosts = playerBoosts(player, now);
 
   const fleets = Object.values(universe.fleets)

@@ -1885,7 +1885,7 @@ var BUILDINGS = {
   researchLab: {
     id: "researchLab",
     name: "Research Lab",
-    description: "Unlocks empire-wide research. One project at a time.",
+    description: "Unlocks empire-wide research. Queue length grows with Yard Logistics.",
     // Metal/crystal only so mines-first sessions unlock research before Deut Still.
     baseCost: { metal: 180, crystal: 120, deuterium: 0 },
     costGrowth: 2,
@@ -2130,6 +2130,15 @@ var RESEARCH = {
     costGrowth: 2,
     baseResearchSeconds: 22,
     labLevel: 1
+  },
+  queueLogistics: {
+    id: "queueLogistics",
+    name: "Yard Logistics",
+    description: "+1 building/ship/defense queue slot per 2 levels; +1 research slot per 3 levels.",
+    baseCost: { metal: 80, crystal: 120, deuterium: 40 },
+    costGrowth: 2,
+    baseResearchSeconds: 28,
+    labLevel: 2
   }
 };
 
@@ -2159,7 +2168,7 @@ var OFFICERS = {
   quartermaster: {
     id: "quartermaster",
     name: "Quartermaster",
-    description: "Boosts mine output while on duty.",
+    description: "Boosts mine output and +1 building/ship/defense queue slot while on duty.",
     cost: 50,
     durationMs: OFFICER_DURATION_MS,
     effects: [{ kind: "mineOutput", value: 1.1 }]
@@ -2167,7 +2176,7 @@ var OFFICERS = {
   archivist: {
     id: "archivist",
     name: "Archivist",
-    description: "Speeds empire research projects.",
+    description: "Speeds empire research and +1 research queue slot while on duty.",
     cost: 50,
     durationMs: OFFICER_DURATION_MS,
     effects: [{ kind: "researchSpeed", value: 1.15 }]
@@ -2214,6 +2223,7 @@ var SKILL_ORDER = [
   "eco_mines_1",
   "eco_energy_1",
   "eco_mines_2",
+  "yardDepth",
   "eco_capstone",
   "mil_fleet_1",
   "mil_slots_1",
@@ -2224,6 +2234,7 @@ var SKILL_ORDER = [
   "exp_spy_2",
   "exp_capstone"
 ];
+var YARD_DEPTH_SKILL_ID = "yardDepth";
 var SKILLS = {
   eco_mines_1: {
     id: "eco_mines_1",
@@ -2251,6 +2262,15 @@ var SKILLS = {
     cost: 40,
     requires: ["eco_mines_1"],
     effects: [{ kind: "mineOutput", value: 1.05 }]
+  },
+  yardDepth: {
+    id: "yardDepth",
+    branch: "economy",
+    name: "Yard Depth",
+    description: "+1 building, ship, and defense queue slot.",
+    cost: 40,
+    requires: ["eco_mines_1"],
+    effects: []
   },
   eco_capstone: {
     id: "eco_capstone",
@@ -2404,6 +2424,13 @@ var SHIP_ORDER = [
   "colonyShip"
 ];
 var DEFENSE_ORDER = ["laserBattery", "shieldDome"];
+var QUEUE_HARD_CAP = 8;
+var QUEUE_BASE_LENGTH = {
+  building: 2,
+  ship: 2,
+  defense: 2,
+  research: 1
+};
 var STARTING_RESOURCES = {
   metal: 500,
   crystal: 500,
@@ -2533,12 +2560,16 @@ function buildingUpgradeCost(buildingId, currentLevel) {
     deuterium: Math.floor(def.baseCost.deuterium * factor)
   };
 }
-function buildingUpgradeSeconds(buildingId, currentLevel) {
+function constructionTimeMultiplier(naniteLevel = 0) {
+  const level = Math.max(0, Math.floor(naniteLevel));
+  if (level <= 0) return 1;
+  return Math.pow(0.1, level);
+}
+var MIN_UNIT_SECONDS = 1e-9;
+function buildingUpgradeSeconds(buildingId, currentLevel, naniteLevel = 0) {
   const def = BUILDINGS[buildingId];
-  return Math.max(
-    1,
-    Math.floor(def.baseBuildSeconds * Math.pow(def.costGrowth, currentLevel))
-  );
+  const raw2 = def.baseBuildSeconds * Math.pow(def.costGrowth, currentLevel) * constructionTimeMultiplier(naniteLevel);
+  return Math.max(MIN_UNIT_SECONDS, raw2);
 }
 function shipCost(shipId, count) {
   const def = SHIPS[shipId];
@@ -2548,10 +2579,11 @@ function shipCost(shipId, count) {
     deuterium: def.cost.deuterium * count
   };
 }
-function shipBuildSeconds(shipId, count, shipyardLevel) {
+function shipUnitBuildSeconds(shipId, shipyardLevel, naniteLevel = 0) {
   const def = SHIPS[shipId];
   const speedFactor = 1 + Math.max(0, shipyardLevel - 1) * 0.1;
-  return Math.max(1, Math.ceil(def.buildSeconds * count / speedFactor));
+  const raw2 = def.buildSeconds / speedFactor * constructionTimeMultiplier(naniteLevel);
+  return Math.max(MIN_UNIT_SECONDS, raw2);
 }
 function defenseCost(defenseId, count) {
   const def = DEFENSES[defenseId];
@@ -2561,10 +2593,11 @@ function defenseCost(defenseId, count) {
     deuterium: def.cost.deuterium * count
   };
 }
-function defenseBuildSeconds(defenseId, count, shipyardLevel) {
+function defenseUnitBuildSeconds(defenseId, shipyardLevel, naniteLevel = 0) {
   const def = DEFENSES[defenseId];
   const speedFactor = 1 + Math.max(0, shipyardLevel - 1) * 0.1;
-  return Math.max(1, Math.ceil(def.buildSeconds * count / speedFactor));
+  const raw2 = def.buildSeconds / speedFactor * constructionTimeMultiplier(naniteLevel);
+  return Math.max(MIN_UNIT_SECONDS, raw2);
 }
 function researchUpgradeCost(researchId, currentLevel) {
   const def = RESEARCH[researchId];
@@ -2676,7 +2709,8 @@ function emptyResearch() {
     shieldingTech: 0,
     espionageTech: 0,
     astrophysics: 0,
-    computerTech: 0
+    computerTech: 0,
+    queueLogistics: 0
   };
 }
 function emptyDefenses() {
@@ -3312,30 +3346,185 @@ function expeditionStarshardsAmount(roll) {
   return 5 + roll % 21;
 }
 
+// packages/game/src/world-queue-normalize.ts
+function newQueueItemId(now = Date.now()) {
+  return `q_${now.toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
+}
+function emptyPaidCost() {
+  return { metal: 0, crystal: 0, deuterium: 0 };
+}
+function asArray(value) {
+  if (value == null) return [];
+  return Array.isArray(value) ? value : [value];
+}
+function hydrateBase(raw2, kind, now) {
+  const completesAt = typeof raw2.completesAt === "number" ? raw2.completesAt : now;
+  const workSeconds = typeof raw2.workSeconds === "number" && raw2.workSeconds > 0 ? raw2.workSeconds : Math.max(1, Math.ceil(Math.max(0, completesAt - now) / 1e3) || 1);
+  const startedAt = raw2.startedAt === null ? null : typeof raw2.startedAt === "number" ? raw2.startedAt : now;
+  return {
+    id: typeof raw2.id === "string" && raw2.id ? raw2.id : newQueueItemId(now),
+    kind,
+    enqueuedAt: typeof raw2.enqueuedAt === "number" ? raw2.enqueuedAt : now,
+    completesAt,
+    workSeconds,
+    startedAt,
+    paidCost: raw2.paidCost ?? emptyPaidCost()
+  };
+}
+function normalizeBuildQueue(value, now = Date.now()) {
+  return asArray(value).map(
+    (raw2, index) => {
+      const base = hydrateBase(raw2, "building", now);
+      if (index > 0 && raw2.startedAt === void 0) {
+        base.startedAt = null;
+      }
+      return {
+        ...base,
+        kind: "building",
+        buildingId: raw2.buildingId,
+        targetLevel: raw2.targetLevel
+      };
+    }
+  );
+}
+function normalizeShipQueue(value, now = Date.now()) {
+  return asArray(value).map(
+    (raw2, index) => {
+      const base = hydrateBase(raw2, "ship", now);
+      if (index > 0 && raw2.startedAt === void 0) {
+        base.startedAt = null;
+      }
+      const count = Math.max(1, raw2.count ?? 1);
+      const unitSeconds = typeof raw2.unitSeconds === "number" && raw2.unitSeconds > 0 ? raw2.unitSeconds : Math.max(1e-9, base.workSeconds / count);
+      return {
+        ...base,
+        kind: "ship",
+        shipId: raw2.shipId,
+        count,
+        unitSeconds
+      };
+    }
+  );
+}
+function normalizeDefenseQueue(value, now = Date.now()) {
+  return asArray(
+    value
+  ).map((raw2, index) => {
+    const base = hydrateBase(raw2, "defense", now);
+    if (index > 0 && raw2.startedAt === void 0) {
+      base.startedAt = null;
+    }
+    const count = Math.max(1, raw2.count ?? 1);
+    const unitSeconds = typeof raw2.unitSeconds === "number" && raw2.unitSeconds > 0 ? raw2.unitSeconds : Math.max(1e-9, base.workSeconds / count);
+    return {
+      ...base,
+      kind: "defense",
+      defenseId: raw2.defenseId,
+      count,
+      unitSeconds
+    };
+  });
+}
+function normalizeResearchQueue(value, now = Date.now()) {
+  return asArray(
+    value
+  ).map((raw2, index) => {
+    const base = hydrateBase(raw2, "research", now);
+    if (index > 0 && raw2.startedAt === void 0) {
+      base.startedAt = null;
+    }
+    return {
+      ...base,
+      kind: "research",
+      researchId: raw2.researchId,
+      targetLevel: raw2.targetLevel
+    };
+  });
+}
+function ensureQueueFrontStarted(queue, now, startAt) {
+  if (queue.length === 0) return queue;
+  const front = queue[0];
+  if (front.startedAt == null) {
+    const t = startAt ?? now;
+    front.startedAt = t;
+    front.completesAt = t + front.workSeconds * 1e3;
+  }
+  return queue;
+}
+function refundResources(have, cost, fraction) {
+  const f = Math.max(0, Math.min(1, fraction));
+  return {
+    metal: have.metal + Math.floor(cost.metal * f),
+    crystal: have.crystal + Math.floor(cost.crystal * f),
+    deuterium: have.deuterium + Math.floor(cost.deuterium * f)
+  };
+}
+
 // packages/game/src/world-tick.ts
+var MIN_UNIT_SECONDS2 = 1e-9;
+function scalePaidCost(cost, remain, before) {
+  if (before <= 0) return { metal: 0, crystal: 0, deuterium: 0 };
+  const ratio = Math.max(0, Math.min(1, remain / before));
+  return {
+    metal: Math.floor(cost.metal * ratio),
+    crystal: Math.floor(cost.crystal * ratio),
+    deuterium: Math.floor(cost.deuterium * ratio)
+  };
+}
+function advanceCountableQueue(queue, now, deliver) {
+  ensureQueueFrontStarted(queue, now);
+  while (queue.length > 0) {
+    const front = queue[0];
+    if (front.startedAt == null) break;
+    const unit = Math.max(MIN_UNIT_SECONDS2, front.unitSeconds);
+    const elapsedSec = Math.max(0, (now - front.startedAt) / 1e3);
+    let batch = front.completesAt <= now ? front.count : Math.floor(elapsedSec / unit + 1e-12);
+    if (batch < 1) break;
+    batch = Math.min(batch, front.count);
+    const before = front.count;
+    deliver(front, batch);
+    front.count -= batch;
+    front.paidCost = scalePaidCost(front.paidCost, front.count, before);
+    if (front.count <= 0) {
+      const freedAt = Math.min(now, front.completesAt);
+      queue.shift();
+      ensureQueueFrontStarted(queue, now, freedAt);
+      continue;
+    }
+    front.startedAt = front.startedAt + batch * unit * 1e3;
+    front.workSeconds = front.count * unit;
+    front.completesAt = front.startedAt + front.workSeconds * 1e3;
+  }
+}
+function advanceBuildingQueue(queue, now, apply) {
+  ensureQueueFrontStarted(queue, now);
+  while (queue.length > 0 && queue[0].startedAt != null && queue[0].completesAt <= now) {
+    const freedAt = queue[0].completesAt;
+    apply(queue[0]);
+    queue.shift();
+    ensureQueueFrontStarted(queue, now, freedAt);
+  }
+}
 function advancePlanet(planet, universeSpeed, now, energyTechLevel = 0, boosts, _owner) {
   let state = {
     ...planet,
     resources: { ...planet.resources },
     buildings: { ...planet.buildings },
     ships: { ...planet.ships },
-    defenses: { ...planet.defenses ?? emptyDefenses() }
+    defenses: { ...planet.defenses ?? emptyDefenses() },
+    buildQueue: [...planet.buildQueue ?? []],
+    shipQueue: [...planet.shipQueue ?? []],
+    defenseQueue: [...planet.defenseQueue ?? []]
   };
-  if (state.buildQueue && state.buildQueue.completesAt <= now) {
-    const { buildingId, targetLevel } = state.buildQueue;
-    state.buildings[buildingId] = targetLevel;
-    state.buildQueue = null;
-  }
-  if (state.shipQueue && state.shipQueue.completesAt <= now) {
-    const { shipId, count } = state.shipQueue;
-    state.ships[shipId] = (state.ships[shipId] ?? 0) + count;
-    state.shipQueue = null;
-  }
-  if (state.defenseQueue && state.defenseQueue.completesAt <= now) {
-    const { defenseId, count } = state.defenseQueue;
-    state.defenses[defenseId] = (state.defenses[defenseId] ?? 0) + count;
-    state.defenseQueue = null;
-  }
+  advanceBuildingQueue(state.buildQueue, now, (item) => {
+    state.buildings[item.buildingId] = item.targetLevel;
+  });
+  advanceCountableQueue(state.shipQueue, now, (item, batch) => {
+    state.ships[item.shipId] = (state.ships[item.shipId] ?? 0) + batch;
+  });
+  advanceCountableQueue(state.defenseQueue, now, (item, batch) => {
+    state.defenses[item.defenseId] = (state.defenses[item.defenseId] ?? 0) + batch;
+  });
   const elapsedMs = Math.max(0, now - state.lastTickAt);
   if (elapsedMs > 0) {
     const rates = productionPerHour(
@@ -3359,11 +3548,16 @@ function advancePlanet(planet, universeSpeed, now, energyTechLevel = 0, boosts, 
   return state;
 }
 function advanceResearch(universe, player, now) {
-  if (!player.researchQueue || player.researchQueue.completesAt > now) return;
-  const { researchId, targetLevel } = player.researchQueue;
-  player.research[researchId] = targetLevel;
-  player.researchQueue = null;
-  grantPlayerXp(player, xpForResearch(targetLevel));
+  if (!player.researchQueue) player.researchQueue = [];
+  ensureQueueFrontStarted(player.researchQueue, now);
+  while (player.researchQueue.length > 0 && player.researchQueue[0].startedAt != null && player.researchQueue[0].completesAt <= now) {
+    const freedAt = player.researchQueue[0].completesAt;
+    const { researchId, targetLevel } = player.researchQueue[0];
+    player.research[researchId] = targetLevel;
+    player.researchQueue.shift();
+    grantPlayerXp(player, xpForResearch(targetLevel));
+    ensureQueueFrontStarted(player.researchQueue, now, freedAt);
+  }
   universe.players[player.id] = player;
 }
 function addShipsToPlanet(planet, ships) {
@@ -3907,7 +4101,10 @@ function ensureUniverseShape(universe) {
       player.activePlanetId = player.homePlanetId;
     }
     if (!player.research) player.research = emptyResearch();
-    if (player.researchQueue === void 0) player.researchQueue = null;
+    if (player.research.queueLogistics == null) player.research.queueLogistics = 0;
+    if (!Array.isArray(player.researchQueue)) {
+      player.researchQueue = player.researchQueue ? [player.researchQueue] : [];
+    }
     if (player.starshards === void 0) player.starshards = 0;
     if (!player.officers) player.officers = [];
     if (!player.skillsUnlocked) player.skillsUnlocked = [];
@@ -3924,7 +4121,15 @@ function ensureUniverseShape(universe) {
     if (planet.parentPlanetId === void 0) planet.parentPlanetId = null;
     if (planet.moonId === void 0) planet.moonId = null;
     if (!planet.defenses) planet.defenses = emptyDefenses();
-    if (planet.defenseQueue === void 0) planet.defenseQueue = null;
+    if (!Array.isArray(planet.buildQueue)) {
+      planet.buildQueue = planet.buildQueue ? [planet.buildQueue] : [];
+    }
+    if (!Array.isArray(planet.shipQueue)) {
+      planet.shipQueue = planet.shipQueue ? [planet.shipQueue] : [];
+    }
+    if (!Array.isArray(planet.defenseQueue)) {
+      planet.defenseQueue = planet.defenseQueue ? [planet.defenseQueue] : [];
+    }
     if (!planet.buildings.researchLab) planet.buildings.researchLab = 0;
     if (!planet.buildings.lunarBase) planet.buildings.lunarBase = 0;
     if (!planet.buildings.sensorArray) planet.buildings.sensorArray = 0;
@@ -3982,9 +4187,9 @@ function joinUniverse(universe, playerName, now = Date.now()) {
     buildings: emptyBuildings(),
     ships: emptyShips(),
     defenses: emptyDefenses(),
-    buildQueue: null,
-    shipQueue: null,
-    defenseQueue: null
+    buildQueue: [],
+    shipQueue: [],
+    defenseQueue: []
   };
   planet.buildings.metalMine = 1;
   planet.buildings.crystalMine = 1;
@@ -3996,7 +4201,7 @@ function joinUniverse(universe, playerName, now = Date.now()) {
     planetIds: [planetId],
     activePlanetId: planetId,
     research: emptyResearch(),
-    researchQueue: null,
+    researchQueue: [],
     createdAt: now,
     level: 1,
     xp: 0,
@@ -4080,9 +4285,9 @@ function tryFormMoon(universe, parent, debrisCreated, reportId, now) {
     buildings: emptyBuildings(),
     ships: emptyShips(),
     defenses: emptyDefenses(),
-    buildQueue: null,
-    shipQueue: null,
-    defenseQueue: null
+    buildQueue: [],
+    shipQueue: [],
+    defenseQueue: []
   };
   universe.planets[moonId] = moon;
   parent.moonId = moonId;
@@ -4445,9 +4650,9 @@ function resolveFleetArrival(universe, fleet, now) {
           buildings: emptyBuildings(),
           ships: emptyShips(),
           defenses: emptyDefenses(),
-          buildQueue: null,
-          shipQueue: null,
-          defenseQueue: null
+          buildQueue: [],
+          shipQueue: [],
+          defenseQueue: []
         };
         colony.buildings.solarPlant = 1;
         const remaining = normalizeFleetShips(fleet.ships);
@@ -4553,7 +4758,29 @@ function advanceUniverse(universe, now = Date.now()) {
   pruneSpyReports(universe, now);
 }
 
+// packages/game/src/world-queue-caps.ts
+function hasActiveOfficer(player, officerId, now) {
+  return pruneExpiredOfficers(player, now).some((o) => o.officerId === officerId);
+}
+function yardQueueCap(player, now = Date.now()) {
+  const logistics = player.research.queueLogistics ?? 0;
+  let cap = QUEUE_BASE_LENGTH.building + Math.floor(logistics / 2);
+  if (hasActiveOfficer(player, "quartermaster", now)) cap += 1;
+  if ((player.skillsUnlocked ?? []).includes(YARD_DEPTH_SKILL_ID)) cap += 1;
+  return Math.min(QUEUE_HARD_CAP, Math.max(1, cap));
+}
+function researchQueueCap(player, now = Date.now()) {
+  const logistics = player.research.queueLogistics ?? 0;
+  let cap = QUEUE_BASE_LENGTH.research + Math.floor(logistics / 3);
+  if (hasActiveOfficer(player, "archivist", now)) cap += 1;
+  return Math.min(QUEUE_HARD_CAP, Math.max(1, cap));
+}
+
 // packages/game/src/world-queues.ts
+function naniteFactoryLevel(planet) {
+  const buildings = planet.buildings;
+  return Math.max(0, Math.floor(buildings.naniteFactory ?? 0));
+}
 function resolveActionPlanet(universe, player, planetId) {
   const id = planetId || player.activePlanetId || player.homePlanetId;
   if (!player.planetIds.includes(id)) return null;
@@ -4591,36 +4818,52 @@ function queueBuildingUpgrade(universe, playerId, buildingId, now = Date.now(), 
   if (buildingId === "jumpGate" && (planet.buildings.lunarBase ?? 0) < 1) {
     return { ok: false, error: "Fold Bridge needs Crater Hab level 1." };
   }
-  if (planet.buildQueue) {
-    return { ok: false, error: "A building is already under construction." };
+  const cap = yardQueueCap(player, now);
+  if (planet.buildQueue.length >= cap) {
+    return {
+      ok: false,
+      error: `Building queue is full (${planet.buildQueue.length}/${cap}).`
+    };
   }
-  const current = planet.buildings[buildingId] ?? 0;
+  const pendingSame = planet.buildQueue.filter(
+    (q) => q.buildingId === buildingId
+  ).length;
+  const current = (planet.buildings[buildingId] ?? 0) + pendingSame;
+  const targetLevel = current + 1;
   if (buildingId === "lunarBase") {
-    const nextCap = MOON_FIELDS_BASE + (current + 1) * MOON_FIELDS_PER_LUNAR_BASE;
+    const nextCap = MOON_FIELDS_BASE + targetLevel * MOON_FIELDS_PER_LUNAR_BASE;
     if (nextCap < fieldsUsed(planet) + 1) {
       return { ok: false, error: "No free planet fields remaining." };
     }
-  } else if (fieldsRemaining(planet) < 1) {
-    return { ok: false, error: "No free planet fields remaining." };
+  } else {
+    const pendingFieldUsers = planet.buildQueue.filter(
+      (q) => q.buildingId !== "lunarBase"
+    ).length;
+    if (fieldsRemaining(planet) < pendingFieldUsers + 1) {
+      return { ok: false, error: "No free planet fields remaining." };
+    }
   }
   const cost = buildingUpgradeCost(buildingId, current);
   if (!canAfford(planet.resources, cost)) {
     return { ok: false, error: "Not enough resources." };
   }
   const lb = levelBonuses(player.level ?? 1);
-  const seconds = Math.max(
-    1,
-    Math.ceil(
-      buildingUpgradeSeconds(buildingId, current) * lb.buildTime / universe.speed
-    )
-  );
+  const naniteLevel = naniteFactoryLevel(planet);
+  const seconds = buildingUpgradeSeconds(buildingId, current, naniteLevel) * lb.buildTime / universe.speed;
   planet.resources = spend(planet.resources, cost);
-  planet.buildQueue = {
+  const startNow = planet.buildQueue.length === 0;
+  planet.buildQueue.push({
+    id: newQueueItemId(now),
     kind: "building",
     buildingId,
-    targetLevel: current + 1,
-    completesAt: now + seconds * 1e3
-  };
+    targetLevel,
+    enqueuedAt: now,
+    workSeconds: seconds,
+    startedAt: startNow ? now : null,
+    completesAt: now + seconds * 1e3,
+    paidCost: { ...cost }
+  });
+  ensureQueueFrontStarted(planet.buildQueue, now);
   universe.planets[planet.id] = planet;
   return { ok: true, planet };
 }
@@ -4636,8 +4879,12 @@ function queueShipBuild(universe, playerId, shipId, count, now = Date.now(), pla
   advanceUniverse(universe, now);
   const planet = resolveActionPlanet(universe, player, planetId);
   if (!planet) return { ok: false, error: "Planet missing." };
-  if (planet.shipQueue) {
-    return { ok: false, error: "Shipyard is already busy." };
+  const cap = yardQueueCap(player, now);
+  if (planet.shipQueue.length >= cap) {
+    return {
+      ok: false,
+      error: `Ship queue is full (${planet.shipQueue.length}/${cap}).`
+    };
   }
   const yard = planet.buildings.shipyard ?? 0;
   if (yard < def.shipyardLevel) {
@@ -4651,20 +4898,24 @@ function queueShipBuild(universe, playerId, shipId, count, now = Date.now(), pla
     return { ok: false, error: "Not enough resources." };
   }
   const lb = levelBonuses(player.level ?? 1);
-  const seconds = Math.max(
-    1,
-    Math.ceil(
-      shipBuildSeconds(shipId, qty, yard) * lb.shipBuild / universe.speed
-    )
-  );
+  const naniteLevel = naniteFactoryLevel(planet);
+  const unitSeconds = shipUnitBuildSeconds(shipId, yard, naniteLevel) * lb.shipBuild / universe.speed;
+  const seconds = unitSeconds * qty;
   planet.resources = spend(planet.resources, cost);
-  planet.shipQueue = {
+  const startNow = planet.shipQueue.length === 0;
+  planet.shipQueue.push({
+    id: newQueueItemId(now),
     kind: "ship",
     shipId,
     count: qty,
+    enqueuedAt: now,
+    workSeconds: seconds,
+    startedAt: startNow ? now : null,
     completesAt: now + seconds * 1e3,
-    unitSeconds: Math.ceil(seconds / qty)
-  };
+    unitSeconds,
+    paidCost: { ...cost }
+  });
+  ensureQueueFrontStarted(planet.shipQueue, now);
   universe.planets[planet.id] = planet;
   return { ok: true, planet };
 }
@@ -4680,8 +4931,12 @@ function queueDefenseBuild(universe, playerId, defenseId, count, now = Date.now(
   advanceUniverse(universe, now);
   const planet = resolveActionPlanet(universe, player, planetId);
   if (!planet) return { ok: false, error: "Planet missing." };
-  if (planet.defenseQueue) {
-    return { ok: false, error: "Defense yard is already busy." };
+  const cap = yardQueueCap(player, now);
+  if (planet.defenseQueue.length >= cap) {
+    return {
+      ok: false,
+      error: `Defense queue is full (${planet.defenseQueue.length}/${cap}).`
+    };
   }
   const yard = planet.buildings.shipyard ?? 0;
   if (yard < def.shipyardLevel) {
@@ -4694,18 +4949,25 @@ function queueDefenseBuild(universe, playerId, defenseId, count, now = Date.now(
   if (!canAfford(planet.resources, cost)) {
     return { ok: false, error: "Not enough resources." };
   }
-  const seconds = Math.max(
-    1,
-    Math.ceil(defenseBuildSeconds(defenseId, qty, yard) / universe.speed)
-  );
+  const lb = levelBonuses(player.level ?? 1);
+  const naniteLevel = naniteFactoryLevel(planet);
+  const unitSeconds = defenseUnitBuildSeconds(defenseId, yard, naniteLevel) * lb.shipBuild / universe.speed;
+  const seconds = unitSeconds * qty;
   planet.resources = spend(planet.resources, cost);
-  planet.defenseQueue = {
+  const startNow = planet.defenseQueue.length === 0;
+  planet.defenseQueue.push({
+    id: newQueueItemId(now),
     kind: "defense",
     defenseId,
     count: qty,
+    enqueuedAt: now,
+    workSeconds: seconds,
+    startedAt: startNow ? now : null,
     completesAt: now + seconds * 1e3,
-    unitSeconds: Math.ceil(seconds / qty)
-  };
+    unitSeconds,
+    paidCost: { ...cost }
+  });
+  ensureQueueFrontStarted(planet.defenseQueue, now);
   universe.planets[planet.id] = planet;
   return { ok: true, planet };
 }
@@ -4717,8 +4979,12 @@ function queueResearch(universe, playerId, researchId, now = Date.now()) {
   const def = RESEARCH[researchId];
   if (!def) return { ok: false, error: "Unknown research." };
   advanceUniverse(universe, now);
-  if (player.researchQueue) {
-    return { ok: false, error: "Research is already in progress." };
+  const cap = researchQueueCap(player, now);
+  if (player.researchQueue.length >= cap) {
+    return {
+      ok: false,
+      error: `Research queue is full (${player.researchQueue.length}/${cap}).`
+    };
   }
   const lab = bestLabLevel(universe, player);
   if (lab < def.labLevel) {
@@ -4729,7 +4995,10 @@ function queueResearch(universe, playerId, researchId, now = Date.now()) {
   }
   const planet = activePlanet(universe, player);
   if (!planet) return { ok: false, error: "Planet missing." };
-  const current = player.research[researchId] ?? 0;
+  const pendingSame = player.researchQueue.filter(
+    (q) => q.researchId === researchId
+  ).length;
+  const current = (player.research[researchId] ?? 0) + pendingSame;
   if (current + 1 > lab) {
     return {
       ok: false,
@@ -4749,15 +5018,254 @@ function queueResearch(universe, playerId, researchId, now = Date.now()) {
     )
   );
   planet.resources = spend(planet.resources, cost);
-  player.researchQueue = {
+  const startNow = player.researchQueue.length === 0;
+  player.researchQueue.push({
+    id: newQueueItemId(now),
     kind: "research",
     researchId,
     targetLevel: current + 1,
-    completesAt: now + seconds * 1e3
-  };
+    enqueuedAt: now,
+    workSeconds: seconds,
+    startedAt: startNow ? now : null,
+    completesAt: startNow ? now + seconds * 1e3 : now + seconds * 1e3,
+    paidCost: { ...cost }
+  });
+  ensureQueueFrontStarted(player.researchQueue, now);
   universe.planets[planet.id] = planet;
   universe.players[player.id] = player;
   return { ok: true, planet };
+}
+
+// packages/game/src/world-queue-manage.ts
+function queueOnPlanet(planet, kind) {
+  switch (kind) {
+    case "building":
+      return planet.buildQueue;
+    case "ship":
+      return planet.shipQueue;
+    case "defense":
+      return planet.defenseQueue;
+    default: {
+      const _exhaustive = kind;
+      throw new Error(`Unhandled planet queue kind: ${_exhaustive}`);
+    }
+  }
+}
+function setQueueOnPlanet(planet, kind, queue) {
+  switch (kind) {
+    case "building":
+      planet.buildQueue = queue;
+      break;
+    case "ship":
+      planet.shipQueue = queue;
+      break;
+    case "defense":
+      planet.defenseQueue = queue;
+      break;
+    default: {
+      const _exhaustive = kind;
+      throw new Error(`Unhandled planet queue kind: ${_exhaustive}`);
+    }
+  }
+}
+function applyRefundToPlanet(planet, cost, fraction) {
+  const refunded = refundResources(planet.resources, cost, fraction);
+  planet.resources = clampToStorage(refunded, storageFor(planet));
+}
+function cancelQueueItem(universe, playerId, opts, now = Date.now()) {
+  const player = universe.players[playerId];
+  if (!player) return { ok: false, error: "Unknown player." };
+  advanceUniverse(universe, now);
+  if (opts.kind === "research") {
+    const queue2 = player.researchQueue;
+    const index2 = queue2.findIndex((q) => q.id === opts.itemId);
+    if (index2 < 0) return { ok: false, error: "Queue item not found." };
+    const item2 = queue2[index2];
+    const planet2 = activePlanet(universe, player);
+    if (!planet2) return { ok: false, error: "Planet missing." };
+    const fraction2 = index2 === 0 && item2.startedAt != null && item2.startedAt < now ? 0.5 : 1;
+    applyRefundToPlanet(planet2, item2.paidCost, fraction2);
+    queue2.splice(index2, 1);
+    ensureQueueFrontStarted(queue2, now);
+    player.researchQueue = queue2;
+    universe.players[player.id] = player;
+    universe.planets[planet2.id] = planet2;
+    return { ok: true, planet: planet2 };
+  }
+  const planetId = opts.planetId || player.activePlanetId || player.homePlanetId;
+  if (!player.planetIds.includes(planetId)) {
+    return { ok: false, error: "You do not own that planet." };
+  }
+  const planet = universe.planets[planetId];
+  if (!planet) return { ok: false, error: "Planet missing." };
+  const queue = queueOnPlanet(planet, opts.kind);
+  const index = queue.findIndex((q) => q.id === opts.itemId);
+  if (index < 0) return { ok: false, error: "Queue item not found." };
+  const item = queue[index];
+  const fraction = index === 0 && item.startedAt != null && item.startedAt < now ? 0.5 : 1;
+  applyRefundToPlanet(planet, item.paidCost, fraction);
+  queue.splice(index, 1);
+  ensureQueueFrontStarted(queue, now);
+  setQueueOnPlanet(planet, opts.kind, queue);
+  universe.planets[planet.id] = planet;
+  return { ok: true, planet };
+}
+function reorderQueue(universe, playerId, opts, now = Date.now()) {
+  const player = universe.players[playerId];
+  if (!player) return { ok: false, error: "Unknown player." };
+  advanceUniverse(universe, now);
+  const applyReorder = (queue, orderedIds) => {
+    if (queue.length === 0) {
+      return { ok: false, error: "Queue is empty." };
+    }
+    if (orderedIds.length !== queue.length) {
+      return { ok: false, error: "orderedIds must list every queue item once." };
+    }
+    const frontId = queue[0].id;
+    if (orderedIds[0] !== frontId) {
+      return {
+        ok: false,
+        error: "Front queue item is locked \u2014 cancel it instead of reordering."
+      };
+    }
+    const byId = new Map(queue.map((q) => [q.id, q]));
+    if (new Set(orderedIds).size !== orderedIds.length) {
+      return { ok: false, error: "orderedIds must be unique." };
+    }
+    const next = [];
+    for (const id of orderedIds) {
+      const item = byId.get(id);
+      if (!item) return { ok: false, error: "orderedIds includes unknown item." };
+      next.push(item);
+    }
+    ensureQueueFrontStarted(next, now);
+    return { ok: true, queue: next };
+  };
+  if (opts.kind === "research") {
+    const result2 = applyReorder(player.researchQueue, opts.orderedIds);
+    if (!result2.ok) return result2;
+    player.researchQueue = result2.queue;
+    universe.players[player.id] = player;
+    const planet2 = activePlanet(universe, player);
+    if (!planet2) return { ok: false, error: "Planet missing." };
+    return { ok: true, planet: planet2 };
+  }
+  const planetId = opts.planetId || player.activePlanetId || player.homePlanetId;
+  if (!player.planetIds.includes(planetId)) {
+    return { ok: false, error: "You do not own that planet." };
+  }
+  const planet = universe.planets[planetId];
+  if (!planet) return { ok: false, error: "Planet missing." };
+  const current = queueOnPlanet(planet, opts.kind);
+  const result = applyReorder(current, opts.orderedIds);
+  if (!result.ok) return result;
+  setQueueOnPlanet(planet, opts.kind, result.queue);
+  universe.planets[planet.id] = planet;
+  return { ok: true, planet };
+}
+function stampQueueView(player, planet, now) {
+  const stamp = (queue) => {
+    let cursor = now;
+    return queue.map((item, index) => {
+      let remaining;
+      if (index === 0 && item.startedAt != null) {
+        remaining = Math.max(0, Math.ceil((item.completesAt - now) / 1e3));
+        cursor = Math.max(cursor, item.completesAt);
+      } else {
+        remaining = item.workSeconds;
+        const startAt = cursor;
+        item.completesAt = startAt + item.workSeconds * 1e3;
+        cursor = item.completesAt;
+      }
+      return { ...item, remainingSeconds: remaining };
+    });
+  };
+  planet.buildQueue = stamp(planet.buildQueue);
+  planet.shipQueue = stamp(planet.shipQueue);
+  planet.defenseQueue = stamp(planet.defenseQueue);
+  player.researchQueue = stamp(player.researchQueue);
+}
+
+// packages/game/src/world-migrate.ts
+function universeSchemaVersion(universe) {
+  return universe.schemaVersion ?? 1;
+}
+function migrateUniverseV2ToV3(universe, now = Date.now()) {
+  if ((universe.schemaVersion ?? 0) >= 3) {
+    ensureUniverseShape(universe);
+    return universe;
+  }
+  for (const player of Object.values(universe.players)) {
+    player.researchQueue = normalizeResearchQueue(player.researchQueue, now);
+    if (player.level == null) {
+      player.level = 1;
+    }
+    if (player.xp == null) {
+      player.xp = 0;
+    }
+    if (player.xpTotal == null) {
+      player.xpTotal = 0;
+    }
+    if (player.discoveredMiniIds == null) {
+      player.discoveredMiniIds = [];
+    }
+    if (player.research && player.research.queueLogistics == null) {
+      player.research.queueLogistics = 0;
+    }
+  }
+  for (const planet of Object.values(universe.planets)) {
+    planet.buildQueue = normalizeBuildQueue(planet.buildQueue, now);
+    planet.shipQueue = normalizeShipQueue(planet.shipQueue, now);
+    planet.defenseQueue = normalizeDefenseQueue(planet.defenseQueue, now);
+  }
+  if (universe.occupations == null) {
+    universe.occupations = {};
+  }
+  if (universe.miniPlanetIds == null) {
+    universe.miniPlanetIds = [];
+  }
+  if (universe.pirateBases) {
+    for (const base of Object.values(universe.pirateBases)) {
+      const tier = base.tier ?? 0;
+      if (base.level == null) {
+        base.level = tier;
+      }
+      if (base.techs == null) {
+        base.techs = {
+          weapons: 0,
+          armour: 0,
+          shielding: 0
+        };
+      }
+      if (base.lastFreeSpawnAt == null) {
+        base.lastFreeSpawnAt = base.lastGrewAt ?? now;
+      }
+    }
+  }
+  universe.schemaVersion = 3;
+  ensureUniverseShape(universe);
+  return universe;
+}
+function migrateOrResetUniverse(data, opts) {
+  const version = universeSchemaVersion(data);
+  if (version >= UNIVERSE_SCHEMA_VERSION && data.id) {
+    ensureUniverseShape(data);
+    return { universe: data, didReset: false, archived: null };
+  }
+  if (version === 2 && data.id) {
+    migrateUniverseV2ToV3(data);
+    return { universe: data, didReset: false, archived: null };
+  }
+  const fresh = createUniverse(
+    opts?.name ?? data.name ?? "Alpha Drift",
+    opts?.speed ?? data.speed ?? 1,
+    opts?.fleetSpeed ?? data.fleetSpeed ?? data.speed ?? 1
+  );
+  ensureUniverseShape(fresh);
+  return { universe: fresh, didReset: true, archived: data };
+}
+function archiveUniverseKey(universeId, ts = Date.now()) {
+  return `starhold:universe:archive:${universeId}:${ts}`;
 }
 
 // packages/game/src/world-launch-target.ts
@@ -5202,6 +5710,9 @@ function playerView(universe, playerId, now = Date.now(), galaxy, system) {
   maybeGrantHighscoreStarshards(universe, playerId);
   const planet = activePlanet(universe, player);
   if (!planet) throw new Error("Planet missing.");
+  stampQueueView(player, planet, now);
+  universe.planets[planet.id] = planet;
+  universe.players[player.id] = player;
   const boosts = playerBoosts(player, now);
   const fleets = Object.values(universe.fleets).filter((f) => f.ownerPlayerId === playerId).sort((a, b) => a.arrivesAt - b.arrivesAt);
   const reports = Object.values(universe.reports).filter(
@@ -5263,33 +5774,6 @@ function playerView(universe, playerId, now = Date.now(), galaxy, system) {
     dailyLoginAvailable: canClaimDailyLogin(player, now),
     progress: playerProgressView(player)
   };
-}
-
-// packages/game/src/world-migrate.ts
-function universeSchemaVersion(universe) {
-  return universe.schemaVersion ?? 1;
-}
-function migrateOrResetUniverse(data, opts) {
-  const version = universeSchemaVersion(data);
-  if (version >= UNIVERSE_SCHEMA_VERSION && data.id) {
-    ensureUniverseShape(data);
-    return { universe: data, didReset: false, archived: null };
-  }
-  if (version === 2 && UNIVERSE_SCHEMA_VERSION >= 3 && data.id) {
-    ensureUniverseShape(data);
-    data.schemaVersion = UNIVERSE_SCHEMA_VERSION;
-    return { universe: data, didReset: false, archived: null };
-  }
-  const fresh = createUniverse(
-    opts?.name ?? data.name ?? "Alpha Drift",
-    opts?.speed ?? data.speed ?? 1,
-    opts?.fleetSpeed ?? data.fleetSpeed ?? data.speed ?? 1
-  );
-  ensureUniverseShape(fresh);
-  return { universe: fresh, didReset: true, archived: data };
-}
-function archiveUniverseKey(universeId, ts = Date.now()) {
-  return `starhold:universe:archive:${universeId}:${ts}`;
 }
 
 // packages/game/src/world-starshards.ts
@@ -11470,6 +11954,103 @@ function createApp() {
     }
     return withUniverse((universe) => {
       const result = queueResearch(universe, body.playerId, body.researchId);
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId));
+    });
+  });
+  app2.post("/api/queue/building", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    if (!body.playerId || !body.buildingId) {
+      return c.json({ error: "playerId and buildingId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = queueBuildingUpgrade(
+        universe,
+        body.playerId,
+        body.buildingId,
+        Date.now(),
+        body.planetId
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId));
+    });
+  });
+  app2.post("/api/queue/ship", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    if (!body.playerId || !body.shipId) {
+      return c.json({ error: "playerId and shipId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = queueShipBuild(
+        universe,
+        body.playerId,
+        body.shipId,
+        body.count ?? 1,
+        Date.now(),
+        body.planetId
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId));
+    });
+  });
+  app2.post("/api/queue/defense", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    if (!body.playerId || !body.defenseId) {
+      return c.json({ error: "playerId and defenseId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = queueDefenseBuild(
+        universe,
+        body.playerId,
+        body.defenseId,
+        body.count ?? 1,
+        Date.now(),
+        body.planetId
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId));
+    });
+  });
+  app2.post("/api/queue/research", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    if (!body.playerId || !body.researchId) {
+      return c.json({ error: "playerId and researchId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = queueResearch(universe, body.playerId, body.researchId);
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId));
+    });
+  });
+  app2.post("/api/queue/cancel", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    if (!body.playerId || !body.kind || !body.itemId) {
+      return c.json({ error: "playerId, kind, and itemId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = cancelQueueItem(universe, body.playerId, {
+        kind: body.kind,
+        itemId: body.itemId,
+        planetId: body.planetId
+      });
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId));
+    });
+  });
+  app2.post("/api/queue/reorder", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    if (!body.playerId || !body.kind || !Array.isArray(body.orderedIds)) {
+      return c.json(
+        { error: "playerId, kind, and orderedIds required." },
+        400
+      );
+    }
+    return withUniverse((universe) => {
+      const result = reorderQueue(universe, body.playerId, {
+        kind: body.kind,
+        orderedIds: body.orderedIds,
+        planetId: body.planetId
+      });
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId));
     });

@@ -12,6 +12,7 @@ export {
   doBuild,
   doBuildDefense,
   doResearch,
+  doCancelQueue,
 } from "./main-actions-build.js";
 export { doLaunchFleet } from "./main-actions-fleet.js";
 export {

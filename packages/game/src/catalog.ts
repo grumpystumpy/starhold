@@ -139,7 +139,19 @@ export const RESEARCH_ORDER: ResearchId[] = [
   "espionageTech",
   "astrophysics",
   "computerTech",
+  "queueLogistics",
 ];
+
+/** Hard cap per queue kind (Round 2 contract v1). */
+export const QUEUE_HARD_CAP = 8;
+
+/** Base queue lengths before Yard Logistics / officers / skills. */
+export const QUEUE_BASE_LENGTH = {
+  building: 2,
+  ship: 2,
+  defense: 2,
+  research: 1,
+} as const;
 
 export const STARTING_RESOURCES = {
   metal: 500,

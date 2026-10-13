@@ -11,6 +11,11 @@ import { activePlanet, bestLabLevel } from "./world-bootstrap.js";
 import { advanceUniverse } from "./world-arrival.js";
 import type { ActionResult } from "./world-queues.js";
 import { playerBoosts } from "./world-boosts.js";
+import { researchQueueCap } from "./world-queue-caps.js";
+import {
+  ensureQueueFrontStarted,
+  newQueueItemId,
+} from "./world-queue-normalize.js";
 
 export function queueResearch(
   universe: UniverseState,
@@ -24,8 +29,12 @@ export function queueResearch(
   if (!def) return { ok: false, error: "Unknown research." };
 
   advanceUniverse(universe, now);
-  if (player.researchQueue) {
-    return { ok: false, error: "Research is already in progress." };
+  const cap = researchQueueCap(player, now);
+  if (player.researchQueue.length >= cap) {
+    return {
+      ok: false,
+      error: `Research queue is full (${player.researchQueue.length}/${cap}).`,
+    };
   }
 
   const lab = bestLabLevel(universe, player);
@@ -36,12 +45,13 @@ export function queueResearch(
     };
   }
 
-  // Spend from active planet.
   const planet = activePlanet(universe, player);
   if (!planet) return { ok: false, error: "Planet missing." };
 
-  const current = player.research[researchId] ?? 0;
-  // Soft gate: research level cannot exceed lab level.
+  const pendingSame = player.researchQueue.filter(
+    (q) => q.researchId === researchId,
+  ).length;
+  const current = (player.research[researchId] ?? 0) + pendingSame;
   if (current + 1 > lab) {
     return {
       ok: false,
@@ -67,12 +77,19 @@ export function queueResearch(
   );
 
   planet.resources = spend(planet.resources, cost);
-  player.researchQueue = {
+  const startNow = player.researchQueue.length === 0;
+  player.researchQueue.push({
+    id: newQueueItemId(now),
     kind: "research",
     researchId,
     targetLevel: current + 1,
-    completesAt: now + seconds * 1000,
-  };
+    enqueuedAt: now,
+    workSeconds: seconds,
+    startedAt: startNow ? now : null,
+    completesAt: startNow ? now + seconds * 1000 : now + seconds * 1000,
+    paidCost: { ...cost },
+  });
+  ensureQueueFrontStarted(player.researchQueue, now);
   universe.planets[planet.id] = planet;
   universe.players[player.id] = player;
   return { ok: true, planet };

@@ -81,7 +81,7 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   researchLab: {
     id: "researchLab",
     name: "Research Lab",
-    description: "Unlocks empire-wide research. One project at a time.",
+    description: "Unlocks empire-wide research. Queue length grows with Yard Logistics.",
     // Metal/crystal only so mines-first sessions unlock research before Deut Still.
     baseCost: { metal: 180, crystal: 120, deuterium: 0 },
     costGrowth: 2,

@@ -148,7 +148,12 @@ export function ensureUniverseShape(universe: UniverseState): void {
       player.activePlanetId = player.homePlanetId;
     }
     if (!player.research) player.research = emptyResearch();
-    if (player.researchQueue === undefined) player.researchQueue = null;
+    if (player.research.queueLogistics == null) player.research.queueLogistics = 0;
+    if (!Array.isArray(player.researchQueue)) {
+      player.researchQueue = player.researchQueue
+        ? [player.researchQueue as never]
+        : [];
+    }
     if (player.starshards === undefined) player.starshards = 0;
     if (!player.officers) player.officers = [];
     if (!player.skillsUnlocked) player.skillsUnlocked = [];
@@ -165,7 +170,17 @@ export function ensureUniverseShape(universe: UniverseState): void {
     if (planet.parentPlanetId === undefined) planet.parentPlanetId = null;
     if (planet.moonId === undefined) planet.moonId = null;
     if (!planet.defenses) planet.defenses = emptyDefenses();
-    if (planet.defenseQueue === undefined) planet.defenseQueue = null;
+    if (!Array.isArray(planet.buildQueue)) {
+      planet.buildQueue = planet.buildQueue ? [planet.buildQueue as never] : [];
+    }
+    if (!Array.isArray(planet.shipQueue)) {
+      planet.shipQueue = planet.shipQueue ? [planet.shipQueue as never] : [];
+    }
+    if (!Array.isArray(planet.defenseQueue)) {
+      planet.defenseQueue = planet.defenseQueue
+        ? [planet.defenseQueue as never]
+        : [];
+    }
     if (!planet.buildings.researchLab) planet.buildings.researchLab = 0;
     if (!planet.buildings.lunarBase) planet.buildings.lunarBase = 0;
     if (!planet.buildings.sensorArray) planet.buildings.sensorArray = 0;
@@ -236,9 +251,9 @@ export function joinUniverse(
     buildings: emptyBuildings(),
     ships: emptyShips(),
     defenses: emptyDefenses(),
-    buildQueue: null,
-    shipQueue: null,
-    defenseQueue: null,
+    buildQueue: [],
+    shipQueue: [],
+    defenseQueue: [],
   };
 
   planet.buildings.metalMine = 1;
@@ -252,7 +267,7 @@ export function joinUniverse(
     planetIds: [planetId],
     activePlanetId: planetId,
     research: emptyResearch(),
-    researchQueue: null,
+    researchQueue: [],
     createdAt: now,
     level: 1,
     xp: 0,

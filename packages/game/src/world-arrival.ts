@@ -155,9 +155,9 @@ export function resolveFleetArrival(
           buildings: emptyBuildings(),
           ships: emptyShips(),
           defenses: emptyDefenses(),
-          buildQueue: null,
-          shipQueue: null,
-          defenseQueue: null,
+          buildQueue: [],
+          shipQueue: [],
+          defenseQueue: [],
         };
         colony.buildings.solarPlant = 1;
         const remaining = normalizeFleetShips(fleet.ships);

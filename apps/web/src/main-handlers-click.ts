@@ -19,6 +19,7 @@ import {
   doActivateOfficer,
   doBuild,
   doBuildDefense,
+  doCancelQueue,
   doClaimDaily,
   doGalaxyNav,
   doJoin,
@@ -73,6 +74,21 @@ export function bindClickHandlers(): void {
         ev.preventDefault();
         const id = planetBtn.getAttribute("data-select-planet");
         if (id) void doSelectPlanet(id);
+        return;
+      }
+
+      const cancelBtn = closestActionEl(target, "[data-queue-cancel]");
+      if (cancelBtn) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const kind = cancelBtn.getAttribute("data-queue-cancel") as
+          | "building"
+          | "ship"
+          | "defense"
+          | "research"
+          | null;
+        const itemId = cancelBtn.getAttribute("data-queue-item");
+        if (kind && itemId) void doCancelQueue(kind, itemId);
         return;
       }
 

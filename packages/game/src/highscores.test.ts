@@ -52,9 +52,9 @@ describe("P2 highscores", () => {
       },
       ships: emptyFleetShips(),
       defenses: emptyDefenses(),
-      buildQueue: null,
-      shipQueue: null,
-      defenseQueue: null,
+      buildQueue: [],
+      shipQueue: [],
+      defenseQueue: [],
     };
     player.planetIds.push(colonyId);
 

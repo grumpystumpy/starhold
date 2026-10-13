@@ -1,17 +1,93 @@
 import { UNIVERSE_SCHEMA_VERSION } from "./catalog.js";
-import type { UniverseState } from "./types.js";
+import type { PirateBase, UniverseState } from "./types.js";
 import { createUniverse, ensureUniverseShape } from "./world-bootstrap.js";
+import {
+  normalizeBuildQueue,
+  normalizeDefenseQueue,
+  normalizeResearchQueue,
+  normalizeShipQueue,
+} from "./world-queue-normalize.js";
 
 export function universeSchemaVersion(universe: UniverseState): number {
   return universe.schemaVersion ?? 1;
 }
 
 /**
+ * Additive Round 2 migrator: wrap legacy single queues into arrays,
+ * seed progress / mini / occupation stubs, pirate level alias.
+ * Idempotent when schemaVersion >= 3.
+ */
+export function migrateUniverseV2ToV3(
+  universe: UniverseState,
+  now = Date.now(),
+): UniverseState {
+  if ((universe.schemaVersion ?? 0) >= 3) {
+    ensureUniverseShape(universe);
+    return universe;
+  }
+
+  for (const player of Object.values(universe.players)) {
+    player.researchQueue = normalizeResearchQueue(player.researchQueue, now);
+    if ((player as { level?: number }).level == null) {
+      (player as { level?: number }).level = 1;
+    }
+    if ((player as { xp?: number }).xp == null) {
+      (player as { xp?: number }).xp = 0;
+    }
+    if ((player as { xpTotal?: number }).xpTotal == null) {
+      (player as { xpTotal?: number }).xpTotal = 0;
+    }
+    if ((player as { discoveredMiniIds?: string[] }).discoveredMiniIds == null) {
+      (player as { discoveredMiniIds?: string[] }).discoveredMiniIds = [];
+    }
+    if (player.research && player.research.queueLogistics == null) {
+      player.research.queueLogistics = 0;
+    }
+  }
+
+  for (const planet of Object.values(universe.planets)) {
+    planet.buildQueue = normalizeBuildQueue(planet.buildQueue, now);
+    planet.shipQueue = normalizeShipQueue(planet.shipQueue, now);
+    planet.defenseQueue = normalizeDefenseQueue(planet.defenseQueue, now);
+  }
+
+  if ((universe as { occupations?: Record<string, unknown> }).occupations == null) {
+    (universe as { occupations?: Record<string, unknown> }).occupations = {};
+  }
+  if ((universe as { miniPlanetIds?: string[] }).miniPlanetIds == null) {
+    (universe as { miniPlanetIds?: string[] }).miniPlanetIds = [];
+  }
+
+  if (universe.pirateBases) {
+    for (const base of Object.values(universe.pirateBases) as PirateBase[]) {
+      const tier = base.tier ?? 0;
+      if ((base as { level?: number }).level == null) {
+        (base as { level?: number }).level = tier;
+      }
+      if ((base as { techs?: unknown }).techs == null) {
+        (base as { techs?: unknown }).techs = {
+          weapons: 0,
+          armour: 0,
+          shielding: 0,
+        };
+      }
+      if ((base as { lastFreeSpawnAt?: number }).lastFreeSpawnAt == null) {
+        (base as { lastFreeSpawnAt?: number }).lastFreeSpawnAt =
+          base.lastGrewAt ?? now;
+      }
+    }
+  }
+
+  universe.schemaVersion = 3;
+  ensureUniverseShape(universe);
+  return universe;
+}
+
+/**
  * Load-path helper:
- * - Current schema: shape-normalize in place.
- * - Schema 2 → 3 (Round 2): additive backfill (levels, …), no map reset.
- * - Older schemas (prototype / v1): full universe reset + archive.
- * Idempotent — never half-applies a map resize in place.
+ * - schema >= 3: shape-normalize in place
+ * - schema 2: additive migrate to 3 (queues + levels; no archive / no map reset)
+ * - schema < 2: full universe reset (prototype 1×9×8 → contract map)
  */
 export function migrateOrResetUniverse(
   data: UniverseState,
@@ -27,10 +103,8 @@ export function migrateOrResetUniverse(
     return { universe: data, didReset: false, archived: null };
   }
 
-  // Additive Round 2 bump: keep players/map, backfill missing fields.
-  if (version === 2 && UNIVERSE_SCHEMA_VERSION >= 3 && data.id) {
-    ensureUniverseShape(data);
-    data.schemaVersion = UNIVERSE_SCHEMA_VERSION;
+  if (version === 2 && data.id) {
+    migrateUniverseV2ToV3(data);
     return { universe: data, didReset: false, archived: null };
   }
 

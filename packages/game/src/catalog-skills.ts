@@ -8,6 +8,7 @@ export const SKILL_ORDER: string[] = [
   "eco_mines_1",
   "eco_energy_1",
   "eco_mines_2",
+  "yardDepth",
   "eco_capstone",
   "mil_fleet_1",
   "mil_slots_1",
@@ -18,6 +19,9 @@ export const SKILL_ORDER: string[] = [
   "exp_spy_2",
   "exp_capstone",
 ];
+
+/** Round 2 skill: +1 building/ship/defense queue slot. */
+export const YARD_DEPTH_SKILL_ID = "yardDepth";
 
 export const SKILLS: Record<string, SkillNodeDef> = {
   eco_mines_1: {
@@ -46,6 +50,15 @@ export const SKILLS: Record<string, SkillNodeDef> = {
     cost: 40,
     requires: ["eco_mines_1"],
     effects: [{ kind: "mineOutput", value: 1.05 }],
+  },
+  yardDepth: {
+    id: "yardDepth",
+    branch: "economy",
+    name: "Yard Depth",
+    description: "+1 building, ship, and defense queue slot.",
+    cost: 40,
+    requires: ["eco_mines_1"],
+    effects: [],
   },
   eco_capstone: {
     id: "eco_capstone",

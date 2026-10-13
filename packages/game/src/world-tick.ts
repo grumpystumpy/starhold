@@ -11,12 +11,89 @@ import {
 import type {
   Coordinates,
   DebrisField,
+  DefenseQueueItem,
   FleetShips,
   PlanetState,
   PlayerState,
   Resources,
+  ShipQueueItem,
   UniverseState,
 } from "./types.js";
+import { ensureQueueFrontStarted } from "./world-queue-normalize.js";
+
+const MIN_UNIT_SECONDS = 1e-9;
+
+function scalePaidCost(
+  cost: Resources,
+  remain: number,
+  before: number,
+): Resources {
+  if (before <= 0) return { metal: 0, crystal: 0, deuterium: 0 };
+  const ratio = Math.max(0, Math.min(1, remain / before));
+  return {
+    metal: Math.floor(cost.metal * ratio),
+    crystal: Math.floor(cost.crystal * ratio),
+    deuterium: Math.floor(cost.deuterium * ratio),
+  };
+}
+
+/**
+ * Ship / defense queues: when unit time is under 1s, deliver
+ * `batch = floor(elapsed / unitTime)` units per tick (Micah amendment).
+ * Never floors at 1s/unit.
+ */
+function advanceCountableQueue<T extends ShipQueueItem | DefenseQueueItem>(
+  queue: T[],
+  now: number,
+  deliver: (item: T, batch: number) => void,
+): void {
+  ensureQueueFrontStarted(queue, now);
+  while (queue.length > 0) {
+    const front = queue[0]!;
+    if (front.startedAt == null) break;
+    const unit = Math.max(MIN_UNIT_SECONDS, front.unitSeconds);
+    const elapsedSec = Math.max(0, (now - front.startedAt) / 1000);
+    // completesAt is authoritative for finishing the remaining count (avoids float floor-to-0).
+    let batch =
+      front.completesAt <= now
+        ? front.count
+        : Math.floor(elapsedSec / unit + 1e-12);
+    if (batch < 1) break;
+    batch = Math.min(batch, front.count);
+    const before = front.count;
+    deliver(front, batch);
+    front.count -= batch;
+    front.paidCost = scalePaidCost(front.paidCost, front.count, before);
+    if (front.count <= 0) {
+      const freedAt = Math.min(now, front.completesAt);
+      queue.shift();
+      ensureQueueFrontStarted(queue, now, freedAt);
+      continue;
+    }
+    front.startedAt = front.startedAt + batch * unit * 1000;
+    front.workSeconds = front.count * unit;
+    front.completesAt = front.startedAt + front.workSeconds * 1000;
+  }
+}
+
+/** Buildings share the same timer path: complete every front item whose completesAt <= now (may be many per tick when times are sub-second). */
+function advanceBuildingQueue(
+  queue: PlanetState["buildQueue"],
+  now: number,
+  apply: (item: PlanetState["buildQueue"][number]) => void,
+): void {
+  ensureQueueFrontStarted(queue, now);
+  while (
+    queue.length > 0 &&
+    queue[0]!.startedAt != null &&
+    queue[0]!.completesAt <= now
+  ) {
+    const freedAt = queue[0]!.completesAt;
+    apply(queue[0]!);
+    queue.shift();
+    ensureQueueFrontStarted(queue, now, freedAt);
+  }
+}
 
 /** Apply due queues + resource production up to `now` (tick-on-read). */
 export function advancePlanet(
@@ -33,26 +110,24 @@ export function advancePlanet(
     buildings: { ...planet.buildings },
     ships: { ...planet.ships },
     defenses: { ...(planet.defenses ?? emptyDefenses()) },
+    buildQueue: [...(planet.buildQueue ?? [])],
+    shipQueue: [...(planet.shipQueue ?? [])],
+    defenseQueue: [...(planet.defenseQueue ?? [])],
   };
 
-  if (state.buildQueue && state.buildQueue.completesAt <= now) {
-    const { buildingId, targetLevel } = state.buildQueue;
-    state.buildings[buildingId] = targetLevel;
-    state.buildQueue = null;
-    // Buildings grant no XP (Micah amendment / Round 2 rebalance).
-  }
+  // Buildings grant no XP (Micah amendment / Round 2 rebalance).
+  advanceBuildingQueue(state.buildQueue, now, (item) => {
+    state.buildings[item.buildingId] = item.targetLevel;
+  });
 
-  if (state.shipQueue && state.shipQueue.completesAt <= now) {
-    const { shipId, count } = state.shipQueue;
-    state.ships[shipId] = (state.ships[shipId] ?? 0) + count;
-    state.shipQueue = null;
-  }
+  advanceCountableQueue(state.shipQueue, now, (item, batch) => {
+    state.ships[item.shipId] = (state.ships[item.shipId] ?? 0) + batch;
+  });
 
-  if (state.defenseQueue && state.defenseQueue.completesAt <= now) {
-    const { defenseId, count } = state.defenseQueue;
-    state.defenses[defenseId] = (state.defenses[defenseId] ?? 0) + count;
-    state.defenseQueue = null;
-  }
+  advanceCountableQueue(state.defenseQueue, now, (item, batch) => {
+    state.defenses[item.defenseId] =
+      (state.defenses[item.defenseId] ?? 0) + batch;
+  });
 
   const elapsedMs = Math.max(0, now - state.lastTickAt);
   if (elapsedMs > 0) {
@@ -83,11 +158,20 @@ export function advanceResearch(
   player: PlayerState,
   now: number,
 ): void {
-  if (!player.researchQueue || player.researchQueue.completesAt > now) return;
-  const { researchId, targetLevel } = player.researchQueue;
-  player.research[researchId] = targetLevel;
-  player.researchQueue = null;
-  grantPlayerXp(player, xpForResearch(targetLevel));
+  if (!player.researchQueue) player.researchQueue = [];
+  ensureQueueFrontStarted(player.researchQueue, now);
+  while (
+    player.researchQueue.length > 0 &&
+    player.researchQueue[0]!.startedAt != null &&
+    player.researchQueue[0]!.completesAt <= now
+  ) {
+    const freedAt = player.researchQueue[0]!.completesAt;
+    const { researchId, targetLevel } = player.researchQueue[0]!;
+    player.research[researchId] = targetLevel;
+    player.researchQueue.shift();
+    grantPlayerXp(player, xpForResearch(targetLevel));
+    ensureQueueFrontStarted(player.researchQueue, now, freedAt);
+  }
   universe.players[player.id] = player;
 }
 

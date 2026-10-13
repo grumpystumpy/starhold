@@ -38,7 +38,10 @@ export type ResearchId =
   | "shieldingTech"
   | "espionageTech"
   | "astrophysics"
-  | "computerTech";
+  | "computerTech"
+  | "queueLogistics";
+
+export type QueueKind = "building" | "ship" | "defense" | "research";
 
 /**
  * Missions:
@@ -133,34 +136,46 @@ export interface ResearchDef {
   labLevel: number;
 }
 
-export interface BuildQueueItem {
+export interface QueueItemBase {
+  id: string;
+  kind: QueueKind;
+  enqueuedAt: number;
+  /** Wall-clock ms when the front item finishes; recomputed when an item starts. */
+  completesAt: number;
+  /** Seconds of work once this item is at the front. */
+  workSeconds: number;
+  /** Set when this item becomes the active front item. */
+  startedAt: number | null;
+  /** Resources spent when enqueued (for cancel refunds). */
+  paidCost: Resources;
+  /** Seconds remaining snapshot for UI (optional; server is source of truth). */
+  remainingSeconds?: number;
+}
+
+export interface BuildQueueItem extends QueueItemBase {
   kind: "building";
   buildingId: BuildingId;
-  completesAt: number;
   targetLevel: number;
 }
 
-export interface ShipQueueItem {
+export interface ShipQueueItem extends QueueItemBase {
   kind: "ship";
   shipId: ShipId;
   count: number;
-  completesAt: number;
   /** Seconds per unit (for UI remaining estimate) */
   unitSeconds: number;
 }
 
-export interface DefenseQueueItem {
+export interface DefenseQueueItem extends QueueItemBase {
   kind: "defense";
   defenseId: DefenseId;
   count: number;
-  completesAt: number;
   unitSeconds: number;
 }
 
-export interface ResearchQueueItem {
+export interface ResearchQueueItem extends QueueItemBase {
   kind: "research";
   researchId: ResearchId;
-  completesAt: number;
   targetLevel: number;
 }
 

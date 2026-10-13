@@ -65,16 +65,35 @@ export function buildingUpgradeCost(
   };
 }
 
-/** Build duration in seconds for the next level (before universe speed). */
+/**
+ * Nanite Factory (Round 2 / Thread J) construction speed hook.
+ * × 0.1^level for buildings / ships / defenses. Research is exempt.
+ * Returns 1 when level is 0 or missing (no Nanite yet).
+ */
+export function constructionTimeMultiplier(naniteLevel = 0): number {
+  const level = Math.max(0, Math.floor(naniteLevel));
+  if (level <= 0) return 1;
+  return Math.pow(0.1, level);
+}
+
+/** Tiny epsilon so sub-second unit times never divide by zero. */
+const MIN_UNIT_SECONDS = 1e-9;
+
+/**
+ * Build duration in seconds for the next level (before universe speed).
+ * May be < 1 — do not floor at 1s (Micah: batch completions per tick).
+ */
 export function buildingUpgradeSeconds(
   buildingId: BuildingId,
   currentLevel: number,
+  naniteLevel = 0,
 ): number {
   const def = BUILDINGS[buildingId];
-  return Math.max(
-    1,
-    Math.floor(def.baseBuildSeconds * Math.pow(def.costGrowth, currentLevel)),
-  );
+  const raw =
+    def.baseBuildSeconds *
+    Math.pow(def.costGrowth, currentLevel) *
+    constructionTimeMultiplier(naniteLevel);
+  return Math.max(MIN_UNIT_SECONDS, raw);
 }
 
 export function shipCost(shipId: ShipId, count: number): Resources {
@@ -86,14 +105,26 @@ export function shipCost(shipId: ShipId, count: number): Resources {
   };
 }
 
+/** Per-unit ship build seconds (may be < 1). No 1s/unit floor. */
+export function shipUnitBuildSeconds(
+  shipId: ShipId,
+  shipyardLevel: number,
+  naniteLevel = 0,
+): number {
+  const def = SHIPS[shipId];
+  const speedFactor = 1 + Math.max(0, shipyardLevel - 1) * 0.1;
+  const raw =
+    (def.buildSeconds / speedFactor) * constructionTimeMultiplier(naniteLevel);
+  return Math.max(MIN_UNIT_SECONDS, raw);
+}
+
 export function shipBuildSeconds(
   shipId: ShipId,
   count: number,
   shipyardLevel: number,
+  naniteLevel = 0,
 ): number {
-  const def = SHIPS[shipId];
-  const speedFactor = 1 + Math.max(0, shipyardLevel - 1) * 0.1;
-  return Math.max(1, Math.ceil((def.buildSeconds * count) / speedFactor));
+  return shipUnitBuildSeconds(shipId, shipyardLevel, naniteLevel) * count;
 }
 
 export function defenseCost(defenseId: DefenseId, count: number): Resources {
@@ -105,14 +136,26 @@ export function defenseCost(defenseId: DefenseId, count: number): Resources {
   };
 }
 
+/** Per-unit defense build seconds (may be < 1). No 1s/unit floor. */
+export function defenseUnitBuildSeconds(
+  defenseId: DefenseId,
+  shipyardLevel: number,
+  naniteLevel = 0,
+): number {
+  const def = DEFENSES[defenseId];
+  const speedFactor = 1 + Math.max(0, shipyardLevel - 1) * 0.1;
+  const raw =
+    (def.buildSeconds / speedFactor) * constructionTimeMultiplier(naniteLevel);
+  return Math.max(MIN_UNIT_SECONDS, raw);
+}
+
 export function defenseBuildSeconds(
   defenseId: DefenseId,
   count: number,
   shipyardLevel: number,
+  naniteLevel = 0,
 ): number {
-  const def = DEFENSES[defenseId];
-  const speedFactor = 1 + Math.max(0, shipyardLevel - 1) * 0.1;
-  return Math.max(1, Math.ceil((def.buildSeconds * count) / speedFactor));
+  return defenseUnitBuildSeconds(defenseId, shipyardLevel, naniteLevel) * count;
 }
 
 export function researchUpgradeCost(
