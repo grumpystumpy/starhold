@@ -9,6 +9,7 @@ Inspired OGame-like browser space-strategy game for learning. **Original** names
 3. **Shipyard** builds ships + **static defenses** into hangar / garrison.
 4. **Galaxy** browser + **fleets**: deploy, raid, espionage, transport, colonize, harvest debris.
 5. Shared universe on a Hono API — **in-memory locally**, **Upstash Redis** on Vercel.
+6. Optional **email magic-link** accounts (Resend free) + secure session cookie; guest `playerId` can be claimed — [`docs/design/accounts.md`](docs/design/accounts.md).
 
 Formulas: [`packages/game/FLEETS.md`](packages/game/FLEETS.md). Deploy: [`docs/vercel-deploy.md`](docs/vercel-deploy.md). Designs: [`docs/design/`](docs/design/).
 
