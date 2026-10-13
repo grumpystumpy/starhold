@@ -18,6 +18,10 @@ export function renderApp(
     notice: string | null;
     busy: boolean;
     joinDraft: string;
+    emailDraft?: string;
+    accountEmail?: string | null;
+    claimablePlayerId?: string | null;
+    devMagicUrl?: string | null;
     activePage: NavPage;
   },
   _handlers: UiHandlers,

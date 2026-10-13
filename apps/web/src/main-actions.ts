@@ -6,6 +6,9 @@ export {
   doRefresh,
   doGalaxyNav,
   doSelectPlanet,
+  doRequestMagicLink,
+  doClaimAnonymous,
+  resumeFromCookie,
 } from "./main-actions-session.js";
 export {
   doUpgrade,
