@@ -1,26 +1,11 @@
-name: Assemble staged sources (player levels)
+name: Assemble staged sources
 on:
-  workflow_dispatch:
   push:
     branches: [cursor/player-levels-on-f-8713]
+    paths:
+      - .github/workflows/assemble-staged-sources.yml
 jobs:
   assemble:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: cursor/player-levels-on-f-8713
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Decode staged sources and remove workflow
-        run: |
-          set -euo pipefail
-          python3 decode_stage.py
-          rm -f decode_stage.py .github/workflows/assemble-staged-sources.yml
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add -A
-          if git diff --cached --quiet; then echo "nothing to commit"; exit 0; fi
-          git commit -m "chore(I): decode staged sources for player levels"
-          git push
+      - run: echo "waiting for chunked stage; no-op"
