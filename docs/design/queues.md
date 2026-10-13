@@ -19,6 +19,8 @@
 
 Only the front item runs. On complete → pop → start next (`startedAt = now`, recompute `completesAt`).
 
+Building completions grant **no XP** (Micah XP mix). Research completions still award `xpForResearch`.
+
 ### Sub-second batching (Micah)
 
 Ship / defense queues store fractional `unitSeconds` (no 1s/unit floor). Each tick:
