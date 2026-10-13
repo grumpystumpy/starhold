@@ -198,7 +198,7 @@ export function fleetCruiseSpeed(ships: FleetShips): number {
   for (const id of SHIP_ORDER) {
     const n = ships[id] ?? 0;
     if (n > 0) min = Math.min(min, SHIPS[id].speed);
-  }
+  };
   return Number.isFinite(min) ? min : 1;
 }
 
