@@ -1,0 +1,33 @@
+{
+  "parts": 9,
+  "files": [
+    "apps/server/src/app.ts",
+    "apps/web/src/api.ts",
+    "apps/web/src/main-actions-starshards.ts",
+    "apps/web/src/main-actions.ts",
+    "apps/web/src/main-handlers-click.ts",
+    "apps/web/src/ui/render-dashboard.ts",
+    "apps/web/src/ui/render-officers-skills.ts",
+    "apps/web/src/ui/styles-panels.css",
+    "docs/design/starshards-officers-skills.md",
+    "packages/game/src/expeditions.test.ts",
+    "packages/game/src/formulas-build.ts",
+    "packages/game/src/formulas-combat.ts",
+    "packages/game/src/formulas-travel.ts",
+    "packages/game/src/types-core.ts",
+    "packages/game/src/types-view.ts",
+    "packages/game/src/world-arrival-raid.ts",
+    "packages/game/src/world-arrival.ts",
+    "packages/game/src/world-bootstrap.ts",
+    "packages/game/src/world-espionage.ts",
+    "packages/game/src/world-expedition.ts",
+    "packages/game/src/world-launch.ts",
+    "packages/game/src/world-pirates.ts",
+    "packages/game/src/world-research-queue.ts",
+    "packages/game/src/world-tick.ts",
+    "packages/game/src/world-view.ts",
+    "packages/game/src/world.ts"
+  ],
+  "sha256": "a56aac58e47105ca15fa98f378a1d623294a07494cc7381f91133e9b768493fa",
+  "gzip_sha256": "a4a6aac10f00a6ff1ead1f032e57a9153c5a96c429c15e063100dceaaf0108b4"
+}
