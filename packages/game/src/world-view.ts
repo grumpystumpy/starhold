@@ -17,8 +17,10 @@ import { advanceUniverse } from "./world-arrival.js";
 import {
   activePlanet,
   ensureUniverseShape,
+  moonAtCoords,
   planetAtCoords,
 } from "./world-bootstrap.js";
+import { ownedPlanetCount } from "./world-moons.js";
 import { getDebris } from "./world-tick.js";
 
 /** Empire total: all planets + in-flight ships + research once. */
@@ -47,7 +49,7 @@ export function highscoresBoard(universe: UniverseState): HighscoreEntry[] {
       name: p.name,
       points: empirePoints(universe, p),
       coords: home?.coords ?? { galaxy: 0, system: 0, slot: 0 },
-      planetCount: p.planetIds?.length ?? 0,
+      planetCount: ownedPlanetCount(universe, p.id),
     };
   });
   rows.sort(
@@ -82,6 +84,7 @@ export function galaxyViewFor(
   for (let slot = 1; slot <= MAP_SLOTS; slot++) {
     const coords = { galaxy: g, system: s, slot };
     const planet = planetAtCoords(universe, coords);
+    const moon = moonAtCoords(universe, coords);
     const debris = getDebris(universe, coords);
     const owner = planet
       ? universe.players[planet.ownerPlayerId]
@@ -96,6 +99,8 @@ export function galaxyViewFor(
         ? { metal: debris.metal, crystal: debris.crystal }
         : null,
       isOwn: owner?.id === playerId,
+      hasMoon: Boolean(moon),
+      moonId: moon?.id ?? null,
     });
   }
   return { galaxy: g, system: s, slots };
@@ -140,6 +145,19 @@ export function playerView(
   const g = galaxy ?? planet.coords.galaxy;
   const s = system ?? planet.coords.system;
 
+  const sensorContacts =
+    planet.kind === "moon" && (planet.buildings.sensorArray ?? 0) >= 1
+      ? Object.values(universe.fleets)
+          .filter(
+            (f) =>
+              f.phase === "outbound" &&
+              f.targetCoords.galaxy === planet.coords.galaxy &&
+              f.targetCoords.system === planet.coords.system,
+          )
+          .sort((a, b) => a.arrivesAt - b.arrivesAt)
+          .slice(0, 20)
+      : [];
+
   return {
     now,
     universe: {
@@ -160,6 +178,7 @@ export function playerView(
           coords: p.coords,
           isHome: p.id === player.homePlanetId,
           isActive: p.id === player.activePlanetId,
+          isMoon: p.kind === "moon",
         };
       })
       .filter((x): x is NonNullable<typeof x> => x !== null),
@@ -175,5 +194,6 @@ export function playerView(
     reports,
     spyReports,
     expeditionReports,
+    sensorContacts,
   };
 }
