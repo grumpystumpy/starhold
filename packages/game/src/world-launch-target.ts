@@ -94,14 +94,19 @@ export function resolveLaunchTarget(
       if (targetPlanet.id === origin.id) {
         return { ok: false, error: "Cannot transport to the same planet." };
       }
-    } else if (mission === "deploy" || mission === "raid") {
+    } else if (mission === "deploy") {
+      if (targetPlanet.id === origin.id) {
+        return { ok: false, error: "Cannot deploy to the same planet." };
+      }
+      // Own worlds: park (dock). Rivals: peaceful visit + return.
+    } else if (mission === "raid") {
       if (targetPlanet.id === origin.id) {
         return { ok: false, error: "Cannot send a fleet to your own planet." };
       }
       if (targetPlanet.ownerPlayerId === player.id) {
         return {
           ok: false,
-          error: "Use transport to move between your own planets.",
+          error: "Use transport or deploy to move between your own planets.",
         };
       }
     } else if (mission === "espionage") {
