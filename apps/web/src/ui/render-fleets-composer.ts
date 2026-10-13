@@ -35,6 +35,16 @@ export function fleetComposer(
         `<option value="planet:${escapeAttr(p.id)}">${escapeHtml(p.name)}${p.isMoon ? " · Moon" : ""} · ${fmtCoords(p.coords)}</option>`,
       );
     }
+  } else if (mission === "jump") {
+    const originGate = view.planet.kind === "moon"
+      ? (view.planet.buildings.jumpGate ?? 0)
+      : 0;
+    for (const p of ownOther) {
+      if (!p.isMoon || (p.jumpGateLevel ?? 0) < 1 || originGate < 1) continue;
+      options.push(
+        `<option value="planet:${escapeAttr(p.id)}">Jump → ${escapeHtml(p.name)} · ${fmtCoords(p.coords)}</option>`,
+      );
+    }
   } else if (mission === "deploy") {
     for (const p of ownOther) {
       options.push(
@@ -87,6 +97,7 @@ export function fleetComposer(
       );
     }
   } else {
+    // raid / espionage — planets + known moons (galaxy hasMoon / moonId)
     for (const r of rivals) {
       options.push(
         `<option value="planet:${escapeAttr(r.planetId)}">${escapeHtml(r.name)} · ${fmtCoords(r.coords)}</option>`,
@@ -95,7 +106,7 @@ export function fleetComposer(
     for (const s of view.galaxy.slots) {
       if (s.moonId && s.playerId && s.playerId !== view.player.id) {
         options.push(
-          `<option value="planet:${escapeAttr(s.moonId)}">Moon @ ${fmtCoords(s.coords)}</option>`,
+          `<option value="planet:${escapeAttr(s.moonId)}" data-has-moon="1">Moon @ ${fmtCoords(s.coords)}</option>`,
         );
       }
     }
@@ -144,15 +155,17 @@ export function fleetComposer(
       : options.length === 0
         ? mission === "transport"
           ? `<p class="hint" data-testid="fleet-need-colony">Need a second world: research Astrophysics, build a Colony Ship, colonize an empty galaxy slot — then transport cargo there.</p>`
-          : mission === "deploy"
-            ? `<p class="hint" data-testid="fleet-need-deploy-target">Colonize for park targets, or join a second commander to visit rivals.</p>`
-            : mission === "colonize"
-              ? `<p class="hint">Browse the galaxy for an empty slot in this system (or change system).</p>`
-              : mission === "harvest"
-                ? `<p class="hint">No debris in this system yet — win a raid that destroys ships.</p>`
-                : mission === "harvestAsteroid"
-                  ? `<p class="hint">No asteroids in this system — browse another system.</p>`
-                  : `<p class="hint" data-testid="fleet-need-rival">Join a second commander (another tab) to unlock raid / spy targets.</p>`
+          : mission === "jump"
+            ? `<p class="hint" data-testid="fleet-need-jump-moon">Need another of your moons with a Jump Gate (form moons from large debris, then build Lunar Base + Jump Gate on both).</p>`
+            : mission === "deploy"
+              ? `<p class="hint" data-testid="fleet-need-deploy-target">Colonize for park targets, or join a second commander to visit rivals.</p>`
+              : mission === "colonize"
+                ? `<p class="hint">Browse the galaxy for an empty slot in this system (or change system).</p>`
+                : mission === "harvest"
+                  ? `<p class="hint">No debris in this system yet — win a raid that destroys ships.</p>`
+                  : mission === "harvestAsteroid"
+                    ? `<p class="hint">No asteroids in this system — browse another system.</p>`
+                    : `<p class="hint" data-testid="fleet-need-rival">Join a second commander (another tab) to unlock raid / spy targets.</p>`
         : "";
   const launchBlocked =
     busy ||
@@ -193,6 +206,7 @@ export function fleetComposer(
       harvest: "Harvest debris",
       harvestAsteroid: "Harvest asteroid (Recycler)",
       expedition: "Expedition (deep space)",
+      jump: "Jump Gate (moon → moon)",
     };
     return `<label><input type="radio" name="fleet-mission" value="${m}" data-testid="mission-${m}" ${mission === m ? "checked" : ""} ${busy ? "disabled" : ""} /> ${labels[m]}</label>`;
   }).join("");
