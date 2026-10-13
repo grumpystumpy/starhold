@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
   "installCommand": "npm install",
   "buildCommand": "npm run build:vercel",
   "outputDirectory": "apps/web/dist",
@@ -7,9 +8,9 @@
     { "source": "/api/(.*)", "destination": "/api" }
   ],
   "functions": {
-    "api/index.ts": {
+    "api/index.js": {
       "maxDuration": 30,
-      "includeFiles": "{apps/server/dist/**,packages/game/dist/**,node_modules/@starhold/**,node_modules/@upstash/**,node_modules/hono/**}"
+      "memory": 1024
     }
   }
 }

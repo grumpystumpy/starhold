@@ -1,63 +1,82 @@
 # Deploy Starhold on Vercel Hobby (Micah)
 
-**You create the Vercel project and Upstash DB.** Agents do not open accounts for you. Hobby / free tiers — **do not add a credit card**.
+**Live project:** [starhold](https://vercel.com) → Production URL **https://starhold-two.vercel.app**  
+**Branch:** `cursor/core-loop-prototype-1093` (every push auto-deploys)  
+**Agents do not create accounts.** Hobby only — no credit card.
 
-Repo is wired for: static Vite UI + Node serverless `/api/*` + **Upstash Redis** JSON universe.
+Build: `npm run build:vercel` → static `apps/web/dist` + bundled serverless `api/index.js` (Hono).  
+Shared state: **Upstash Redis** (JSON universe document). Without Redis env vars, each API invoke uses empty in-memory state → multiplayer **will not work**.
 
-## 1. Create free Upstash Redis (required for multiplayer)
+---
 
-1. Open https://console.upstash.com/
-2. **Sign in with GitHub** (free).
-3. **Create database** → region near you → name e.g. `starhold`.
-4. Open the DB → **REST API** tab → copy:
-   - `UPSTASH_REDIS_REST_URL`
-   - `UPSTASH_REDIS_REST_TOKEN`
+## STOP — Micah must add Upstash (required for multiplayer)
 
-No schema migrations: one JSON key (`STARHOLD_UNIVERSE_KEY`, default `starhold:universe:v1`) holds the whole universe. Optional lock key `${key}:lock`.
+### A. Create free Upstash Redis
 
-## 2. Import the GitHub repo on Vercel
+1. Open **https://console.upstash.com/** → **Sign in with GitHub** (free).
+2. **Create database**
+   - Name: `starhold` (any name)
+   - Type: Regional / free tier
+   - Region: pick one close to `iad1` (US East) if unsure
+3. Open the database → **Details** / **REST API**
+4. Copy:
+   - **UPSTASH_REDIS_REST_URL** — looks like `https://xxxxx.upstash.io`
+   - **UPSTASH_REDIS_REST_TOKEN** — long secret string
 
-1. Open https://vercel.com/new (sign in with GitHub on **Hobby** if needed).
-2. **Import** `grumpystumpy/starhold`.
-3. **Branch / production branch:** use `cursor/core-loop-prototype-1093` until merged to `main`, or `main` after merge.
-4. **Root Directory:** leave `.` (repo root) — do not set to `apps/web`.
-5. Framework preset: **Other** (or Vite). Vercel reads `vercel.json`:
-   - Install: `npm install`
-   - Build: `npm run build:vercel`
-   - Output: `apps/web/dist`
-6. **Do not** enable a paid plan.
+No SQL schema. One key holds the universe JSON (`starhold:universe:v1` by default).
 
-## 3. Environment variables (paste in Vercel)
+### B. Paste env vars on Vercel (this project)
 
-**Project → Settings → Environment Variables** — enable for **Production** and **Preview**:
+1. Open Vercel → team **Stumpy's Creations** → project **starhold**
+2. **Settings → Environment Variables**
+3. Add for **Production** and **Preview** (and Development if you want):
 
-| Name | Required | Example / value |
-|------|----------|------------------|
-| `UPSTASH_REDIS_REST_URL` | **Yes** | `https://….upstash.io` from Upstash REST API |
-| `UPSTASH_REDIS_REST_TOKEN` | **Yes** | REST token from Upstash |
-| `STARHOLD_UNIVERSE_KEY` | No | `starhold:universe:v1` |
-| `STARHOLD_UNIVERSE_NAME` | No | `Alpha Drift` |
-| `STARHOLD_UNIVERSE_SPEED` | No | `8` |
-| `ALLOWED_ORIGINS` | No | `https://<your-deployment>.vercel.app` (only if you hit API cross-origin) |
+| Name | Required | Example format | Where it comes from |
+|------|----------|----------------|---------------------|
+| `UPSTASH_REDIS_REST_URL` | **YES** | `https://us1-happy-name-12345.upstash.io` | Upstash → REST API |
+| `UPSTASH_REDIS_REST_TOKEN` | **YES** | `AXxxxx...` (long token) | Upstash → REST API |
+| `STARHOLD_UNIVERSE_KEY` | No | `starhold:universe:v1` | optional override |
+| `STARHOLD_UNIVERSE_NAME` | No | `Alpha Drift` | first-boot universe name |
+| `STARHOLD_UNIVERSE_SPEED` | No | `8` | economy/fleet speed |
+| `ALLOWED_ORIGINS` | No | `https://starhold-two.vercel.app` | only if CORS issues |
 
-`VERCEL_URL` is set automatically by Vercel (used for CORS).
+4. **Save**
+5. **Deployments → … on latest → Redeploy** (or push any commit) so functions pick up env.
 
-Without the two Upstash vars, each serverless instance uses **empty in-memory** state (joins will not stick across requests).
+### C. Smoke after Redeploy
 
-## 4. Deploy and smoke-check
+```bash
+curl -s https://starhold-two.vercel.app/api/health
+```
 
-1. **Deploy** (or push a commit on the connected branch).
-2. Open `https://<project>.vercel.app/api/health` — expect `"ok": true` and `"storage": "upstash"`.
-3. Open the site root → join a commander → refresh → state should persist.
-4. Paste the production URL into Project store `internal/playtest-host.txt` as `WEB=https://…`.
+Expect JSON like: `"ok":true,"storage":"upstash",...`  
+If `"storage":"memory"` → env vars missing or not applied to that deployment.
 
-## 5. Redeploy later
+Then join two commanders in two browsers; both should appear on the same roster.
 
-Push to the connected branch, or Vercel dashboard → **Deployments → Redeploy**.
+---
 
-Local parity: `npm run build && PORT=3001 npm start` (memory store unless Upstash env is set).
+## Project settings (already set / confirm)
 
-## Related
+| Setting | Value |
+|---------|--------|
+| Framework preset | **Other** |
+| Root Directory | `./` |
+| Install Command | `npm install` (from `vercel.json`) |
+| Build Command | `npm run build:vercel` |
+| Output Directory | `apps/web/dist` |
+| Production Branch | `cursor/core-loop-prototype-1093` |
 
-- [`.env.example`](../.env.example)
-- [process.md](./process.md) · [hosting.md](./hosting.md)
+Optional: Vercel Marketplace → search **Upstash** → integrate into project (auto-fills the two `UPSTASH_*` vars). Still free Hobby / Upstash free — skip any paid prompts.
+
+---
+
+## Local
+
+```bash
+npm install
+npm run build:vercel   # also writes api/index.js
+PORT=3001 npm start    # memory store unless Upstash env set
+```
+
+See also: [`.env.example`](../.env.example) · [process.md](./process.md) · [hosting.md](./hosting.md)
