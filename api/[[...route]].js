@@ -2836,6 +2836,18 @@ function resolveEspionage(universe, fleet, target, now) {
   fleet.reportId = reportId;
 }
 
+// packages/game/src/world-spy-prune.ts
+function pruneSpyReports(universe, now = Date.now(), ttlMs = SPY_REPORT_TTL_MS) {
+  let removed = 0;
+  for (const [id, report] of Object.entries(universe.spyReports ?? {})) {
+    if (now - report.at > ttlMs) {
+      delete universe.spyReports[id];
+      removed += 1;
+    }
+  }
+  return removed;
+}
+
 // packages/game/src/world-arrival.ts
 function resolveFleetArrival(universe, fleet, now) {
   const origin = universe.planets[fleet.originPlanetId];
@@ -2871,6 +2883,13 @@ function resolveFleetArrival(universe, fleet, now) {
       addShipsToPlanet(target, fleet.ships);
       delete universe.fleets[fleet.id];
       return;
+    } else if (fleet.mission === "deploy") {
+      const target = fleet.targetPlanetId ? universe.planets[fleet.targetPlanetId] : null;
+      if (target && target.ownerPlayerId === fleet.ownerPlayerId) {
+        addShipsToPlanet(target, fleet.ships);
+        delete universe.fleets[fleet.id];
+        return;
+      }
     } else if (fleet.mission === "colonize") {
       const occupied = planetAtCoords(universe, fleet.targetCoords);
       if (occupied) {
@@ -2977,6 +2996,7 @@ function advanceUniverse(universe, now = Date.now()) {
     );
   }
   advanceFleets(universe, now);
+  pruneSpyReports(universe, now);
 }
 
 // packages/game/src/world-queues.ts
@@ -3215,14 +3235,18 @@ function resolveLaunchTarget(universe, player, origin, mission, ships, targetPla
       if (targetPlanet.id === origin.id) {
         return { ok: false, error: "Cannot transport to the same planet." };
       }
-    } else if (mission === "deploy" || mission === "raid") {
+    } else if (mission === "deploy") {
+      if (targetPlanet.id === origin.id) {
+        return { ok: false, error: "Cannot deploy to the same planet." };
+      }
+    } else if (mission === "raid") {
       if (targetPlanet.id === origin.id) {
         return { ok: false, error: "Cannot send a fleet to your own planet." };
       }
       if (targetPlanet.ownerPlayerId === player.id) {
         return {
           ok: false,
-          error: "Use transport to move between your own planets."
+          error: "Use transport or deploy to move between your own planets."
         };
       }
     } else if (mission === "espionage") {
