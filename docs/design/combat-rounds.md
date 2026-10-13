@@ -44,10 +44,10 @@ Attacker only has ships; defender has ships + defenses.
 | Interceptor → Scout | 2 | |
 | Cruiser → Hauler | 3 | Line ships punish freighters |
 | Cruiser → Probe | 4 | |
-| Bomber → Laser Battery | 4 | Breach guns |
+| Bomber → Beam Emplacement | 4 | Breach guns |
 | Bomber → Scout | 2 | |
 | Scout → Probe | 2 | |
-| Probe / Colony Ship | — | atk 0; never fire |
+| Whisper Probe / Outpost Cradle | — | atk 0; never fire |
 
 No mutual RF stacks beyond the single focus target per firer type per round.
 
