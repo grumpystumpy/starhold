@@ -1,0 +1,40 @@
+r;
+  planet.defenses = combat.defensesAfter;
+
+  const sent = fleetShipCount(raidFleet);
+  const survived = fleetShipCount(combat.attackerAfter);
+  if (sent > 0) {
+    const keep = survived / sent;
+    base.ships = scaleShips(base.ships, Math.min(1, 0.5 + keep * 0.5));
+  }
+
+  if (combat.outcome === "attacker_win") {
+    const loot = computeRaidLoot(planet.resources, combat.attackerAfter);
+    subtractCargo(planet, loot);
+    base.resources = {
+      metal: base.resources.metal + loot.metal,
+      crystal: base.resources.crystal + loot.crystal,
+      deuterium: base.resources.deuterium + loot.deuterium,
+    };
+    grantPlayerXp(owner, xpForCombatLose());
+  } else if (combat.outcome === "defender_win") {
+    grantPirateFleetKillStarshards(owner);
+    const killed = resourcesCostTotal(
+      destroyedShipResources(raidFleet, combat.attackerAfter),
+    );
+    grantPlayerXp(
+      owner,
+      xpForCombatWin(killed) + xpForPirateShipKills(killed),
+    );
+  } else {
+    grantPlayerXp(owner, xpForCombatLose());
+  }
+  universe.players[owner.id] = owner;
+
+  if (fleetShipCount(base.ships) <= 0) {
+    markPirateDestroyed(base, now);
+  }
+}
+
+function applyPirateRaidOnPirate(
+  universe: Universe
