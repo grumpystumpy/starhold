@@ -1,0 +1,45 @@
+name: Assemble API route bundle
+on:
+  push:
+    paths:
+      - ".github/workflows/assemble-api-route.yml"
+      - "scripts/bundle-api.mjs"
+      - "apps/server/src/vercel-entry.ts"
+      - "apps/server/src/app.ts"
+      - "apps/server/src/store.ts"
+  workflow_dispatch:
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: node scripts/bundle-api.mjs
+      - name: Commit api catch-all bundle
+        run: |
+          git config user.name "grumpystumpy"
+          git config user.email "stumpysgarage@gmail.com"
+          test -f "api/[[...route]].js"
+          BYTES=$(wc -c < "api/[[...route]].js" | tr -d ' ')
+          echo "bundled bytes=$BYTES"
+          if [ "$BYTES" -lt 100000 ]; then
+            echo "bundle too small ($BYTES); refusing commit"
+            exit 1
+          fi
+          # Exact local disk marker must appear (KV fallback)
+          grep -q "KV_REST_API_URL" "api/[[...route]].js"
+          git add "api/[[...route]].js"
+          if git diff --cached --quiet; then
+            echo "api/[[...route]].js unchanged"
+          else
+            git commit -m "chore: assemble api/[[...route]].js from Node-bridge bundle (KV)"
+            git push
+          fi
