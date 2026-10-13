@@ -14,6 +14,7 @@ import {
   fieldsUsed,
   shipBuildSeconds,
   shipCost,
+  shipResearchReqMet,
   spend,
 } from "./formulas.js";
 import type {
@@ -26,6 +27,17 @@ import type {
   UniverseState,
 } from "./types.js";
 import { advanceUniverse } from "./world-arrival.js";
+import { isPlanetOccupied } from "./world-occupation.js";
+
+function isPlanetOccupiedByOther(
+  universe: UniverseState,
+  planetId: string,
+  _playerId: string,
+  now: number,
+): boolean {
+  // Owner build/ship/defense queues blocked while occupied.
+  return isPlanetOccupied(universe, planetId, now);
+}
 
 export type ActionResult =
   | { ok: true; planet: PlanetState }
@@ -78,6 +90,9 @@ export function queueBuildingUpgrade(
   advanceUniverse(universe, now);
   const planet = resolveActionPlanet(universe, player, planetId);
   if (!planet) return { ok: false, error: "Planet missing." };
+  if (isPlanetOccupiedByOther(universe, planet.id, playerId, now)) {
+    return { ok: false, error: "Construction blocked while planet is occupied." };
+  }
   if (!buildingAllowedOn(planet, buildingId)) {
     return {
       ok: false,
@@ -152,6 +167,10 @@ export function queueShipBuild(
     return { ok: false, error: "Shipyard is already busy." };
   }
 
+  if (isPlanetOccupiedByOther(universe, planet.id, playerId, now)) {
+    return { ok: false, error: "Shipyard blocked while planet is occupied." };
+  }
+
   const yard = planet.buildings.shipyard ?? 0;
   if (yard < def.shipyardLevel) {
     return {
@@ -159,6 +178,9 @@ export function queueShipBuild(
       error: `Needs Shipyard level ${def.shipyardLevel} (you have ${yard}).`,
     };
   }
+
+  const researchOk = shipResearchReqMet(shipId, player.research);
+  if (!researchOk.ok) return researchOk;
 
   const cost = shipCost(shipId, qty);
   if (!canAfford(planet.resources, cost)) {
@@ -202,6 +224,9 @@ export function queueDefenseBuild(
   advanceUniverse(universe, now);
   const planet = resolveActionPlanet(universe, player, planetId);
   if (!planet) return { ok: false, error: "Planet missing." };
+  if (isPlanetOccupiedByOther(universe, planet.id, playerId, now)) {
+    return { ok: false, error: "Defense yard blocked while planet is occupied." };
+  }
   if (planet.defenseQueue) {
     return { ok: false, error: "Defense yard is already busy." };
   }
