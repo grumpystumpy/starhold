@@ -1,4 +1,6 @@
 import type { PlayerView } from "@starhold/game";
+import { startCountdownTick } from "./countdown";
+import type { NavPage } from "./nav";
 import { renderJoin } from "./render-chrome";
 import { salvageFleetForm } from "./render-fleets";
 import { dashboardHtml } from "./render-dashboard";
@@ -16,6 +18,7 @@ export function renderApp(
     notice: string | null;
     busy: boolean;
     joinDraft: string;
+    activePage: NavPage;
   },
   _handlers: UiHandlers,
 ): void {
@@ -25,5 +28,11 @@ export function renderApp(
   }
 
   const fleetDraft = salvageFleetForm(root);
-  root.innerHTML = dashboardHtml(state.view, state, fleetDraft);
+  root.innerHTML = dashboardHtml(
+    state.view,
+    state,
+    fleetDraft,
+    state.activePage,
+  );
+  startCountdownTick();
 }
