@@ -11,6 +11,8 @@ export const BUILDING_ART: Record<BuildingId, string> = {
   deutTank: "/assets/buildings/deut-tank.svg",
   shipyard: "/assets/buildings/shipyard.svg",
   researchLab: "/assets/buildings/research-lab.svg",
+  lunarBase: "/assets/buildings/lunar-base.svg",
+  sensorArray: "/assets/buildings/sensor-array.svg",
 };
 
 export const SHIP_ART: Record<ShipId, string> = {
@@ -39,6 +41,7 @@ export const RESOURCE_ART = {
 export const PLANET_ART = {
   outpost: "/assets/planets/outpost.svg",
   rocky: "/assets/planets/rocky.svg",
+  moon: "/assets/planets/moon.svg",
 } as const;
 
 export const UI_ART = {

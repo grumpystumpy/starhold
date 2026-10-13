@@ -13,6 +13,17 @@ import type {
 /** Session path hint so mines-first play still sees yard → scout → fleet mission. */
 export function recommendedNext(view: PlayerView): string {
   const planet = view.planet;
+  if (planet.kind === "moon") {
+    const lunar = planet.buildings.lunarBase ?? 0;
+    const sensor = planet.buildings.sensorArray ?? 0;
+    if (lunar < 1) {
+      return "Recommended next: raise the Lunar Base to expand moon fields.";
+    }
+    if (sensor < 1) {
+      return "Recommended next: build a Sensor Array to scan inbound fleets.";
+    }
+    return "Recommended next: park fleets here or watch Sensor contacts.";
+  }
   const yard = planet.buildings.shipyard ?? 0;
   const lab = planet.buildings.researchLab ?? 0;
   const scouts = planet.ships.scout ?? 0;
