@@ -4,7 +4,7 @@
 **Branch:** `cursor/core-loop-prototype-1093` (every push auto-deploys)  
 **Agents do not create accounts.** Hobby only — no credit card.
 
-Build: `npm run build:vercel` → static `apps/web/dist` + bundled serverless `api/index.js` (Hono).  
+Build: `npm run build:vercel` → static `apps/web/dist` + bundled serverless catch-all `api/[[...route]].js` (Node req/res → Fetch bridge; no path-stripping rewrites).  
 Shared state: **Upstash Redis** (JSON universe document). Without Redis env vars, each API invoke uses empty in-memory state → multiplayer **will not work**.
 
 ---
@@ -75,7 +75,7 @@ Optional: Vercel Marketplace → search **Upstash** → integrate into project (
 
 ```bash
 npm install
-npm run build:vercel   # also writes api/index.js
+npm run build:vercel   # also writes api/[[...route]].js
 PORT=3001 npm start    # memory store unless Upstash env set
 ```
 
