@@ -1,6 +1,7 @@
 import { SHIPS, SHIP_ORDER } from "./catalog.js";
 import {
   canAfford,
+  canCollectDebris,
   fleetShipCount,
   flightSecondsOneWay,
   fuelCostOneWay,
@@ -8,6 +9,7 @@ import {
   maxFleetSlots,
   normalizeFleetShips,
   spend,
+  validateSwarmCarry,
 } from "./formulas.js";
 import type {
   Coordinates,
@@ -92,6 +94,20 @@ export function launchFleet(
   const ships = normalizeFleetShips(opts.ships);
   if (fleetShipCount(ships) < 1) {
     return { ok: false, error: "Select at least one ship." };
+  }
+
+  const swarmOk = validateSwarmCarry(ships, player.research.swarmHold ?? 0);
+  if (!swarmOk.ok) return swarmOk;
+
+  if (
+    (opts.mission === "harvest" || opts.mission === "harvestAsteroid") &&
+    !canCollectDebris(ships)
+  ) {
+    return {
+      ok: false,
+      error:
+        "Debris collection requires a Salvage Trawler (World Eaters cannot recycle).",
+    };
   }
 
   advanceUniverse(universe, now);
