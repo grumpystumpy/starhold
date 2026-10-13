@@ -17,6 +17,8 @@ export const SHIP_ART: Record<ShipId, string> = {
   scout: "/assets/ships/scout.svg",
   hauler: "/assets/ships/hauler.svg",
   interceptor: "/assets/ships/interceptor.svg",
+  cruiser: "/assets/ships/cruiser.svg",
+  bomber: "/assets/ships/bomber.svg",
   probe: "/assets/ships/probe.svg",
   recycler: "/assets/ships/recycler.svg",
   colonyShip: "/assets/ships/colony-ship.svg",
