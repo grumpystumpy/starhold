@@ -79,3 +79,19 @@ export {
   type PlayerBoosts,
   type StarshardActionResult,
 } from "./world-starshards.js";
+export {
+  effectiveCombatResearch,
+  ensurePlayerProgress,
+  grantPlayerXp,
+  levelBonuses,
+  playerProgressView,
+  xpForBuilding,
+  xpForCombatLose,
+  xpForCombatWin,
+  xpForExpedition,
+  xpForMiniPlanetDiscovery,
+  xpForPirateBaseDestroy,
+  xpForPirateShipKills,
+  xpForResearch,
+  xpToNext,
+} from "./formulas-progress.js";

@@ -155,6 +155,9 @@ export function ensureUniverseShape(universe: UniverseState): void {
     if (player.highscoreStarshardsClaimed === undefined) {
       player.highscoreStarshardsClaimed = false;
     }
+    if (player.level == null || player.level < 1) player.level = 1;
+    if (player.xp == null || player.xp < 0) player.xp = 0;
+    if (player.xpTotal == null || player.xpTotal < 0) player.xpTotal = 0;
   }
   const seed = universe.seed ?? universe.id;
   for (const planet of Object.values(universe.planets)) {
@@ -251,6 +254,9 @@ export function joinUniverse(
     research: emptyResearch(),
     researchQueue: null,
     createdAt: now,
+    level: 1,
+    xp: 0,
+    xpTotal: 0,
     starshards: 0,
     officers: [],
     skillsUnlocked: [],
