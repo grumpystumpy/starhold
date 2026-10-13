@@ -34,7 +34,7 @@ export function swarmCapacityForLevel(swarmHoldLevel: number): number {
   const raw = Math.floor(
     SWARM_CAPACITY_BASE * (1 + SWARM_HOLD_BONUS_PER_LEVEL * level),
   );
-  return Math.min(SWARM_CAPACITY_HARD_CAP, raw);
+  return Math.min(SWARM_CAPACITY_HARD_CAP, Math.max(SWARM_CAPACITY_BASE, raw));
 }
 
 /** Total swarm capacity for a fleet (per mothership × count). */
