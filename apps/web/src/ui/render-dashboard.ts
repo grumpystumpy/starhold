@@ -1,6 +1,7 @@
 import {
-  BUILDING_ORDER,
   DEFENSE_ORDER,
+  MOON_BUILDING_ORDER,
+  PLANET_BUILDING_ORDER,
   RESEARCH_ORDER,
   SHIP_ORDER,
   BUILDINGS,
@@ -23,6 +24,7 @@ import {
   fleetsInFlight,
   galaxyPanel,
   reportsHtml,
+  sensorContactsHtml,
   spyReportsHtml,
   type FleetDraft,
 } from "./render-fleets";
@@ -50,13 +52,18 @@ export function dashboardHtml(
   const now = view.now;
   const hangarEmpty = SHIP_ORDER.every((id) => (planet.ships[id] ?? 0) <= 0);
 
+  const buildingOrder =
+    planet.kind === "moon" ? MOON_BUILDING_ORDER : PLANET_BUILDING_ORDER;
+  const heroArt =
+    planet.kind === "moon" ? PLANET_ART.moon : PLANET_ART.outpost;
+
   const planetSwitcher =
     view.ownedPlanets.length > 1
       ? `<div class="planet-switch" data-testid="planet-switch">
           ${view.ownedPlanets
             .map(
               (p) =>
-                `<button type="button" data-select-planet="${escapeAttr(p.id)}" data-testid="select-planet-${p.id}" class="${p.isActive ? "active" : ""}" ${state.busy ? "disabled" : ""}>${escapeHtml(p.name)}${p.isHome ? " ★" : ""}</button>`,
+                `<button type="button" data-select-planet="${escapeAttr(p.id)}" data-testid="select-planet-${p.id}" class="${p.isActive ? "active" : ""}" ${state.busy ? "disabled" : ""}>${escapeHtml(p.name)}${p.isMoon ? " · Moon" : ""}${p.isHome ? " ★" : ""}</button>`,
             )
             .join("")}
         </div>`
@@ -65,10 +72,10 @@ export function dashboardHtml(
   return `
     <header class="topbar">
       <div class="topbar-brand">
-        <img class="thumb thumb-lg" src="${PLANET_ART.outpost}" alt="" width="56" height="56" />
+        <img class="thumb thumb-lg" src="${heroArt}" alt="" width="56" height="56" />
         <div>
           <h1 class="brand">Starhold</h1>
-          <div class="coords" data-testid="planet-coords">${escapeHtml(planet.name)} · ${fmtCoords(planet.coords)} · ${escapeHtml(universe.name)} @ ${universe.speed}×${Number(PRODUCTION_MULT) > 1 ? ` · income ×${PRODUCTION_MULT} (test)` : ""}</div>
+          <div class="coords" data-testid="planet-coords">${escapeHtml(planet.name)}${planet.kind === "moon" ? " · Moon" : ""} · ${fmtCoords(planet.coords)} · ${escapeHtml(universe.name)} @ ${universe.speed}×${Number(PRODUCTION_MULT) > 1 ? ` · income ×${PRODUCTION_MULT} (test)` : ""}</div>
         </div>
       </div>
       <div>
@@ -91,11 +98,13 @@ export function dashboardHtml(
       <section class="panel">
         <h2>Buildings</h2>
         <p class="hint" data-testid="planet-fields">Fields ${economy.fields.used} / ${economy.fields.cap} · ${economy.fields.remaining} free</p>
-        ${BUILDING_ORDER.map((id) => buildingRow(id, planet, universe.speed, now, state.busy)).join("")}
+        ${buildingOrder.map((id) => buildingRow(id, planet, universe.speed, now, state.busy)).join("")}
         ${
           planet.buildQueue
             ? `<div class="queue" data-testid="build-queue">Building ${escapeHtml(BUILDINGS[planet.buildQueue.buildingId].name)} → L${planet.buildQueue.targetLevel} · ${fmtEta(remainingSeconds(planet.buildQueue.completesAt, now))} left</div>`
-            : `<p class="hint">One construction at a time. Upgrade the Solar Array if mines stall.</p>`
+            : planet.kind === "moon"
+              ? `<p class="hint">Moons have no mines — expand with Lunar Base, then Sensor Array.</p>`
+              : `<p class="hint">One construction at a time. Upgrade the Solar Array if mines stall.</p>`
         }
         <p class="hint" data-testid="recommended-next">${escapeHtml(recommendedNext(view))}</p>
       </section>
@@ -145,6 +154,7 @@ export function dashboardHtml(
           <h2>Fleets &amp; missions</h2>
           ${fleetComposer(view, state.busy, fleetDraft)}
           ${fleetsInFlight(fleets, roster, now)}
+          ${sensorContactsHtml(view.sensorContacts ?? [], roster, now)}
           ${reportsHtml(reports, player.id)}
           ${spyReportsHtml(spyReports)}
           ${expeditionReportsHtml(expeditionReports)}
