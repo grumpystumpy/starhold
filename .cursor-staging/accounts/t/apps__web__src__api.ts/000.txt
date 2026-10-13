@@ -1,0 +1,23 @@
+import type {
+  BuildingId,
+  Coordinates,
+  DefenseId,
+  FleetShips,
+  MissionType,
+  OfficerId,
+  PlayerView,
+  ResearchId,
+  Resources,
+  ShipId,
+} from "@starhold/game";
+
+async function parse<T>(res: Response): Promise<T> {
+  const data = (await res.json()) as T & { error?: string };
+  if (!res.ok) {
+    throw new Error(data.error ?? `Request failed (${res.status})`);
+  }
+  return data;
+}
+
+const credFetch = (input: RequestInfo | URL, init?: RequestInit) =>
+  fetch(input, { credentials: "incl

@@ -1,0 +1,23 @@
+ude", ...init });
+
+export interface AuthAccount {
+  id: string;
+  email: string;
+  playerId: string | null;
+}
+
+export interface AuthMeResponse {
+  account: AuthAccount | null;
+  view: PlayerView | null;
+  auth?: { resendConfigured?: boolean };
+  error?: string;
+}
+
+export async function fetchAuthMe(): Promise<AuthMeResponse> {
+  const res = await credFetch("/api/auth/me");
+  return parse<AuthMeResponse>(res);
+}
+
+export async function requestMagicLink(
+  email: string,
+  claimPlayerId?: string | n

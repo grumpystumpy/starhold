@@ -1,0 +1,16 @@
+new URLSearchParams();
+  params.set("playerId", playerId);
+  if (galaxy) params.set("galaxy", String(galaxy));
+  if (system) params.set("system", String(system));
+  const res = await credFetch(`/api/state?${params.toString()}`);
+  return parse<PlayerView>(res);
+}
+
+export async function upgradeBuilding(
+  playerId: string,
+  buildingId: BuildingId,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/upgrade", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    

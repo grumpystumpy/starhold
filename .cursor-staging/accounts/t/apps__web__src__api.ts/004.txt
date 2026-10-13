@@ -1,0 +1,19 @@
+nction logoutAccount(): Promise<void> {
+  await credFetch("/api/auth/logout", { method: "POST" });
+}
+
+export async function joinGame(name: string): Promise<PlayerView> {
+  const res = await credFetch("/api/join", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function fetchState(
+  playerId: string,
+  galaxy?: number,
+  system?: number,
+): Promise<PlayerView> {
+  const params = 

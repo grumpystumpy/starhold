@@ -1,0 +1,19 @@
+unt: AuthAccount }> {
+  const res = await credFetch("/api/auth/claim", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId }),
+  });
+  return parse(res);
+}
+
+export async function authJoin(name: string): Promise<PlayerView> {
+  const res = await credFetch("/api/auth/join", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async fu

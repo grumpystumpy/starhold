@@ -1,0 +1,22 @@
+ull,
+): Promise<{
+  ok: boolean;
+  emailed: boolean;
+  devMagicUrl?: string;
+  resendConfigured?: boolean;
+  error?: string;
+}> {
+  const res = await credFetch("/api/auth/request-link", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email,
+      claimPlayerId: claimPlayerId || undefined,
+    }),
+  });
+  return parse(res);
+}
+
+export async function claimAnonymousPlayer(
+  playerId: string,
+): Promise<{ ok: boolean; view: PlayerView; acco
