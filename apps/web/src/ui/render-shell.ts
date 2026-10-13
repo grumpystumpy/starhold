@@ -86,6 +86,17 @@ export function shellHtml(
   // Enrich resource blocks with storage titles via patch after — resBlock is shared.
   // Inject title attributes by wrapping amounts in the bar already.
 
+  const progress = view.progress ?? {
+    level: view.player.level ?? 1,
+    xp: view.player.xp ?? 0,
+    xpToNext: 100,
+    xpTotal: view.player.xpTotal ?? 0,
+  };
+  const xpPct = Math.min(
+    100,
+    Math.floor((progress.xp / Math.max(1, progress.xpToNext)) * 100),
+  );
+
   return `
     <div class="game-shell" data-testid="game-shell" data-page="${activePage}">
       <header class="topbar shell-top">
@@ -94,6 +105,13 @@ export function shellHtml(
           <div>
             <h1 class="brand">Starhold</h1>
             <div class="coords" data-testid="planet-coords">${escapeHtml(planet.name)}${planet.kind === "moon" ? " · Moon" : ""} · ${fmtCoords(planet.coords)} · ${escapeHtml(universe.name)} @ ${universe.speed}×${Number(PRODUCTION_MULT) > 1 ? ` · income ×${PRODUCTION_MULT} (test)` : ""}</div>
+          </div>
+        </div>
+        <div class="topbar-progress" data-testid="player-level" title="Lifetime XP ${fmt(progress.xpTotal)}">
+          <span class="level-label">Lv ${progress.level}</span>
+          <div class="xp-bar" data-testid="xp-bar" role="progressbar" aria-valuemin="0" aria-valuemax="${progress.xpToNext}" aria-valuenow="${progress.xp}" aria-label="Experience">
+            <div class="xp-fill" style="width:${xpPct}%"></div>
+            <span class="xp-text">${fmt(progress.xp)} / ${fmt(progress.xpToNext)}</span>
           </div>
         </div>
         <div class="topbar-actions">
