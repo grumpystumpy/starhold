@@ -18,12 +18,20 @@ import {
 import {
   computeRaidLoot,
   defenseCombatPower,
+  destroyedShipResources,
+  effectiveCombatResearch,
   emptyDefenses,
   emptyFleetShips,
   fleetCombatPower,
   fleetShipCount,
+  grantPlayerXp,
   normalizeFleetShips,
   resolveCombat,
+  resourcesCostTotal,
+  xpForCombatLose,
+  xpForCombatWin,
+  xpForPirateBaseDestroy,
+  xpForPirateShipKills,
 } from "./formulas.js";
 import { hashSeed } from "./formulas-position.js";
 import type {
@@ -381,7 +389,7 @@ function applyPirateRaidOnPlanet(
     planet.ships,
     planet.defenses ?? emptyDefenses(),
     undefined,
-    owner.research,
+    effectiveCombatResearch(owner),
   );
   planet.ships = combat.defenderAfter;
   planet.defenses = combat.defensesAfter;
@@ -401,10 +409,20 @@ function applyPirateRaidOnPlanet(
       crystal: base.resources.crystal + loot.crystal,
       deuterium: base.resources.deuterium + loot.deuterium,
     };
+    grantPlayerXp(owner, xpForCombatLose());
   } else if (combat.outcome === "defender_win") {
     grantPirateFleetKillStarshards(owner);
-    universe.players[owner.id] = owner;
+    const killed = resourcesCostTotal(
+      destroyedShipResources(raidFleet, combat.attackerAfter),
+    );
+    grantPlayerXp(
+      owner,
+      xpForCombatWin(killed) + xpForPirateShipKills(killed),
+    );
+  } else {
+    grantPlayerXp(owner, xpForCombatLose());
   }
+  universe.players[owner.id] = owner;
 
   if (fleetShipCount(base.ships) <= 0) {
     markPirateDestroyed(base, now);
@@ -501,9 +519,13 @@ export function resolvePirateRaidArrival(
     fleet.ships,
     defenderBefore,
     emptyDefenses(),
-    owner?.research,
+    effectiveCombatResearch(owner),
   );
   base.ships = combat.defenderAfter;
+
+  const killed = resourcesCostTotal(
+    destroyedShipResources(defenderBefore, combat.defenderAfter),
+  );
 
   let loot = emptyCargo();
   if (combat.outcome === "attacker_win") {
@@ -516,8 +538,17 @@ export function resolvePirateRaidArrival(
     markPirateDestroyed(base, now);
     if (owner) {
       grantPirateDestroyStarshards(owner, tierAtFight);
+      grantPlayerXp(
+        owner,
+        xpForCombatWin(killed) +
+          xpForPirateBaseDestroy(tierAtFight) +
+          xpForPirateShipKills(killed),
+      );
       universe.players[owner.id] = owner;
     }
+  } else if (owner) {
+    grantPlayerXp(owner, xpForCombatLose());
+    universe.players[owner.id] = owner;
   }
 
   const reportId = `rpt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;

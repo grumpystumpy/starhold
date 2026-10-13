@@ -2422,7 +2422,7 @@ var MAP_SYSTEMS = 399;
 var MAP_SLOTS = 15;
 var DEEP_SPACE_SLOT = 16;
 var EXPEDITION_SLOT = DEEP_SPACE_SLOT;
-var UNIVERSE_SCHEMA_VERSION = 2;
+var UNIVERSE_SCHEMA_VERSION = 3;
 var HOME_SLOT_PREFERENCE = [
   4,
   5,
@@ -3061,6 +3061,99 @@ function maxExpeditions(astrophysics) {
   return 1 + Math.max(0, astrophysics);
 }
 
+// packages/game/src/formulas-progress.ts
+function xpToNext(level) {
+  const L = Math.max(1, Math.floor(level));
+  return Math.floor(100 * Math.pow(L, 1.45));
+}
+function levelBonuses(level) {
+  const n = Math.max(0, Math.floor(level) - 1);
+  return {
+    production: 1 + 5e-3 * n,
+    buildTime: Math.max(0.7, 1 - 4e-3 * n),
+    researchTime: Math.max(0.7, 1 - 4e-3 * n),
+    fleetTime: Math.max(0.75, 1 - 3e-3 * n),
+    shipBuild: Math.max(0.65, 1 - 5e-3 * n),
+    weaponsBonus: Math.floor(n / 5),
+    shieldingBonus: Math.floor(n / 5)
+  };
+}
+function ensurePlayerProgress(player) {
+  if (player.level == null || player.level < 1) player.level = 1;
+  if (player.xp == null || player.xp < 0) player.xp = 0;
+  if (player.xpTotal == null || player.xpTotal < 0) player.xpTotal = 0;
+}
+function grantPlayerXp(player, amount) {
+  const add = Math.max(0, Math.floor(amount));
+  if (add <= 0) return 0;
+  ensurePlayerProgress(player);
+  let level = player.level ?? 1;
+  let xp = player.xp ?? 0;
+  let xpTotal = player.xpTotal ?? 0;
+  xpTotal += add;
+  xp += add;
+  let gained = 0;
+  while (xp >= xpToNext(level)) {
+    xp -= xpToNext(level);
+    level += 1;
+    gained += 1;
+  }
+  player.level = level;
+  player.xp = xp;
+  player.xpTotal = xpTotal;
+  return gained;
+}
+function xpForBuilding(targetLevel) {
+  return 8 + 2 * Math.max(1, Math.floor(targetLevel));
+}
+function xpForResearch(targetLevel) {
+  return 12 + 3 * Math.max(1, Math.floor(targetLevel));
+}
+function xpForCombatWin(destroyedEnemyCost) {
+  const bonus = Math.min(200, Math.floor(Math.max(0, destroyedEnemyCost) / 500));
+  return 25 + bonus;
+}
+function xpForCombatLose() {
+  return 8;
+}
+function xpForExpedition() {
+  return 15;
+}
+function xpForPirateBaseDestroy(baseLevel) {
+  return 50 + 10 * Math.max(0, Math.floor(baseLevel));
+}
+function xpForPirateShipKills(destroyedEnemyCost) {
+  return Math.min(
+    100,
+    Math.floor(Math.max(0, destroyedEnemyCost) / 1e3) * 5
+  );
+}
+function resourcesCostTotal(res) {
+  return Math.max(0, res.metal) + Math.max(0, res.crystal) + Math.max(0, res.deuterium ?? 0);
+}
+function effectiveCombatResearch(player) {
+  if (!player) return void 0;
+  ensurePlayerProgress(player);
+  const lb = levelBonuses(player.level ?? 1);
+  return {
+    ...player.research,
+    weaponsTech: (player.research.weaponsTech ?? 0) + lb.weaponsBonus,
+    shieldingTech: (player.research.shieldingTech ?? 0) + lb.shieldingBonus
+  };
+}
+function playerProgressView(player) {
+  ensurePlayerProgress(player);
+  const level = player.level ?? 1;
+  const xp = player.xp ?? 0;
+  const xpTotal = player.xpTotal ?? 0;
+  return {
+    level,
+    xp,
+    xpToNext: xpToNext(level),
+    xpTotal
+  };
+}
+
 // packages/game/src/world-asteroids.ts
 function asteroidId(galaxy, system, index) {
   return `ast:${galaxy}:${system}:a${index}`;
@@ -3226,7 +3319,7 @@ function expeditionStarshardsAmount(roll) {
 }
 
 // packages/game/src/world-tick.ts
-function advancePlanet(planet, universeSpeed, now, energyTechLevel = 0, boosts) {
+function advancePlanet(planet, universeSpeed, now, energyTechLevel = 0, boosts, owner) {
   let state = {
     ...planet,
     resources: { ...planet.resources },
@@ -3238,6 +3331,7 @@ function advancePlanet(planet, universeSpeed, now, energyTechLevel = 0, boosts) 
     const { buildingId, targetLevel } = state.buildQueue;
     state.buildings[buildingId] = targetLevel;
     state.buildQueue = null;
+    if (owner) grantPlayerXp(owner, xpForBuilding(targetLevel));
   }
   if (state.shipQueue && state.shipQueue.completesAt <= now) {
     const { shipId, count } = state.shipQueue;
@@ -3276,6 +3370,7 @@ function advanceResearch(universe, player, now) {
   const { researchId, targetLevel } = player.researchQueue;
   player.research[researchId] = targetLevel;
   player.researchQueue = null;
+  grantPlayerXp(player, xpForResearch(targetLevel));
   universe.players[player.id] = player;
 }
 function addShipsToPlanet(planet, ships) {
@@ -3561,7 +3656,7 @@ function applyPirateRaidOnPlanet(universe, base, planet, now) {
     planet.ships,
     planet.defenses ?? emptyDefenses(),
     void 0,
-    owner.research
+    effectiveCombatResearch(owner)
   );
   planet.ships = combat.defenderAfter;
   planet.defenses = combat.defensesAfter;
@@ -3579,10 +3674,20 @@ function applyPirateRaidOnPlanet(universe, base, planet, now) {
       crystal: base.resources.crystal + loot.crystal,
       deuterium: base.resources.deuterium + loot.deuterium
     };
+    grantPlayerXp(owner, xpForCombatLose());
   } else if (combat.outcome === "defender_win") {
     grantPirateFleetKillStarshards(owner);
-    universe.players[owner.id] = owner;
+    const killed = resourcesCostTotal(
+      destroyedShipResources(raidFleet, combat.attackerAfter)
+    );
+    grantPlayerXp(
+      owner,
+      xpForCombatWin(killed) + xpForPirateShipKills(killed)
+    );
+  } else {
+    grantPlayerXp(owner, xpForCombatLose());
   }
+  universe.players[owner.id] = owner;
   if (fleetShipCount(base.ships) <= 0) {
     markPirateDestroyed(base, now);
   }
@@ -3656,9 +3761,12 @@ function resolvePirateRaidArrival(universe, fleet, now) {
     fleet.ships,
     defenderBefore,
     emptyDefenses(),
-    owner?.research
+    effectiveCombatResearch(owner)
   );
   base.ships = combat.defenderAfter;
+  const killed = resourcesCostTotal(
+    destroyedShipResources(defenderBefore, combat.defenderAfter)
+  );
   let loot = emptyCargo();
   if (combat.outcome === "attacker_win") {
     loot = computeRaidLoot(base.resources, combat.attackerAfter);
@@ -3670,8 +3778,15 @@ function resolvePirateRaidArrival(universe, fleet, now) {
     markPirateDestroyed(base, now);
     if (owner) {
       grantPirateDestroyStarshards(owner, tierAtFight);
+      grantPlayerXp(
+        owner,
+        xpForCombatWin(killed) + xpForPirateBaseDestroy(tierAtFight) + xpForPirateShipKills(killed)
+      );
       universe.players[owner.id] = owner;
     }
+  } else if (owner) {
+    grantPlayerXp(owner, xpForCombatLose());
+    universe.players[owner.id] = owner;
   }
   const reportId = `rpt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
   universe.reports[reportId] = {
@@ -3806,6 +3921,9 @@ function ensureUniverseShape(universe) {
     if (player.highscoreStarshardsClaimed === void 0) {
       player.highscoreStarshardsClaimed = false;
     }
+    if (player.level == null || player.level < 1) player.level = 1;
+    if (player.xp == null || player.xp < 0) player.xp = 0;
+    if (player.xpTotal == null || player.xpTotal < 0) player.xpTotal = 0;
   }
   const seed = universe.seed ?? universe.id;
   for (const planet of Object.values(universe.planets)) {
@@ -3887,6 +4005,9 @@ function joinUniverse(universe, playerName, now = Date.now()) {
     research: emptyResearch(),
     researchQueue: null,
     createdAt: now,
+    level: 1,
+    xp: 0,
+    xpTotal: 0,
     starshards: 0,
     officers: [],
     skillsUnlocked: [],
@@ -3992,8 +4113,8 @@ function resolveRaidArrival(universe, fleet, target, now) {
     fleet.ships,
     defenderBefore,
     defensesBefore,
-    owner?.research,
-    defenderOwner?.research,
+    effectiveCombatResearch(owner),
+    effectiveCombatResearch(defenderOwner),
     { defensePower }
   );
   target.ships = combat.defenderAfter;
@@ -4014,6 +4135,30 @@ function resolveRaidArrival(universe, fleet, target, now) {
   if (combat.outcome === "attacker_win") {
     loot = computeRaidLoot(target.resources, combat.attackerAfter);
     subtractCargo(target, loot);
+  }
+  const atkDestroyed = resourcesCostTotal(
+    destroyedShipResources(defenderBefore, combat.defenderAfter)
+  );
+  const defDestroyed = resourcesCostTotal(
+    destroyedShipResources(fleet.ships, combat.attackerAfter)
+  );
+  if (owner) {
+    if (combat.outcome === "attacker_win") {
+      grantPlayerXp(owner, xpForCombatWin(atkDestroyed));
+    } else {
+      grantPlayerXp(owner, xpForCombatLose());
+    }
+    universe.players[owner.id] = owner;
+  }
+  if (defenderOwner && defenderOwner.id !== owner?.id) {
+    if (combat.outcome === "defender_win") {
+      grantPlayerXp(defenderOwner, xpForCombatWin(defDestroyed));
+    } else if (combat.outcome === "attacker_win") {
+      grantPlayerXp(defenderOwner, xpForCombatLose());
+    } else {
+      grantPlayerXp(defenderOwner, xpForCombatLose());
+    }
+    universe.players[defenderOwner.id] = defenderOwner;
   }
   const reportId = `rpt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
   const moon = tryFormMoon(universe, target, debrisCreated, reportId, now);
@@ -4186,6 +4331,13 @@ function resolveExpeditionArrival(universe, fleet, now) {
       throw new Error(`Unhandled expedition kind: ${_exhaustive}`);
     }
   }
+  if (kind !== "nothing") {
+    const owner = universe.players[fleet.ownerPlayerId];
+    if (owner) {
+      grantPlayerXp(owner, xpForExpedition());
+      universe.players[owner.id] = owner;
+    }
+  }
   const reportId = `xpd_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
   const report = {
     id: reportId,
@@ -4216,6 +4368,12 @@ function pruneSpyReports(universe, now = Date.now(), ttlMs = SPY_REPORT_TTL_MS) 
 }
 
 // packages/game/src/world-arrival.ts
+function effectiveFleetSpeed(universe, ownerPlayerId, now) {
+  const owner = universe.players[ownerPlayerId];
+  const boosts = playerBoosts(owner, now);
+  const lb = levelBonuses(owner?.level ?? 1);
+  return universe.fleetSpeed * Math.max(0.01, boosts.fleetSpeed) / Math.max(0.01, lb.fleetTime);
+}
 function resolveFleetArrival(universe, fleet, now) {
   const origin = universe.planets[fleet.originPlanetId];
   if (!origin) {
@@ -4341,7 +4499,7 @@ function resolveFleetArrival(universe, fleet, now) {
       fleet.targetCoords,
       origin.coords,
       fleet.ships,
-      universe.fleetSpeed,
+      effectiveFleetSpeed(universe, fleet.ownerPlayerId, now),
       drive
     );
     if (fleetShipCount(fleet.ships) <= 0) {
@@ -4383,13 +4541,19 @@ function advanceUniverse(universe, now = Date.now()) {
     const owner = universe.players[planet.ownerPlayerId];
     const energyTech = owner?.research.energyTech ?? 0;
     const boosts = playerBoosts(owner, now);
+    const lb = levelBonuses(owner?.level ?? 1);
     universe.planets[id] = advancePlanet(
       planet,
       universe.speed,
       now,
       energyTech,
-      { mineOutput: boosts.mineOutput, energyOutput: boosts.energyOutput }
+      {
+        mineOutput: lb.production * boosts.mineOutput,
+        energyOutput: boosts.energyOutput
+      },
+      owner
     );
+    if (owner) universe.players[owner.id] = owner;
   }
   advanceFleets(universe, now);
   tickPirates(universe, now);
@@ -4450,9 +4614,12 @@ function queueBuildingUpgrade(universe, playerId, buildingId, now = Date.now(), 
   if (!canAfford(planet.resources, cost)) {
     return { ok: false, error: "Not enough resources." };
   }
+  const lb = levelBonuses(player.level ?? 1);
   const seconds = Math.max(
     1,
-    Math.ceil(buildingUpgradeSeconds(buildingId, current) / universe.speed)
+    Math.ceil(
+      buildingUpgradeSeconds(buildingId, current) * lb.buildTime / universe.speed
+    )
   );
   planet.resources = spend(planet.resources, cost);
   planet.buildQueue = {
@@ -4490,9 +4657,12 @@ function queueShipBuild(universe, playerId, shipId, count, now = Date.now(), pla
   if (!canAfford(planet.resources, cost)) {
     return { ok: false, error: "Not enough resources." };
   }
+  const lb = levelBonuses(player.level ?? 1);
   const seconds = Math.max(
     1,
-    Math.ceil(shipBuildSeconds(shipId, qty, yard) / universe.speed)
+    Math.ceil(
+      shipBuildSeconds(shipId, qty, yard) * lb.shipBuild / universe.speed
+    )
   );
   planet.resources = spend(planet.resources, cost);
   planet.shipQueue = {
@@ -4578,10 +4748,11 @@ function queueResearch(universe, playerId, researchId, now = Date.now()) {
     return { ok: false, error: "Not enough resources on active planet." };
   }
   const researchSpeed = playerBoosts(player, now).researchSpeed;
+  const lb = levelBonuses(player.level ?? 1);
   const seconds = Math.max(
     1,
     Math.ceil(
-      researchUpgradeSeconds(researchId, current, lab) / universe.speed / Math.max(0.01, researchSpeed)
+      researchUpgradeSeconds(researchId, current, lab) * lb.researchTime / universe.speed / Math.max(0.01, researchSpeed)
     )
   );
   planet.resources = spend(planet.resources, cost);
@@ -4893,11 +5064,13 @@ function launchFleet(universe, playerIdOrOpts, targetPlanetId, mission, shipsInp
     crystal: 0,
     deuterium: fuel
   });
+  const lb = levelBonuses(player.level ?? 1);
   const oneWay = opts.mission === "jump" ? 1 : flightSecondsOneWay(
     origin.coords,
     targetCoords,
     ships,
-    universe.fleetSpeed * Math.max(0.01, boosts.fleetSpeed),
+    // Stack: base → combustion → level time → officers/skills fleetSpeed.
+    universe.fleetSpeed * Math.max(0.01, boosts.fleetSpeed) / Math.max(0.01, lb.fleetTime),
     player.research.combustionDrive ?? 0
   );
   const fleetId = `flt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
@@ -4945,11 +5118,13 @@ function highscoresBoard(universe) {
       name: p.name,
       points: empirePoints(universe, p),
       coords: home?.coords ?? { galaxy: 0, system: 0, slot: 0 },
-      planetCount: ownedPlanetCount(universe, p.id)
+      planetCount: ownedPlanetCount(universe, p.id),
+      level: p.level ?? 1,
+      xpTotal: p.xpTotal ?? 0
     };
   });
   rows.sort(
-    (a, b) => b.points - a.points || a.playerId.localeCompare(b.playerId)
+    (a, b) => b.points - a.points || b.level - a.level || b.xpTotal - a.xpTotal || a.playerId.localeCompare(b.playerId)
   );
   return rows.map((r, i) => ({ ...r, rank: i + 1 }));
 }
@@ -5074,7 +5249,10 @@ function playerView(universe, playerId, now = Date.now(), galaxy, system) {
       planet,
       universe.speed,
       player.research.energyTech ?? 0,
-      { mineOutput: boosts.mineOutput, energyOutput: boosts.energyOutput }
+      {
+        mineOutput: levelBonuses(player.level ?? 1).production * boosts.mineOutput,
+        energyOutput: boosts.energyOutput
+      }
     ),
     roster: publicRoster(universe),
     highscores: highscoresBoard(universe),
@@ -5089,7 +5267,8 @@ function playerView(universe, playerId, now = Date.now(), galaxy, system) {
     skillsUnlocked: player.skillsUnlocked ?? [],
     officerCatalog: OFFICER_ORDER.map((id) => OFFICERS[id]),
     skillCatalog: SKILL_ORDER.map((id) => SKILLS[id]),
-    dailyLoginAvailable: canClaimDailyLogin(player, now)
+    dailyLoginAvailable: canClaimDailyLogin(player, now),
+    progress: playerProgressView(player)
   };
 }
 
@@ -5101,6 +5280,11 @@ function migrateOrResetUniverse(data, opts) {
   const version = universeSchemaVersion(data);
   if (version >= UNIVERSE_SCHEMA_VERSION && data.id) {
     ensureUniverseShape(data);
+    return { universe: data, didReset: false, archived: null };
+  }
+  if (version === 2 && UNIVERSE_SCHEMA_VERSION >= 3 && data.id) {
+    ensureUniverseShape(data);
+    data.schemaVersion = UNIVERSE_SCHEMA_VERSION;
     return { universe: data, didReset: false, archived: null };
   }
   const fresh = createUniverse(
