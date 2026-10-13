@@ -1,9 +1,10 @@
 import {
+  EXPEDITION_SLOT,
   MAP_GALAXIES,
   MAP_SLOTS,
   MAP_SYSTEMS,
 } from "./catalog.js";
-import { maxColonies } from "./formulas.js";
+import { maxColonies, maxExpeditions } from "./formulas.js";
 import type {
   Coordinates,
   FleetShips,
@@ -36,6 +37,36 @@ export function resolveLaunchTarget(
   let targetCoords: Coordinates;
   let targetPlanet: PlanetState | null = null;
   let targetPlayerId: string | null = null;
+
+  if (mission === "expedition") {
+    if (!targetCoordsOpt) {
+      return { ok: false, error: "targetCoords required for expedition." };
+    }
+    targetCoords = { ...targetCoordsOpt };
+    if (
+      targetCoords.galaxy < 1 ||
+      targetCoords.galaxy > MAP_GALAXIES ||
+      targetCoords.system < 1 ||
+      targetCoords.system > MAP_SYSTEMS ||
+      targetCoords.slot !== EXPEDITION_SLOT
+    ) {
+      return {
+        ok: false,
+        error: `Expedition requires deep-space slot ${EXPEDITION_SLOT}.`,
+      };
+    }
+    const activeExpeditions = Object.values(universe.fleets).filter(
+      (f) => f.ownerPlayerId === player.id && f.mission === "expedition",
+    ).length;
+    const cap = maxExpeditions(player.research.astrophysics);
+    if (activeExpeditions >= cap) {
+      return {
+        ok: false,
+        error: `Expedition limit reached (Astrophysics → ${cap} concurrent).`,
+      };
+    }
+    return { ok: true, targetCoords, targetPlanet: null, targetPlayerId: null };
+  }
 
   if (mission === "colonize" || mission === "harvest") {
     if (!targetCoordsOpt) {

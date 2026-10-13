@@ -29,6 +29,7 @@ const MISSIONS: MissionType[] = [
   "espionage",
   "colonize",
   "harvest",
+  "expedition",
 ];
 
 export interface LaunchFleetOpts {
