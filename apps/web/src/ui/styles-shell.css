@@ -1,4 +1,5 @@
-/* Classic OGame-style shell: left nav · main · right planet rail-pai
+/* Classic OGame-style shell: left nav · main · right planet rail */
+
 #app {
   max-width: 1280px;
   margin: 0 auto;
@@ -78,7 +79,8 @@
 
 .shell-main {
   min-width: 0;
-  /* No enter animation — poll re-renders would restart it and break click stabilitye-pai}
+  /* No enter animation — poll re-renders would restart it and break click stability. */
+}
 
 .planet-rail {
   position: sticky;
@@ -184,7 +186,8 @@
   font-weight: 600;
 }
 
-/* Cost / requirement tooltips-pai.has-tip {
+/* Cost / requirement tooltips */
+.has-tip {
   position: relative;
   display: inline-flex;
   vertical-align: middle;
