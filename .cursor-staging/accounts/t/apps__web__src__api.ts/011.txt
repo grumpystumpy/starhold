@@ -1,0 +1,16 @@
+: Partial<Resources>;
+  },
+): Promise<PlayerView> {
+  const res = await credFetch("/api/launch-fleet", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, ...opts }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function claimDaily(playerId: string): Promise<PlayerView> {
+  const res = await credFetch("/api/claim-daily", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playe

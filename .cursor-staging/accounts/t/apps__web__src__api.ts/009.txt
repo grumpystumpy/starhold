@@ -1,0 +1,20 @@
+;
+}
+
+export async function reorderQueueItems(
+  playerId: string,
+  kind: "building" | "ship" | "defense" | "research",
+  orderedIds: string[],
+  planetId?: string,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/queue/reorder", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, kind, orderedIds, planetId }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function selectPlanet(
+  playerId: string,
+  planetId: strin

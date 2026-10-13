@@ -1,0 +1,18 @@
+Id,
+  count: number,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/build-defense", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, defenseId, count }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function researchTech(
+  playerId: string,
+  researchId: ResearchId,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/research", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" }

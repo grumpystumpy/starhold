@@ -1,0 +1,20 @@
+g,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/select-planet", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, planetId }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function launchFleetMission(
+  playerId: string,
+  opts: {
+    mission: MissionType;
+    ships: Partial<FleetShips>;
+    targetPlanetId?: string;
+    targetCoords?: Coordinates;
+    asteroidId?: string;
+    pirateBaseId?: string;
+    cargo?

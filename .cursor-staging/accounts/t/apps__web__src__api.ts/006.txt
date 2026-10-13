@@ -1,0 +1,21 @@
+body: JSON.stringify({ playerId, buildingId }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function buildShip(
+  playerId: string,
+  shipId: ShipId,
+  count: number,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/build-ship", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, shipId, count }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function buildDefense(
+  playerId: string,
+  defenseId: Defense

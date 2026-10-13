@@ -1,0 +1,18 @@
+,
+    body: JSON.stringify({ playerId, researchId }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function cancelQueueItem(
+  playerId: string,
+  kind: "building" | "ship" | "defense" | "research",
+  itemId: string,
+  planetId?: string,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/queue/cancel", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, kind, itemId, planetId }),
+  });
+  return parse<PlayerView>(res)
