@@ -153,6 +153,8 @@ export function ensureUniverseShape(universe: UniverseState): void {
       player.activePlanetId = player.homePlanetId;
     }
     if (!player.research) player.research = emptyResearch();
+    if (player.research.swarmHold === undefined) player.research.swarmHold = 0;
+    if (player.research.queueLogistics === undefined) player.research.queueLogistics = 0;
     if (player.research.queueLogistics == null) player.research.queueLogistics = 0;
     if (player.research.swarmHold == null) player.research.swarmHold = 0;
     if (!Array.isArray(player.researchQueue)) {
