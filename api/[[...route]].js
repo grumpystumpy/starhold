@@ -2030,6 +2030,83 @@ var SHIPS = {
     hull: 100,
     speed: 3e3,
     fuelPerDistance: 1.2
+  },
+  voidforgeTitan: {
+    id: "voidforgeTitan",
+    name: "Voidforge Titan",
+    description: "Moon-killer flagship. Deathstar-class balance reference \u2014 original Starhold hull.",
+    cost: { metal: 5e6, crystal: 4e6, deuterium: 1e6 },
+    buildSeconds: 12e4,
+    shipyardLevel: 12,
+    cargo: 1e6,
+    attack: 2e5,
+    shield: 5e4,
+    hull: 1e6,
+    speed: 100,
+    fuelPerDistance: 5,
+    researchReq: {
+      weaponsTech: 12,
+      shieldingTech: 12,
+      armourTech: 12
+    }
+  },
+  worldEater: {
+    id: "worldEater",
+    name: "World Eater",
+    description: "Siege hull for mini-planet capture/destroy. Cannot collect debris \u2014 bring Salvage Trawlers.",
+    cost: { metal: 8e4, crystal: 6e4, deuterium: 25e3 },
+    buildSeconds: 8e3,
+    shipyardLevel: 9,
+    cargo: 0,
+    attack: 12e3,
+    shield: 2e3,
+    hull: 4e4,
+    speed: 800,
+    fuelPerDistance: 3
+  },
+  swarmDrone: {
+    id: "swarmDrone",
+    name: "Swarm Drone",
+    description: "Carried strike mite. Must ride a Swarm Mothership; intercepts fire aimed at the carrier.",
+    cost: { metal: 200, crystal: 80, deuterium: 0 },
+    buildSeconds: 8,
+    shipyardLevel: 4,
+    cargo: 0,
+    attack: 6,
+    shield: 40,
+    hull: 8,
+    speed: 2e4,
+    fuelPerDistance: 0,
+    swarmCarried: true
+  },
+  swarmHarvester: {
+    id: "swarmHarvester",
+    name: "Swarm Harvester",
+    description: "Carried salvage mite. Loot feeds the mothership; kamikazes when the carrier is critical.",
+    cost: { metal: 400, crystal: 300, deuterium: 100 },
+    buildSeconds: 20,
+    shipyardLevel: 5,
+    cargo: 0,
+    attack: 0,
+    shield: 60,
+    hull: 30,
+    speed: 15e3,
+    fuelPerDistance: 0,
+    swarmCarried: true
+  },
+  swarmMothership: {
+    id: "swarmMothership",
+    name: "Swarm Mothership",
+    description: "Swarm carrier and occupation platform. Holds drones/harvesters; can produce drones in flight.",
+    cost: { metal: 4e4, crystal: 3e4, deuterium: 1e4 },
+    buildSeconds: 4e3,
+    shipyardLevel: 8,
+    cargo: 5e4,
+    attack: 500,
+    shield: 2e3,
+    hull: 2e4,
+    speed: 2500,
+    fuelPerDistance: 2
   }
 };
 var DEFENSES = {
@@ -2130,15 +2207,35 @@ var RESEARCH = {
     costGrowth: 2,
     baseResearchSeconds: 22,
     labLevel: 1
+  },
+  swarmHold: {
+    id: "swarmHold",
+    name: "Swarm Hold",
+    description: "+15% of base (300) Swarm Mothership capacity per level (hard cap 2000).",
+    baseCost: { metal: 200, crystal: 400, deuterium: 200 },
+    costGrowth: 2,
+    baseResearchSeconds: 40,
+    labLevel: 4
   }
 };
 
 // packages/game/src/catalog-rapid-fire.ts
 var RAPID_FIRE = {
-  scout: { probe: 2 },
-  interceptor: { probe: 5, scout: 2 },
-  cruiser: { hauler: 3, probe: 4 },
-  bomber: { laserBattery: 4, scout: 2 }
+  scout: { probe: 2, swarmDrone: 2 },
+  interceptor: { probe: 5, scout: 2, swarmDrone: 5 },
+  cruiser: { hauler: 3, probe: 4, swarmDrone: 8 },
+  bomber: { laserBattery: 4, scout: 2, swarmDrone: 4 },
+  voidforgeTitan: {
+    swarmDrone: 200,
+    probe: 250,
+    scout: 50,
+    laserBattery: 50
+  },
+  worldEater: {
+    laserBattery: 20,
+    shieldDome: 10
+  },
+  swarmDrone: { probe: 3 }
 };
 function rapidFireFactor(firer, target) {
   const n = RAPID_FIRE[firer]?.[target] ?? 1;
@@ -2401,9 +2498,29 @@ var SHIP_ORDER = [
   "bomber",
   "probe",
   "recycler",
-  "colonyShip"
+  "colonyShip",
+  "voidforgeTitan",
+  "worldEater",
+  "swarmDrone",
+  "swarmHarvester",
+  "swarmMothership"
 ];
 var DEFENSE_ORDER = ["laserBattery", "shieldDome"];
+var SWARM_CAPACITY_BASE = 300;
+var SWARM_HOLD_BONUS_PER_LEVEL = 0.15;
+var SWARM_CAPACITY_HARD_CAP = 2e3;
+var SWARM_NUMBERS_THRESHOLD = 50;
+var SWARM_NUMBERS_BONUS_PER = 2e-3;
+var SWARM_NUMBERS_BONUS_CAP_COUNT = 2e3;
+var SWARM_INTERCEPT_FRACTION = 0.7;
+var SWARM_INTERCEPT_SPLIT = 0.5;
+var SWARM_KAMIKAZE_HULL_FRAC = 0.3;
+var SWARM_KAMIKAZE_SHIELD_DMG = 80;
+var SWARM_KAMIKAZE_HULL_DMG = 40;
+var OCCUPATION_DURATION_MS = 2 * 24 * 60 * 60 * 1e3;
+var OCCUPATION_OCCUPIER_SHARE = 0.3;
+var OCCUPATION_OWNER_SHARE = 0.7;
+var MINI_WORLD_EATER_MIN = 5;
 var STARTING_RESOURCES = {
   metal: 500,
   crystal: 500,
@@ -2676,7 +2793,8 @@ function emptyResearch() {
     shieldingTech: 0,
     espionageTech: 0,
     astrophysics: 0,
-    computerTech: 0
+    computerTech: 0,
+    swarmHold: 0
   };
 }
 function emptyDefenses() {
@@ -2797,6 +2915,79 @@ function fuelCostOneWay(origin, target, ships) {
   return Math.max(1, Math.ceil(fuel));
 }
 
+// packages/game/src/formulas-round2.ts
+function voidforgeMoonKillChancePct(titans, fieldsCap2) {
+  const n = Math.max(0, Math.floor(titans));
+  if (n <= 0) return 0;
+  const diameter = Math.max(1, fieldsCap2);
+  return Math.min(
+    100,
+    Math.floor((100 - Math.sqrt(diameter)) * Math.sqrt(n))
+  );
+}
+function swarmCapacityForLevel(swarmHoldLevel) {
+  const level = Math.max(0, Math.floor(swarmHoldLevel));
+  const raw2 = Math.floor(
+    SWARM_CAPACITY_BASE * (1 + SWARM_HOLD_BONUS_PER_LEVEL * level)
+  );
+  return Math.min(SWARM_CAPACITY_HARD_CAP, raw2);
+}
+function swarmFleetCapacity(ships, swarmHoldLevel) {
+  const motherships = ships.swarmMothership ?? 0;
+  if (motherships <= 0) return 0;
+  return motherships * swarmCapacityForLevel(swarmHoldLevel);
+}
+function swarmCarriedCount(ships) {
+  return (ships.swarmDrone ?? 0) + (ships.swarmHarvester ?? 0);
+}
+function swarmDroneAttackMult(droneCount) {
+  const n = Math.max(0, Math.floor(droneCount));
+  if (n < SWARM_NUMBERS_THRESHOLD) return 1;
+  const bonus = SWARM_NUMBERS_BONUS_PER * Math.min(n, SWARM_NUMBERS_BONUS_CAP_COUNT);
+  return 1 + bonus;
+}
+function canCollectDebris(ships) {
+  return (ships.recycler ?? 0) >= 1;
+}
+function canResolveMiniPlanet(ships) {
+  return (ships.worldEater ?? 0) >= MINI_WORLD_EATER_MIN;
+}
+function validateSwarmCarry(ships, swarmHoldLevel) {
+  const drones = ships.swarmDrone ?? 0;
+  const harvesters = ships.swarmHarvester ?? 0;
+  const carried = drones + harvesters;
+  const motherships = ships.swarmMothership ?? 0;
+  if (carried <= 0) return { ok: true };
+  if (motherships <= 0) {
+    return {
+      ok: false,
+      error: "Swarm drones/harvesters must ride a Swarm Mothership."
+    };
+  }
+  const cap = swarmFleetCapacity(ships, swarmHoldLevel);
+  if (carried > cap) {
+    return {
+      ok: false,
+      error: `Swarm carry exceeds capacity (${carried}/${cap}). Research Swarm Hold or add motherships.`
+    };
+  }
+  return { ok: true };
+}
+function shipResearchReqMet(shipId, research) {
+  const req = SHIPS[shipId].researchReq;
+  if (!req) return { ok: true };
+  for (const [id, need] of Object.entries(req)) {
+    const have = research[id] ?? 0;
+    if (have < (need ?? 0)) {
+      return {
+        ok: false,
+        error: `Needs research ${id} level ${need} (you have ${have}).`
+      };
+    }
+  }
+  return { ok: true };
+}
+
 // packages/game/src/formulas-combat.ts
 function unitCombatPower(attack, shield, hull, research) {
   const w = 1 + (research?.weaponsTech ?? 0) * 0.08;
@@ -2912,13 +3103,72 @@ function applyDamageToTarget(side, id, damage, research) {
     if (side.defenses[did] === 0) side.residual[id] = 0;
   }
 }
+function redistributeSwarmIntercept(target, damage, side) {
+  if (target !== "swarmMothership" || damage <= 0) {
+    return [{ target, damage }];
+  }
+  const drones = side.ships.swarmDrone ?? 0;
+  const harvesters = side.ships.swarmHarvester ?? 0;
+  if (drones <= 0 && harvesters <= 0) {
+    return [{ target, damage }];
+  }
+  const intercepted = damage * SWARM_INTERCEPT_FRACTION;
+  const toMother = damage - intercepted;
+  const out = [];
+  if (toMother > 0) out.push({ target: "swarmMothership", damage: toMother });
+  if (drones > 0 && harvesters > 0) {
+    const toDrones = intercepted * SWARM_INTERCEPT_SPLIT;
+    const toHarv = intercepted - toDrones;
+    if (toDrones > 0) out.push({ target: "swarmDrone", damage: toDrones });
+    if (toHarv > 0) out.push({ target: "swarmHarvester", damage: toHarv });
+  } else if (drones > 0) {
+    out.push({ target: "swarmDrone", damage: intercepted });
+  } else {
+    out.push({ target: "swarmHarvester", damage: intercepted });
+  }
+  return out;
+}
+function mothershipHullFraction(side, research) {
+  const count = side.ships.swarmMothership ?? 0;
+  if (count <= 0) return 0;
+  const hp = targetHp("swarmMothership", research);
+  const residual = side.residual.swarmMothership ?? 0;
+  return Math.max(0, Math.min(1, 1 - residual / hp));
+}
+function applyHarvesterKamikaze(own, enemy, ownResearch, enemyResearch) {
+  const harvesters = own.ships.swarmHarvester ?? 0;
+  if (harvesters <= 0) return 0;
+  if ((own.ships.swarmMothership ?? 0) <= 0) return 0;
+  if (mothershipHullFraction(own, ownResearch) >= SWARM_KAMIKAZE_HULL_FRAC) {
+    return 0;
+  }
+  const focus = pickFocusTarget(enemy.ships, enemy.defenses);
+  if (!focus) {
+    own.ships.swarmHarvester = 0;
+    own.residual.swarmHarvester = 0;
+    return harvesters;
+  }
+  const dmgPer = SWARM_KAMIKAZE_SHIELD_DMG + SWARM_KAMIKAZE_HULL_DMG;
+  applyDamageToTarget(enemy, focus, harvesters * dmgPer, enemyResearch);
+  own.ships.swarmHarvester = 0;
+  own.residual.swarmHarvester = 0;
+  return harvesters;
+}
+function applyShotWithIntercept(side, target, damage, research) {
+  for (const part of redistributeSwarmIntercept(target, damage, side)) {
+    applyDamageToTarget(side, part.target, part.damage, research);
+  }
+}
 function collectFire(firerShips, firerDefenses, targetShips, targetDefenses, firerResearch) {
   const shots = [];
   const focus = pickFocusTarget(targetShips, targetDefenses);
   if (!focus) return shots;
   for (const id of livingShipIds(firerShips)) {
     const def = SHIPS[id];
-    const atk = unitAtk(def.attack, firerResearch);
+    let atk = unitAtk(def.attack, firerResearch);
+    if (id === "swarmDrone") {
+      atk *= swarmDroneAttackMult(firerShips.swarmDrone ?? 0);
+    }
     if (atk <= 0) continue;
     const n = firerShips[id] ?? 0;
     const rf = rapidFireFactor(id, focus);
@@ -2986,7 +3236,7 @@ function resolveCombat(attacker, defender, defenses = emptyDefenses(), attackerR
       defenderResearch
     );
     for (const shot of atkShots) {
-      applyDamageToTarget(
+      applyShotWithIntercept(
         defSide,
         shot.target,
         shot.damage / defensePowerMult,
@@ -2994,13 +3244,25 @@ function resolveCombat(attacker, defender, defenses = emptyDefenses(), attackerR
       );
     }
     for (const shot of defShots) {
-      applyDamageToTarget(
+      applyShotWithIntercept(
         atkSide,
         shot.target,
         shot.damage * defensePowerMult,
         attackerResearch
       );
     }
+    applyHarvesterKamikaze(
+      atkSide,
+      defSide,
+      attackerResearch,
+      defenderResearch
+    );
+    applyHarvesterKamikaze(
+      defSide,
+      atkSide,
+      defenderResearch,
+      attackerResearch
+    );
     const atkAlive2 = shipCount(atkSide.ships) > 0;
     const defAlive2 = shipCount(defSide.ships) + defenseCount(defSide.defenses) > 0;
     if (!atkAlive2 || !defAlive2) break;
@@ -3789,6 +4051,8 @@ function ensureUniverseShape(universe) {
   if (!universe.debris) universe.debris = {};
   if (!universe.asteroids) universe.asteroids = {};
   if (!universe.pirateBases) universe.pirateBases = {};
+  if (!universe.occupations) universe.occupations = {};
+  if (!universe.miniPlanetIds) universe.miniPlanetIds = [];
   if (!universe.fleetSpeed) universe.fleetSpeed = universe.speed || 1;
   if (!universe.seed) universe.seed = `seed_${universe.id}`;
   for (const player of Object.values(universe.players)) {
@@ -3799,6 +4063,7 @@ function ensureUniverseShape(universe) {
       player.activePlanetId = player.homePlanetId;
     }
     if (!player.research) player.research = emptyResearch();
+    if (player.research.swarmHold === void 0) player.research.swarmHold = 0;
     if (player.researchQueue === void 0) player.researchQueue = null;
     if (player.starshards === void 0) player.starshards = 0;
     if (!player.officers) player.officers = [];
@@ -3981,6 +4246,210 @@ function tryFormMoon(universe, parent, debrisCreated, reportId, now) {
   return moon;
 }
 
+// packages/game/src/world-occupation.ts
+function defensesCleared(planet) {
+  const d = planet.defenses ?? emptyDefenses();
+  return (d.laserBattery ?? 0) + (d.shieldDome ?? 0) <= 0;
+}
+function pruneExpiredOccupations(universe, now) {
+  if (!universe.occupations) {
+    universe.occupations = {};
+    return;
+  }
+  for (const [planetId, occ] of Object.entries(universe.occupations)) {
+    if (occ.endsAt <= now) {
+      delete universe.occupations[planetId];
+    }
+  }
+}
+function occupationForPlanet(universe, planetId, now = Date.now()) {
+  pruneExpiredOccupations(universe, now);
+  return universe.occupations?.[planetId] ?? null;
+}
+function isPlanetOccupied(universe, planetId, now = Date.now()) {
+  return occupationForPlanet(universe, planetId, now) !== null;
+}
+function occupationMineShares(rates) {
+  return {
+    owner: {
+      metal: rates.metal * OCCUPATION_OWNER_SHARE,
+      crystal: rates.crystal * OCCUPATION_OWNER_SHARE,
+      deuterium: rates.deuterium * OCCUPATION_OWNER_SHARE
+    },
+    occupier: {
+      metal: rates.metal * OCCUPATION_OCCUPIER_SHARE,
+      crystal: rates.crystal * OCCUPATION_OCCUPIER_SHARE,
+      deuterium: rates.deuterium * OCCUPATION_OCCUPIER_SHARE
+    }
+  };
+}
+function startOccupation(universe, playerId, fleetId, now = Date.now()) {
+  pruneExpiredOccupations(universe, now);
+  const fleet = universe.fleets[fleetId];
+  if (!fleet || fleet.ownerPlayerId !== playerId) {
+    return { ok: false, error: "Fleet not found." };
+  }
+  if ((fleet.ships.swarmMothership ?? 0) < 1) {
+    return { ok: false, error: "Occupation requires a Swarm Mothership." };
+  }
+  const planetId = fleet.targetPlanetId;
+  if (!planetId) {
+    return { ok: false, error: "Fleet has no target planet." };
+  }
+  const planet = universe.planets[planetId];
+  if (!planet) return { ok: false, error: "Planet missing." };
+  if (planet.ownerPlayerId === playerId) {
+    return { ok: false, error: "Cannot occupy your own body." };
+  }
+  if (!defensesCleared(planet)) {
+    return { ok: false, error: "All defenses must be destroyed first." };
+  }
+  if (universe.occupations?.[planetId]) {
+    return { ok: false, error: "Planet is already occupied." };
+  }
+  const occ = {
+    planetId,
+    occupierPlayerId: playerId,
+    mothershipFleetId: fleetId,
+    startedAt: now,
+    endsAt: now + OCCUPATION_DURATION_MS
+  };
+  if (!universe.occupations) universe.occupations = {};
+  universe.occupations[planetId] = occ;
+  return { ok: true, planet };
+}
+function abandonOccupation(universe, playerId, planetId, now = Date.now()) {
+  pruneExpiredOccupations(universe, now);
+  const occ = universe.occupations?.[planetId];
+  if (!occ) return { ok: false, error: "No occupation on that planet." };
+  if (occ.occupierPlayerId !== playerId) {
+    return { ok: false, error: "Only the occupier can abandon." };
+  }
+  if (universe.occupations) delete universe.occupations[planetId];
+  const planet = universe.planets[planetId];
+  if (!planet) return { ok: false, error: "Planet missing." };
+  return { ok: true, planet };
+}
+function clearOccupationIfRecaptured(universe, planetId, winnerPlayerId) {
+  const occ = universe.occupations?.[planetId];
+  if (!occ) return;
+  const planet = universe.planets[planetId];
+  if (!planet) return;
+  if (winnerPlayerId === planet.ownerPlayerId && universe.occupations) {
+    delete universe.occupations[planetId];
+  }
+}
+function clearOccupationIfFleetGone(universe, fleet) {
+  if (!universe.occupations) return;
+  for (const [planetId, occ] of Object.entries(universe.occupations)) {
+    if (occ.mothershipFleetId === fleet.id) {
+      delete universe.occupations[planetId];
+    }
+  }
+}
+
+// packages/game/src/world-round2.ts
+function swarmProduce(universe, playerId, fleetId, count) {
+  const qty = Math.floor(count);
+  if (qty < 1 || qty > 200) {
+    return { ok: false, error: "Produce between 1 and 200 drones." };
+  }
+  const fleet = universe.fleets[fleetId];
+  if (!fleet || fleet.ownerPlayerId !== playerId) {
+    return { ok: false, error: "Fleet not found." };
+  }
+  const motherships = fleet.ships.swarmMothership ?? 0;
+  if (motherships < 1) {
+    return { ok: false, error: "Swarm produce requires a Swarm Mothership." };
+  }
+  const player = universe.players[playerId];
+  if (!player) return { ok: false, error: "Unknown player." };
+  const hold = player.research.swarmHold ?? 0;
+  const cap = swarmFleetCapacity(fleet.ships, hold);
+  const used = swarmCarriedCount(fleet.ships);
+  if (used + qty > cap) {
+    return {
+      ok: false,
+      error: `Not enough swarm capacity (${used + qty}/${cap}).`
+    };
+  }
+  const cost = shipCost("swarmDrone", qty);
+  if (!canAfford(fleet.cargo, cost)) {
+    return { ok: false, error: "Not enough cargo resources on the mothership." };
+  }
+  fleet.cargo = spend(fleet.cargo, cost);
+  fleet.ships.swarmDrone = (fleet.ships.swarmDrone ?? 0) + qty;
+  universe.fleets[fleet.id] = fleet;
+  const origin = universe.planets[fleet.originPlanetId];
+  if (!origin) return { ok: false, error: "Origin planet missing." };
+  return { ok: true, planet: origin };
+}
+function resolveMiniPlanetChoice(universe, playerId, fleetId, choice) {
+  const fleet = universe.fleets[fleetId];
+  if (!fleet || fleet.ownerPlayerId !== playerId) {
+    return { ok: false, error: "Fleet not found." };
+  }
+  if (!canResolveMiniPlanet(fleet.ships)) {
+    return {
+      ok: false,
+      error: `Need at least ${MINI_WORLD_EATER_MIN} World Eaters.`
+    };
+  }
+  const planetId = fleet.targetPlanetId;
+  if (!planetId) return { ok: false, error: "Fleet has no target." };
+  const planet = universe.planets[planetId];
+  if (!planet) return { ok: false, error: "Planet missing." };
+  const isMini = Boolean(planet.flags?.mini) || (universe.miniPlanetIds ?? []).includes(planetId);
+  if (!isMini) {
+    return {
+      ok: false,
+      error: "Target is not a mini planet (discovery lands in thread K)."
+    };
+  }
+  void choice;
+  return { ok: true, planet };
+}
+function maybeDestroyMoonWithTitans(universe, moon, survivingAttacker, reportId) {
+  const titans = survivingAttacker.voidforgeTitan ?? 0;
+  const chancePct = voidforgeMoonKillChancePct(titans, fieldsCap(moon));
+  if (chancePct <= 0) return { destroyed: false, chancePct: 0 };
+  const roll = moonRoll(`${reportId}:moonkill`);
+  if (roll >= chancePct) return { destroyed: false, chancePct };
+  const debrisShips = destroyedShipResources(moon.ships, emptyShips());
+  const halfDebris = debrisFromDestroyed({
+    metal: debrisShips.metal,
+    crystal: debrisShips.crystal,
+    deuterium: 0
+  });
+  addDebris(universe, moon.coords, {
+    metal: Math.floor(halfDebris.metal),
+    crystal: Math.floor(halfDebris.crystal),
+    deuterium: 0
+  });
+  const owner = universe.players[moon.ownerPlayerId];
+  if (owner) {
+    owner.planetIds = owner.planetIds.filter((id) => id !== moon.id);
+    if (owner.activePlanetId === moon.id) {
+      owner.activePlanetId = owner.homePlanetId;
+    }
+    universe.players[owner.id] = owner;
+  }
+  const parentId = moon.parentPlanetId;
+  if (parentId && universe.planets[parentId]) {
+    universe.planets[parentId].moonId = null;
+  }
+  for (const [fid, fleet] of Object.entries(universe.fleets)) {
+    if (fleet.originPlanetId === moon.id || fleet.targetPlanetId === moon.id) {
+      delete universe.fleets[fid];
+    }
+  }
+  if (universe.occupations?.[moon.id]) {
+    delete universe.occupations[moon.id];
+  }
+  delete universe.planets[moon.id];
+  return { destroyed: true, chancePct };
+}
+
 // packages/game/src/world-arrival-raid.ts
 function resolveRaidArrival(universe, fleet, target, now) {
   const owner = universe.players[fleet.ownerPlayerId];
@@ -4016,8 +4485,34 @@ function resolveRaidArrival(universe, fleet, target, now) {
     subtractCargo(target, loot);
   }
   const reportId = `rpt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
-  const moon = tryFormMoon(universe, target, debrisCreated, reportId, now);
-  const summary = moon ? `${combat.summary} A moon coalesced from the debris field.` : combat.summary;
+  let summary = combat.summary;
+  let moonFormed = false;
+  let moonDestroyed = false;
+  let moonKillChancePct;
+  if (target.kind === "moon" && combat.outcome === "attacker_win") {
+    const kill = maybeDestroyMoonWithTitans(
+      universe,
+      target,
+      combat.attackerAfter,
+      reportId
+    );
+    moonKillChancePct = kill.chancePct;
+    if (kill.destroyed) {
+      moonDestroyed = true;
+      summary = `${combat.summary} Voidforge Titan shattered the moon (${kill.chancePct}% chance).`;
+    }
+  } else {
+    const moon = tryFormMoon(universe, target, debrisCreated, reportId, now);
+    moonFormed = Boolean(moon);
+    if (moon) {
+      summary = `${combat.summary} A moon coalesced from the debris field.`;
+    }
+  }
+  if (combat.outcome === "attacker_win") {
+    clearOccupationIfRecaptured(universe, target.id, fleet.ownerPlayerId);
+  } else if (combat.outcome === "defender_win") {
+    clearOccupationIfRecaptured(universe, target.id, target.ownerPlayerId);
+  }
   const report = {
     id: reportId,
     at: now,
@@ -4038,7 +4533,9 @@ function resolveRaidArrival(universe, fleet, target, now) {
     outcome: combat.outcome,
     rounds: combat.rounds,
     summary,
-    moonFormed: Boolean(moon)
+    moonFormed,
+    moonDestroyed: moonDestroyed || void 0,
+    moonKillChancePct
   };
   universe.reports[reportId] = report;
   fleet.ships = combat.attackerAfter;
@@ -4219,6 +4716,7 @@ function pruneSpyReports(universe, now = Date.now(), ttlMs = SPY_REPORT_TTL_MS) 
 function resolveFleetArrival(universe, fleet, now) {
   const origin = universe.planets[fleet.originPlanetId];
   if (!origin) {
+    clearOccupationIfFleetGone(universe, fleet);
     delete universe.fleets[fleet.id];
     return;
   }
@@ -4345,6 +4843,7 @@ function resolveFleetArrival(universe, fleet, now) {
       drive
     );
     if (fleetShipCount(fleet.ships) <= 0) {
+      clearOccupationIfFleetGone(universe, fleet);
       delete universe.fleets[fleet.id];
       return;
     }
@@ -4353,6 +4852,7 @@ function resolveFleetArrival(universe, fleet, now) {
     universe.fleets[fleet.id] = fleet;
     return;
   }
+  clearOccupationIfFleetGone(universe, fleet);
   addShipsToPlanet(origin, fleet.ships);
   addCargoToPlanet(origin, fleet.cargo);
   delete universe.fleets[fleet.id];
@@ -4375,6 +4875,7 @@ function advanceFleets(universe, now) {
 }
 function advanceUniverse(universe, now = Date.now()) {
   ensureUniverseShape(universe);
+  pruneExpiredOccupations(universe, now);
   for (const player of Object.values(universe.players)) {
     advanceResearch(universe, player, now);
   }
@@ -4383,13 +4884,37 @@ function advanceUniverse(universe, now = Date.now()) {
     const owner = universe.players[planet.ownerPlayerId];
     const energyTech = owner?.research.energyTech ?? 0;
     const boosts = playerBoosts(owner, now);
-    universe.planets[id] = advancePlanet(
+    const before = { ...planet.resources };
+    const advanced = advancePlanet(
       planet,
       universe.speed,
       now,
       energyTech,
       { mineOutput: boosts.mineOutput, energyOutput: boosts.energyOutput }
     );
+    const occ = occupationForPlanet(universe, id, now);
+    if (occ && occ.occupierPlayerId !== planet.ownerPlayerId) {
+      const gained = {
+        metal: Math.max(0, advanced.resources.metal - before.metal),
+        crystal: Math.max(0, advanced.resources.crystal - before.crystal),
+        deuterium: Math.max(
+          0,
+          advanced.resources.deuterium - before.deuterium
+        )
+      };
+      const shares = occupationMineShares(gained);
+      subtractCargo(advanced, {
+        metal: gained.metal - shares.owner.metal,
+        crystal: gained.crystal - shares.owner.crystal,
+        deuterium: gained.deuterium - shares.owner.deuterium
+      });
+      const occupier = universe.players[occ.occupierPlayerId];
+      const payPlanetId = occupier?.activePlanetId ?? occupier?.homePlanetId ?? null;
+      if (payPlanetId && universe.planets[payPlanetId]) {
+        addCargoToPlanet(universe.planets[payPlanetId], shares.occupier);
+      }
+    }
+    universe.planets[id] = advanced;
   }
   advanceFleets(universe, now);
   tickPirates(universe, now);
@@ -4397,6 +4922,9 @@ function advanceUniverse(universe, now = Date.now()) {
 }
 
 // packages/game/src/world-queues.ts
+function isPlanetOccupiedByOther(universe, planetId, _playerId, now) {
+  return isPlanetOccupied(universe, planetId, now);
+}
 function resolveActionPlanet(universe, player, planetId) {
   const id = planetId || player.activePlanetId || player.homePlanetId;
   if (!player.planetIds.includes(id)) return null;
@@ -4422,6 +4950,9 @@ function queueBuildingUpgrade(universe, playerId, buildingId, now = Date.now(), 
   advanceUniverse(universe, now);
   const planet = resolveActionPlanet(universe, player, planetId);
   if (!planet) return { ok: false, error: "Planet missing." };
+  if (isPlanetOccupiedByOther(universe, planet.id, playerId, now)) {
+    return { ok: false, error: "Construction blocked while planet is occupied." };
+  }
   if (!buildingAllowedOn(planet, buildingId)) {
     return {
       ok: false,
@@ -4479,6 +5010,9 @@ function queueShipBuild(universe, playerId, shipId, count, now = Date.now(), pla
   if (planet.shipQueue) {
     return { ok: false, error: "Shipyard is already busy." };
   }
+  if (isPlanetOccupiedByOther(universe, planet.id, playerId, now)) {
+    return { ok: false, error: "Shipyard blocked while planet is occupied." };
+  }
   const yard = planet.buildings.shipyard ?? 0;
   if (yard < def.shipyardLevel) {
     return {
@@ -4486,6 +5020,8 @@ function queueShipBuild(universe, playerId, shipId, count, now = Date.now(), pla
       error: `Needs Shipyard level ${def.shipyardLevel} (you have ${yard}).`
     };
   }
+  const researchOk = shipResearchReqMet(shipId, player.research);
+  if (!researchOk.ok) return researchOk;
   const cost = shipCost(shipId, qty);
   if (!canAfford(planet.resources, cost)) {
     return { ok: false, error: "Not enough resources." };
@@ -4517,6 +5053,9 @@ function queueDefenseBuild(universe, playerId, defenseId, count, now = Date.now(
   advanceUniverse(universe, now);
   const planet = resolveActionPlanet(universe, player, planetId);
   if (!planet) return { ok: false, error: "Planet missing." };
+  if (isPlanetOccupiedByOther(universe, planet.id, playerId, now)) {
+    return { ok: false, error: "Defense yard blocked while planet is occupied." };
+  }
   if (planet.defenseQueue) {
     return { ok: false, error: "Defense yard is already busy." };
   }
@@ -4812,6 +5351,14 @@ function launchFleet(universe, playerIdOrOpts, targetPlanetId, mission, shipsInp
   if (fleetShipCount(ships) < 1) {
     return { ok: false, error: "Select at least one ship." };
   }
+  const swarmOk = validateSwarmCarry(ships, player.research.swarmHold ?? 0);
+  if (!swarmOk.ok) return swarmOk;
+  if ((opts.mission === "harvest" || opts.mission === "harvestAsteroid") && !canCollectDebris(ships)) {
+    return {
+      ok: false,
+      error: "Debris collection requires a Salvage Trawler (World Eaters cannot recycle)."
+    };
+  }
   advanceUniverse(universe, now);
   const origin = resolveActionPlanet(universe, player, opts.originPlanetId);
   if (!origin) return { ok: false, error: "Planet missing." };
@@ -5089,7 +5636,8 @@ function playerView(universe, playerId, now = Date.now(), galaxy, system) {
     skillsUnlocked: player.skillsUnlocked ?? [],
     officerCatalog: OFFICER_ORDER.map((id) => OFFICERS[id]),
     skillCatalog: SKILL_ORDER.map((id) => SKILLS[id]),
-    dailyLoginAvailable: canClaimDailyLogin(player, now)
+    dailyLoginAvailable: canClaimDailyLogin(player, now),
+    occupation: occupationForPlanet(universe, planet.id, now)
   };
 }
 
@@ -11366,6 +11914,72 @@ function createApp() {
     }
     return withUniverse((universe) => {
       const result = unlockSkill(universe, body.playerId, body.skillId);
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId));
+    });
+  });
+  app2.post("/api/occupy", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    if (!body.playerId || !body.fleetId) {
+      return c.json({ error: "playerId and fleetId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      advanceUniverse(universe);
+      const result = startOccupation(
+        universe,
+        body.playerId,
+        body.fleetId
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId));
+    });
+  });
+  app2.post("/api/abandon-occupation", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    if (!body.playerId || !body.planetId) {
+      return c.json({ error: "playerId and planetId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      advanceUniverse(universe);
+      const result = abandonOccupation(
+        universe,
+        body.playerId,
+        body.planetId
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId));
+    });
+  });
+  app2.post("/api/swarm-produce", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    if (!body.playerId || !body.fleetId) {
+      return c.json({ error: "playerId and fleetId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      advanceUniverse(universe);
+      const result = swarmProduce(
+        universe,
+        body.playerId,
+        body.fleetId,
+        body.count ?? 1
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId));
+    });
+  });
+  app2.post("/api/mini-resolve", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    if (!body.playerId || !body.fleetId) {
+      return c.json({ error: "playerId and fleetId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      advanceUniverse(universe);
+      const result = resolveMiniPlanetChoice(
+        universe,
+        body.playerId,
+        body.fleetId,
+        body.choice ?? "capture"
+      );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId));
     });
