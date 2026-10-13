@@ -1,10 +1,31 @@
-{
-  "path": "packages/game/src/world-pirates.ts",
-  "sha256": "0d9b6e2c2cf2f96e1fcb4d1ca860ecc9f6790bff8e687f9560250491c5c7d341",
-  "size": 16744,
-  "parts": [
-    "part-000.b64",
-    "part-001.b64",
-    "part-002.b64"
-  ]
-}
+[
+  {
+    "path": "packages/game/src/world-pirates.ts",
+    "sha256": "0d9b6e2c2cf2f96e1fcb4d1ca860ecc9f6790bff8e687f9560250491c5c7d341",
+    "size": 16744,
+    "parts": [
+      "part-000.b64",
+      "part-001.b64",
+      "part-002.b64"
+    ]
+  },
+  {
+    "path": "packages/game/src/player-levels.test.ts",
+    "sha256": "6663ba624a57540ee8a33837dbe37d7f07f87ef1d5c91b390eb0cdbfd83e69ba",
+    "size": 12002,
+    "parts": [
+      "part-003.b64",
+      "part-004.b64"
+    ]
+  },
+  {
+    "path": "scripts/smoke-ui.mjs",
+    "sha256": "a95901ab21a8c875df3067fc81a8320ac69cdb1525cec1ed5f349686334d07fa",
+    "size": 19364,
+    "parts": [
+      "part-005.b64",
+      "part-006.b64",
+      "part-007.b64"
+    ]
+  }
+]
