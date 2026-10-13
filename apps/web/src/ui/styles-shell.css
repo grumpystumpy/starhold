@@ -14,6 +14,44 @@
 
 .shell-top {
   margin-bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 1rem;
+}
+
+.nav-dropdown-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  flex: 0 0 auto;
+  min-width: 9.5rem;
+}
+
+.nav-dropdown-label {
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.nav-dropdown {
+  appearance: auto;
+  background: color-mix(in srgb, var(--bg2) 90%, transparent);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.4rem 0.55rem;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color-scheme: dark;
+  cursor: pointer;
+}
+
+.nav-dropdown:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .resource-bar {
@@ -59,7 +97,9 @@
 .side-nav .nav-link {
   display: block;
   width: 100%;
+  box-sizing: border-box;
   text-align: left;
+  text-decoration: none;
   background: transparent;
   color: var(--text);
   border: none;
@@ -210,7 +250,6 @@
   border: 1px solid var(--line);
   font-size: 0.65rem;
   color: var(--muted);
-  cursor: help;
 }
 
 .tip-bubble {
