@@ -5,6 +5,7 @@ import type {
   PlanetState,
   UniverseState,
 } from "./types.js";
+import { playerBoosts } from "./world-boosts.js";
 
 export function resolveEspionage(
   universe: UniverseState,
@@ -16,8 +17,9 @@ export function resolveEspionage(
   const targetOwner = universe.players[target.ownerPlayerId];
   if (!spy || !targetOwner) return;
 
+  const spyBoost = playerBoosts(spy, now).espionageLevel;
   const detail = espionageDetail(
-    spy.research.espionageTech ?? 0,
+    (spy.research.espionageTech ?? 0) + spyBoost,
     target.buildings.researchLab ?? 0,
   );
   const reportId = `spy_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
