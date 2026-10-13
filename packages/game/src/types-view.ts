@@ -1,4 +1,5 @@
 import type {
+  BodyKind,
   BuildingId,
   BuildQueueItem,
   Coordinates,
@@ -37,6 +38,8 @@ export interface CombatReport {
   /** Fire exchanges resolved (0 = unopposed / empty attacker). */
   rounds: number;
   summary: string;
+  /** Set when this raid formed a moon at the target planet. */
+  moonFormed?: boolean;
 }
 
 export interface EspionageReport {
@@ -84,6 +87,12 @@ export interface PlanetState {
   ownerPlayerId: string;
   name: string;
   coords: Coordinates;
+  /** Defaults to planet when omitted (older saves). */
+  kind?: BodyKind;
+  /** Set on moons — id of the parent planet. */
+  parentPlanetId?: string | null;
+  /** Set on planets — id of the linked moon, if any. */
+  moonId?: string | null;
   resources: Resources;
   /** Last time production was applied (epoch ms) */
   lastTickAt: number;
@@ -135,6 +144,9 @@ export interface GalaxySlot {
   pointsHint: number;
   debris: { metal: number; crystal: number } | null;
   isOwn: boolean;
+  /** Linked moon at this slot, if any. */
+  hasMoon: boolean;
+  moonId: string | null;
 }
 
 export interface GalaxyView {
@@ -161,6 +173,7 @@ export interface PlayerView {
     coords: Coordinates;
     isHome: boolean;
     isActive: boolean;
+    isMoon: boolean;
   }>;
   /** Derived production / energy for UI */
   economy: EconomySnapshot;
@@ -176,6 +189,11 @@ export interface PlayerView {
   spyReports: EspionageReport[];
   /** Recent deep-space expedition reports */
   expeditionReports: ExpeditionReport[];
+  /**
+   * Outbound fleets targeting this moon's system when Sensor Array ≥ 1
+   * on the active moon; otherwise empty.
+   */
+  sensorContacts: FleetMission[];
 }
 
 export interface PublicPlayer {
