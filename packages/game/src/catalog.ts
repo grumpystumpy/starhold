@@ -1,0 +1,130 @@
+import type { BuildingId, DefenseId, ResearchId, ShipId } from "./types.js";
+
+export { BUILDINGS } from "./catalog-buildings.js";
+export { SHIPS, DEFENSES } from "./catalog-units.js";
+export { RESEARCH } from "./catalog-research.js";
+export {
+  RAPID_FIRE,
+  rapidFireFactor,
+  type CombatUnitId,
+} from "./catalog-rapid-fire.js";
+
+/** Max simultaneous fire exchanges in a raid. */
+export const MAX_COMBAT_ROUNDS = 6;
+
+/** Share of defender stockpile eligible for loot on an attacker win. */
+export const RAID_LOOT_SHARE = 0.5;
+
+/** Fraction of destroyed ship metal/crystal that becomes debris. */
+export const DEBRIS_FROM_SHIPS = 0.3;
+
+/** Minimum one-way flight seconds after speed scaling. */
+export const MIN_FLIGHT_SECONDS = 8;
+
+/** Soft building-field budget (levels sum toward this). */
+export const PLANET_FIELDS = 200;
+
+/** Moon field budget: base free field + per Lunar Base level. */
+export const MOON_FIELDS_BASE = 1;
+export const MOON_FIELDS_PER_LUNAR_BASE = 3;
+
+/** Minimum debris (metal+crystal) before a moon can form. */
+export const MOON_DEBRIS_MIN = 5000;
+
+/** Cap on moon-formation chance percent. */
+export const MOON_CHANCE_CAP = 20;
+
+/** Wall-clock TTL for espionage reports before prune. */
+export const SPY_REPORT_TTL_MS = 20 * 60 * 1000;
+
+export const BUILDING_ORDER: BuildingId[] = [
+  "metalMine",
+  "crystalMine",
+  "deutSynth",
+  "solarPlant",
+  "metalStorage",
+  "crystalStorage",
+  "deutTank",
+  "shipyard",
+  "researchLab",
+  "lunarBase",
+  "sensorArray",
+];
+
+/** Buildings shown / allowed on normal planets. */
+export const PLANET_BUILDING_ORDER: BuildingId[] = [
+  "metalMine",
+  "crystalMine",
+  "deutSynth",
+  "solarPlant",
+  "metalStorage",
+  "crystalStorage",
+  "deutTank",
+  "shipyard",
+  "researchLab",
+];
+
+/** Buildings shown / allowed on moons. */
+export const MOON_BUILDING_ORDER: BuildingId[] = [
+  "lunarBase",
+  "sensorArray",
+  "solarPlant",
+  "metalStorage",
+  "crystalStorage",
+  "deutTank",
+  "shipyard",
+];
+
+export const SHIP_ORDER: ShipId[] = [
+  "scout",
+  "hauler",
+  "interceptor",
+  "cruiser",
+  "bomber",
+  "probe",
+  "recycler",
+  "colonyShip",
+];
+
+export const DEFENSE_ORDER: DefenseId[] = ["laserBattery", "shieldDome"];
+
+export const RESEARCH_ORDER: ResearchId[] = [
+  "energyTech",
+  "combustionDrive",
+  "weaponsTech",
+  "armourTech",
+  "shieldingTech",
+  "espionageTech",
+  "astrophysics",
+  "computerTech",
+];
+
+export const STARTING_RESOURCES = {
+  metal: 500,
+  crystal: 500,
+  /** Enough for a few early fleet launches before Deut Still comes online. */
+  deuterium: 100,
+} as const;
+
+/**
+ * Temporary playtest tuning: multiplies mine income only (not build/fleet timers).
+ * Remove or set to 1 when session economy no longer needs the boost.
+ */
+export const PRODUCTION_MULT = 4;
+
+/** Base hourly rates at level 1 before energy factor (invented curve). */
+export const MINE_BASE_PER_HOUR = {
+  metal: 30,
+  crystal: 20,
+  deuterium: 10,
+} as const;
+
+export const MINE_GROWTH = 1.1;
+
+/** Map bounds for the prototype galaxy browser. */
+export const MAP_GALAXIES = 1;
+export const MAP_SYSTEMS = 9;
+export const MAP_SLOTS = 8;
+
+/** Deep-space slot beyond planet slots (expedition destination). */
+export const EXPEDITION_SLOT = MAP_SLOTS + 1;

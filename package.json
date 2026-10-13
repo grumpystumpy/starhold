@@ -1,0 +1,32 @@
+{
+  "name": "starhold",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Inspired OGame-like browser space-strategy learning project",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run build -w @starhold/game && concurrently -n server,web -c blue,green \"npm run dev -w @starhold/server\" \"npm run dev -w @starhold/web\"",
+    "build": "npm run build -w @starhold/game && npm run build -w @starhold/server && npm run build -w @starhold/web",
+    "build:vercel": "npm run build -w @starhold/game && npm run build -w @starhold/server && npm run build -w @starhold/web && node scripts/bundle-api.mjs",
+    "typecheck": "npm run typecheck -w @starhold/game && npm run typecheck -w @starhold/server && npm run typecheck -w @starhold/web",
+    "test": "npm run test -w @starhold/game && npm run test -w @starhold/server",
+    "smoke": "node scripts/smoke-ui.mjs",
+    "e2e": "node scripts/smoke-ui.mjs",
+    "start": "npm run start -w @starhold/server"
+  },
+  "dependencies": {
+    "@upstash/redis": "^1.34.9",
+    "hono": "^4.7.5"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "esbuild": "^0.25.12",
+    "typescript": "^5.8.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "npm install",
+  "buildCommand": "npm run build:vercel",
+  "outputDirectory": "apps/web/dist",
+  "rewrites": [
+    {
+      "source": "/api/state/:playerId",
+      "destination": "/api/state?playerId=:playerId"
+    }
+  ],
+  "functions": {
+    "api/[[...route]].js": {
+      "maxDuration": 30,
+      "memory": 1024
+    }
+  }
+}
