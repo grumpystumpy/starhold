@@ -73,6 +73,11 @@ function getRedis(): Redis | null {
   return redis;
 }
 
+/** Shared Redis/KV client for accounts + universe (null → memory mode). */
+export function getKvClient(): Redis | null {
+  return getRedis();
+}
+
 export function storageMode(): StorageMode {
   if (resolvedMode) return resolvedMode;
   const creds = redisCredentials(process.env);
