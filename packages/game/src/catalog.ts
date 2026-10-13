@@ -90,6 +90,7 @@ export const BUILDING_ORDER: BuildingId[] = [
   "lunarBase",
   "sensorArray",
   "jumpGate",
+  "chronoLathe",
 ];
 
 /** Buildings shown / allowed on normal planets. */
@@ -103,6 +104,7 @@ export const PLANET_BUILDING_ORDER: BuildingId[] = [
   "deutTank",
   "shipyard",
   "researchLab",
+  "chronoLathe",
 ];
 
 /** Buildings shown / allowed on moons. */
@@ -148,11 +150,15 @@ export const RESEARCH_ORDER: ResearchId[] = [
 ];
 
 /** Swarm Mothership base carry capacity (drones + harvesters). */
-export const SWARM_CAPACITY_BASE = 300;
+export const SWARM_CAPACITY_BASE = 2000;
 /** +15% of base capacity per Swarm Hold level. */
 export const SWARM_HOLD_BONUS_PER_LEVEL = 0.15;
-/** Hard cap on carried swarm hulls per mothership stack capacity calc. */
-export const SWARM_CAPACITY_HARD_CAP = 2000;
+/** Soft safety ceiling (base is already 2000; research grows past it). */
+export const SWARM_CAPACITY_HARD_CAP = 100_000;
+/** Chrono Lathe: build-time multiplier = 0.1^level (buildings/ships/defenses). */
+export const CHRONO_LATHE_TIME_BASE = 0.1;
+/** Shipyard level required to start Chrono Lathe. */
+export const CHRONO_LATHE_SHIPYARD_REQ = 10;
 /** Drones needed before swarm numbers attack bonus applies. */
 export const SWARM_NUMBERS_THRESHOLD = 50;
 /** Attack bonus per drone above threshold (capped). */
