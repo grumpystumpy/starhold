@@ -9,6 +9,7 @@ import {
 import { BUILDING_ART, PLANET_ART } from "./assets";
 import { fmt, fmtCost, fmtEta } from "./format";
 import { escapeAttr, escapeHtml } from "./render-escape";
+import { costTooltip } from "./render-tooltips";
 
 /** Keep the commander input mounted so automation / IME is not wiped by re-paints. */
 export function renderJoin(
@@ -128,21 +129,30 @@ export function buildingRow(
   let label = "Upgrade";
   if (queueBusy) label = "Queue busy";
   else if (!affordable) label = "Can't afford";
-  const title = queueBusy
+  const blocked = queueBusy
     ? "A building is already under construction."
     : !affordable
       ? "Not enough resources."
-      : `Upgrade to L${level + 1}`;
+      : null;
+  const tip = costTooltip({
+    action: `Upgrade ${def.name} → L${level + 1}`,
+    cost,
+    timeSecs: secs,
+    requires: def.energyUsePerLevel
+      ? [`Energy use +${def.energyUsePerLevel}/level`]
+      : undefined,
+    blocked,
+  });
   return `
     <article class="item item-thumb" data-building-id="${id}" data-testid="building-${id}">
       <img class="thumb" src="${BUILDING_ART[id]}" alt="" width="48" height="48" />
       <div>
-        <h3>${escapeHtml(def.name)} <span class="meta" data-testid="building-level-${id}">L${level}</span></h3>
+        <h3>${escapeHtml(def.name)} <span class="meta" data-testid="building-level-${id}">L${level}</span> ${tip.html}</h3>
         <p>${escapeHtml(def.description)}</p>
         <div class="meta">Next: ${fmtCost(cost)} · ${fmtEta(secs)}</div>
       </div>
       <div class="actions">
-        <button type="button" data-upgrade="${id}" data-building-id="${id}" data-testid="upgrade-${id}" title="${escapeAttr(title)}">${label}</button>
+        <button type="button" data-upgrade="${id}" data-building-id="${id}" data-testid="upgrade-${id}" title="${tip.title}">${label}</button>
       </div>
     </article>
   `;
