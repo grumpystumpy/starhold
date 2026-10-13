@@ -80,7 +80,6 @@ async function apiSmoke() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ playerId, buildingId: "metalStorage" }),
   });
-  // Vault either blocked by queue or unaffordable — both are valid reject strings.
   if (!vault.error) throw new Error("expected vault reject while poor/busy");
 
   await waitMetal(playerId, 220, 360_000);
@@ -103,7 +102,6 @@ async function apiSmoke() {
   }
   if (!scoutReady) throw new Error("scout never entered hangar");
 
-  // Fleets: second commander as fleet-mission target
   const victimName = `Vic${Date.now().toString(36).slice(-5)}`;
   const victim = await apiJson("/api/join", {
     method: "POST",
@@ -129,7 +127,6 @@ async function apiSmoke() {
     throw new Error(`expected outbound fleet: ${JSON.stringify(launch.fleets)}`);
   }
 
-  // Wait for resolve + return. ETA scales with map distance (crowded uni → longer).
   const outboundMs = Math.max(0, launch.fleets[0].arrivesAt - Date.now());
   const deadline = Date.now() + Math.max(90_000, outboundMs * 3 + 20_000);
   let reportSeen = false;
@@ -141,8 +138,6 @@ async function apiSmoke() {
       const r = st.reports[0];
       const lootTotal =
         (r.loot?.metal ?? 0) + (r.loot?.crystal ?? 0) + (r.loot?.deuterium ?? 0);
-      // Empty-hangar target → attacker win; loot may be 0 if cargo tiny / stocks drained,
-      // but report must exist with an outcome.
       lootOk = Boolean(r.outcome) && (lootTotal >= 0);
     }
     if (reportSeen && lootOk && (st.fleets?.length ?? 0) === 0) {
@@ -173,7 +168,6 @@ async function uiSmoke() {
   const browser = await playwright.chromium.launch({ headless: true });
   const logs = [];
 
-  // 1) URL commander join
   const urlName = `Url${Date.now().toString(36).slice(-4)}`;
   const page = await browser.newPage();
   await page.goto(`${WEB}/?commander=${encodeURIComponent(urlName)}`, {
@@ -186,6 +180,13 @@ async function uiSmoke() {
   const hsRank = await page.locator('[data-testid="highscore-1"]').count();
   if (hsRank < 1) throw new Error("highscores missing rank #1");
   logs.push("ui-highscores");
+  await goNav(page, "officers");
+  await page.waitForSelector('[data-testid="officers-panel"]', { timeout: 10_000 });
+  await goNav(page, "skills");
+  await page.waitForSelector('[data-testid="skills-panel"]', { timeout: 10_000 });
+  const claimDaily = await page.locator('[data-testid="claim-daily"]').count();
+  if (claimDaily < 1) throw new Error("claim-daily missing from resource bar");
+  logs.push("ui-officers-skills");
   const galaxyHasMoon = await page.evaluate(() => {
     const st = window.starhold?.getState();
     const slots = st?.galaxy?.slots ?? [];
@@ -199,8 +200,6 @@ async function uiSmoke() {
   }
   logs.push(`url-join:${urlName}`);
 
-  // 2) P0: Shipyard Upgrade click must raise L0→L1 under aggressive poll pressure.
-  // Catalog id is `shipyard` (data-testid=upgrade-shipyard) — not metalMine/Ore.
   await goNav(page, "facilities");
   const yardLevelBefore = await page.textContent(
     '[data-testid="building-level-shipyard"]',
@@ -214,8 +213,6 @@ async function uiSmoke() {
     throw new Error(`upgrade-shipyard data-upgrade mismatch: ${yardAttr}`);
   }
 
-  // Hammer silent polls while clicking — reproduces 1s multi-client poll races
-  // (must not use refresh(): that sets busy and can reject Upgrade).
   const pollHammer = await page.evaluateHandle(() => {
     const id = window.setInterval(() => {
       void window.starhold?.poll();
@@ -287,7 +284,6 @@ async function uiSmoke() {
   }
   logs.push("ui-upgrade-shipyard-level-under-poll-hammer");
 
-  // 3) P1 double-queue flash + persistence across polls (yard already L1 — upgrade solar)
   await goNav(page, "resources");
   await page.click('[data-testid="upgrade-solarPlant"]');
   await page.waitForSelector('[data-testid="flash-ok"], [data-testid="build-queue"]', {
@@ -305,7 +301,6 @@ async function uiSmoke() {
   }
   logs.push("p1-double-queue-flash");
 
-  // 4) Unaffordable vault (after dismissing prior flash via new click)
   await page.click('[data-testid="upgrade-metalStorage"]');
   await page.waitForSelector('[data-testid="flash-error"]', { timeout: 10_000 });
   const vaultErr = await page.textContent('[data-testid="flash-error"]');
@@ -317,7 +312,6 @@ async function uiSmoke() {
   }
   logs.push("p1-unaffordable-or-busy-flash");
 
-  // 5) Typed join (fresh page — input must accept fill)
   const typedPage = await browser.newPage();
   await typedPage.goto(WEB, { waitUntil: "networkidle" });
   await typedPage.waitForSelector('[data-testid="commander-input"]');
@@ -333,7 +327,6 @@ async function uiSmoke() {
   await typedPage.waitForSelector('[data-testid="resources"]', { timeout: 15_000 });
   logs.push(`typed-join:${typed}`);
 
-  // 6) Helper join
   const helpPage = await browser.newPage();
   await helpPage.goto(WEB, { waitUntil: "networkidle" });
   const helperName = `Help${Date.now().toString(36).slice(-4)}`;
@@ -343,14 +336,12 @@ async function uiSmoke() {
   await helpPage.waitForSelector('[data-testid="resources"]', { timeout: 15_000 });
   logs.push(`helper-join:${helperName}`);
 
-  // 7) Build scout under live 1s polls (yard already L1 on urlName page — fresh commander)
   const buildName = `Clk${Date.now().toString(36).slice(-4)}`;
   await page.goto(`${WEB}/?commander=${encodeURIComponent(buildName)}`, {
     waitUntil: "networkidle",
   });
   await page.waitForSelector('[data-testid="resources"]');
   await goNav(page, "facilities");
-  // Prefer UI click path for yard (asserts P0 again on a fresh player + poll hammer)
   const hammer2 = await page.evaluateHandle(() =>
     window.setInterval(() => {
       void window.starhold?.poll();
@@ -376,7 +367,6 @@ async function uiSmoke() {
   }
 
   await goNav(page, "shipyard");
-  // Wait until Build Scout is affordable and unlocked
   await page.waitForFunction(
     () => {
       const btn = document.querySelector('[data-testid="build-scout"]');
@@ -432,7 +422,6 @@ async function uiSmoke() {
   if (!noticeOrHangar) throw new Error("lost build feedback after poll");
   logs.push("build-feedback-ok");
 
-  // 8) Fleet panel + second commander → UI launch attack mission → report/loot
   const rivalName = `Riv${Date.now().toString(36).slice(-4)}`;
   const rivalPage = await browser.newPage();
   await rivalPage.goto(`${WEB}/?commander=${encodeURIComponent(rivalName)}`, {
@@ -459,7 +448,6 @@ async function uiSmoke() {
   await page.waitForSelector('[data-testid="fleet-form"]', { timeout: 15_000 });
   logs.push("fleet-form-and-art");
 
-  // UI launch preferred: pick attack mission, set 1 scout, submit form
   await page.click('[data-testid="mission-raid"]');
   await page.fill('[data-testid="fleet-count-scout"]', "1");
   await page.click('[data-testid="launch-fleet"]');
@@ -468,7 +456,6 @@ async function uiSmoke() {
   });
   logs.push("ui-fleet-mission-launch");
 
-  // Wait for combat report (mission resolve + return may still be in flight)
   await page.waitForFunction(
     () => {
       const reports = document.querySelector('[data-testid="combat-reports"]');

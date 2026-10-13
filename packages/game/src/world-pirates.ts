@@ -2,7 +2,6 @@ import {
   MAP_GALAXIES,
   MAP_SLOTS,
   MAP_SYSTEMS,
-  PIRATE_DEFENSE_WIN_STARSHARDS,
   PIRATE_DESTROY_STARSHARDS_BASE,
   PIRATE_DESTROY_STARSHARDS_PER_TIER,
   PIRATE_GROWTH_INTERVAL_MS,
@@ -36,6 +35,10 @@ import type {
   Resources,
   UniverseState,
 } from "./types.js";
+import {
+  grantPirateDestroyStarshards,
+  grantPirateFleetKillStarshards,
+} from "./world-boosts.js";
 import { emptyCargo, planetAtCoords } from "./world-bootstrap.js";
 import { subtractCargo } from "./world-tick.js";
 
@@ -272,7 +275,6 @@ function growPirateBase(base: PirateBase, now: number): void {
       deuterium: Math.max(base.resources.deuterium, stock.deuterium),
     };
   }
-  // Catch-up: if many intervals passed past cap, advance clock once.
   if (base.tier >= PIRATE_TIER_CAP && now - base.lastGrewAt >= PIRATE_GROWTH_INTERVAL_MS) {
     base.lastGrewAt = now;
   }
@@ -351,7 +353,6 @@ function pickRaidTarget(
     (p) => p.kind !== "moon",
   );
 
-  // Prefer players (~70%), else other pirate bases.
   if (planets.length > 0 && (others.length === 0 || roll % 10 < 7)) {
     const planet = planets[roll % planets.length]!;
     return { kind: "planet", planet };
@@ -385,7 +386,6 @@ function applyPirateRaidOnPlanet(
   planet.ships = combat.defenderAfter;
   planet.defenses = combat.defensesAfter;
 
-  // Detachment losses come out of the base garrison (proportional).
   const sent = fleetShipCount(raidFleet);
   const survived = fleetShipCount(combat.attackerAfter);
   if (sent > 0) {
@@ -402,7 +402,7 @@ function applyPirateRaidOnPlanet(
       deuterium: base.resources.deuterium + loot.deuterium,
     };
   } else if (combat.outcome === "defender_win") {
-    owner.starshards = (owner.starshards ?? 0) + PIRATE_DEFENSE_WIN_STARSHARDS;
+    grantPirateFleetKillStarshards(owner);
     universe.players[owner.id] = owner;
   }
 
@@ -515,8 +515,7 @@ export function resolvePirateRaidArrival(
     };
     markPirateDestroyed(base, now);
     if (owner) {
-      owner.starshards =
-        (owner.starshards ?? 0) + pirateDestroyStarshards(tierAtFight);
+      grantPirateDestroyStarshards(owner, tierAtFight);
       universe.players[owner.id] = owner;
     }
   }

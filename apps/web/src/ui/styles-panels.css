@@ -339,3 +339,45 @@ code {
 [data-flash-slot]:empty {
   display: none;
 }
+
+.officer-list,
+.skill-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.officer-row,
+.skill-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: flex-start;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.officer-row:last-child,
+.skill-row:last-child {
+  border-bottom: none;
+}
+
+.officer-row .hint,
+.skill-row .hint {
+  display: block;
+}
+
+.skill-branch h3 {
+  margin: 0.75rem 0 0.35rem;
+  font-size: 1rem;
+}
+
+.skill-row.unlocked {
+  opacity: 0.85;
+}
+
+.badge {
+  align-self: center;
+  color: var(--muted);
+  font-size: 0.85rem;
+}

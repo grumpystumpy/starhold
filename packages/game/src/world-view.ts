@@ -3,6 +3,11 @@ import {
   MAP_GALAXIES,
   MAP_SLOTS,
   MAP_SYSTEMS,
+  OFFICER_ORDER,
+  OFFICERS,
+  SKILL_ORDER,
+  SKILLS,
+  STARSHARDS_HIGHSCORE_TOP3,
 } from "./catalog.js";
 import {
   economySnapshot,
@@ -21,6 +26,12 @@ import type {
 } from "./types.js";
 import { advanceUniverse } from "./world-arrival.js";
 import { asteroidsInSystem } from "./world-asteroids.js";
+import {
+  canClaimDailyLogin,
+  grantStarshards,
+  playerBoosts,
+  pruneExpiredOfficers,
+} from "./world-boosts.js";
 import {
   activePlanet,
   ensureUniverseShape,
@@ -145,6 +156,22 @@ export function galaxyViewFor(
   };
 }
 
+/** Once-only +50 Starshards the first time a player reaches top 3 (needs rivals). */
+function maybeGrantHighscoreStarshards(
+  universe: UniverseState,
+  playerId: string,
+): void {
+  const player = universe.players[playerId];
+  if (!player || player.highscoreStarshardsClaimed) return;
+  if (Object.keys(universe.players).length < 2) return;
+  const board = highscoresBoard(universe);
+  const row = board.find((e) => e.playerId === playerId);
+  if (!row || row.rank > 3) return;
+  player.highscoreStarshardsClaimed = true;
+  grantStarshards(player, STARSHARDS_HIGHSCORE_TOP3);
+  universe.players[player.id] = player;
+}
+
 export function playerView(
   universe: UniverseState,
   playerId: string,
@@ -156,8 +183,11 @@ export function playerView(
   ensureUniverseShape(universe);
   const player = universe.players[playerId];
   if (!player) throw new Error("Unknown player.");
+  pruneExpiredOfficers(player, now);
+  maybeGrantHighscoreStarshards(universe, playerId);
   const planet = activePlanet(universe, player);
   if (!planet) throw new Error("Planet missing.");
+  const boosts = playerBoosts(player, now);
 
   const fleets = Object.values(universe.fleets)
     .filter((f) => f.ownerPlayerId === playerId)
@@ -226,6 +256,7 @@ export function playerView(
       planet,
       universe.speed,
       player.research.energyTech ?? 0,
+      { mineOutput: boosts.mineOutput, energyOutput: boosts.energyOutput },
     ),
     roster: publicRoster(universe),
     highscores: highscoresBoard(universe),
@@ -238,5 +269,8 @@ export function playerView(
     starshards: player.starshards ?? 0,
     officers: player.officers ?? [],
     skillsUnlocked: player.skillsUnlocked ?? [],
+    officerCatalog: OFFICER_ORDER.map((id) => OFFICERS[id]),
+    skillCatalog: SKILL_ORDER.map((id) => SKILLS[id]),
+    dailyLoginAvailable: canClaimDailyLogin(player, now),
   };
 }

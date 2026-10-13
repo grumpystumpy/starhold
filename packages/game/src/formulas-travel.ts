@@ -120,18 +120,21 @@ export function economySnapshot(
   planet: PlanetState,
   universeSpeed = 1,
   energyTechLevel = 0,
+  boosts?: { mineOutput?: number; energyOutput?: number },
 ): EconomySnapshot {
   const used = fieldsUsed(planet);
+  const energyMult = boosts?.energyOutput ?? 1;
   return {
     productionPerHour: productionPerHour(
       planet,
       universeSpeed,
       energyTechLevel,
+      boosts,
     ),
     energy: {
-      produced: energyProduced(planet),
+      produced: energyProduced(planet, energyMult),
       used: energyUsed(planet),
-      factor: energyFactor(planet),
+      factor: energyFactor(planet, energyMult),
     },
     storage: storageFor(planet),
     fields: {

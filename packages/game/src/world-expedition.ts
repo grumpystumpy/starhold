@@ -14,6 +14,10 @@ import type {
   ShipId,
   UniverseState,
 } from "./types.js";
+import {
+  expeditionStarshardsAmount,
+  grantStarshards,
+} from "./world-boosts.js";
 
 /** Deterministic 0..99 roll from fleet id + arrival time. */
 export function expeditionRoll(fleetId: string, at: number): number {
@@ -24,10 +28,15 @@ export function expeditionRoll(fleetId: string, at: number): number {
   return h % 100;
 }
 
+/**
+ * Expedition outcome table (v1):
+ * 0–39 resources, 40–54 ships, 55–69 nothing, 70–74 starshards (5%), 75–99 pirates.
+ */
 export function expeditionKindFromRoll(roll: number): ExpeditionKind {
   if (roll < 40) return "resources";
   if (roll < 55) return "ships";
-  if (roll < 75) return "nothing";
+  if (roll < 70) return "nothing";
+  if (roll < 75) return "starshards";
   return "pirates";
 }
 
@@ -49,7 +58,6 @@ function resourceFind(
     return { metal: 0, crystal: 0, deuterium: 0 };
   }
   const power = Math.max(1, fleetCombatPower(ships));
-  // Scale find with cargo and a touch of combat weight; roll jitters mix.
   const budget = Math.min(
     cap,
     Math.floor(80 + (cap * 0.35 + power * 0.5) * (0.55 + (roll % 20) / 40)),
@@ -58,15 +66,11 @@ function resourceFind(
   const crystal = Math.floor(budget * 0.3);
   let deuterium = budget - metal - crystal;
   if (deuterium < 0) deuterium = 0;
-  // Trim if rounding overflowed capacity.
   let total = metal + crystal + deuterium;
   if (total > cap) deuterium = Math.max(0, deuterium - (total - cap));
   return { metal, crystal, deuterium };
 }
 
-/**
- * Resolve deep-space arrival: mutates fleet ships/cargo/reportId; writes report.
- */
 export function resolveExpeditionArrival(
   universe: UniverseState,
   fleet: FleetMission,
@@ -78,6 +82,7 @@ export function resolveExpeditionArrival(
   const before = normalizeFleetShips(fleet.ships);
   let cargoGained: Resources = { metal: 0, crystal: 0, deuterium: 0 };
   const shipsDelta: Partial<FleetShips> = {};
+  let starshardsGained = 0;
   let summary: string;
 
   switch (kind) {
@@ -104,6 +109,17 @@ export function resolveExpeditionArrival(
     case "nothing": {
       fleet.cargo = { metal: 0, crystal: 0, deuterium: 0 };
       summary = "Empty void — instruments found nothing of value.";
+      break;
+    }
+    case "starshards": {
+      fleet.cargo = { metal: 0, crystal: 0, deuterium: 0 };
+      starshardsGained = expeditionStarshardsAmount(roll);
+      const owner = universe.players[fleet.ownerPlayerId];
+      if (owner) {
+        grantStarshards(owner, starshardsGained);
+        universe.players[owner.id] = owner;
+      }
+      summary = `Rare stellar fragment cache — +${starshardsGained} Starshards.`;
       break;
     }
     case "pirates": {
@@ -139,6 +155,7 @@ export function resolveExpeditionArrival(
     kind,
     cargoGained,
     shipsDelta,
+    starshardsGained: starshardsGained || undefined,
     summary,
   };
   universe.expeditionReports[reportId] = report;
