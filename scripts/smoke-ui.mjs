@@ -175,6 +175,9 @@ async function uiSmoke() {
   });
   await page.waitForSelector('[data-testid="resources"]', { timeout: 15_000 });
   await page.waitForSelector('[data-testid="side-nav"]', { timeout: 10_000 });
+  await page.waitForSelector('[data-testid="player-level"]', { timeout: 10_000 });
+  await page.waitForSelector('[data-testid="xp-bar"]', { timeout: 5_000 });
+  logs.push("ui-player-level");
   await goNav(page, "highscore");
   await page.waitForSelector('[data-testid="highscores"]', { timeout: 10_000 });
   const hsRank = await page.locator('[data-testid="highscore-1"]').count();
