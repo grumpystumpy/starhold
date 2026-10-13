@@ -46,6 +46,7 @@ export type ResearchId =
  * - espionage — probe report at target
  * - colonize — found colony on empty slot
  * - harvest — collect debris with recyclers
+ * - harvestAsteroid — mine asteroid field with recyclers
  * - expedition — deep-space probe (resources / ships / nothing / pirates)
  */
 export type MissionType =
@@ -55,6 +56,7 @@ export type MissionType =
   | "espionage"
   | "colonize"
   | "harvest"
+  | "harvestAsteroid"
   | "expedition";
 
 export type FleetPhase = "outbound" | "returning";
@@ -163,6 +165,11 @@ export interface Coordinates {
   slot: number;
 }
 
+/** Debris vs asteroid harvest target (API / mission hooks). */
+export type HarvestTarget =
+  | { kind: "debris"; coords: Coordinates }
+  | { kind: "asteroid"; asteroidId: string };
+
 export type FleetShips = Record<ShipId, number>;
 export type DefenseStock = Record<DefenseId, number>;
 export type ResearchLevels = Record<ResearchId, number>;
@@ -175,6 +182,8 @@ export interface FleetMission {
   targetPlanetId: string | null;
   targetPlayerId: string | null;
   targetCoords: Coordinates;
+  /** Set for harvestAsteroid missions. */
+  targetAsteroidId?: string | null;
   mission: MissionType;
   ships: FleetShips;
   /** Loot, transport cargo, or harvest haul on the return leg */
@@ -185,4 +194,42 @@ export interface FleetMission {
   phase: FleetPhase;
   /** Combat or espionage report id when relevant */
   reportId: string | null;
+}
+
+/** Mineable asteroid field (not a PlanetState). */
+export interface AsteroidField {
+  id: string;
+  coords: Coordinates;
+  metal: number;
+  crystal: number;
+  deuterium: number;
+  /** Remaining harvest cycles before despawn (v1). */
+  richness: number;
+}
+
+/** NPC pirate base stub (thread E fills behavior). */
+export interface PirateBase {
+  id: string;
+  coords: Coordinates;
+  name: string;
+  tier: number;
+  ships: FleetShips;
+  resources: Resources;
+  lastGrewAt: number;
+  lastRaidAt: number;
+  destroyedAt: number | null;
+}
+
+export interface SlotProductionMult {
+  metal: number;
+  crystal: number;
+  deuterium: number;
+  energy: number;
+}
+
+/** Officer runtime stub (thread D). */
+export interface OfficerState {
+  officerId: string;
+  activatedAt: number;
+  expiresAt: number;
 }
