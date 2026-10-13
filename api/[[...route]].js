@@ -2313,7 +2313,16 @@ function emptyDefenses() {
   for (const id of DEFENSE_ORDER) out[id] = 0;
   return out;
 }
-function roughPoints(planet, research) {
+function shipStockPoints(ships) {
+  let points = 0;
+  for (const [id, count] of Object.entries(ships)) {
+    if (!count) continue;
+    const c = SHIPS[id].cost;
+    points += (c.metal + c.crystal + c.deuterium) * count / 1e3;
+  }
+  return points;
+}
+function planetPoints(planet) {
   let points = 0;
   for (const [id, level] of Object.entries(planet.buildings)) {
     for (let L = 0; L < level; L++) {
@@ -2321,23 +2330,22 @@ function roughPoints(planet, research) {
       points += (c.metal + c.crystal + c.deuterium) / 1e3;
     }
   }
-  for (const [id, count] of Object.entries(planet.ships)) {
-    const c = SHIPS[id].cost;
-    points += (c.metal + c.crystal + c.deuterium) * count / 1e3;
-  }
+  points += shipStockPoints(planet.ships);
   for (const [id, count] of Object.entries(planet.defenses ?? {})) {
     const c = DEFENSES[id].cost;
     points += (c.metal + c.crystal + c.deuterium) * count / 1e3;
   }
-  if (research) {
-    for (const [id, level] of Object.entries(research)) {
-      for (let L = 0; L < level; L++) {
-        const c = researchUpgradeCost(id, L);
-        points += (c.metal + c.crystal + c.deuterium) / 1e3;
-      }
+  return points;
+}
+function researchPoints(research) {
+  let points = 0;
+  for (const [id, level] of Object.entries(research)) {
+    for (let L = 0; L < level; L++) {
+      const c = researchUpgradeCost(id, L);
+      points += (c.metal + c.crystal + c.deuterium) / 1e3;
     }
   }
-  return Math.floor(points);
+  return points;
 }
 function economySnapshot(planet, universeSpeed = 1, energyTechLevel = 0) {
   const used = fieldsUsed(planet);
@@ -3692,6 +3700,35 @@ function launchFleet(universe, playerIdOrOpts, targetPlanetId, mission, shipsInp
 }
 
 // packages/game/src/world-view.ts
+function empirePoints(universe, player) {
+  let points = researchPoints(player.research);
+  for (const id of player.planetIds ?? []) {
+    const planet = universe.planets[id];
+    if (planet) points += planetPoints(planet);
+  }
+  for (const fleet of Object.values(universe.fleets)) {
+    if (fleet.ownerPlayerId === player.id) {
+      points += shipStockPoints(fleet.ships);
+    }
+  }
+  return Math.floor(points);
+}
+function highscoresBoard(universe) {
+  const rows = Object.values(universe.players).map((p) => {
+    const home = universe.planets[p.homePlanetId];
+    return {
+      playerId: p.id,
+      name: p.name,
+      points: empirePoints(universe, p),
+      coords: home?.coords ?? { galaxy: 0, system: 0, slot: 0 },
+      planetCount: p.planetIds?.length ?? 0
+    };
+  });
+  rows.sort(
+    (a, b) => b.points - a.points || a.playerId.localeCompare(b.playerId)
+  );
+  return rows.map((r, i) => ({ ...r, rank: i + 1 }));
+}
 function publicRoster(universe) {
   return Object.values(universe.players).map((p) => {
     const planet = universe.planets[p.homePlanetId];
@@ -3699,7 +3736,7 @@ function publicRoster(universe) {
       id: p.id,
       name: p.name,
       coords: planet?.coords ?? { galaxy: 0, system: 0, slot: 0 },
-      pointsHint: planet ? roughPoints(planet, p.research) : 0,
+      pointsHint: empirePoints(universe, p),
       planetId: p.homePlanetId
     };
   });
@@ -3719,7 +3756,7 @@ function galaxyViewFor(universe, playerId, galaxy, system) {
       planetId: planet?.id ?? null,
       playerId: owner?.id ?? null,
       playerName: owner?.name ?? null,
-      pointsHint: planet && owner ? roughPoints(planet, owner.research) : 0,
+      pointsHint: planet ? Math.floor(planetPoints(planet)) : 0,
       debris: debris ? { metal: debris.metal, crystal: debris.crystal } : null,
       isOwn: owner?.id === playerId
     });
@@ -3768,6 +3805,7 @@ function playerView(universe, playerId, now = Date.now(), galaxy, system) {
       player.research.energyTech ?? 0
     ),
     roster: publicRoster(universe),
+    highscores: highscoresBoard(universe),
     galaxy: galaxyViewFor(universe, playerId, g, s),
     fleets,
     reports,
