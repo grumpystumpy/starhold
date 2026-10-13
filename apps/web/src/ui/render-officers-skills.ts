@@ -17,7 +17,7 @@ function effectLabel(kind: string, value: number): string {
     case "energyOutput":
       return `Energy ×${value.toFixed(2)}`;
     case "espionageLevel":
-      return `Espionage +${value}`;
+      return `Shadow Optics +${value}`;
     default:
       return `${kind} ${value}`;
   }

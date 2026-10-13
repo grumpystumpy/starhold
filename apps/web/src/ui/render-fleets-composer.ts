@@ -201,7 +201,7 @@ export function fleetComposer(
     const labels: Record<MissionType, string> = {
       deploy: "Deploy (park own / visit rival)",
       raid: "Raid / attack",
-      espionage: "Espionage (Whisper Probe)",
+      espionage: "Spy (Whisper Probe)",
       transport: "Transport cargo (own worlds)",
       colonize: "Colonize empty slot",
       harvest: "Harvest debris",

@@ -98,7 +98,7 @@ export function spyReportsHtml(reports: PlayerView["spyReports"]): string {
     return `<p class="hint">No espionage reports yet.</p>`;
   }
   return `
-    <h3 class="subhead">Espionage reports</h3>
+    <h3 class="subhead">Spy reports</h3>
     <ul class="reports" data-testid="spy-reports">
       ${reports
         .map((r) => {

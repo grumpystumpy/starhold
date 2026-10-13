@@ -51,6 +51,24 @@ jobs:
           STARHOLD_API: http://127.0.0.1:3001
         run: npm run e2e
 
+      - name: Playwright layout check (overlap / overflow / screenshots)
+        env:
+          STARHOLD_WEB: http://127.0.0.1:3001
+          STARHOLD_API: http://127.0.0.1:3001
+          UI_REVIEW_OUT: ui-review-out
+          UI_REVIEW_BASELINE_DIR: scripts/ui-review-baselines
+          UI_REVIEW_FAIL_ON: overlap,overflow,forbidden,contrast,truncated,overlap-img-text,screenshot-diff
+          UI_REVIEW_MAX_DIFF_RATIO: "0.08"
+        run: npm run e2e:layout
+
+      - name: Upload layout review artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-layout-review
+          path: ui-review-out/
+          if-no-files-found: ignore
+
       - name: Stop server
         if: always()
         run: |

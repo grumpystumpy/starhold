@@ -15,6 +15,7 @@
     "test": "npm run test -w @starhold/game && npm run test -w @starhold/server && npm run test -w @starhold/web",
     "smoke": "node scripts/smoke-ui.mjs",
     "e2e": "node scripts/smoke-ui.mjs",
+    "e2e:layout": "node scripts/ui-layout-check.mjs",
     "start": "npm run start -w @starhold/server"
   },
   "dependencies": {
