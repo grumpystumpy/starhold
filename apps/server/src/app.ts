@@ -6,9 +6,12 @@ import {
   type DefenseId,
   type FleetShips,
   type MissionType,
+  type OfficerId,
   type ResearchId,
   type Resources,
   type ShipId,
+  activateOfficer,
+  claimDailyLogin,
   ensureUniverseShape,
   joinUniverse,
   launchFleet,
@@ -18,6 +21,7 @@ import {
   queueResearch,
   queueShipBuild,
   setActivePlanet,
+  unlockSkill,
 } from "@starhold/game";
 import { storageMode, withUniverse } from "./store.js";
 
@@ -294,6 +298,55 @@ export function createApp(): Hono {
         cargo: body.cargo,
         originPlanetId: body.originPlanetId,
       });
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  // Single-segment paths (Vercel catch-all); contract names map here.
+  app.post("/api/claim-daily", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+    };
+    if (!body.playerId) {
+      return c.json({ error: "playerId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = claimDailyLogin(universe, body.playerId!);
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  app.post("/api/activate-officer", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      officerId?: OfficerId;
+    };
+    if (!body.playerId || !body.officerId) {
+      return c.json({ error: "playerId and officerId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = activateOfficer(
+        universe,
+        body.playerId!,
+        body.officerId!,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  app.post("/api/unlock-skill", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      skillId?: string;
+    };
+    if (!body.playerId || !body.skillId) {
+      return c.json({ error: "playerId and skillId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = unlockSkill(universe, body.playerId!, body.skillId!);
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
     });

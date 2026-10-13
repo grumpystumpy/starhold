@@ -9,6 +9,7 @@ import type { ResearchId, UniverseState } from "./types.js";
 import { activePlanet, bestLabLevel } from "./world-bootstrap.js";
 import { advanceUniverse } from "./world-arrival.js";
 import type { ActionResult } from "./world-queues.js";
+import { playerBoosts } from "./world-boosts.js";
 
 export function queueResearch(
   universe: UniverseState,
@@ -52,10 +53,13 @@ export function queueResearch(
     return { ok: false, error: "Not enough resources on active planet." };
   }
 
+  const researchSpeed = playerBoosts(player, now).researchSpeed;
   const seconds = Math.max(
     1,
     Math.ceil(
-      researchUpgradeSeconds(researchId, current, lab) / universe.speed,
+      researchUpgradeSeconds(researchId, current, lab) /
+        universe.speed /
+        Math.max(0.01, researchSpeed),
     ),
   );
 

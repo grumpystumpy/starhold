@@ -154,6 +154,9 @@ export function ensureUniverseShape(universe: UniverseState): void {
     if (player.starshards === undefined) player.starshards = 0;
     if (!player.officers) player.officers = [];
     if (!player.skillsUnlocked) player.skillsUnlocked = [];
+    if (player.highscoreStarshardsClaimed === undefined) {
+      player.highscoreStarshardsClaimed = false;
+    }
   }
   const seed = universe.seed ?? universe.id;
   for (const planet of Object.values(universe.planets)) {
@@ -253,6 +256,7 @@ export function joinUniverse(
     starshards: 0,
     officers: [],
     skillsUnlocked: [],
+    highscoreStarshardsClaimed: false,
   };
 
   universe.players[playerId] = player;
