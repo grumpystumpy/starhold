@@ -1,0 +1,31 @@
+name: Assemble J API once
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [cursor/round2-j-ships-i-rebase-b40c]
+
+permissions:
+  contents: write
+
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci && node scripts/bundle-api.mjs
+      - name: Commit api bundle
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "api/[[...route]].js"
+          if git diff --cached --quiet; then
+            echo "nothing to commit"
+            exit 0
+          fi
+          git commit -m "chore(J): assemble api/[[...route]].js"
+          git push
