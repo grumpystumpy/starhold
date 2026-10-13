@@ -1,5 +1,6 @@
 import { BUILDINGS, DEFENSES, SHIPS } from "./catalog.js";
 import {
+  CHRONO_LATHE_SHIPYARD_REQ,
   MOON_FIELDS_BASE,
   MOON_FIELDS_PER_LUNAR_BASE,
 } from "./catalog.js";
@@ -14,6 +15,7 @@ import {
   fieldsUsed,
   levelBonuses,
   shipCost,
+  shipResearchReqMet,
   shipUnitBuildSeconds,
   spend,
 } from "./formulas.js";
@@ -27,6 +29,7 @@ import type {
   UniverseState,
 } from "./types.js";
 import { advanceUniverse } from "./world-arrival.js";
+import { isPlanetOccupied } from "./world-occupation.js";
 import { yardQueueCap } from "./world-queue-caps.js";
 import {
   ensureQueueFrontStarted,
@@ -42,13 +45,15 @@ export type FleetActionResult =
   | { ok: false; error: string };
 
 /**
- * Nanite Factory level hook (Thread J). Building id `naniteFactory` may land later;
- * until then this returns 0 so constructionTimeMultiplier stays 1.
+ * Chrono Lathe level (Thread J). H left a Nanite Factory hook; Chrono Lathe
+ * is the Round 2 building that fills it (`0.1^level` via constructionTimeMultiplier).
  */
 export function naniteFactoryLevel(planet: PlanetState): number {
-  const buildings = planet.buildings as Record<string, number | undefined>;
-  return Math.max(0, Math.floor(buildings.naniteFactory ?? 0));
+  return Math.max(0, Math.floor(planet.buildings.chronoLathe ?? 0));
 }
+
+/** Alias for call sites / tests that prefer the Chrono Lathe name. */
+export const chronoLatheLevel = naniteFactoryLevel;
 
 export function resolveActionPlanet(
   universe: UniverseState,
@@ -93,6 +98,9 @@ export function queueBuildingUpgrade(
   advanceUniverse(universe, now);
   const planet = resolveActionPlanet(universe, player, planetId);
   if (!planet) return { ok: false, error: "Planet missing." };
+  if (isPlanetOccupied(universe, planet.id, now)) {
+    return { ok: false, error: "Construction blocked while planet is occupied." };
+  }
   if (!buildingAllowedOn(planet, buildingId)) {
     return {
       ok: false,
@@ -106,6 +114,15 @@ export function queueBuildingUpgrade(
   }
   if (buildingId === "jumpGate" && (planet.buildings.lunarBase ?? 0) < 1) {
     return { ok: false, error: "Fold Bridge needs Crater Hab level 1." };
+  }
+  if (buildingId === "chronoLathe") {
+    const yard = planet.buildings.shipyard ?? 0;
+    if (yard < CHRONO_LATHE_SHIPYARD_REQ) {
+      return {
+        ok: false,
+        error: `Chrono Lathe needs Shipyard level ${CHRONO_LATHE_SHIPYARD_REQ} (you have ${yard}).`,
+      };
+    }
   }
 
   const cap = yardQueueCap(player, now);
@@ -143,7 +160,9 @@ export function queueBuildingUpgrade(
   }
 
   const lb = levelBonuses(player.level ?? 1);
-  const naniteLevel = naniteFactoryLevel(planet);
+  // Chrono Lathe does not accelerate itself (avoid recursive free builds).
+  const naniteLevel =
+    buildingId === "chronoLathe" ? 0 : naniteFactoryLevel(planet);
   const seconds =
     (buildingUpgradeSeconds(buildingId, current, naniteLevel) * lb.buildTime) /
     universe.speed;
@@ -186,6 +205,9 @@ export function queueShipBuild(
   advanceUniverse(universe, now);
   const planet = resolveActionPlanet(universe, player, planetId);
   if (!planet) return { ok: false, error: "Planet missing." };
+  if (isPlanetOccupied(universe, planet.id, now)) {
+    return { ok: false, error: "Shipyard blocked while planet is occupied." };
+  }
 
   const cap = yardQueueCap(player, now);
   if (planet.shipQueue.length >= cap) {
@@ -202,6 +224,9 @@ export function queueShipBuild(
       error: `Needs Shipyard level ${def.shipyardLevel} (you have ${yard}).`,
     };
   }
+
+  const researchOk = shipResearchReqMet(shipId, player.research);
+  if (!researchOk.ok) return researchOk;
 
   const cost = shipCost(shipId, qty);
   if (!canAfford(planet.resources, cost)) {
@@ -254,6 +279,9 @@ export function queueDefenseBuild(
   advanceUniverse(universe, now);
   const planet = resolveActionPlanet(universe, player, planetId);
   if (!planet) return { ok: false, error: "Planet missing." };
+  if (isPlanetOccupied(universe, planet.id, now)) {
+    return { ok: false, error: "Defense yard blocked while planet is occupied." };
+  }
 
   const cap = yardQueueCap(player, now);
   if (planet.defenseQueue.length >= cap) {

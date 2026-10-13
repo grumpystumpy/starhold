@@ -90,6 +90,7 @@ export const BUILDING_ORDER: BuildingId[] = [
   "lunarBase",
   "sensorArray",
   "jumpGate",
+  "chronoLathe",
 ];
 
 /** Buildings shown / allowed on normal planets. */
@@ -103,6 +104,7 @@ export const PLANET_BUILDING_ORDER: BuildingId[] = [
   "deutTank",
   "shipyard",
   "researchLab",
+  "chronoLathe",
 ];
 
 /** Buildings shown / allowed on moons. */
@@ -126,6 +128,11 @@ export const SHIP_ORDER: ShipId[] = [
   "probe",
   "recycler",
   "colonyShip",
+  "voidforgeTitan",
+  "worldEater",
+  "swarmDrone",
+  "swarmHarvester",
+  "swarmMothership",
 ];
 
 export const DEFENSE_ORDER: DefenseId[] = ["laserBattery", "shieldDome"];
@@ -140,6 +147,7 @@ export const RESEARCH_ORDER: ResearchId[] = [
   "astrophysics",
   "computerTech",
   "queueLogistics",
+  "swarmHold",
 ];
 
 /** Hard cap per queue kind (Round 2 contract v1). */
@@ -152,6 +160,28 @@ export const QUEUE_BASE_LENGTH = {
   defense: 2,
   research: 1,
 } as const;
+
+
+/** Round 2 combat/economy constants — defined in `data/tuning.ts` (lane c). */
+export {
+  SWARM_CAPACITY_BASE,
+  SWARM_HOLD_BONUS_PER_LEVEL,
+  SWARM_CAPACITY_HARD_CAP,
+  CHRONO_LATHE_TIME_BASE,
+  CHRONO_LATHE_SHIPYARD_REQ,
+  SWARM_NUMBERS_THRESHOLD,
+  SWARM_NUMBERS_BONUS_PER,
+  SWARM_NUMBERS_BONUS_CAP_COUNT,
+  SWARM_INTERCEPT_FRACTION,
+  SWARM_INTERCEPT_SPLIT,
+  SWARM_KAMIKAZE_HULL_FRAC,
+  SWARM_KAMIKAZE_SHIELD_DMG,
+  SWARM_KAMIKAZE_HULL_DMG,
+  OCCUPATION_DURATION_MS,
+  OCCUPATION_OCCUPIER_SHARE,
+  OCCUPATION_OWNER_SHARE,
+  MINI_WORLD_EATER_MIN,
+} from "./data/tuning.js";
 
 export const STARTING_RESOURCES = {
   metal: 500,

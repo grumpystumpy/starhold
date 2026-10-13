@@ -110,3 +110,20 @@ export {
   xpForResearch,
   xpToNext,
 } from "./formulas-progress.js";
+
+export {
+  abandonOccupation,
+  clearOccupationIfFleetGone,
+  clearOccupationIfRecaptured,
+  isPlanetOccupied,
+  occupationForPlanet,
+  occupationMineShares,
+  pruneExpiredOccupations,
+  startOccupation,
+} from "./world-occupation.js";
+export {
+  maybeDestroyMoonWithTitans,
+  resolveMiniPlanetChoice,
+  swarmProduce,
+} from "./world-round2.js";
+

@@ -42,6 +42,7 @@ import {
 } from "./world-bootstrap.js";
 import { stampQueueView } from "./world-queue-manage.js";
 import { inSensorPhalanxRange, ownedPlanetCount } from "./world-moons.js";
+import { occupationForPlanet } from "./world-occupation.js";
 import { getDebris } from "./world-tick.js";
 
 /** Empire total: all planets + in-flight ships + research once. */
@@ -289,5 +290,6 @@ export function playerView(
     skillCatalog: SKILL_ORDER.map((id) => SKILLS[id]),
     dailyLoginAvailable: canClaimDailyLogin(player, now),
     progress: playerProgressView(player),
+    occupation: occupationForPlanet(universe, planet.id, now),
   };
 }
