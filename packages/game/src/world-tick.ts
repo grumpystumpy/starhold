@@ -22,6 +22,7 @@ export function advancePlanet(
   universeSpeed: number,
   now: number,
   energyTechLevel = 0,
+  boosts?: { mineOutput?: number; energyOutput?: number },
 ): PlanetState {
   let state = {
     ...planet,
@@ -51,7 +52,12 @@ export function advancePlanet(
 
   const elapsedMs = Math.max(0, now - state.lastTickAt);
   if (elapsedMs > 0) {
-    const rates = productionPerHour(state, universeSpeed, energyTechLevel);
+    const rates = productionPerHour(
+      state,
+      universeSpeed,
+      energyTechLevel,
+      boosts,
+    );
     const hours = elapsedMs / 3_600_000;
     const caps = storageFor(state);
     state.resources = clampToStorage(
