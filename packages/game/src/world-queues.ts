@@ -12,6 +12,7 @@ import {
   defenseCost,
   fieldsRemaining,
   fieldsUsed,
+  levelBonuses,
   shipBuildSeconds,
   shipCost,
   spend,
@@ -112,9 +113,13 @@ export function queueBuildingUpgrade(
     return { ok: false, error: "Not enough resources." };
   }
 
+  const lb = levelBonuses(player.level ?? 1);
   const seconds = Math.max(
     1,
-    Math.ceil(buildingUpgradeSeconds(buildingId, current) / universe.speed),
+    Math.ceil(
+      (buildingUpgradeSeconds(buildingId, current) * lb.buildTime) /
+        universe.speed,
+    ),
   );
 
   planet.resources = spend(planet.resources, cost);
@@ -165,9 +170,12 @@ export function queueShipBuild(
     return { ok: false, error: "Not enough resources." };
   }
 
+  const lb = levelBonuses(player.level ?? 1);
   const seconds = Math.max(
     1,
-    Math.ceil(shipBuildSeconds(shipId, qty, yard) / universe.speed),
+    Math.ceil(
+      (shipBuildSeconds(shipId, qty, yard) * lb.shipBuild) / universe.speed,
+    ),
   );
 
   planet.resources = spend(planet.resources, cost);
