@@ -22,6 +22,7 @@ import {
   planetAtCoords,
 } from "./world-bootstrap.js";
 import { resolveEspionage } from "./world-espionage.js";
+import { pruneSpyReports } from "./world-spy-prune.js";
 import {
   addCargoToPlanet,
   addShipsToPlanet,
@@ -75,6 +76,17 @@ export function resolveFleetArrival(
       addShipsToPlanet(target, fleet.ships);
       delete universe.fleets[fleet.id];
       return;
+    } else if (fleet.mission === "deploy") {
+      const target = fleet.targetPlanetId
+        ? universe.planets[fleet.targetPlanetId]
+        : null;
+      // Park on own colonies — dock ships, no return leg.
+      if (target && target.ownerPlayerId === fleet.ownerPlayerId) {
+        addShipsToPlanet(target, fleet.ships);
+        delete universe.fleets[fleet.id];
+        return;
+      }
+      // Rival visit: fall through to return-leg scheduling below.
     } else if (fleet.mission === "colonize") {
       const occupied = planetAtCoords(universe, fleet.targetCoords);
       if (occupied) {
@@ -188,4 +200,5 @@ export function advanceUniverse(universe: UniverseState, now = Date.now()): void
     );
   }
   advanceFleets(universe, now);
+  pruneSpyReports(universe, now);
 }
