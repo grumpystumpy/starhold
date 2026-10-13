@@ -4,6 +4,10 @@ export {
   joinUniverse,
   planetAtCoords,
 } from "./world-bootstrap.js";
+export {
+  claimPlayerToAccount,
+  playerForAccount,
+} from "./world-accounts.js";
 export { advancePlanet } from "./world-tick.js";
 export { advanceUniverse } from "./world-arrival.js";
 export type { ActionResult, FleetActionResult } from "./world-queues.js";
@@ -126,4 +130,3 @@ export {
   resolveMiniPlanetChoice,
   swarmProduce,
 } from "./world-round2.js";
-
