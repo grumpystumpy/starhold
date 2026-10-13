@@ -108,7 +108,7 @@ export function resolveRaidArrival(
     moonKillChancePct = kill.chancePct;
     if (kill.destroyed) {
       moonDestroyed = true;
-      summary = `${combat.summary} Voidforge Titan shattered the moon (${kill.chancePct}% chance).`;
+      summary = `${combat.summary} Siege hulls shattered the moon (${kill.chancePct}% chance).`;
     }
   } else {
     const moon = tryFormMoon(universe, target, debrisCreated, reportId, now);
