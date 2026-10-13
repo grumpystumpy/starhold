@@ -250,6 +250,7 @@
   border: 1px solid var(--line);
   font-size: 0.65rem;
   color: var(--muted);
+  cursor: help;
 }
 
 .tip-bubble {
