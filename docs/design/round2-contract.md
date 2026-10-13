@@ -82,8 +82,14 @@ Already original (keep): Scout Skiff, Ore Hauler, Interceptor, Aegis Cruiser, Br
 
 | Id | Display | Effect |
 |----|---------|--------|
-| `swarmHold` | **Swarm Hold** | +15% of base (300) Swarm Mothership capacity per level |
+| `swarmHold` | **Swarm Hold** | +15% of base (**2000**) Swarm Mothership capacity per level |
 | `queueLogistics` | **Yard Logistics** | +1 building/ship/defense queue slot per 2 levels (see §2) |
+
+### New building (Round 2)
+
+| Id | Display | Effect |
+|----|---------|--------|
+| `chronoLathe` | **Chrono Lathe** | Build time × `0.1^level` for buildings/ships/defenses (not research); Shipyard 10 gate |
 
 ### Death Star / moon-killer
 
@@ -91,7 +97,7 @@ No Death Star id exists on `main` yet. Round 2 introduces:
 
 | Id | Display | Role |
 |----|---------|------|
-| `voidforgeTitan` | **Voidforge Titan** | Moon-killer flagship (Deathstar-class balance **reference only**) |
+| `voidforgeTitan` | **Void Titan** | Moon-killer flagship (3rd largest; Deathstar-class balance **reference only**) |
 
 ### UI / docs copy
 
@@ -375,16 +381,18 @@ POST /api/fleet/mini-resolve { playerId, fleetId, choice: "capture" | "destroy" 
 
 ## 7. New ships
 
-### 7.1 Voidforge Titan (`voidforgeTitan`) — moon-killer flagship
+> **Micah amendments (Round 2):** Swarm costs/times ×0.25; Mothership cargo/combat/capacity raised (2nd largest); Voidforge Titan renamed **Void Titan** (3rd); World Eater = largest; Chrono Lathe build-speed building; sub-second batch production.
 
-Deathstar-class **balance reference** (not a clone). Original name.
+### 7.1 Void Titan (`voidforgeTitan`) — moon-killer flagship (3rd largest)
 
-| Stat | v1 |
+Deathstar-class **balance reference** (not a clone). Display name **Void Titan**.
+
+| Stat | v1 (amended) |
 |------|---:|
-| Cost | metal `5_000_000`, crystal `4_000_000`, deuterium `1_000_000` |
-| Build seconds | `120_000` (before yard/level speed) |
-| Shipyard req | **12** |
-| Research req | Ordnance Doctrine 12, Aegis Lattice 12, Hull Weave 12 |
+| Cost | metal `1_500_000`, crystal `1_200_000`, deuterium `400_000` |
+| Build seconds | `90_000` (before yard/Chrono Lathe) |
+| Shipyard req | **11** |
+| Research req | Ordnance Doctrine 10, Aegis Lattice 10, Hull Weave 10 |
 | Cargo | `1_000_000` |
 | Attack | `200_000` |
 | Shield | `50_000` |
@@ -392,7 +400,7 @@ Deathstar-class **balance reference** (not a clone). Original name.
 | Speed | `100` |
 | Fuel / distance | `5` |
 
-**Moon destruction chance** (attacker won, target is moon, ≥1 Voidforge Titan survived):
+**Moon destruction chance** (attacker won, target is moon, ≥1 Void Titan survived):
 
 ```
 chancePct = min(100,
@@ -404,28 +412,29 @@ chancePct = min(100,
 
 On success: moon deleted; parent `moonId` cleared; fleets on moon → debris 50% / rest destroyed; message all parties.
 
-### 7.2 World Eater (`worldEater`)
+### 7.2 World Eater (`worldEater`) — LARGEST hull
 
-| Stat | v1 |
+| Stat | v1 (amended) |
 |------|---:|
-| Cost | metal `80_000`, crystal `60_000`, deuterium `25_000` |
-| Build seconds | `8_000` |
-| Shipyard | **9** |
+| Cost | metal `8_000_000`, crystal `6_500_000`, deuterium `2_500_000` |
+| Build seconds | `200_000` |
+| Shipyard | **15** |
+| Research req | Ordnance Doctrine 14, Aegis Lattice 14, Hull Weave 14 |
 | Cargo | `0` (**cannot collect debris**) |
-| Attack | `12_000` |
-| Shield | `2_000` |
-| Hull | `40_000` |
-| Speed | `800` |
-| Fuel / distance | `3` |
+| Attack | `80_000` (≫ Mothership) |
+| Shield | `800_000` |
+| Hull | `2_000_000` |
+| Speed | `600` |
+| Fuel / distance | `4` |
 
 Role: required (≥5) to capture/destroy mini planets; strong vs structures; no recycler behavior.
 
 ### 7.3 Swarm Drone (`swarmDrone`)
 
-| Stat | v1 |
+| Stat | v1 (amended −75% cost & time) |
 |------|---:|
-| Cost | metal `200`, crystal `80`, deuterium `0` |
-| Build seconds | `8` |
+| Cost | metal `50`, crystal `20`, deuterium `0` |
+| Build seconds | `2` |
 | Shipyard | **4** (or produced by mothership — see below) |
 | Cargo | `0` |
 | Attack | `6` |
@@ -440,10 +449,10 @@ Role: required (≥5) to capture/destroy mini planets; strong vs structures; no 
 
 ### 7.4 Swarm Harvester (`swarmHarvester`)
 
-| Stat | v1 |
+| Stat | v1 (amended −75% cost & time) |
 |------|---:|
-| Cost | metal `400`, crystal `300`, deuterium `100` |
-| Build seconds | `20` |
+| Cost | metal `100`, crystal `75`, deuterium `25` |
+| Build seconds | `5` |
 | Shipyard | **5** |
 | Cargo | `0` (loot goes to **mothership** cargo) |
 | Attack | `0` |
@@ -456,24 +465,38 @@ Role: required (≥5) to capture/destroy mini planets; strong vs structures; no 
 - Intercepts mothership damage (50% share with drones if both present; drones priority first).
 - **Kamikaze:** if mothership hull < 30% of max during combat, each harvester may suicide: deal `shieldDmg = 80`, `hullDmg = 40` to a random enemy combatant; harvester destroyed.
 
-### 7.5 Swarm Mothership (`swarmMothership`)
+### 7.5 Swarm Mothership (`swarmMothership`) — 2nd largest
 
-| Stat | v1 |
+| Stat | v1 (amended) |
 |------|---:|
-| Cost | metal `40_000`, crystal `30_000`, deuterium `10_000` |
-| Build seconds | `4_000` |
-| Shipyard | **8** |
-| Cargo | `50_000` |
-| Attack | `500` |
-| Shield | `2_000` |
-| Hull | `20_000` |
+| Cost | metal `2_500_000`, crystal `2_000_000`, deuterium `750_000` |
+| Build seconds | `80_000` |
+| Shipyard | **13** |
+| Research req | Ordnance Doctrine 11, Aegis Lattice 11, Hull Weave 11 |
+| Cargo | `150_050_000` (= 50_000 × 3001) |
+| Attack | `3_000` (= 500 × 6) |
+| Shield | `202_000` (= 2_000 × 101) |
+| Hull | `120_000` (= 20_000 × 6) |
 | Speed | `2_500` |
 | Fuel / distance | `2` |
-| Base swarm capacity | **300** |
+| Base swarm capacity | **2000** |
 
-**Capacity:** `floor(300 * (1 + 0.15 * swarmHoldLevel))`, hard visual cap **2000** swarm ships (drones + harvesters). Research **Swarm Hold** +15% of base (300) per level → +45 capacity/level.
+**Capacity:** `floor(2000 * (1 + 0.15 * swarmHoldLevel))`. Research **Swarm Hold** +15% of base (2000) per level.
 
-**Produce drones anywhere:** mission or action `swarmProduce` from mothership fleet in flight or parked — no home planet required; costs paid from mothership cargo resources; builds into carried swarm (not planet hangar).
+**Produce drones anywhere:** action `swarmProduce` from mothership fleet — costs from mothership cargo; builds into carried swarm with **batch production** when unit time < 1s.
+
+### 7.5b Chrono Lathe (`chronoLathe`) — nanite-equivalent (original name)
+
+| | |
+|--|--|
+| Display | **Chrono Lathe** |
+| Gate | Shipyard **10** |
+| Effect | Build time × `0.1^level` for **buildings, ships, defenses** — **not research** |
+| Late-game | Expensive base cost; meant for high-end economies |
+
+### 7.5c Batch production (ships / defenses / mothership drones)
+
+If per-unit build time < 1s: each tick produces `batch = floor(elapsed / unitTime)` units (never floor unit time at 1s). When unit time ≥ 1s, complete-at semantics unchanged.
 
 ### 7.6 Occupation (Swarm Mothership)
 
@@ -527,7 +550,7 @@ Existing RF table unchanged otherwise.
 - Stat fixtures for all five ships
 - RF lookups for new pairs
 - Moon-kill chance monotonic in titan count; fieldsCap reduces chance
-- Swarm capacity formula vs `swarmHold`
+- Swarm capacity formula vs `swarmHold` (base **2000**)
 - Intercept damage redirection
 - Harvester kamikaze threshold
 - Occupation start/expiry/recapture

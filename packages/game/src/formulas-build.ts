@@ -76,6 +76,26 @@ export function constructionTimeMultiplier(naniteLevel = 0): number {
   return Math.pow(0.1, level);
 }
 
+/** Chrono Lathe alias — same `0.1^level` curve as constructionTimeMultiplier. */
+export function chronoLatheTimeFactor(chronoLatheLevel: number): number {
+  return constructionTimeMultiplier(chronoLatheLevel);
+}
+
+/**
+ * Sub-second batch helper (Micah): when unitSeconds < 1, return
+ * floor(elapsed / unitSeconds) capped by remaining; otherwise 0 (use completesAt).
+ */
+export function batchUnitsProduced(
+  elapsedSec: number,
+  unitSeconds: number,
+  remaining: number,
+): number {
+  if (unitSeconds >= 1) return 0;
+  if (elapsedSec <= 0 || remaining <= 0) return 0;
+  const unit = Math.max(1e-9, unitSeconds);
+  return Math.min(remaining, Math.floor(elapsedSec / unit + 1e-12));
+}
+
 /** Tiny epsilon so sub-second unit times never divide by zero. */
 const MIN_UNIT_SECONDS = 1e-9;
 
