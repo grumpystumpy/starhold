@@ -33,7 +33,7 @@ describe("universe map constants (contract A)", () => {
     assert.equal(MAP_SLOTS, 15);
     assert.equal(DEEP_SPACE_SLOT, 16);
     assert.equal(EXPEDITION_SLOT, 16);
-    assert.equal(UNIVERSE_SCHEMA_VERSION, 2);
+    assert.equal(UNIVERSE_SCHEMA_VERSION, 3);
   });
 
   it("createUniverse stamps schemaVersion + seed + asteroid map", () => {
@@ -230,5 +230,16 @@ describe("KV schema migration / reset", () => {
     assert.equal(result.universe.schemaVersion, UNIVERSE_SCHEMA_VERSION);
     assert.equal(Object.keys(result.universe.players).length, 0);
     assert.notEqual(result.universe.id, legacy.id);
+  });
+
+  it("migrates schema 2 → 3 additively without reset", () => {
+    const uni = createUniverse("Round2 Migrate", 8);
+    joinUniverse(uni, "KeepMe", 206_000_000);
+    uni.schemaVersion = 2;
+    const result = migrateOrResetUniverse(uni);
+    assert.equal(result.didReset, false);
+    assert.equal(result.universe.schemaVersion, 3);
+    assert.equal(Object.keys(result.universe.players).length, 1);
+    assert.equal(result.universe.players[Object.keys(result.universe.players)[0]!].level, 1);
   });
 });
