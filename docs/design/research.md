@@ -29,4 +29,4 @@ Empire-wide techs that gate flight, combat, espionage depth, colonies, and fleet
 ## Completeness
 
 **Have:** lab building, queue API/UI, full minimal tree, unit coverage.  
-**Polish left:** session timing vs mines-first path (lab cost tweak); optional research points on highscores (P2).
+**Polish left:** session timing vs mines-first path (lab cost tweak). Research feeds empire highscores once (see [highscores.md](./highscores.md)).

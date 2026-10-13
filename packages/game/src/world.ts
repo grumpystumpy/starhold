@@ -15,7 +15,13 @@ export {
 export { queueResearch } from "./world-research-queue.js";
 export type { LaunchFleetOpts } from "./world-launch.js";
 export { launchFleet } from "./world-launch.js";
-export { galaxyViewFor, playerView } from "./world-view.js";
+export {
+  empirePoints,
+  galaxyViewFor,
+  highscoresBoard,
+  playerView,
+  publicRoster,
+} from "./world-view.js";
 export { pruneSpyReports } from "./world-spy-prune.js";
 export {
   expeditionKindFromRoll,
