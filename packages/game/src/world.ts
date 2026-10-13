@@ -1,63 +1,27 @@
+export { createUniverse, joinUniverse } from "./world-bootstrap.js";
 export {
-  createUniverse,
-  ensureUniverseShape,
-  joinUniverse,
-  planetAtCoords,
-} from "./world-bootstrap.js";
-export { advancePlanet } from "./world-tick.js";
-export { advanceUniverse } from "./world-arrival.js";
-export type { ActionResult, FleetActionResult } from "./world-queues.js";
-export {
-  setActivePlanet,
-  queueBuildingUpgrade,
-  queueShipBuild,
-  queueDefenseBuild,
-} from "./world-queues.js";
-export { queueResearch } from "./world-research-queue.js";
-export type { LaunchFleetOpts } from "./world-launch.js";
+  advanceUniverse,
+  applyArrivals,
+  applyBuildCompletions,
+} from "./world-arrival.js";
+export { tickProduction } from "./world-tick.js";
 export { launchFleet } from "./world-launch.js";
+export { queueBuilding, queueDefense, queueShip } from "./world-queue.js";
+export { startResearch } from "./world-research-queue.js";
+export { playerView } from "./world-view.js";
 export {
-  empirePoints,
-  galaxyViewFor,
-  highscoresBoard,
-  playerView,
-  publicRoster,
-} from "./world-view.js";
-export { pruneSpyReports } from "./world-spy-prune.js";
-export {
-  expeditionKindFromRoll,
-  expeditionRoll,
-  resolveExpeditionArrival,
-} from "./world-expedition.js";
-export {
-  moonChancePercent,
-  moonRoll,
-  ownedPlanetCount,
-  tryFormMoon,
-} from "./world-moons.js";
-export { moonAtCoords } from "./world-bootstrap.js";
-export {
-  archiveUniverseKey,
-  migrateOrResetUniverse,
-  universeSchemaVersion,
-} from "./world-migrate.js";
-export {
-  asteroidId,
-  asteroidsInSystem,
-  harvestAsteroidField,
-  rollAsteroidCount,
-  seedUniverseAsteroids,
-} from "./world-asteroids.js";
-export {
-  activePirateBases,
-  createPirateBase,
-  pirateBaseAtCoords,
-  pirateBaseId,
-  pirateDestroyStarshards,
-  pirateRespawnAt,
-  pirateShipsForTier,
-  resolvePirateRaidArrival,
-  scalePirateRaidFleet,
-  seedUniversePirates,
-  tickPirates,
-} from "./world-pirates.js";
+  activateOfficer,
+  claimDailyLogin,
+  unlockSkill,
+  canClaimDailyLogin,
+  emptyBoosts,
+  expeditionStarshardsAmount,
+  grantPirateDestroyStarshards,
+  grantPirateFleetKillStarshards,
+  grantStarshards,
+  playerBoosts,
+  pruneExpiredOfficers,
+  utcDayKey,
+  type PlayerBoosts,
+  type StarshardActionResult,
+} from "./world-starshards.js";
