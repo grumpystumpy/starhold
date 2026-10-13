@@ -1,0 +1,53 @@
+) ?? null
+  );
+}
+
+function systemOccupiedByPirate(
+  universe: UniverseState,
+  galaxy: number,
+  system: number,
+  exceptId?: string,
+): boolean {
+  return activePirateBases(universe).some(
+    (b) =>
+      b.id !== exceptId &&
+      b.coords.galaxy === galaxy &&
+      b.coords.system === system,
+  );
+}
+
+function pickEmptySlot(
+  universe: UniverseState,
+  galaxy: number,
+  system: number,
+  seedKey: string,
+): number | null {
+  const start = 1 + (hashSeed(seedKey) % MAP_SLOTS);
+  for (let i = 0; i < MAP_SLOTS; i++) {
+    const slot = ((start - 1 + i) % MAP_SLOTS) + 1;
+    const coords = { galaxy, system, slot };
+    if (planetAtCoords(universe, coords)) continue;
+    if (pirateBaseAtCoords(universe, coords)) continue;
+    return slot;
+  }
+  return null;
+}
+
+export function createPirateBase(
+  universeSeed: string,
+  galaxy: number,
+  system: number,
+  slot: number,
+  now: number,
+  tier = 0,
+): PirateBase {
+  const id = pirateBaseId(galaxy, system, slot);
+  return {
+    id,
+    coords: { galaxy, system, slot },
+    name: pirateName(universeSeed, galaxy, system),
+    tier,
+    ships: pirateShipsForTier(tier),
+    resources: pirateResourcesForTier(tier),
+    lastGrewAt: now,
+    las
