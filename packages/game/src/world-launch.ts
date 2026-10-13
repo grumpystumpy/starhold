@@ -32,13 +32,14 @@ const MISSIONS: MissionType[] = [
   "harvestAsteroid",
   "expedition",
   "pirateRaid",
+  "jump",
 ];
 
 export interface LaunchFleetOpts {
   playerId: string;
   mission: MissionType;
   ships: Partial<FleetShips>;
-  /** Occupied target (raid/deploy/espionage/transport). */
+  /** Occupied target (raid/deploy/espionage/transport/jump). */
   targetPlanetId?: string;
   /** Empty/debris coords (colonize/harvest) or override. */
   targetCoords?: Coordinates;
@@ -52,9 +53,6 @@ export interface LaunchFleetOpts {
   originPlanetId?: string;
 }
 
-/**
- * Launch a fleet from the player's active (or specified) hangar.
- */
 export function launchFleet(
   universe: UniverseState,
   playerId: string,
@@ -185,13 +183,16 @@ export function launchFleet(
     deuterium: fuel,
   });
 
-  const oneWay = flightSecondsOneWay(
-    origin.coords,
-    targetCoords,
-    ships,
-    universe.fleetSpeed,
-    player.research.combustionDrive ?? 0,
-  );
+  const oneWay =
+    opts.mission === "jump"
+      ? 1
+      : flightSecondsOneWay(
+          origin.coords,
+          targetCoords,
+          ships,
+          universe.fleetSpeed,
+          player.research.combustionDrive ?? 0,
+        );
   const fleetId = `flt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
   const fleet: FleetMission = {
     id: fleetId,
