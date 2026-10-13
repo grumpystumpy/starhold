@@ -2,12 +2,16 @@ import {
   DEBRIS_FROM_SHIPS,
   DEFENSE_ORDER,
   DEFENSES,
+  MAX_COMBAT_ROUNDS,
   RAID_LOOT_SHARE,
   SHIPS,
   SHIP_ORDER,
+  rapidFireFactor,
+  type CombatUnitId,
 } from "./catalog.js";
 import type {
   CombatOutcome,
+  DefenseId,
   DefenseStock,
   FleetShips,
   ResearchLevels,
@@ -33,9 +37,25 @@ function unitCombatPower(
   return attack * w + 0.5 * shield * s + 0.3 * hull * a;
 }
 
+function unitAtk(
+  attack: number,
+  research: ResearchLevels | undefined,
+): number {
+  return attack * (1 + (research?.weaponsTech ?? 0) * 0.08);
+}
+
+function unitHp(
+  shield: number,
+  hull: number,
+  research: ResearchLevels | undefined,
+): number {
+  const s = shield * (1 + (research?.shieldingTech ?? 0) * 0.08);
+  const h = hull * (1 + (research?.armourTech ?? 0) * 0.08);
+  return Math.max(1, s + h);
+}
+
 /**
- * Combat power score (invented):
- * power = sum count * (attack + 0.5*shield + 0.3*hull) with research bonuses
+ * Rough combat power score for UI / heuristics (not raid resolution).
  */
 export function fleetCombatPower(
   ships: FleetShips,
@@ -46,8 +66,7 @@ export function fleetCombatPower(
     const n = ships[id] ?? 0;
     if (n <= 0) continue;
     const d = SHIPS[id];
-    power +=
-      n * unitCombatPower(d.attack, d.shield, d.hull, research);
+    power += n * unitCombatPower(d.attack, d.shield, d.hull, research);
   }
   return power;
 }
@@ -61,31 +80,9 @@ export function defenseCombatPower(
     const n = defenses[id] ?? 0;
     if (n <= 0) continue;
     const d = DEFENSES[id];
-    power +=
-      n * unitCombatPower(d.attack, d.shield, d.hull, research);
+    power += n * unitCombatPower(d.attack, d.shield, d.hull, research);
   }
   return power;
-}
-
-function scaleFleet(ships: FleetShips, keepRatio: number): FleetShips {
-  const ratio = Math.min(1, Math.max(0, keepRatio));
-  const out = emptyFleetShips();
-  for (const id of SHIP_ORDER) {
-    out[id] = Math.floor((ships[id] ?? 0) * ratio);
-  }
-  return out;
-}
-
-function scaleDefenses(
-  defenses: DefenseStock,
-  keepRatio: number,
-): DefenseStock {
-  const ratio = Math.min(1, Math.max(0, keepRatio));
-  const out = emptyDefenses();
-  for (const id of DEFENSE_ORDER) {
-    out[id] = Math.floor((defenses[id] ?? 0) * ratio);
-  }
-  return out;
 }
 
 /** Metal/crystal cost of ships that were destroyed (before -> after). */
@@ -118,11 +115,138 @@ export interface CombatResolution {
   attackerAfter: FleetShips;
   defenderAfter: FleetShips;
   defensesAfter: DefenseStock;
+  rounds: number;
   summary: string;
 }
 
+type SidePools = {
+  ships: FleetShips;
+  defenses: DefenseStock;
+  /** Residual damage toward next kill, keyed by CombatUnitId. */
+  residual: Partial<Record<CombatUnitId, number>>;
+};
+
+function shipCount(ships: FleetShips): number {
+  let n = 0;
+  for (const id of SHIP_ORDER) n += ships[id] ?? 0;
+  return n;
+}
+
+function defenseCount(defenses: DefenseStock): number {
+  let n = 0;
+  for (const id of DEFENSE_ORDER) n += defenses[id] ?? 0;
+  return n;
+}
+
+function livingShipIds(ships: FleetShips): ShipId[] {
+  return SHIP_ORDER.filter((id) => (ships[id] ?? 0) > 0);
+}
+
+function livingDefenseIds(defenses: DefenseStock): DefenseId[] {
+  return DEFENSE_ORDER.filter((id) => (defenses[id] ?? 0) > 0);
+}
+
+function pickFocusTarget(
+  ships: FleetShips,
+  defenses: DefenseStock,
+): CombatUnitId | null {
+  let best: CombatUnitId | null = null;
+  let bestCount = 0;
+  for (const id of SHIP_ORDER) {
+    const n = ships[id] ?? 0;
+    if (n > bestCount) {
+      best = id;
+      bestCount = n;
+    }
+  }
+  for (const id of DEFENSE_ORDER) {
+    const n = defenses[id] ?? 0;
+    if (n > bestCount) {
+      best = id;
+      bestCount = n;
+    }
+  }
+  return best;
+}
+
+function targetHp(
+  id: CombatUnitId,
+  research: ResearchLevels | undefined,
+): number {
+  if ((SHIP_ORDER as string[]).includes(id)) {
+    const d = SHIPS[id as ShipId];
+    return unitHp(d.shield, d.hull, research);
+  }
+  const d = DEFENSES[id as DefenseId];
+  return unitHp(d.shield, d.hull, research);
+}
+
+function targetCount(side: SidePools, id: CombatUnitId): number {
+  if ((SHIP_ORDER as string[]).includes(id)) {
+    return side.ships[id as ShipId] ?? 0;
+  }
+  return side.defenses[id as DefenseId] ?? 0;
+}
+
+function applyDamageToTarget(
+  side: SidePools,
+  id: CombatUnitId,
+  damage: number,
+  research: ResearchLevels | undefined,
+): void {
+  if (damage <= 0) return;
+  const hp = targetHp(id, research);
+  const pool = (side.residual[id] ?? 0) + damage;
+  const kills = Math.floor(pool / hp);
+  const rem = pool - kills * hp;
+  side.residual[id] = rem;
+  if (kills <= 0) return;
+  if ((SHIP_ORDER as string[]).includes(id)) {
+    const sid = id as ShipId;
+    side.ships[sid] = Math.max(0, (side.ships[sid] ?? 0) - kills);
+    if (side.ships[sid] === 0) side.residual[id] = 0;
+  } else {
+    const did = id as DefenseId;
+    side.defenses[did] = Math.max(0, (side.defenses[did] ?? 0) - kills);
+    if (side.defenses[did] === 0) side.residual[id] = 0;
+  }
+}
+
+/** Snapshot damage intents from start-of-round counts (simultaneous fire). */
+function collectFire(
+  firerShips: FleetShips,
+  firerDefenses: DefenseStock | null,
+  targetShips: FleetShips,
+  targetDefenses: DefenseStock,
+  firerResearch: ResearchLevels | undefined,
+): Array<{ target: CombatUnitId; damage: number }> {
+  const shots: Array<{ target: CombatUnitId; damage: number }> = [];
+  const focus = pickFocusTarget(targetShips, targetDefenses);
+  if (!focus) return shots;
+
+  for (const id of livingShipIds(firerShips)) {
+    const def = SHIPS[id];
+    const atk = unitAtk(def.attack, firerResearch);
+    if (atk <= 0) continue;
+    const n = firerShips[id] ?? 0;
+    const rf = rapidFireFactor(id, focus);
+    shots.push({ target: focus, damage: n * atk * rf });
+  }
+  if (firerDefenses) {
+    for (const id of livingDefenseIds(firerDefenses)) {
+      const def = DEFENSES[id];
+      const atk = unitAtk(def.attack, firerResearch);
+      if (atk <= 0) continue;
+      const n = firerDefenses[id] ?? 0;
+      const rf = rapidFireFactor(id, focus);
+      shots.push({ target: focus, damage: n * atk * rf });
+    }
+  }
+  return shots;
+}
+
 /**
- * Deterministic raid resolution (basics-first) including static defenses.
+ * Deterministic multi-round raid resolution with rapid-fire multipliers.
  */
 export function resolveCombat(
   attacker: FleetShips,
@@ -131,47 +255,92 @@ export function resolveCombat(
   attackerResearch?: ResearchLevels,
   defenderResearch?: ResearchLevels,
 ): CombatResolution {
-  const atk = fleetCombatPower(attacker, attackerResearch);
-  const def =
-    fleetCombatPower(defender, defenderResearch) +
-    defenseCombatPower(defenses, defenderResearch);
+  const atkSide: SidePools = {
+    ships: normalizeFleetShips(attacker),
+    defenses: emptyDefenses(),
+    residual: {},
+  };
+  const defSide: SidePools = {
+    ships: normalizeFleetShips(defender),
+    defenses: { ...emptyDefenses(), ...defenses },
+    residual: {},
+  };
 
-  if (def <= 0 && atk > 0) {
-    return {
-      outcome: "attacker_win",
-      attackerAfter: { ...normalizeFleetShips(attacker) },
-      defenderAfter: emptyFleetShips(),
-      defensesAfter: emptyDefenses(),
-      summary: `Unopposed landing (atk ${atk.toFixed(0)}). Garrison empty.`,
-    };
-  }
-
-  if (atk >= def * 1.1) {
-    return {
-      outcome: "attacker_win",
-      attackerAfter: scaleFleet(attacker, 0.8),
-      defenderAfter: scaleFleet(defender, 0.3),
-      defensesAfter: scaleDefenses(defenses, 0.3),
-      summary: `Attacker breakthrough (atk ${atk.toFixed(0)} vs def ${def.toFixed(0)}).`,
-    };
-  }
-
-  if (def >= atk * 1.1) {
+  if (shipCount(atkSide.ships) <= 0) {
     return {
       outcome: "defender_win",
-      attackerAfter: scaleFleet(attacker, 0.3),
-      defenderAfter: scaleFleet(defender, 0.8),
-      defensesAfter: scaleDefenses(defenses, 0.8),
-      summary: `Defenders held (atk ${atk.toFixed(0)} vs def ${def.toFixed(0)}).`,
+      attackerAfter: emptyFleetShips(),
+      defenderAfter: defSide.ships,
+      defensesAfter: defSide.defenses,
+      rounds: 0,
+      summary: "No attacking ships.",
     };
   }
 
+  if (shipCount(defSide.ships) + defenseCount(defSide.defenses) <= 0) {
+    return {
+      outcome: "attacker_win",
+      attackerAfter: { ...atkSide.ships },
+      defenderAfter: emptyFleetShips(),
+      defensesAfter: emptyDefenses(),
+      rounds: 0,
+      summary: "Unopposed landing. Garrison empty.",
+    };
+  }
+
+  let rounds = 0;
+  for (let r = 1; r <= MAX_COMBAT_ROUNDS; r++) {
+    rounds = r;
+    const atkShots = collectFire(
+      atkSide.ships,
+      null,
+      defSide.ships,
+      defSide.defenses,
+      attackerResearch,
+    );
+    const defShots = collectFire(
+      defSide.ships,
+      defSide.defenses,
+      atkSide.ships,
+      emptyDefenses(),
+      defenderResearch,
+    );
+
+    for (const shot of atkShots) {
+      applyDamageToTarget(defSide, shot.target, shot.damage, defenderResearch);
+    }
+    for (const shot of defShots) {
+      applyDamageToTarget(atkSide, shot.target, shot.damage, attackerResearch);
+    }
+
+    const atkAlive = shipCount(atkSide.ships) > 0;
+    const defAlive =
+      shipCount(defSide.ships) + defenseCount(defSide.defenses) > 0;
+    if (!atkAlive || !defAlive) break;
+  }
+
+  const atkAlive = shipCount(atkSide.ships) > 0;
+  const defAlive =
+    shipCount(defSide.ships) + defenseCount(defSide.defenses) > 0;
+
+  let outcome: CombatOutcome;
+  if (atkAlive && !defAlive) outcome = "attacker_win";
+  else if (!atkAlive && defAlive) outcome = "defender_win";
+  else if (!atkAlive && !defAlive) outcome = "draw";
+  else outcome = "draw";
+
+  const atkPower = fleetCombatPower(atkSide.ships, attackerResearch);
+  const defPower =
+    fleetCombatPower(defSide.ships, defenderResearch) +
+    defenseCombatPower(defSide.defenses, defenderResearch);
+
   return {
-    outcome: "draw",
-    attackerAfter: scaleFleet(attacker, 0.6),
-    defenderAfter: scaleFleet(defender, 0.6),
-    defensesAfter: scaleDefenses(defenses, 0.6),
-    summary: `Inconclusive clash (atk ${atk.toFixed(0)} vs def ${def.toFixed(0)}).`,
+    outcome,
+    attackerAfter: atkSide.ships,
+    defenderAfter: defSide.ships,
+    defensesAfter: defSide.defenses,
+    rounds,
+    summary: `${outcome.split("_").join(" ")} after ${rounds} round${rounds === 1 ? "" : "s"} (surviving power atk ${atkPower.toFixed(0)} / def ${defPower.toFixed(0)}).`,
   };
 }
 
@@ -223,6 +392,5 @@ export function maxFleetSlots(computerTech: number): number {
 }
 
 export function maxColonies(astrophysics: number): number {
-  // Home + astrophysics levels.
   return 1 + Math.max(0, astrophysics);
 }
