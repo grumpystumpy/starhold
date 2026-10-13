@@ -8,7 +8,9 @@ import { Redis } from "@upstash/redis";
 /**
  * Universe persistence.
  * - Local / CI: in-memory (process lifetime).
- * - Vercel: Upstash Redis via UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN.
+ * - Vercel: Upstash Redis / Vercel KV REST:
+ *     UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN
+ *     OR KV_REST_API_URL + KV_REST_API_TOKEN (Vercel Upstash integration)
  *
  * Schema: one JSON document at STARHOLD_UNIVERSE_KEY (default `starhold:universe:v1`).
  * Lock key: `${key}:lock` (NX + short TTL) for critical sections.
@@ -19,27 +21,49 @@ const UNIVERSE_SPEED = Number(process.env.STARHOLD_UNIVERSE_SPEED ?? 8);
 const REDIS_KEY = process.env.STARHOLD_UNIVERSE_KEY ?? "starhold:universe:v1";
 const LOCK_KEY = `${REDIS_KEY}:lock`;
 
+export type StorageMode = "upstash" | "kv" | "memory";
+
 let memoryUniverse: UniverseState | null = null;
 let redis: Redis | null | undefined;
+let resolvedMode: StorageMode | undefined;
 
-function hasUpstashEnv(): boolean {
-  return Boolean(
-    process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN,
-  );
+function redisCredentials(): {
+  url: string;
+  token: string;
+  mode: "upstash" | "kv";
+} | null {
+  const upstashUrl = process.env.UPSTASH_REDIS_REST_URL?.trim();
+  const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
+  if (upstashUrl && upstashToken) {
+    return { url: upstashUrl, token: upstashToken, mode: "upstash" };
+  }
+
+  const kvUrl = process.env.KV_REST_API_URL?.trim();
+  const kvToken = process.env.KV_REST_API_TOKEN?.trim();
+  if (kvUrl && kvToken) {
+    return { url: kvUrl, token: kvToken, mode: "kv" };
+  }
+
+  return null;
 }
 
 function getRedis(): Redis | null {
   if (redis !== undefined) return redis;
-  if (!hasUpstashEnv()) {
+  const creds = redisCredentials();
+  if (!creds) {
     redis = null;
+    resolvedMode = "memory";
     return null;
   }
-  redis = Redis.fromEnv();
+  resolvedMode = creds.mode;
+  redis = new Redis({ url: creds.url, token: creds.token });
   return redis;
 }
 
-export function storageMode(): "upstash" | "memory" {
-  return hasUpstashEnv() ? "upstash" : "memory";
+export function storageMode(): StorageMode {
+  if (resolvedMode) return resolvedMode;
+  const creds = redisCredentials();
+  return creds?.mode ?? "memory";
 }
 
 function freshUniverse(): UniverseState {
