@@ -14,58 +14,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
       - name: Import Thread I large sources + G smoke patch
-        run: |
-          git fetch origin cursor/player-levels-xp-8713
-          git checkout origin/cursor/player-levels-xp-8713 -- \
-            packages/game/src/world-pirates.ts \
-            packages/game/src/player-levels.test.ts \
-            scripts/smoke-ui.mjs
-          python3 <<'PY'
-          from pathlib import Path
-          p = Path("scripts/smoke-ui.mjs")
-          t = p.read_text()
-          t = t.replace('await goNav(page, "facilities");', 'await goNav(page, "buildings");')
-          old = """  logs.push(\"ui-upgrade-shipyard-level-under-poll-hammer\");
-
-  await goNav(page, \"resources\");
-  await page.click('[data-testid=\"upgrade-solarPlant\"]');"""
-          new = """  logs.push(\"ui-upgrade-shipyard-level-under-poll-hammer\");
-
-  await goNav(page, \"buildings\");
-  // Deep-link URL should reflect the routed page.
-  if (!page.url().includes(\"/buildings\")) {
-    throw new Error(`expected /buildings in URL after nav, got: ${page.url()}`);
-  }
-  await page.click('[data-testid=\"upgrade-solarPlant\"]');"""
-          if old not in t:
-              raise SystemExit("smoke patch anchor1 missing")
-          t = t.replace(old, new, 1)
-          old2 = """  if (rec < 1) throw new Error(\"recommended-next hint missing\");
-  await goNav(page, \"resources\");
-  const thumb = await page.locator('[data-testid=\"building-metalMine\"] img.thumb').count();
-  if (thumb < 1) throw new Error(\"building thumbnail missing\");
-  await goNav(page, \"fleet\");"""
-          new2 = """  if (rec < 1) throw new Error(\"recommended-next hint missing\");
-  await goNav(page, \"buildings\");
-  const thumb = await page.locator('[data-testid=\"building-metalMine\"] img.thumb').count();
-  if (thumb < 1) throw new Error(\"building thumbnail missing\");
-  // Dropdown mirrors side-nav and updates the URL.
-  await page.selectOption('[data-testid=\"nav-dropdown\"]', \"defenses\");
-  await page.waitForSelector('[data-testid=\"page-defenses\"]', { timeout: 10_000 });
-  if (!page.url().includes(\"/defenses\")) {
-    throw new Error(`dropdown nav missing /defenses URL: ${page.url()}`);
-  }
-  logs.push(\"ui-nav-dropdown-routes\");
-  await goNav(page, \"fleet\");"""
-          if old2 not in t:
-              raise SystemExit("smoke patch anchor2 missing")
-          t = t.replace(old2, new2, 1)
-          p.write_text(t)
-          print("smoke patched for G nav")
-          PY
-          rm -rf .cursor-staging
-          # drop helper if present
-          rm -f scripts/unpack-i-staging.py
+        run: python3 scripts/assemble-i-on-g.py
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -77,6 +26,7 @@ jobs:
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           rm -f .github/workflows/assemble-api-route.yml
+          rm -f scripts/assemble-i-on-g.py
           git add -A
           if git diff --cached --quiet; then echo "nothing to commit"; exit 0; fi
           git commit -m "chore(I): assemble api/[[...route]].js for player levels"
