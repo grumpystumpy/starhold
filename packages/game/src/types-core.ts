@@ -11,7 +11,11 @@ export type BuildingId =
   | "crystalStorage"
   | "deutTank"
   | "shipyard"
-  | "researchLab";
+  | "researchLab"
+  | "lunarBase"
+  | "sensorArray";
+
+export type BodyKind = "planet" | "moon";
 
 export type ShipId =
   | "scout"
