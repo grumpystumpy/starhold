@@ -40,7 +40,7 @@ async function apiJson(path, init) {
 async function waitMetal(playerId, minMetal, ms = 360_000) {
   const start = Date.now();
   while (Date.now() - start < ms) {
-    const st = await apiJson(`/api/state/${playerId}`);
+    const st = await apiJson(`/api/state?playerId=${encodeURIComponent(playerId)}`);
     if (st.planet.resources.metal >= minMetal && !st.planet.buildQueue) {
       return st;
     }
@@ -94,7 +94,7 @@ async function apiSmoke() {
 
   let scoutReady = null;
   for (let i = 0; i < 30; i++) {
-    const st = await apiJson(`/api/state/${playerId}`);
+    const st = await apiJson(`/api/state?playerId=${encodeURIComponent(playerId)}`);
     if ((st.planet?.ships?.scout ?? 0) >= 1) {
       scoutReady = st;
       break;
@@ -135,7 +135,7 @@ async function apiSmoke() {
   let reportSeen = false;
   let lootOk = false;
   while (Date.now() < deadline) {
-    const st = await apiJson(`/api/state/${playerId}`);
+    const st = await apiJson(`/api/state?playerId=${encodeURIComponent(playerId)}`);
     if ((st.reports?.length ?? 0) >= 1) {
       reportSeen = true;
       const r = st.reports[0];
