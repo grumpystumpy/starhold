@@ -1890,6 +1890,22 @@ var BUILDINGS = {
     baseCost: { metal: 180, crystal: 120, deuterium: 0 },
     costGrowth: 2,
     baseBuildSeconds: 18
+  },
+  lunarBase: {
+    id: "lunarBase",
+    name: "Lunar Base",
+    description: "Expands moon fields so more lunar structures can be built.",
+    baseCost: { metal: 2e3, crystal: 4e3, deuterium: 0 },
+    costGrowth: 2,
+    baseBuildSeconds: 30
+  },
+  sensorArray: {
+    id: "sensorArray",
+    name: "Sensor Array",
+    description: "Scans the local system for outbound fleets headed this way (moon only).",
+    baseCost: { metal: 4e3, crystal: 8e3, deuterium: 2e3 },
+    costGrowth: 2,
+    baseBuildSeconds: 40
   }
 };
 
@@ -2127,7 +2143,31 @@ var RAID_LOOT_SHARE = 0.5;
 var DEBRIS_FROM_SHIPS = 0.3;
 var MIN_FLIGHT_SECONDS = 8;
 var PLANET_FIELDS = 200;
+var MOON_FIELDS_BASE = 1;
+var MOON_FIELDS_PER_LUNAR_BASE = 3;
+var MOON_DEBRIS_MIN = 5e3;
+var MOON_CHANCE_CAP = 20;
 var SPY_REPORT_TTL_MS = 20 * 60 * 1e3;
+var PLANET_BUILDING_ORDER = [
+  "metalMine",
+  "crystalMine",
+  "deutSynth",
+  "solarPlant",
+  "metalStorage",
+  "crystalStorage",
+  "deutTank",
+  "shipyard",
+  "researchLab"
+];
+var MOON_BUILDING_ORDER = [
+  "lunarBase",
+  "sensorArray",
+  "solarPlant",
+  "metalStorage",
+  "crystalStorage",
+  "deutTank",
+  "shipyard"
+];
 var SHIP_ORDER = [
   "scout",
   "hauler",
@@ -2158,6 +2198,20 @@ var MAP_SLOTS = 8;
 var EXPEDITION_SLOT = MAP_SLOTS + 1;
 
 // packages/game/src/formulas-build.ts
+function isMoon(planet) {
+  return planet.kind === "moon";
+}
+function buildingAllowedOn(planet, buildingId) {
+  const order2 = isMoon(planet) ? MOON_BUILDING_ORDER : PLANET_BUILDING_ORDER;
+  return order2.includes(buildingId);
+}
+function fieldsCap(planet) {
+  if (isMoon(planet)) {
+    const lunar = planet.buildings.lunarBase ?? 0;
+    return MOON_FIELDS_BASE + lunar * MOON_FIELDS_PER_LUNAR_BASE;
+  }
+  return PLANET_FIELDS;
+}
 function buildingUpgradeCost(buildingId, currentLevel) {
   const def = BUILDINGS[buildingId];
   const factor = Math.pow(def.costGrowth, currentLevel);
@@ -2265,7 +2319,7 @@ function fieldsUsed(planet) {
   return used;
 }
 function fieldsRemaining(planet) {
-  return Math.max(0, PLANET_FIELDS - fieldsUsed(planet));
+  return Math.max(0, fieldsCap(planet) - fieldsUsed(planet));
 }
 function productionPerHour(planet, universeSpeed = 1, energyTechLevel = 0) {
   const factor = energyFactor(planet);
@@ -2363,7 +2417,7 @@ function economySnapshot(planet, universeSpeed = 1, energyTechLevel = 0) {
     storage: storageFor(planet),
     fields: {
       used,
-      cap: PLANET_FIELDS,
+      cap: fieldsCap(planet),
       remaining: fieldsRemaining(planet)
     }
   };
@@ -2687,7 +2741,9 @@ function emptyBuildings() {
     crystalStorage: 0,
     deutTank: 0,
     shipyard: 0,
-    researchLab: 0
+    researchLab: 0,
+    lunarBase: 0,
+    sensorArray: 0
   };
 }
 function emptyShips() {
@@ -2715,7 +2771,7 @@ function createUniverse(name = "Alpha Drift", speed = 1, fleetSpeed = speed) {
 }
 function nextCoords(universe) {
   const used = new Set(
-    Object.values(universe.planets).map((p) => coordsKey(p.coords))
+    Object.values(universe.planets).filter((p) => p.kind !== "moon").map((p) => coordsKey(p.coords))
   );
   for (let galaxy = 1; galaxy <= MAP_GALAXIES; galaxy++) {
     for (let system = 1; system <= MAP_SYSTEMS; system++) {
@@ -2731,7 +2787,15 @@ function nextCoords(universe) {
 }
 function planetAtCoords(universe, coords) {
   const key = coordsKey(coords);
-  return Object.values(universe.planets).find((p) => coordsKey(p.coords) === key) ?? null;
+  return Object.values(universe.planets).find(
+    (p) => p.kind !== "moon" && coordsKey(p.coords) === key
+  ) ?? null;
+}
+function moonAtCoords(universe, coords) {
+  const key = coordsKey(coords);
+  return Object.values(universe.planets).find(
+    (p) => p.kind === "moon" && coordsKey(p.coords) === key
+  ) ?? null;
 }
 function ensureUniverseShape(universe) {
   if (!universe.fleets) universe.fleets = {};
@@ -2751,9 +2815,14 @@ function ensureUniverseShape(universe) {
     if (player.researchQueue === void 0) player.researchQueue = null;
   }
   for (const planet of Object.values(universe.planets)) {
+    if (!planet.kind) planet.kind = "planet";
+    if (planet.parentPlanetId === void 0) planet.parentPlanetId = null;
+    if (planet.moonId === void 0) planet.moonId = null;
     if (!planet.defenses) planet.defenses = emptyDefenses();
     if (planet.defenseQueue === void 0) planet.defenseQueue = null;
     if (!planet.buildings.researchLab) planet.buildings.researchLab = 0;
+    if (!planet.buildings.lunarBase) planet.buildings.lunarBase = 0;
+    if (!planet.buildings.sensorArray) planet.buildings.sensorArray = 0;
     for (const id of SHIP_ORDER) {
       if (planet.ships[id] === void 0) planet.ships[id] = 0;
     }
@@ -2787,6 +2856,9 @@ function joinUniverse(universe, playerName, now = Date.now()) {
     ownerPlayerId: playerId,
     name: `${trimmed}'s Outpost`,
     coords,
+    kind: "planet",
+    parentPlanetId: null,
+    moonId: null,
     resources: { ...STARTING_RESOURCES },
     lastTickAt: now,
     buildings: emptyBuildings(),
@@ -2919,6 +2991,68 @@ function getDebris(universe, coords) {
   return universe.debris[coordsKey(coords)] ?? null;
 }
 
+// packages/game/src/world-moons.ts
+function moonRoll(seed) {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return Math.abs(h) % 100;
+}
+function moonChancePercent(debris) {
+  const total = Math.max(0, debris.metal + debris.crystal);
+  if (total < MOON_DEBRIS_MIN) return 0;
+  return Math.min(MOON_CHANCE_CAP, Math.floor(total / 1e3));
+}
+function ownedPlanetCount(universe, playerId) {
+  const player = universe.players[playerId];
+  if (!player) return 0;
+  let n = 0;
+  for (const id of player.planetIds ?? []) {
+    const body = universe.planets[id];
+    if (body && body.kind !== "moon") n++;
+  }
+  return n;
+}
+function tryFormMoon(universe, parent, debrisCreated, reportId, now) {
+  if (parent.kind === "moon") return null;
+  if (parent.moonId && universe.planets[parent.moonId]) return null;
+  const chance = moonChancePercent(debrisCreated);
+  if (chance <= 0) return null;
+  const roll = moonRoll(reportId);
+  if (roll >= chance) return null;
+  const owner = universe.players[parent.ownerPlayerId];
+  if (!owner) return null;
+  const moonId = `moon_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  const moon = {
+    id: moonId,
+    ownerPlayerId: owner.id,
+    name: `${parent.name} Moon`,
+    coords: { ...parent.coords },
+    kind: "moon",
+    parentPlanetId: parent.id,
+    moonId: null,
+    resources: { metal: 0, crystal: 0, deuterium: 0 },
+    lastTickAt: now,
+    buildings: emptyBuildings(),
+    ships: emptyShips(),
+    defenses: emptyDefenses(),
+    buildQueue: null,
+    shipQueue: null,
+    defenseQueue: null
+  };
+  universe.planets[moonId] = moon;
+  parent.moonId = moonId;
+  parent.kind = parent.kind ?? "planet";
+  universe.planets[parent.id] = parent;
+  if (!owner.planetIds.includes(moonId)) {
+    owner.planetIds.push(moonId);
+  }
+  universe.players[owner.id] = owner;
+  return moon;
+}
+
 // packages/game/src/world-arrival-raid.ts
 function resolveRaidArrival(universe, fleet, target, now) {
   const owner = universe.players[fleet.ownerPlayerId];
@@ -2952,6 +3086,8 @@ function resolveRaidArrival(universe, fleet, target, now) {
     subtractCargo(target, loot);
   }
   const reportId = `rpt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  const moon = tryFormMoon(universe, target, debrisCreated, reportId, now);
+  const summary = moon ? `${combat.summary} A moon coalesced from the debris field.` : combat.summary;
   const report = {
     id: reportId,
     at: now,
@@ -2971,7 +3107,8 @@ function resolveRaidArrival(universe, fleet, target, now) {
     debrisCreated,
     outcome: combat.outcome,
     rounds: combat.rounds,
-    summary: combat.summary
+    summary,
+    moonFormed: Boolean(moon)
   };
   universe.reports[reportId] = report;
   fleet.ships = combat.attackerAfter;
@@ -3182,7 +3319,7 @@ function resolveFleetArrival(universe, fleet, now) {
       } else if (!owner) {
         delete universe.fleets[fleet.id];
         return;
-      } else if (owner.planetIds.length >= maxColonies(owner.research.astrophysics)) {
+      } else if (ownedPlanetCount(universe, owner.id) >= maxColonies(owner.research.astrophysics)) {
       } else {
         const planetId = `plnt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
         const colony = {
@@ -3190,6 +3327,9 @@ function resolveFleetArrival(universe, fleet, now) {
           ownerPlayerId: owner.id,
           name: `${owner.name}'s Colony`,
           coords: { ...fleet.targetCoords },
+          kind: "planet",
+          parentPlanetId: null,
+          moonId: null,
           resources: { metal: 500, crystal: 500, deuterium: 0 },
           lastTickAt: now,
           buildings: emptyBuildings(),
@@ -3312,13 +3452,27 @@ function queueBuildingUpgrade(universe, playerId, buildingId, now = Date.now(), 
   advanceUniverse(universe, now);
   const planet = resolveActionPlanet(universe, player, planetId);
   if (!planet) return { ok: false, error: "Planet missing." };
+  if (!buildingAllowedOn(planet, buildingId)) {
+    return {
+      ok: false,
+      error: planet.kind === "moon" ? "That structure cannot be built on a moon." : "That structure can only be built on a moon."
+    };
+  }
+  if (buildingId === "sensorArray" && (planet.buildings.lunarBase ?? 0) < 1) {
+    return { ok: false, error: "Sensor Array needs Lunar Base level 1." };
+  }
   if (planet.buildQueue) {
     return { ok: false, error: "A building is already under construction." };
   }
-  if (fieldsRemaining(planet) < 1) {
+  const current = planet.buildings[buildingId] ?? 0;
+  if (buildingId === "lunarBase") {
+    const nextCap = MOON_FIELDS_BASE + (current + 1) * MOON_FIELDS_PER_LUNAR_BASE;
+    if (nextCap < fieldsUsed(planet) + 1) {
+      return { ok: false, error: "No free planet fields remaining." };
+    }
+  } else if (fieldsRemaining(planet) < 1) {
     return { ok: false, error: "No free planet fields remaining." };
   }
-  const current = planet.buildings[buildingId] ?? 0;
   const cost = buildingUpgradeCost(buildingId, current);
   if (!canAfford(planet.resources, cost)) {
     return { ok: false, error: "Not enough resources." };
@@ -3515,7 +3669,7 @@ function resolveLaunchTarget(universe, player, origin, mission, ships, targetPla
       if ((ships.colonyShip ?? 0) < 1) {
         return { ok: false, error: "Colonize requires a Colony Ship." };
       }
-      if (player.planetIds.length >= maxColonies(player.research.astrophysics)) {
+      if (ownedPlanetCount(universe, player.id) >= maxColonies(player.research.astrophysics)) {
         return {
           ok: false,
           error: `Colony limit reached (Astrophysics \u2192 ${maxColonies(player.research.astrophysics)} worlds).`
@@ -3721,7 +3875,7 @@ function highscoresBoard(universe) {
       name: p.name,
       points: empirePoints(universe, p),
       coords: home?.coords ?? { galaxy: 0, system: 0, slot: 0 },
-      planetCount: p.planetIds?.length ?? 0
+      planetCount: ownedPlanetCount(universe, p.id)
     };
   });
   rows.sort(
@@ -3749,6 +3903,7 @@ function galaxyViewFor(universe, playerId, galaxy, system) {
   for (let slot = 1; slot <= MAP_SLOTS; slot++) {
     const coords = { galaxy: g, system: s, slot };
     const planet = planetAtCoords(universe, coords);
+    const moon = moonAtCoords(universe, coords);
     const debris = getDebris(universe, coords);
     const owner = planet ? universe.players[planet.ownerPlayerId] : void 0;
     slots.push({
@@ -3758,7 +3913,9 @@ function galaxyViewFor(universe, playerId, galaxy, system) {
       playerName: owner?.name ?? null,
       pointsHint: planet ? Math.floor(planetPoints(planet)) : 0,
       debris: debris ? { metal: debris.metal, crystal: debris.crystal } : null,
-      isOwn: owner?.id === playerId
+      isOwn: owner?.id === playerId,
+      hasMoon: Boolean(moon),
+      moonId: moon?.id ?? null
     });
   }
   return { galaxy: g, system: s, slots };
@@ -3778,6 +3935,9 @@ function playerView(universe, playerId, now = Date.now(), galaxy, system) {
   const expeditionReports = Object.values(universe.expeditionReports ?? {}).filter((r) => r.playerId === playerId).sort((a, b) => b.at - a.at).slice(0, 12);
   const g = galaxy ?? planet.coords.galaxy;
   const s = system ?? planet.coords.system;
+  const sensorContacts = planet.kind === "moon" && (planet.buildings.sensorArray ?? 0) >= 1 ? Object.values(universe.fleets).filter(
+    (f) => f.phase === "outbound" && f.targetCoords.galaxy === planet.coords.galaxy && f.targetCoords.system === planet.coords.system
+  ).sort((a, b) => a.arrivesAt - b.arrivesAt).slice(0, 20) : [];
   return {
     now,
     universe: {
@@ -3796,7 +3956,8 @@ function playerView(universe, playerId, now = Date.now(), galaxy, system) {
         name: p.name,
         coords: p.coords,
         isHome: p.id === player.homePlanetId,
-        isActive: p.id === player.activePlanetId
+        isActive: p.id === player.activePlanetId,
+        isMoon: p.kind === "moon"
       };
     }).filter((x) => x !== null),
     economy: economySnapshot(
@@ -3810,7 +3971,8 @@ function playerView(universe, playerId, now = Date.now(), galaxy, system) {
     fleets,
     reports,
     spyReports,
-    expeditionReports
+    expeditionReports,
+    sensorContacts
   };
 }
 
