@@ -149,13 +149,25 @@ export function dashboardHtml(
           ${spyReportsHtml(spyReports)}
           ${expeditionReportsHtml(expeditionReports)}
         </section>
+        <section class="panel" data-testid="highscores">
+          <h2>Highscores</h2>
+          <p class="hint">Empire points — buildings, fleets, defenses, and research (once).</p>
+          <ol class="highscores" data-testid="highscores-list">
+            ${(view.highscores ?? [])
+              .map(
+                (h) =>
+                  `<li data-testid="highscore-${h.rank}" data-player-id="${escapeAttr(h.playerId)}"><span class="row-with-thumb"><span class="hs-rank">#${h.rank}</span><img class="thumb" src="${PLANET_ART.rocky}" alt="" width="32" height="32" />${escapeHtml(h.name)}${h.playerId === player.id ? " (you)" : ""}</span><span>${h.points} pts · ${fmtCoords(h.coords)} · ${h.planetCount} world${h.planetCount === 1 ? "" : "s"}</span></li>`,
+              )
+              .join("")}
+          </ol>
+        </section>
         <section class="panel">
           <h2>Universe roster</h2>
           <ul class="roster" data-testid="roster">
             ${roster
               .map(
                 (r) =>
-                  `<li><span class="row-with-thumb"><img class="thumb" src="${PLANET_ART.rocky}" alt="" width="32" height="32" />${escapeHtml(r.name)}${r.id === player.id ? " (you)" : ""}</span><span>${fmtCoords(r.coords)} · ~${r.pointsHint} pts</span></li>`,
+                  `<li><span class="row-with-thumb"><img class="thumb" src="${PLANET_ART.rocky}" alt="" width="32" height="32" />${escapeHtml(r.name)}${r.id === player.id ? " (you)" : ""}</span><span>${fmtCoords(r.coords)} · ${r.pointsHint} pts</span></li>`,
               )
               .join("")}
           </ul>
