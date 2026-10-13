@@ -113,6 +113,8 @@ export function fleetComposer(
     scout: 1,
     hauler: 0,
     interceptor: 0,
+    cruiser: 0,
+    bomber: 0,
     probe: 0,
     recycler: 0,
     colonyShip: 0,
