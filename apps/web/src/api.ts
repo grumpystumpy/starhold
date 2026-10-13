@@ -19,8 +19,74 @@ async function parse<T>(res: Response): Promise<T> {
   return data;
 }
 
+const credFetch = (input: RequestInfo | URL, init?: RequestInit) =>
+  fetch(input, { credentials: "include", ...init });
+
+export interface AuthAccount {
+  id: string;
+  email: string;
+  playerId: string | null;
+}
+
+export interface AuthMeResponse {
+  account: AuthAccount | null;
+  view: PlayerView | null;
+  auth?: { resendConfigured?: boolean };
+  error?: string;
+}
+
+export async function fetchAuthMe(): Promise<AuthMeResponse> {
+  const res = await credFetch("/api/auth/me");
+  return parse<AuthMeResponse>(res);
+}
+
+export async function requestMagicLink(
+  email: string,
+  claimPlayerId?: string | null,
+): Promise<{
+  ok: boolean;
+  emailed: boolean;
+  devMagicUrl?: string;
+  resendConfigured?: boolean;
+  error?: string;
+}> {
+  const res = await credFetch("/api/auth/request-link", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email,
+      claimPlayerId: claimPlayerId || undefined,
+    }),
+  });
+  return parse(res);
+}
+
+export async function claimAnonymousPlayer(
+  playerId: string,
+): Promise<{ ok: boolean; view: PlayerView; account: AuthAccount }> {
+  const res = await credFetch("/api/auth/claim", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId }),
+  });
+  return parse(res);
+}
+
+export async function authJoin(name: string): Promise<PlayerView> {
+  const res = await credFetch("/api/auth/join", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function logoutAccount(): Promise<void> {
+  await credFetch("/api/auth/logout", { method: "POST" });
+}
+
 export async function joinGame(name: string): Promise<PlayerView> {
-  const res = await fetch("/api/join", {
+  const res = await credFetch("/api/join", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name }),
@@ -37,7 +103,7 @@ export async function fetchState(
   params.set("playerId", playerId);
   if (galaxy) params.set("galaxy", String(galaxy));
   if (system) params.set("system", String(system));
-  const res = await fetch(`/api/state?${params.toString()}`);
+  const res = await credFetch(`/api/state?${params.toString()}`);
   return parse<PlayerView>(res);
 }
 
@@ -45,7 +111,7 @@ export async function upgradeBuilding(
   playerId: string,
   buildingId: BuildingId,
 ): Promise<PlayerView> {
-  const res = await fetch("/api/upgrade", {
+  const res = await credFetch("/api/upgrade", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ playerId, buildingId }),
@@ -58,7 +124,7 @@ export async function buildShip(
   shipId: ShipId,
   count: number,
 ): Promise<PlayerView> {
-  const res = await fetch("/api/build-ship", {
+  const res = await credFetch("/api/build-ship", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ playerId, shipId, count }),
@@ -71,7 +137,7 @@ export async function buildDefense(
   defenseId: DefenseId,
   count: number,
 ): Promise<PlayerView> {
-  const res = await fetch("/api/build-defense", {
+  const res = await credFetch("/api/build-defense", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ playerId, defenseId, count }),
@@ -83,7 +149,7 @@ export async function researchTech(
   playerId: string,
   researchId: ResearchId,
 ): Promise<PlayerView> {
-  const res = await fetch("/api/research", {
+  const res = await credFetch("/api/research", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ playerId, researchId }),
@@ -97,7 +163,7 @@ export async function cancelQueueItem(
   itemId: string,
   planetId?: string,
 ): Promise<PlayerView> {
-  const res = await fetch("/api/queue/cancel", {
+  const res = await credFetch("/api/queue/cancel", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ playerId, kind, itemId, planetId }),
@@ -111,7 +177,7 @@ export async function reorderQueueItems(
   orderedIds: string[],
   planetId?: string,
 ): Promise<PlayerView> {
-  const res = await fetch("/api/queue/reorder", {
+  const res = await credFetch("/api/queue/reorder", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ playerId, kind, orderedIds, planetId }),
@@ -123,7 +189,7 @@ export async function selectPlanet(
   playerId: string,
   planetId: string,
 ): Promise<PlayerView> {
-  const res = await fetch("/api/select-planet", {
+  const res = await credFetch("/api/select-planet", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ playerId, planetId }),
@@ -143,7 +209,7 @@ export async function launchFleetMission(
     cargo?: Partial<Resources>;
   },
 ): Promise<PlayerView> {
-  const res = await fetch("/api/launch-fleet", {
+  const res = await credFetch("/api/launch-fleet", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ playerId, ...opts }),
@@ -152,7 +218,7 @@ export async function launchFleetMission(
 }
 
 export async function claimDaily(playerId: string): Promise<PlayerView> {
-  const res = await fetch("/api/claim-daily", {
+  const res = await credFetch("/api/claim-daily", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ playerId }),
@@ -164,7 +230,7 @@ export async function activateOfficerHire(
   playerId: string,
   officerId: OfficerId,
 ): Promise<PlayerView> {
-  const res = await fetch("/api/activate-officer", {
+  const res = await credFetch("/api/activate-officer", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ playerId, officerId }),
@@ -176,7 +242,7 @@ export async function unlockSkillNode(
   playerId: string,
   skillId: string,
 ): Promise<PlayerView> {
-  const res = await fetch("/api/unlock-skill", {
+  const res = await credFetch("/api/unlock-skill", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ playerId, skillId }),
