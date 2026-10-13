@@ -9,9 +9,10 @@ import { flashHtml, resBlock } from "./render-chrome";
 import { escapeAttr, escapeHtml } from "./render-escape";
 import { storageFillTitle } from "./render-tooltips";
 
-function resourceBar(view: PlayerView): string {
+function resourceBar(view: PlayerView, busy: boolean): string {
   const { planet, economy } = view;
   const shards = view.starshards ?? 0;
+  const canClaim = Boolean(view.dailyLoginAvailable) && !busy;
   return `
     <section class="resource-bar" aria-label="Resources" data-testid="resources">
       ${resBlock("metal", "Metal", planet.resources.metal, economy.productionPerHour.metal, economy.storage.metal, RESOURCE_ART.metal)}
@@ -24,8 +25,9 @@ function resourceBar(view: PlayerView): string {
       </div>
       <div class="res starshards" title="Starshards (premium in-game currency)" data-testid="res-starshards">
         <span class="res-head"><span class="label">Starshards</span></span>
-        <span class="value">${fmt(shards)}</span>
+        <span class="value" data-testid="starshards-balance">${fmt(shards)}</span>
         <span class="sub">earned in-game</span>
+        <button type="button" class="ghost claim-daily" data-claim-daily data-testid="claim-daily" ${canClaim ? "" : "disabled"}>${view.dailyLoginAvailable ? "Claim daily +15" : "Daily claimed"}</button>
       </div>
     </section>`;
 }
@@ -99,7 +101,7 @@ export function shellHtml(
         </div>
       </header>
       ${flashHtml(state.error, state.notice)}
-      ${resourceBar(view)}
+      ${resourceBar(view, state.busy)}
       <div class="shell-body">
         ${leftNav(activePage)}
         <main class="shell-main" data-testid="page-${activePage}" id="page-main">
