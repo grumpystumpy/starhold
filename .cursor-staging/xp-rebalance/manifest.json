@@ -1,0 +1,28 @@
+[
+  {
+    "path": "packages/game/src/player-levels.test.ts",
+    "chunks": [
+      ".cursor-staging/xp-rebalance/packages__game__src__player-levels.test.ts.b64.00",
+      ".cursor-staging/xp-rebalance/packages__game__src__player-levels.test.ts.b64.01",
+      ".cursor-staging/xp-rebalance/packages__game__src__player-levels.test.ts.b64.02",
+      ".cursor-staging/xp-rebalance/packages__game__src__player-levels.test.ts.b64.03",
+      ".cursor-staging/xp-rebalance/packages__game__src__player-levels.test.ts.b64.04"
+    ],
+    "sha256": "10eb1bb229aa81a8cd678818bed6971017b6a96039729828b325a5a3fd29be44"
+  },
+  {
+    "path": "docs/design/round2-contract.md",
+    "chunks": [
+      ".cursor-staging/xp-rebalance/docs__design__round2-contract.md.b64.00",
+      ".cursor-staging/xp-rebalance/docs__design__round2-contract.md.b64.01",
+      ".cursor-staging/xp-rebalance/docs__design__round2-contract.md.b64.02",
+      ".cursor-staging/xp-rebalance/docs__design__round2-contract.md.b64.03",
+      ".cursor-staging/xp-rebalance/docs__design__round2-contract.md.b64.04",
+      ".cursor-staging/xp-rebalance/docs__design__round2-contract.md.b64.05",
+      ".cursor-staging/xp-rebalance/docs__design__round2-contract.md.b64.06",
+      ".cursor-staging/xp-rebalance/docs__design__round2-contract.md.b64.07",
+      ".cursor-staging/xp-rebalance/docs__design__round2-contract.md.b64.08"
+    ],
+    "sha256": "25ba5d2cc173c8939c36519ce651e195447300d788cc2cb3698af571e08e5e2f"
+  }
+]
