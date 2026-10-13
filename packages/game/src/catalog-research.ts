@@ -74,4 +74,14 @@ export const RESEARCH: Record<ResearchId, ResearchDef> = {
     baseResearchSeconds: 22,
     labLevel: 1,
   },
+  swarmHold: {
+    id: "swarmHold",
+    name: "Swarm Hold",
+    description:
+      "+15% of base (300) Swarm Mothership capacity per level (hard cap 2000).",
+    baseCost: { metal: 200, crystal: 400, deuterium: 200 },
+    costGrowth: 2,
+    baseResearchSeconds: 40,
+    labLevel: 4,
+  },
 };
