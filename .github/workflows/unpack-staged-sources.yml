@@ -1,0 +1,44 @@
+name: Unpack staged player-levels sources
+on:
+  push:
+    branches: [cursor/player-levels-xp-8713]
+    paths:
+      - ".mcp-stage/**"
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cursor/player-levels-xp-8713
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Unpack gzip+base64 staged files
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import base64, gzip, json
+          from pathlib import Path
+          manifest = json.loads(Path(".mcp-stage/manifest.json").read_text())
+          for item in manifest:
+              safe = item["safe"]
+              n = item["nparts"]
+              dest = Path(item["dest"])
+              parts = []
+              for i in range(n):
+                  p = Path(f".mcp-stage/{safe}.part{i:02d}.b64")
+                  parts.append(p.read_text().strip())
+              raw = gzip.decompress(base64.b64decode("".join(parts)))
+              dest.parent.mkdir(parents=True, exist_ok=True)
+              dest.write_bytes(raw)
+              print("wrote", dest, len(raw))
+          PY
+          rm -rf .mcp-stage
+          rm -f .github/workflows/unpack-staged-sources.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          if git diff --cached --quiet; then echo "nothing to commit"; exit 0; fi
+          git commit -m "feat(I): unpack staged player-levels sources"
+          git push
