@@ -24,6 +24,16 @@ export const MIN_FLIGHT_SECONDS = 8;
 /** Soft building-field budget (levels sum toward this). */
 export const PLANET_FIELDS = 200;
 
+/** Moon field budget: base free field + per Lunar Base level. */
+export const MOON_FIELDS_BASE = 1;
+export const MOON_FIELDS_PER_LUNAR_BASE = 3;
+
+/** Minimum debris (metal+crystal) before a moon can form. */
+export const MOON_DEBRIS_MIN = 5000;
+
+/** Cap on moon-formation chance percent. */
+export const MOON_CHANCE_CAP = 20;
+
 /** Wall-clock TTL for espionage reports before prune. */
 export const SPY_REPORT_TTL_MS = 20 * 60 * 1000;
 
@@ -37,6 +47,32 @@ export const BUILDING_ORDER: BuildingId[] = [
   "deutTank",
   "shipyard",
   "researchLab",
+  "lunarBase",
+  "sensorArray",
+];
+
+/** Buildings shown / allowed on normal planets. */
+export const PLANET_BUILDING_ORDER: BuildingId[] = [
+  "metalMine",
+  "crystalMine",
+  "deutSynth",
+  "solarPlant",
+  "metalStorage",
+  "crystalStorage",
+  "deutTank",
+  "shipyard",
+  "researchLab",
+];
+
+/** Buildings shown / allowed on moons. */
+export const MOON_BUILDING_ORDER: BuildingId[] = [
+  "lunarBase",
+  "sensorArray",
+  "solarPlant",
+  "metalStorage",
+  "crystalStorage",
+  "deutTank",
+  "shipyard",
 ];
 
 export const SHIP_ORDER: ShipId[] = [

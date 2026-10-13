@@ -60,6 +60,8 @@ Outcomes: defender wiped → **attacker_win**; attacker wiped → **defender_win
 
 30% of destroyed ship metal/crystal costs become a debris field at the target coords. Recyclers harvest with the **harvest** mission.
 
+Heavy debris can coalesce into a **moon** (see [docs/design/moons.md](../../docs/design/moons.md)): chance `% = min(20, floor((metal+crystal)/1000))` when total ≥ 5000 and the planet has no moon yet.
+
 ## Loot
 
 Only on **attacker_win**:

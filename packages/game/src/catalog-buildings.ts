@@ -87,4 +87,21 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
     costGrowth: 2,
     baseBuildSeconds: 18,
   },
+  lunarBase: {
+    id: "lunarBase",
+    name: "Lunar Base",
+    description: "Expands moon fields so more lunar structures can be built.",
+    baseCost: { metal: 2000, crystal: 4000, deuterium: 0 },
+    costGrowth: 2,
+    baseBuildSeconds: 30,
+  },
+  sensorArray: {
+    id: "sensorArray",
+    name: "Sensor Array",
+    description:
+      "Scans the local system for outbound fleets headed this way (moon only).",
+    baseCost: { metal: 4000, crystal: 8000, deuterium: 2000 },
+    costGrowth: 2,
+    baseBuildSeconds: 40,
+  },
 };
