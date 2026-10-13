@@ -3103,30 +3103,24 @@ function grantPlayerXp(player, amount) {
   player.xpTotal = xpTotal;
   return gained;
 }
-function xpForBuilding(targetLevel) {
-  return 8 + 2 * Math.max(1, Math.floor(targetLevel));
-}
 function xpForResearch(targetLevel) {
-  return 12 + 3 * Math.max(1, Math.floor(targetLevel));
+  return 2 + Math.max(1, Math.floor(targetLevel));
 }
 function xpForCombatWin(destroyedEnemyCost) {
-  const bonus = Math.min(200, Math.floor(Math.max(0, destroyedEnemyCost) / 500));
-  return 25 + bonus;
+  const bonus = Math.min(56, Math.floor(Math.max(0, destroyedEnemyCost) / 500));
+  return 19 + bonus;
 }
 function xpForCombatLose() {
-  return 8;
+  return 4;
 }
 function xpForExpedition() {
-  return 15;
+  return 4;
 }
 function xpForPirateBaseDestroy(baseLevel) {
-  return 50 + 10 * Math.max(0, Math.floor(baseLevel));
+  return 4 + Math.max(0, Math.floor(baseLevel));
 }
 function xpForPirateShipKills(destroyedEnemyCost) {
-  return Math.min(
-    100,
-    Math.floor(Math.max(0, destroyedEnemyCost) / 1e3) * 5
-  );
+  return Math.min(10, Math.floor(Math.max(0, destroyedEnemyCost) / 1e3));
 }
 function resourcesCostTotal(res) {
   return Math.max(0, res.metal) + Math.max(0, res.crystal) + Math.max(0, res.deuterium ?? 0);
@@ -3319,7 +3313,7 @@ function expeditionStarshardsAmount(roll) {
 }
 
 // packages/game/src/world-tick.ts
-function advancePlanet(planet, universeSpeed, now, energyTechLevel = 0, boosts, owner) {
+function advancePlanet(planet, universeSpeed, now, energyTechLevel = 0, boosts, _owner) {
   let state = {
     ...planet,
     resources: { ...planet.resources },
@@ -3331,7 +3325,6 @@ function advancePlanet(planet, universeSpeed, now, energyTechLevel = 0, boosts, 
     const { buildingId, targetLevel } = state.buildQueue;
     state.buildings[buildingId] = targetLevel;
     state.buildQueue = null;
-    if (owner) grantPlayerXp(owner, xpForBuilding(targetLevel));
   }
   if (state.shipQueue && state.shipQueue.completesAt <= now) {
     const { shipId, count } = state.shipQueue;

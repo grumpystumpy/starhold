@@ -9,10 +9,12 @@ import {
   levelBonuses,
   researchUpgradeSeconds,
   shipBuildSeconds,
+  XP_MIX_TARGET,
   xpForBuilding,
   xpForCombatLose,
   xpForCombatWin,
   xpForExpedition,
+  xpForMiniPlanetDiscovery,
   xpForPirateBaseDestroy,
   xpForPirateShipKills,
   xpForResearch,
@@ -63,17 +65,44 @@ describe("Thread I player levels / XP formulas", () => {
     assert.equal(high.shipBuild, 0.65);
   });
 
-  it("XP award helpers match contract amounts", () => {
-    assert.equal(xpForBuilding(5), 8 + 2 * 5);
-    assert.equal(xpForResearch(4), 12 + 3 * 4);
-    assert.equal(xpForCombatWin(0), 25);
-    assert.equal(xpForCombatWin(500_000), 25 + 200);
-    assert.equal(xpForCombatWin(2500), 25 + 5);
-    assert.equal(xpForCombatLose(), 8);
-    assert.equal(xpForExpedition(), 15);
-    assert.equal(xpForPirateBaseDestroy(3), 50 + 30);
-    assert.equal(xpForPirateShipKills(2500), 10);
-    assert.equal(xpForPirateShipKills(1_000_000), 100);
+  it("XP award helpers match Micah mix (buildings = 0)", () => {
+    assert.equal(xpForBuilding(5), 0);
+    assert.equal(xpForBuilding(99), 0);
+    assert.equal(xpForResearch(2), 4);
+    assert.equal(xpForResearch(4), 6);
+    assert.equal(xpForCombatWin(0), 19);
+    assert.equal(xpForCombatWin(500_000), 19 + 56); // bonus cap
+    assert.equal(xpForCombatWin(2500), 19 + 5);
+    assert.equal(xpForCombatLose(), 4);
+    assert.equal(xpForExpedition(), 4);
+    assert.equal(xpForMiniPlanetDiscovery(), 10);
+    assert.equal(xpForPirateBaseDestroy(2), 6);
+    assert.equal(xpForPirateBaseDestroy(3), 7);
+    assert.equal(xpForPirateShipKills(2500), 2);
+    assert.equal(xpForPirateShipKills(1_000_000), 10); // cap
+    assert.deepEqual(XP_MIX_TARGET, {
+      combat: 80,
+      pirates: 8,
+      expeditions: 8,
+      research: 4,
+      buildings: 0,
+    });
+  });
+
+  it("reference earn pack hits 80/8/8/4/0 mix", () => {
+    // 3× PvP win @19 + lose @4 + pirateRaid (combat 19 + destroy t2 @6 + kills 2)
+    // + 2× expedition @4 + research L2 @4
+    const combat = 3 * xpForCombatWin(0) + xpForCombatLose() + xpForCombatWin(0);
+    const pirates = xpForPirateBaseDestroy(2) + xpForPirateShipKills(2000);
+    const expeditions = 2 * xpForExpedition();
+    const research = xpForResearch(2);
+    const buildings = xpForBuilding(10);
+    assert.equal(combat, XP_MIX_TARGET.combat);
+    assert.equal(pirates, XP_MIX_TARGET.pirates);
+    assert.equal(expeditions, XP_MIX_TARGET.expeditions);
+    assert.equal(research, XP_MIX_TARGET.research);
+    assert.equal(buildings, XP_MIX_TARGET.buildings);
+    assert.equal(combat + pirates + expeditions + research + buildings, 100);
   });
 
   it("grantPlayerXp levels up with leftover xp", () => {
@@ -98,7 +127,7 @@ describe("Thread I player levels / XP formulas", () => {
 });
 
 describe("Thread I XP grants live", () => {
-  it("grants building + research XP on completion", () => {
+  it("grants research XP but not building XP on completion", () => {
     const universe = createUniverse("Build XP", 100);
     const a = joinUniverse(universe, "Builder", 301_000_000);
     const player = universe.players[a.player.id];
@@ -119,13 +148,9 @@ describe("Thread I XP grants live", () => {
     assert.equal(q.ok, true);
     const queued = universe.planets[a.planet.id].buildQueue;
     assert.ok(queued);
-    const target = queued!.targetLevel;
     advanceUniverse(universe, queued!.completesAt);
     assert.equal(universe.planets[a.planet.id].buildQueue, null);
-    assert.equal(
-      universe.players[a.player.id].xpTotal,
-      beforeXp + xpForBuilding(target),
-    );
+    assert.equal(universe.players[a.player.id].xpTotal, beforeXp);
 
     const beforeR = universe.players[a.player.id].xpTotal ?? 0;
     const rq = queueResearch(universe, a.player.id, "energyTech", 301_100_000);
