@@ -38,6 +38,7 @@ export function emptyBuildings(): PlanetState["buildings"] {
     lunarBase: 0,
     sensorArray: 0,
     jumpGate: 0,
+    chronoLathe: 0,
   };
 }
 
@@ -80,6 +81,8 @@ export function createUniverse(
     debris: {},
     asteroids: {},
     pirateBases: {},
+    occupations: {},
+    miniPlanetIds: [],
   };
   seedUniverseAsteroids(universe);
   seedUniversePirates(universe, now);
@@ -138,6 +141,8 @@ export function ensureUniverseShape(universe: UniverseState): void {
   if (!universe.debris) universe.debris = {};
   if (!universe.asteroids) universe.asteroids = {};
   if (!universe.pirateBases) universe.pirateBases = {};
+  if (!universe.occupations) universe.occupations = {};
+  if (!universe.miniPlanetIds) universe.miniPlanetIds = [];
   if (!universe.fleetSpeed) universe.fleetSpeed = universe.speed || 1;
   if (!universe.seed) universe.seed = `seed_${universe.id}`;
   for (const player of Object.values(universe.players)) {
@@ -148,6 +153,7 @@ export function ensureUniverseShape(universe: UniverseState): void {
       player.activePlanetId = player.homePlanetId;
     }
     if (!player.research) player.research = emptyResearch();
+    if (player.research.swarmHold === undefined) player.research.swarmHold = 0;
     if (player.researchQueue === undefined) player.researchQueue = null;
     if (player.starshards === undefined) player.starshards = 0;
     if (!player.officers) player.officers = [];
@@ -170,6 +176,7 @@ export function ensureUniverseShape(universe: UniverseState): void {
     if (!planet.buildings.lunarBase) planet.buildings.lunarBase = 0;
     if (!planet.buildings.sensorArray) planet.buildings.sensorArray = 0;
     if (!planet.buildings.jumpGate) planet.buildings.jumpGate = 0;
+    if (!planet.buildings.chronoLathe) planet.buildings.chronoLathe = 0;
     if (
       planet.kind !== "moon" &&
       (typeof planet.fieldsCap !== "number" || planet.fieldsCap <= 0)
