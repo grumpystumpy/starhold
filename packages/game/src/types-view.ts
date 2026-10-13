@@ -1,4 +1,5 @@
 import type {
+  AsteroidField,
   BodyKind,
   BuildingId,
   BuildQueueItem,
@@ -7,11 +8,14 @@ import type {
   DefenseStock,
   FleetMission,
   FleetShips,
+  OfficerState,
+  PirateBase,
   ResearchLevels,
   ResearchQueueItem,
   Resources,
   ShipId,
   ShipQueueItem,
+  SlotProductionMult,
 } from "./types-core.js";
 
 
@@ -93,6 +97,8 @@ export interface PlanetState {
   parentPlanetId?: string | null;
   /** Set on planets — id of the linked moon, if any. */
   moonId?: string | null;
+  /** Rolled field cap for planets; moons compute from lunarBase. */
+  fieldsCap?: number;
   resources: Resources;
   /** Last time production was applied (epoch ms) */
   lastTickAt: number;
@@ -115,6 +121,12 @@ export interface PlayerState {
   research: ResearchLevels;
   researchQueue: ResearchQueueItem | null;
   createdAt: number;
+  /** Premium currency (thread D spends; A stubs 0). */
+  starshards?: number;
+  /** Active officers (thread D; A stubs []). */
+  officers?: OfficerState[];
+  /** Unlocked skill node ids (thread D; A stubs []). */
+  skillsUnlocked?: string[];
 }
 
 export interface UniverseState {
@@ -125,6 +137,13 @@ export interface UniverseState {
   /** Fleet travel speed factor (defaults to economy speed when omitted in older saves) */
   fleetSpeed: number;
   createdAt: number;
+  /**
+   * Persistence schema version. Missing ⇒ treat as `1` (prototype map).
+   * Contract map = `2` (`UNIVERSE_SCHEMA_VERSION`).
+   */
+  schemaVersion?: number;
+  /** Deterministic seed for fields / asteroids rolls. */
+  seed?: string;
   players: Record<string, PlayerState>;
   planets: Record<string, PlanetState>;
   fleets: Record<string, FleetMission>;
@@ -133,6 +152,19 @@ export interface UniverseState {
   expeditionReports: Record<string, ExpeditionReport>;
   /** Keyed by "g:s:slot" */
   debris: Record<string, DebrisField>;
+  /** Mineable asteroid fields keyed by id. */
+  asteroids?: Record<string, AsteroidField>;
+  /** NPC pirate bases (thread E; A may leave empty). */
+  pirateBases?: Record<string, PirateBase>;
+}
+
+/** Coarse pirate threat for galaxy UI (thread E fills). */
+export interface PirateBasePublic {
+  id: string;
+  coords: Coordinates;
+  name: string;
+  tier: number;
+  threatHint: "low" | "medium" | "high";
 }
 
 /** One slot in the galaxy/system browser. */
@@ -141,18 +173,24 @@ export interface GalaxySlot {
   planetId: string | null;
   playerId: string | null;
   playerName: string | null;
+  allianceTag: string | null;
   pointsHint: number;
   debris: { metal: number; crystal: number } | null;
   isOwn: boolean;
   /** Linked moon at this slot, if any. */
   hasMoon: boolean;
   moonId: string | null;
+  /** Empty | occupied | npc markers for UI */
+  activity: "empty" | "planet" | "pirate" | null;
 }
 
 export interface GalaxyView {
   galaxy: number;
   system: number;
   slots: GalaxySlot[];
+  deepSpace: { coords: Coordinates };
+  asteroids: AsteroidField[];
+  pirateBase: PirateBasePublic | null;
 }
 
 /** Snapshot returned to a specific player (active planet + public roster). */
@@ -194,6 +232,12 @@ export interface PlayerView {
    * on the active moon; otherwise empty.
    */
   sensorContacts: FleetMission[];
+  /** Premium currency echo (thread D; A stubs 0). */
+  starshards: number;
+  /** Active officers (thread D; A stubs []). */
+  officers: OfficerState[];
+  /** Unlocked skills (thread D; A stubs []). */
+  skillsUnlocked: string[];
 }
 
 export interface PublicPlayer {
@@ -220,4 +264,6 @@ export interface EconomySnapshot {
   storage: Resources;
   /** Building-level field budget (soft-cap). */
   fields: { used: number; cap: number; remaining: number };
+  /** Echo position mults for UI tooltips. */
+  positionMult: SlotProductionMult;
 }

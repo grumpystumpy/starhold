@@ -7,7 +7,6 @@ import {
   MOON_FIELDS_BASE,
   MOON_FIELDS_PER_LUNAR_BASE,
   PLANET_BUILDING_ORDER,
-  PLANET_FIELDS,
   PRODUCTION_MULT,
   RESEARCH,
   SHIPS,
@@ -20,6 +19,10 @@ import type {
   Resources,
   ShipId,
 } from "./types.js";
+import {
+  productionMultForSlot,
+  rollPlanetFields,
+} from "./formulas-position.js";
 
 export function isMoon(planet: PlanetState): boolean {
   return planet.kind === "moon";
@@ -38,7 +41,14 @@ export function fieldsCap(planet: PlanetState): number {
     const lunar = planet.buildings.lunarBase ?? 0;
     return MOON_FIELDS_BASE + lunar * MOON_FIELDS_PER_LUNAR_BASE;
   }
-  return PLANET_FIELDS;
+  if (typeof planet.fieldsCap === "number" && planet.fieldsCap > 0) {
+    return planet.fieldsCap;
+  }
+  // Deterministic backfill for blobs missing fieldsCap.
+  return rollPlanetFields(
+    planet.coords.slot,
+    `${planet.id}:${planet.coords.galaxy}:${planet.coords.system}:${planet.coords.slot}`,
+  );
 }
 
 /** Cost to go from `currentLevel` → `currentLevel + 1`. */
@@ -165,7 +175,9 @@ export function energyUsed(planet: PlanetState): number {
 }
 
 export function energyProduced(planet: PlanetState): number {
-  return solarEnergy(planet.buildings.solarPlant ?? 0);
+  const base = solarEnergy(planet.buildings.solarPlant ?? 0);
+  const mult = productionMultForSlot(planet.coords.slot).energy;
+  return Math.floor(base * mult);
 }
 
 /** 0..1 production multiplier from energy surplus/shortfall. */
@@ -205,19 +217,23 @@ export function productionPerHour(
   const techBonus = 1 + energyTechLevel * 0.02;
   // universe.speed scales timers + income; PRODUCTION_MULT is income-only test tuning.
   const incomeScale = universeSpeed * PRODUCTION_MULT * techBonus;
+  const pos = productionMultForSlot(planet.coords.slot);
   return {
     metal:
       mineOutputPerHour("metal", planet.buildings.metalMine ?? 0) *
       factor *
-      incomeScale,
+      incomeScale *
+      pos.metal,
     crystal:
       mineOutputPerHour("crystal", planet.buildings.crystalMine ?? 0) *
       factor *
-      incomeScale,
+      incomeScale *
+      pos.crystal,
     deuterium:
       mineOutputPerHour("deuterium", planet.buildings.deutSynth ?? 0) *
       factor *
-      incomeScale,
+      incomeScale *
+      pos.deuterium,
   };
 }
 

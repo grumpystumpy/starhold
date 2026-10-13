@@ -1,6 +1,9 @@
 import {
+  archiveUniverseKey,
   createUniverse,
   ensureUniverseShape,
+  migrateOrResetUniverse,
+  UNIVERSE_SCHEMA_VERSION,
   type UniverseState,
 } from "@starhold/game";
 import { Redis } from "@upstash/redis";
@@ -12,13 +15,19 @@ import { Redis } from "@upstash/redis";
  *     UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN
  *     OR KV_REST_API_URL + KV_REST_API_TOKEN (Vercel Upstash integration)
  *
- * Schema: one JSON document at STARHOLD_UNIVERSE_KEY (default `starhold:universe:v1`).
+ * Schema: one JSON document at STARHOLD_UNIVERSE_KEY
+ * (default `starhold:universe:v2` for contract map).
  * Lock key: `${key}:lock` (NX + short TTL) for critical sections.
+ *
+ * Incompatible schema (missing / < UNIVERSE_SCHEMA_VERSION): archive old blob,
+ * write a fresh universe — never remap 1×9×8 coords in place.
  */
 
 const UNIVERSE_NAME = process.env.STARHOLD_UNIVERSE_NAME ?? "Alpha Drift";
 const UNIVERSE_SPEED = Number(process.env.STARHOLD_UNIVERSE_SPEED ?? 8);
-const REDIS_KEY = process.env.STARHOLD_UNIVERSE_KEY ?? "starhold:universe:v1";
+const REDIS_KEY =
+  process.env.STARHOLD_UNIVERSE_KEY ??
+  `starhold:universe:v${UNIVERSE_SCHEMA_VERSION}`;
 const LOCK_KEY = `${REDIS_KEY}:lock`;
 
 export type StorageMode = "upstash" | "kv" | "memory";
@@ -79,11 +88,36 @@ async function loadUniverse(client: Redis | null): Promise<UniverseState> {
     ensureUniverseShape(memoryUniverse);
     return memoryUniverse;
   }
-  const data = await client.get<UniverseState>(REDIS_KEY);
-  if (data && typeof data === "object" && data.id) {
-    ensureUniverseShape(data);
-    return data;
+
+  // Prefer versioned key; also probe legacy v1 key once for archive/reset.
+  let data = await client.get<UniverseState>(REDIS_KEY);
+  if (!data || typeof data !== "object" || !data.id) {
+    const legacy = await client.get<UniverseState>("starhold:universe:v1");
+    if (legacy && typeof legacy === "object" && legacy.id) {
+      data = legacy;
+    }
   }
+
+  if (data && typeof data === "object" && data.id) {
+    const migrated = migrateOrResetUniverse(data, {
+      name: UNIVERSE_NAME,
+      speed: UNIVERSE_SPEED,
+    });
+    if (migrated.didReset && migrated.archived) {
+      const archiveKey = archiveUniverseKey(
+        migrated.archived.id,
+        Date.now(),
+      );
+      await client.set(archiveKey, migrated.archived);
+      await client.set(REDIS_KEY, migrated.universe);
+      // Drop legacy key so partial deploys do not re-read prototype map.
+      await client.del("starhold:universe:v1").catch(() => undefined);
+      return migrated.universe;
+    }
+    ensureUniverseShape(migrated.universe);
+    return migrated.universe;
+  }
+
   const created = freshUniverse();
   ensureUniverseShape(created);
   await client.set(REDIS_KEY, created);

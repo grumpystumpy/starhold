@@ -109,6 +109,7 @@ export async function launchFleetMission(
     ships: Partial<FleetShips>;
     targetPlanetId?: string;
     targetCoords?: Coordinates;
+    asteroidId?: string;
     cargo?: Partial<Resources>;
   },
 ): Promise<PlayerView> {

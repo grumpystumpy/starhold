@@ -65,6 +65,12 @@ export function fleetComposer(
         `<option value="coords:${s.coords.galaxy}:${s.coords.system}:${s.coords.slot}">Debris ${fmtCoords(s.coords)} (${fmt(s.debris!.metal)}/${fmt(s.debris!.crystal)})</option>`,
       );
     }
+  } else if (mission === "harvestAsteroid") {
+    for (const a of view.galaxy.asteroids ?? []) {
+      options.push(
+        `<option value="asteroid:${escapeAttr(a.id)}">Asteroid ${escapeHtml(a.id)} (${fmt(a.metal)}/${fmt(a.crystal)}/${fmt(a.deuterium)} · ${a.richness} left)</option>`,
+      );
+    }
   } else if (mission === "expedition") {
     const systems = new Set<number>([
       view.galaxy.system,
@@ -96,11 +102,13 @@ export function fleetComposer(
   }
 
   let selected =
-    draft?.targetPlanetId != null
-      ? `planet:${draft.targetPlanetId}`
-      : draft?.targetCoords
-        ? `coords:${draft.targetCoords.galaxy}:${draft.targetCoords.system}:${draft.targetCoords.slot}`
-        : options[0]?.match(/value="([^"]+)"/)?.[1] ?? "";
+    draft?.asteroidId != null
+      ? `asteroid:${draft.asteroidId}`
+      : draft?.targetPlanetId != null
+        ? `planet:${draft.targetPlanetId}`
+        : draft?.targetCoords
+          ? `coords:${draft.targetCoords.galaxy}:${draft.targetCoords.system}:${draft.targetCoords.slot}`
+          : options[0]?.match(/value="([^"]+)"/)?.[1] ?? "";
 
   if (selected && !options.some((o) => o.includes(`value="${selected}"`))) {
     selected = options[0]?.match(/value="([^"]+)"/)?.[1] ?? "";
@@ -142,7 +150,9 @@ export function fleetComposer(
               ? `<p class="hint">Browse the galaxy for an empty slot in this system (or change system).</p>`
               : mission === "harvest"
                 ? `<p class="hint">No debris in this system yet — win a raid that destroys ships.</p>`
-                : `<p class="hint" data-testid="fleet-need-rival">Join a second commander (another tab) to unlock raid / spy targets.</p>`
+                : mission === "harvestAsteroid"
+                  ? `<p class="hint">No asteroids in this system — browse another system.</p>`
+                  : `<p class="hint" data-testid="fleet-need-rival">Join a second commander (another tab) to unlock raid / spy targets.</p>`
         : "";
   const launchBlocked =
     busy ||
@@ -181,6 +191,7 @@ export function fleetComposer(
       transport: "Transport cargo (own worlds)",
       colonize: "Colonize empty slot",
       harvest: "Harvest debris",
+      harvestAsteroid: "Harvest asteroid (Recycler)",
       expedition: "Expedition (deep space)",
     };
     return `<label><input type="radio" name="fleet-mission" value="${m}" data-testid="mission-${m}" ${mission === m ? "checked" : ""} ${busy ? "disabled" : ""} /> ${labels[m]}</label>`;

@@ -1,4 +1,9 @@
-import { MAP_GALAXIES, MAP_SLOTS, MAP_SYSTEMS } from "./catalog.js";
+import {
+  DEEP_SPACE_SLOT,
+  MAP_GALAXIES,
+  MAP_SLOTS,
+  MAP_SYSTEMS,
+} from "./catalog.js";
 import {
   economySnapshot,
   planetPoints,
@@ -6,6 +11,7 @@ import {
   shipStockPoints,
 } from "./formulas.js";
 import type {
+  GalaxySlot,
   GalaxyView,
   HighscoreEntry,
   PlayerState,
@@ -14,6 +20,7 @@ import type {
   UniverseState,
 } from "./types.js";
 import { advanceUniverse } from "./world-arrival.js";
+import { asteroidsInSystem } from "./world-asteroids.js";
 import {
   activePlanet,
   ensureUniverseShape,
@@ -80,7 +87,7 @@ export function galaxyViewFor(
   ensureUniverseShape(universe);
   const g = Math.min(MAP_GALAXIES, Math.max(1, Math.floor(galaxy)));
   const s = Math.min(MAP_SYSTEMS, Math.max(1, Math.floor(system)));
-  const slots = [];
+  const slots: GalaxySlot[] = [];
   for (let slot = 1; slot <= MAP_SLOTS; slot++) {
     const coords = { galaxy: g, system: s, slot };
     const planet = planetAtCoords(universe, coords);
@@ -94,6 +101,7 @@ export function galaxyViewFor(
       planetId: planet?.id ?? null,
       playerId: owner?.id ?? null,
       playerName: owner?.name ?? null,
+      allianceTag: null,
       pointsHint: planet ? Math.floor(planetPoints(planet)) : 0,
       debris: debris
         ? { metal: debris.metal, crystal: debris.crystal }
@@ -101,9 +109,40 @@ export function galaxyViewFor(
       isOwn: owner?.id === playerId,
       hasMoon: Boolean(moon),
       moonId: moon?.id ?? null,
+      activity: planet ? "planet" : "empty",
     });
   }
-  return { galaxy: g, system: s, slots };
+
+  const pirate = Object.values(universe.pirateBases ?? {}).find(
+    (b) =>
+      b.destroyedAt == null &&
+      b.coords.galaxy === g &&
+      b.coords.system === s,
+  );
+  if (pirate) {
+    const slot = slots.find((row) => row.coords.slot === pirate.coords.slot);
+    if (slot && slot.activity === "empty") {
+      slot.activity = "pirate";
+    }
+  }
+
+  return {
+    galaxy: g,
+    system: s,
+    slots,
+    deepSpace: { coords: { galaxy: g, system: s, slot: DEEP_SPACE_SLOT } },
+    asteroids: asteroidsInSystem(universe, g, s),
+    pirateBase: pirate
+      ? {
+          id: pirate.id,
+          coords: pirate.coords,
+          name: pirate.name,
+          tier: pirate.tier,
+          threatHint:
+            pirate.tier >= 5 ? "high" : pirate.tier >= 2 ? "medium" : "low",
+        }
+      : null,
+  };
 }
 
 export function playerView(
@@ -195,5 +234,8 @@ export function playerView(
     spyReports,
     expeditionReports,
     sensorContacts,
+    starshards: player.starshards ?? 0,
+    officers: player.officers ?? [],
+    skillsUnlocked: player.skillsUnlocked ?? [],
   };
 }

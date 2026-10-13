@@ -1,15 +1,18 @@
 import {
+  HOME_SLOT_PREFERENCE,
   MAP_GALAXIES,
   MAP_SLOTS,
   MAP_SYSTEMS,
   SHIP_ORDER,
   STARTING_RESOURCES,
+  UNIVERSE_SCHEMA_VERSION,
 } from "./catalog.js";
 import {
   coordsKey,
   emptyDefenses,
   emptyFleetShips,
   emptyResearch,
+  rollPlanetFields,
 } from "./formulas.js";
 import type {
   Coordinates,
@@ -18,6 +21,7 @@ import type {
   Resources,
   UniverseState,
 } from "./types.js";
+import { seedUniverseAsteroids } from "./world-asteroids.js";
 
 export function emptyBuildings(): PlanetState["buildings"] {
   return {
@@ -43,18 +47,28 @@ export function emptyCargo(): Resources {
   return { metal: 0, crystal: 0, deuterium: 0 };
 }
 
+export function fieldsSeedForCoords(
+  universeSeed: string,
+  coords: Coordinates,
+): string {
+  return `${universeSeed}:fields:${coords.galaxy}:${coords.system}:${coords.slot}`;
+}
+
 export function createUniverse(
   name = "Alpha Drift",
   speed = 1,
   fleetSpeed = speed,
 ): UniverseState {
   const now = Date.now();
-  return {
-    id: `uni_${now.toString(36)}`,
+  const id = `uni_${now.toString(36)}`;
+  const universe: UniverseState = {
+    id,
     name,
     speed,
     fleetSpeed,
     createdAt: now,
+    schemaVersion: UNIVERSE_SCHEMA_VERSION,
+    seed: `seed_${id}`,
     players: {},
     planets: {},
     fleets: {},
@@ -62,9 +76,14 @@ export function createUniverse(
     spyReports: {},
     expeditionReports: {},
     debris: {},
+    asteroids: {},
+    pirateBases: {},
   };
+  seedUniverseAsteroids(universe);
+  return universe;
 }
 
+/** Next free home/colony slot — mid slots preferred for homes. */
 export function nextCoords(universe: UniverseState): Coordinates {
   const used = new Set(
     Object.values(universe.planets)
@@ -73,7 +92,8 @@ export function nextCoords(universe: UniverseState): Coordinates {
   );
   for (let galaxy = 1; galaxy <= MAP_GALAXIES; galaxy++) {
     for (let system = 1; system <= MAP_SYSTEMS; system++) {
-      for (let slot = 1; slot <= MAP_SLOTS; slot++) {
+      for (const slot of HOME_SLOT_PREFERENCE) {
+        if (slot < 1 || slot > MAP_SLOTS) continue;
         const key = `${galaxy}:${system}:${slot}`;
         if (!used.has(key)) {
           return { galaxy, system, slot };
@@ -81,7 +101,7 @@ export function nextCoords(universe: UniverseState): Coordinates {
       }
     }
   }
-  throw new Error("Universe planet slots are full (prototype map).");
+  throw new Error("Universe planet slots are full.");
 }
 
 export function planetAtCoords(
@@ -115,7 +135,13 @@ export function ensureUniverseShape(universe: UniverseState): void {
   if (!universe.spyReports) universe.spyReports = {};
   if (!universe.expeditionReports) universe.expeditionReports = {};
   if (!universe.debris) universe.debris = {};
+  if (!universe.asteroids) universe.asteroids = {};
+  if (!universe.pirateBases) universe.pirateBases = {};
   if (!universe.fleetSpeed) universe.fleetSpeed = universe.speed || 1;
+  if (!universe.seed) universe.seed = `seed_${universe.id}`;
+  if (universe.schemaVersion === undefined) {
+    // Leave missing version as-is for migrator detection; do not bump here.
+  }
   for (const player of Object.values(universe.players)) {
     if (!player.planetIds?.length) {
       player.planetIds = [player.homePlanetId];
@@ -125,7 +151,11 @@ export function ensureUniverseShape(universe: UniverseState): void {
     }
     if (!player.research) player.research = emptyResearch();
     if (player.researchQueue === undefined) player.researchQueue = null;
+    if (player.starshards === undefined) player.starshards = 0;
+    if (!player.officers) player.officers = [];
+    if (!player.skillsUnlocked) player.skillsUnlocked = [];
   }
+  const seed = universe.seed ?? universe.id;
   for (const planet of Object.values(universe.planets)) {
     if (!planet.kind) planet.kind = "planet";
     if (planet.parentPlanetId === undefined) planet.parentPlanetId = null;
@@ -135,6 +165,15 @@ export function ensureUniverseShape(universe: UniverseState): void {
     if (!planet.buildings.researchLab) planet.buildings.researchLab = 0;
     if (!planet.buildings.lunarBase) planet.buildings.lunarBase = 0;
     if (!planet.buildings.sensorArray) planet.buildings.sensorArray = 0;
+    if (
+      planet.kind !== "moon" &&
+      (typeof planet.fieldsCap !== "number" || planet.fieldsCap <= 0)
+    ) {
+      planet.fieldsCap = rollPlanetFields(
+        planet.coords.slot,
+        fieldsSeedForCoords(seed, planet.coords),
+      );
+    }
     for (const id of SHIP_ORDER) {
       if (planet.ships[id] === undefined) planet.ships[id] = 0;
     }
@@ -172,6 +211,11 @@ export function joinUniverse(
   const playerId = `plyr_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
   const planetId = `plnt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
   const coords = nextCoords(universe);
+  const seed = universe.seed ?? universe.id;
+  const fieldsCap = rollPlanetFields(
+    coords.slot,
+    fieldsSeedForCoords(seed, coords),
+  );
 
   const planet: PlanetState = {
     id: planetId,
@@ -181,6 +225,7 @@ export function joinUniverse(
     kind: "planet",
     parentPlanetId: null,
     moonId: null,
+    fieldsCap,
     resources: { ...STARTING_RESOURCES },
     lastTickAt: now,
     buildings: emptyBuildings(),
@@ -205,6 +250,9 @@ export function joinUniverse(
     research: emptyResearch(),
     researchQueue: null,
     createdAt: now,
+    starshards: 0,
+    officers: [],
+    skillsUnlocked: [],
   };
 
   universe.players[playerId] = player;

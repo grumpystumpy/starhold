@@ -6,6 +6,7 @@ import {
   flightSecondsOneWay,
   maxColonies,
   normalizeFleetShips,
+  rollPlanetFields,
 } from "./formulas.js";
 import type {
   FleetMission,
@@ -14,11 +15,13 @@ import type {
   UniverseState,
 } from "./types.js";
 import { resolveRaidArrival } from "./world-arrival-raid.js";
+import { harvestAsteroidField } from "./world-asteroids.js";
 import {
   emptyBuildings,
   emptyCargo,
   emptyShips,
   ensureUniverseShape,
+  fieldsSeedForCoords,
   planetAtCoords,
 } from "./world-bootstrap.js";
 import { resolveEspionage } from "./world-espionage.js";
@@ -102,14 +105,19 @@ export function resolveFleetArrival(
       ) {
       } else {
         const planetId = `plnt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+        const colonyCoords = { ...fleet.targetCoords };
         const colony: PlanetState = {
           id: planetId,
           ownerPlayerId: owner.id,
           name: `${owner.name}'s Colony`,
-          coords: { ...fleet.targetCoords },
+          coords: colonyCoords,
           kind: "planet",
           parentPlanetId: null,
           moonId: null,
+          fieldsCap: rollPlanetFields(
+            colonyCoords.slot,
+            fieldsSeedForCoords(universe.seed ?? universe.id, colonyCoords),
+          ),
           resources: { metal: 500, crystal: 500, deuterium: 0 },
           lastTickAt: now,
           buildings: emptyBuildings(),
@@ -146,6 +154,12 @@ export function resolveFleetArrival(
         if (field.metal <= 0 && field.crystal <= 0) {
           delete universe.debris[coordsKey(fleet.targetCoords)];
         }
+      }
+    } else if (fleet.mission === "harvestAsteroid") {
+      const asteroidId = fleet.targetAsteroidId;
+      if (asteroidId) {
+        const cap = fleetCargoCapacityForHarvest(fleet.ships);
+        fleet.cargo = harvestAsteroidField(universe, asteroidId, cap);
       }
     } else if (fleet.mission === "expedition") {
       resolveExpeditionArrival(universe, fleet, now);

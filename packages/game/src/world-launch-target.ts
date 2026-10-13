@@ -23,6 +23,7 @@ export type LaunchTargetResult =
       targetCoords: Coordinates;
       targetPlanet: PlanetState | null;
       targetPlayerId: string | null;
+      targetAsteroidId: string | null;
     }
   | { ok: false; error: string };
 
@@ -34,10 +35,12 @@ export function resolveLaunchTarget(
   ships: FleetShips,
   targetPlanetId: string | undefined,
   targetCoordsOpt: Coordinates | undefined,
+  targetAsteroidIdOpt?: string,
 ): LaunchTargetResult {
   let targetCoords: Coordinates;
   let targetPlanet: PlanetState | null = null;
   let targetPlayerId: string | null = null;
+  let targetAsteroidId: string | null = null;
 
   if (mission === "expedition") {
     if (!targetCoordsOpt) {
@@ -66,7 +69,36 @@ export function resolveLaunchTarget(
         error: `Expedition limit reached (Astrophysics → ${cap} concurrent).`,
       };
     }
-    return { ok: true, targetCoords, targetPlanet: null, targetPlayerId: null };
+    return {
+      ok: true,
+      targetCoords,
+      targetPlanet: null,
+      targetPlayerId: null,
+      targetAsteroidId: null,
+    };
+  }
+
+  if (mission === "harvestAsteroid") {
+    const asteroidId = targetAsteroidIdOpt?.trim();
+    if (!asteroidId) {
+      return { ok: false, error: "asteroidId required for harvestAsteroid." };
+    }
+    const field = universe.asteroids?.[asteroidId];
+    if (!field || field.richness <= 0) {
+      return { ok: false, error: "Asteroid field not found." };
+    }
+    if ((ships.recycler ?? 0) < 1) {
+      return { ok: false, error: "Asteroid harvest requires a Recycler." };
+    }
+    targetAsteroidId = asteroidId;
+    targetCoords = { ...field.coords };
+    return {
+      ok: true,
+      targetCoords,
+      targetPlanet: null,
+      targetPlayerId: null,
+      targetAsteroidId,
+    };
   }
 
   if (mission === "colonize" || mission === "harvest") {
@@ -154,5 +186,11 @@ export function resolveLaunchTarget(
     }
   }
 
-  return { ok: true, targetCoords, targetPlanet, targetPlayerId };
+  return {
+    ok: true,
+    targetCoords,
+    targetPlanet,
+    targetPlayerId,
+    targetAsteroidId,
+  };
 }

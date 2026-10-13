@@ -274,6 +274,7 @@ export function createApp(): Hono {
       playerId?: string;
       targetPlanetId?: string;
       targetCoords?: Coordinates;
+      asteroidId?: string;
       mission?: MissionType;
       ships?: Partial<FleetShips>;
       cargo?: Partial<Resources>;
@@ -289,6 +290,7 @@ export function createApp(): Hono {
         ships: body.ships ?? {},
         targetPlanetId: body.targetPlanetId,
         targetCoords: body.targetCoords,
+        asteroidId: body.asteroidId,
         cargo: body.cargo,
         originPlanetId: body.originPlanetId,
       });

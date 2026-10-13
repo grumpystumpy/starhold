@@ -27,7 +27,7 @@ UI: Deploy mission target list = own other planets **plus** rivals (labeled).
 
 ## Planet fields (sim already enforced)
 
-- Budget: `PLANET_FIELDS` (200) — each building level costs 1 field ([formulas-build](../../packages/game/src/formulas-build.ts)).
+- Budget: per-planet `fieldsCap` (slot curve, min 250) — each building level costs 1 field ([formulas-build](../../packages/game/src/formulas-build.ts)). See [planet-fields.md](./planet-fields.md).
 - Upgrade rejects with “No free planet fields remaining.”
 - **This batch:** show used / remaining on the Buildings panel so the soft-cap is visible.
 

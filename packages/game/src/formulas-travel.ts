@@ -32,6 +32,7 @@ import {
   researchUpgradeCost,
   storageFor,
 } from "./formulas-build.js";
+import { productionMultForSlot } from "./formulas-position.js";
 
 export function clampToStorage(
   resources: Resources,
@@ -138,6 +139,7 @@ export function economySnapshot(
       cap: fieldsCap(planet),
       remaining: fieldsRemaining(planet),
     },
+    positionMult: productionMultForSlot(planet.coords.slot),
   };
 }
 

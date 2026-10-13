@@ -1,19 +1,28 @@
-# Design — Galaxy / system view (P0)
+# Design — Galaxy / system view
 
 ## Goal
 
-Browse a system’s slots (occupied / empty / debris) and pick fleet targets without relying only on the roster list.
+Browse a system’s slots (occupied / empty / debris / moon / asteroids / deep space) and pick fleet targets without relying only on the roster list.
 
-## Map bounds (prototype)
+## Map bounds (universe contract v1)
 
-- 1 galaxy × 5 systems × 8 slots (`MAP_*` in catalog).
-- Join assigns the next free slot.
+- **10** galaxies × **399** systems × **15** planet slots
+- Slot **16** = deep space (`DEEP_SPACE_SLOT` / `EXPEDITION_SLOT`) — expeditions only
+- Join assigns the next free slot (prefer mid slots **4–12**)
 
-## UI / API
+## API
 
-- `galaxyViewFor(universe, playerId, galaxy, system)` → 8 slots with occupant name, planetId, debris summary.
+- `galaxyViewFor(universe, playerId, galaxy, system)` →
+  - `slots[15]` with occupant, allianceTag (null until alliances), debris, hasMoon/moonId, activity
+  - `deepSpace` coords (slot 16)
+  - `asteroids[]` for the browsed system
+  - `pirateBase` public stub (null until thread E)
 - Player view includes `galaxy`; query `?galaxy=&system=` on `/api/state/:id`.
-- Panel: prev/next system, click slot → fleet draft target (planet or coords).
+
+## Asteroids
+
+- 0–2 per system (seeded at universe create)
+- Mission `harvestAsteroid` with `asteroidId` (recyclers)
 
 ## Ties
 
@@ -22,5 +31,5 @@ Browse a system’s slots (occupied / empty / debris) and pick fleet targets wit
 
 ## Completeness
 
-**Have:** system list, nav, deep-link into fleet composer empty/debris options.  
-**Later:** multi-galaxy scroll, vacation flags, phalanx (P2+).
+**Have (A):** map constants, galaxy payload shapes, asteroid harvest hooks, KV schemaVersion reset.  
+**Later (B):** classic 15-row + deep-space + asteroid/pirate UI layout.

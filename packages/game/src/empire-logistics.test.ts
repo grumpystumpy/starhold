@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { PLANET_FIELDS, SPY_REPORT_TTL_MS } from "./catalog.js";
-import { economySnapshot, fieldsRemaining, fieldsUsed } from "./formulas.js";
+import { SPY_REPORT_TTL_MS } from "./catalog.js";
+import {
+  economySnapshot,
+  fieldsCap,
+  fieldsRemaining,
+  fieldsUsed,
+} from "./formulas.js";
 import {
   advanceUniverse,
   createUniverse,
@@ -139,14 +144,17 @@ describe("empire logistics — planet fields", () => {
     const universe = createUniverse("Fields Drift", 8);
     const a = joinUniverse(universe, "Builder", 113_000_000);
     const planet = universe.planets[a.planet.id];
+    const cap = fieldsCap(planet);
     const snap = economySnapshot(planet, universe.speed);
-    assert.equal(snap.fields.cap, PLANET_FIELDS);
+    assert.equal(snap.fields.cap, cap);
+    assert.ok(cap >= 250);
     assert.equal(snap.fields.used, fieldsUsed(planet));
     assert.equal(snap.fields.remaining, fieldsRemaining(planet));
     assert.ok(snap.fields.remaining > 0);
+    assert.ok(snap.positionMult);
 
     const view = playerView(universe, a.player.id, 113_000_100);
-    assert.equal(view.economy.fields.cap, PLANET_FIELDS);
+    assert.equal(view.economy.fields.cap, cap);
     assert.equal(view.economy.fields.used, snap.fields.used);
   });
 
@@ -154,8 +162,9 @@ describe("empire logistics — planet fields", () => {
     const universe = createUniverse("Cap Drift", 8);
     const a = joinUniverse(universe, "Crowded", 114_000_000);
     const planet = universe.planets[a.planet.id];
+    const cap = fieldsCap(planet);
     // Fill soft-cap: each building level costs 1 field.
-    planet.buildings.metalMine = PLANET_FIELDS;
+    planet.buildings.metalMine = cap;
     planet.buildings.crystalMine = 0;
     planet.buildings.deutSynth = 0;
     planet.buildings.solarPlant = 0;

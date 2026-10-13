@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { MAP_SLOTS } from "./catalog.js";
 import {
   advanceUniverse,
   createUniverse,
@@ -24,7 +25,7 @@ describe("P0/P1 parity — fleets & galaxy", () => {
       a.planet.coords.galaxy,
       a.planet.coords.system,
     );
-    assert.equal(view.slots.length, 8);
+    assert.equal(view.slots.length, MAP_SLOTS);
     const occupied = view.slots.filter((s) => s.planetId);
     assert.ok(occupied.length >= 1);
     const empty = view.slots.filter((s) => !s.planetId);
