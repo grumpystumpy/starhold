@@ -10,10 +10,21 @@ export type CombatUnitId = ShipId | DefenseId;
 export const RAPID_FIRE: Partial<
   Record<CombatUnitId, Partial<Record<CombatUnitId, number>>>
 > = {
-  scout: { probe: 2 },
-  interceptor: { probe: 5, scout: 2 },
-  cruiser: { hauler: 3, probe: 4 },
-  bomber: { laserBattery: 4, scout: 2 },
+  scout: { probe: 2, swarmDrone: 2 },
+  interceptor: { probe: 5, scout: 2, swarmDrone: 5 },
+  cruiser: { hauler: 3, probe: 4, swarmDrone: 8 },
+  bomber: { laserBattery: 4, scout: 2, swarmDrone: 4 },
+  voidforgeTitan: {
+    swarmDrone: 200,
+    probe: 250,
+    scout: 50,
+    laserBattery: 50,
+  },
+  worldEater: {
+    laserBattery: 20,
+    shieldDome: 10,
+  },
+  swarmDrone: { probe: 3 },
 };
 
 export function rapidFireFactor(
