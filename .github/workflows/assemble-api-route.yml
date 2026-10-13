@@ -1,0 +1,29 @@
+name: Assemble API route bundle
+on:
+  push:
+    paths:
+      - ".api-route-stage/**"
+      - "scripts/assemble-api-route.mjs"
+      - ".github/workflows/assemble-api-route.yml"
+  workflow_dispatch:
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - run: node scripts/assemble-api-route.mjs
+      - name: Commit api catch-all bundle
+        run: |
+          git config user.name "grumpystumpy"
+          git config user.email "stumpysgarage@gmail.com"
+          git add "api/[[...route]].js"
+          if git diff --cached --quiet; then
+            echo "api/[[...route]].js unchanged"
+          else
+            git commit -m "chore: assemble api/[[...route]].js from compressed staging"
+            git push
+          fi
