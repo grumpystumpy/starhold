@@ -159,7 +159,12 @@ describe("galaxy view contract shapes", () => {
     assert.equal(view.slots.length, MAP_SLOTS);
     assert.equal(view.deepSpace.coords.slot, DEEP_SPACE_SLOT);
     assert.ok(Array.isArray(view.asteroids));
-    assert.equal(view.pirateBase, null);
+    // Thread E may place a base in this system; null or public stub both OK.
+    if (view.pirateBase) {
+      assert.equal(typeof view.pirateBase.id, "string");
+      assert.equal(typeof view.pirateBase.tier, "number");
+      assert.ok(["low", "medium", "high"].includes(view.pirateBase.threatHint));
+    }
     const home = view.slots.find((s) => s.planetId === planet.id);
     assert.ok(home);
     assert.equal(home!.activity, "planet");

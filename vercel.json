@@ -4,6 +4,12 @@
   "installCommand": "npm install",
   "buildCommand": "npm run build:vercel",
   "outputDirectory": "apps/web/dist",
+  "git": {
+    "deploymentEnabled": {
+      "*": false,
+      "main": true
+    }
+  },
   "rewrites": [
     {
       "source": "/api/state/:playerId",

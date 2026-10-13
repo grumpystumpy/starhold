@@ -1901,11 +1901,19 @@ var BUILDINGS = {
   },
   sensorArray: {
     id: "sensorArray",
-    name: "Sensor Array",
-    description: "Scans the local system for outbound fleets headed this way (moon only).",
+    name: "Sensor Phalanx",
+    description: "Scans nearby systems for outbound fleets headed this way (moon only). Range grows with level.",
     baseCost: { metal: 4e3, crystal: 8e3, deuterium: 2e3 },
     costGrowth: 2,
     baseBuildSeconds: 40
+  },
+  jumpGate: {
+    id: "jumpGate",
+    name: "Jump Gate",
+    description: "Links your moons for near-instant fleet hops. Both moons need a Jump Gate (moon only).",
+    baseCost: { metal: 8e3, crystal: 16e3, deuterium: 8e3 },
+    costGrowth: 2,
+    baseBuildSeconds: 60
   }
 };
 
@@ -2180,6 +2188,7 @@ var PLANET_BUILDING_ORDER = [
 var MOON_BUILDING_ORDER = [
   "lunarBase",
   "sensorArray",
+  "jumpGate",
   "solarPlant",
   "metalStorage",
   "crystalStorage",
@@ -2256,6 +2265,18 @@ var SLOT_PRODUCTION_MULT = {
   14: { metal: 1, crystal: 0.75, deuterium: 1.25, energy: 0.75 },
   15: { metal: 1, crystal: 0.7, deuterium: 1.3, energy: 0.7 }
 };
+var PIRATE_SYSTEMS_PER_BASE = 40;
+var PIRATE_GROWTH_INTERVAL_MS = 6 * 60 * 60 * 1e3;
+var PIRATE_TIER_CAP = 8;
+var PIRATE_RESPAWN_DELAY_MIN_MS = 12 * 60 * 60 * 1e3;
+var PIRATE_RESPAWN_DELAY_MAX_MS = 36 * 60 * 60 * 1e3;
+var PIRATE_RAID_INTERVAL_MIN_MS = 8 * 60 * 60 * 1e3;
+var PIRATE_RAID_INTERVAL_MAX_MS = 24 * 60 * 60 * 1e3;
+var PIRATE_DESTROY_STARSHARDS_BASE = 40;
+var PIRATE_DESTROY_STARSHARDS_PER_TIER = 5;
+var PIRATE_DEFENSE_WIN_STARSHARDS = 10;
+var PIRATE_RAID_POWER_FACTOR = 1.4;
+var PIRATE_RAID_POWER_FLOOR = 40;
 
 // packages/game/src/formulas-position.ts
 function hashSeed(seed) {
@@ -2914,209 +2935,6 @@ function harvestAsteroidField(universe, asteroidId2, cargoCap) {
   return { metal: takeMetal, crystal: takeCrystal, deuterium: takeDeut };
 }
 
-// packages/game/src/world-bootstrap.ts
-function emptyBuildings() {
-  return {
-    metalMine: 0,
-    crystalMine: 0,
-    deutSynth: 0,
-    solarPlant: 0,
-    metalStorage: 0,
-    crystalStorage: 0,
-    deutTank: 0,
-    shipyard: 0,
-    researchLab: 0,
-    lunarBase: 0,
-    sensorArray: 0
-  };
-}
-function emptyShips() {
-  return emptyFleetShips();
-}
-function emptyCargo() {
-  return { metal: 0, crystal: 0, deuterium: 0 };
-}
-function fieldsSeedForCoords(universeSeed, coords) {
-  return `${universeSeed}:fields:${coords.galaxy}:${coords.system}:${coords.slot}`;
-}
-function createUniverse(name = "Alpha Drift", speed = 1, fleetSpeed = speed) {
-  const now = Date.now();
-  const id = `uni_${now.toString(36)}`;
-  const universe = {
-    id,
-    name,
-    speed,
-    fleetSpeed,
-    createdAt: now,
-    schemaVersion: UNIVERSE_SCHEMA_VERSION,
-    seed: `seed_${id}`,
-    players: {},
-    planets: {},
-    fleets: {},
-    reports: {},
-    spyReports: {},
-    expeditionReports: {},
-    debris: {},
-    asteroids: {},
-    pirateBases: {}
-  };
-  seedUniverseAsteroids(universe);
-  return universe;
-}
-function nextCoords(universe) {
-  const used = new Set(
-    Object.values(universe.planets).filter((p) => p.kind !== "moon").map((p) => coordsKey(p.coords))
-  );
-  for (let galaxy = 1; galaxy <= MAP_GALAXIES; galaxy++) {
-    for (let system = 1; system <= MAP_SYSTEMS; system++) {
-      for (const slot of HOME_SLOT_PREFERENCE) {
-        if (slot < 1 || slot > MAP_SLOTS) continue;
-        const key = `${galaxy}:${system}:${slot}`;
-        if (!used.has(key)) {
-          return { galaxy, system, slot };
-        }
-      }
-    }
-  }
-  throw new Error("Universe planet slots are full.");
-}
-function planetAtCoords(universe, coords) {
-  const key = coordsKey(coords);
-  return Object.values(universe.planets).find(
-    (p) => p.kind !== "moon" && coordsKey(p.coords) === key
-  ) ?? null;
-}
-function moonAtCoords(universe, coords) {
-  const key = coordsKey(coords);
-  return Object.values(universe.planets).find(
-    (p) => p.kind === "moon" && coordsKey(p.coords) === key
-  ) ?? null;
-}
-function ensureUniverseShape(universe) {
-  if (!universe.fleets) universe.fleets = {};
-  if (!universe.reports) universe.reports = {};
-  if (!universe.spyReports) universe.spyReports = {};
-  if (!universe.expeditionReports) universe.expeditionReports = {};
-  if (!universe.debris) universe.debris = {};
-  if (!universe.asteroids) universe.asteroids = {};
-  if (!universe.pirateBases) universe.pirateBases = {};
-  if (!universe.fleetSpeed) universe.fleetSpeed = universe.speed || 1;
-  if (!universe.seed) universe.seed = `seed_${universe.id}`;
-  if (universe.schemaVersion === void 0) {
-  }
-  for (const player of Object.values(universe.players)) {
-    if (!player.planetIds?.length) {
-      player.planetIds = [player.homePlanetId];
-    }
-    if (!player.activePlanetId) {
-      player.activePlanetId = player.homePlanetId;
-    }
-    if (!player.research) player.research = emptyResearch();
-    if (player.researchQueue === void 0) player.researchQueue = null;
-    if (player.starshards === void 0) player.starshards = 0;
-    if (!player.officers) player.officers = [];
-    if (!player.skillsUnlocked) player.skillsUnlocked = [];
-  }
-  const seed = universe.seed ?? universe.id;
-  for (const planet of Object.values(universe.planets)) {
-    if (!planet.kind) planet.kind = "planet";
-    if (planet.parentPlanetId === void 0) planet.parentPlanetId = null;
-    if (planet.moonId === void 0) planet.moonId = null;
-    if (!planet.defenses) planet.defenses = emptyDefenses();
-    if (planet.defenseQueue === void 0) planet.defenseQueue = null;
-    if (!planet.buildings.researchLab) planet.buildings.researchLab = 0;
-    if (!planet.buildings.lunarBase) planet.buildings.lunarBase = 0;
-    if (!planet.buildings.sensorArray) planet.buildings.sensorArray = 0;
-    if (planet.kind !== "moon" && (typeof planet.fieldsCap !== "number" || planet.fieldsCap <= 0)) {
-      planet.fieldsCap = rollPlanetFields(
-        planet.coords.slot,
-        fieldsSeedForCoords(seed, planet.coords)
-      );
-    }
-    for (const id of SHIP_ORDER) {
-      if (planet.ships[id] === void 0) planet.ships[id] = 0;
-    }
-    if (!planet.ownerPlayerId) {
-      const owner = Object.values(universe.players).find(
-        (p) => p.homePlanetId === planet.id || p.planetIds?.includes(planet.id)
-      );
-      planet.ownerPlayerId = owner?.id ?? "";
-    }
-  }
-}
-function joinUniverse(universe, playerName, now = Date.now()) {
-  ensureUniverseShape(universe);
-  const trimmed = playerName.trim().slice(0, 24);
-  if (!trimmed) {
-    throw new Error("Commander name is required.");
-  }
-  const existing = Object.values(universe.players).find(
-    (p) => p.name.toLowerCase() === trimmed.toLowerCase()
-  );
-  if (existing) {
-    const planet2 = universe.planets[existing.activePlanetId] ?? universe.planets[existing.homePlanetId];
-    if (!planet2) throw new Error("Player home planet missing.");
-    return { player: existing, planet: planet2 };
-  }
-  const playerId = `plyr_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
-  const planetId = `plnt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
-  const coords = nextCoords(universe);
-  const seed = universe.seed ?? universe.id;
-  const fieldsCap2 = rollPlanetFields(
-    coords.slot,
-    fieldsSeedForCoords(seed, coords)
-  );
-  const planet = {
-    id: planetId,
-    ownerPlayerId: playerId,
-    name: `${trimmed}'s Outpost`,
-    coords,
-    kind: "planet",
-    parentPlanetId: null,
-    moonId: null,
-    fieldsCap: fieldsCap2,
-    resources: { ...STARTING_RESOURCES },
-    lastTickAt: now,
-    buildings: emptyBuildings(),
-    ships: emptyShips(),
-    defenses: emptyDefenses(),
-    buildQueue: null,
-    shipQueue: null,
-    defenseQueue: null
-  };
-  planet.buildings.metalMine = 1;
-  planet.buildings.crystalMine = 1;
-  planet.buildings.solarPlant = 1;
-  const player = {
-    id: playerId,
-    name: trimmed,
-    homePlanetId: planetId,
-    planetIds: [planetId],
-    activePlanetId: planetId,
-    research: emptyResearch(),
-    researchQueue: null,
-    createdAt: now,
-    starshards: 0,
-    officers: [],
-    skillsUnlocked: []
-  };
-  universe.players[playerId] = player;
-  universe.planets[planetId] = planet;
-  return { player, planet };
-}
-function activePlanet(universe, player) {
-  const id = player.activePlanetId || player.homePlanetId;
-  return universe.planets[id] ?? universe.planets[player.homePlanetId] ?? null;
-}
-function bestLabLevel(universe, player) {
-  let best = 0;
-  for (const id of player.planetIds) {
-    const p = universe.planets[id];
-    if (p) best = Math.max(best, p.buildings.researchLab ?? 0);
-  }
-  return best;
-}
-
 // packages/game/src/world-tick.ts
 function advancePlanet(planet, universeSpeed, now, energyTechLevel = 0) {
   let state = {
@@ -3210,6 +3028,588 @@ function getDebris(universe, coords) {
   return universe.debris[coordsKey(coords)] ?? null;
 }
 
+// packages/game/src/world-pirates.ts
+var PIRATE_NAMES = [
+  "Black Comet Hold",
+  "Corsair Nest",
+  "Rogue Drift",
+  "Scarlet Wake",
+  "Iron Maw Outpost",
+  "Void Reaver Camp",
+  "Ashen Jolly",
+  "Cutlass Beacon"
+];
+function pirateBaseId(galaxy, system, slot) {
+  return `pir:${galaxy}:${system}:${slot}`;
+}
+function pirateDestroyStarshards(tier) {
+  return PIRATE_DESTROY_STARSHARDS_BASE + PIRATE_DESTROY_STARSHARDS_PER_TIER * Math.max(0, Math.floor(tier));
+}
+function rollInRange2(seed, min, max) {
+  const span = max - min + 1;
+  return min + hashSeed(seed) % span;
+}
+function scaleShips(base, factor) {
+  const out = emptyFleetShips();
+  for (const id of SHIP_ORDER) {
+    out[id] = Math.max(0, Math.floor((base[id] ?? 0) * factor));
+  }
+  if (fleetShipCount(out) < 1 && fleetShipCount(base) > 0) {
+    for (const id of SHIP_ORDER) {
+      if ((base[id] ?? 0) > 0) {
+        out[id] = 1;
+        break;
+      }
+    }
+  }
+  return out;
+}
+function pirateShipsForTier(tier) {
+  const t = Math.max(0, Math.min(PIRATE_TIER_CAP, Math.floor(tier)));
+  const ships = emptyFleetShips();
+  ships.scout = 2 + t * 2;
+  ships.interceptor = t >= 1 ? t : 0;
+  ships.hauler = t >= 2 ? Math.ceil(t / 2) : 0;
+  ships.cruiser = t >= 3 ? Math.floor((t - 2) / 2) : 0;
+  ships.bomber = t >= 6 ? t - 5 : 0;
+  return ships;
+}
+function pirateResourcesForTier(tier) {
+  const t = Math.max(0, Math.floor(tier));
+  return {
+    metal: 800 + t * 400,
+    crystal: 400 + t * 250,
+    deuterium: 100 + t * 80
+  };
+}
+function pirateName(seed, galaxy, system) {
+  const idx = hashSeed(`${seed}:pname:${galaxy}:${system}`) % PIRATE_NAMES.length;
+  return PIRATE_NAMES[idx];
+}
+function activePirateBases(universe) {
+  return Object.values(universe.pirateBases ?? {}).filter(
+    (b) => b.destroyedAt == null
+  );
+}
+function pirateBaseAtCoords(universe, coords) {
+  return activePirateBases(universe).find(
+    (b) => b.coords.galaxy === coords.galaxy && b.coords.system === coords.system && b.coords.slot === coords.slot
+  ) ?? null;
+}
+function systemOccupiedByPirate(universe, galaxy, system, exceptId) {
+  return activePirateBases(universe).some(
+    (b) => b.id !== exceptId && b.coords.galaxy === galaxy && b.coords.system === system
+  );
+}
+function pickEmptySlot(universe, galaxy, system, seedKey) {
+  const start = 1 + hashSeed(seedKey) % MAP_SLOTS;
+  for (let i = 0; i < MAP_SLOTS; i++) {
+    const slot = (start - 1 + i) % MAP_SLOTS + 1;
+    const coords = { galaxy, system, slot };
+    if (planetAtCoords(universe, coords)) continue;
+    if (pirateBaseAtCoords(universe, coords)) continue;
+    return slot;
+  }
+  return null;
+}
+function createPirateBase(universeSeed, galaxy, system, slot, now, tier = 0) {
+  const id = pirateBaseId(galaxy, system, slot);
+  return {
+    id,
+    coords: { galaxy, system, slot },
+    name: pirateName(universeSeed, galaxy, system),
+    tier,
+    ships: pirateShipsForTier(tier),
+    resources: pirateResourcesForTier(tier),
+    lastGrewAt: now,
+    lastRaidAt: now,
+    destroyedAt: null
+  };
+}
+function seedUniversePirates(universe, now = Date.now()) {
+  const seed = universe.seed ?? universe.id;
+  if (!universe.pirateBases) universe.pirateBases = {};
+  const kept = {};
+  for (const [id, base] of Object.entries(universe.pirateBases)) {
+    if (base.destroyedAt != null) kept[id] = base;
+  }
+  const living = {};
+  for (let galaxy = 1; galaxy <= MAP_GALAXIES; galaxy++) {
+    for (let system = 1; system <= MAP_SYSTEMS; system++) {
+      if (hashSeed(`${seed}:pirate-spawn:${galaxy}:${system}`) % PIRATE_SYSTEMS_PER_BASE !== 0) {
+        continue;
+      }
+      const slot = pickEmptySlot(
+        universe,
+        galaxy,
+        system,
+        `${seed}:pirate-slot:${galaxy}:${system}`
+      );
+      if (slot == null) continue;
+      const base = createPirateBase(seed, galaxy, system, slot, now, 0);
+      living[base.id] = base;
+    }
+  }
+  universe.pirateBases = { ...kept, ...living };
+}
+function nextRaidIntervalMs(baseId, at) {
+  return rollInRange2(
+    `${baseId}:raid-iv:${at}`,
+    PIRATE_RAID_INTERVAL_MIN_MS,
+    PIRATE_RAID_INTERVAL_MAX_MS
+  );
+}
+function pirateRespawnAt(destroyedAt, baseId) {
+  const delay = rollInRange2(
+    `${baseId}:respawn:${destroyedAt}`,
+    PIRATE_RESPAWN_DELAY_MIN_MS,
+    PIRATE_RESPAWN_DELAY_MAX_MS
+  );
+  return destroyedAt + delay;
+}
+function scalePirateRaidFleet(full, defenderPower) {
+  const fullPower = Math.max(1, fleetCombatPower(full));
+  const cap = Math.max(PIRATE_RAID_POWER_FLOOR, defenderPower * PIRATE_RAID_POWER_FACTOR) || PIRATE_RAID_POWER_FLOOR;
+  if (fullPower <= cap) return normalizeFleetShips(full);
+  return scaleShips(full, cap / fullPower);
+}
+function growPirateBase(base, now) {
+  if (base.destroyedAt != null) return;
+  while (base.tier < PIRATE_TIER_CAP && now - base.lastGrewAt >= PIRATE_GROWTH_INTERVAL_MS) {
+    base.tier += 1;
+    base.lastGrewAt += PIRATE_GROWTH_INTERVAL_MS;
+    base.ships = pirateShipsForTier(base.tier);
+    const stock = pirateResourcesForTier(base.tier);
+    base.resources = {
+      metal: Math.max(base.resources.metal, stock.metal),
+      crystal: Math.max(base.resources.crystal, stock.crystal),
+      deuterium: Math.max(base.resources.deuterium, stock.deuterium)
+    };
+  }
+  if (base.tier >= PIRATE_TIER_CAP && now - base.lastGrewAt >= PIRATE_GROWTH_INTERVAL_MS) {
+    base.lastGrewAt = now;
+  }
+}
+function markPirateDestroyed(base, now) {
+  base.destroyedAt = now;
+  base.ships = emptyFleetShips();
+  base.resources = emptyCargo();
+}
+function findRespawnSite(universe, seedKey) {
+  const startG = 1 + hashSeed(`${seedKey}:g`) % MAP_GALAXIES;
+  const startS = 1 + hashSeed(`${seedKey}:s`) % MAP_SYSTEMS;
+  for (let dg = 0; dg < MAP_GALAXIES; dg++) {
+    const galaxy = (startG - 1 + dg) % MAP_GALAXIES + 1;
+    for (let ds = 0; ds < MAP_SYSTEMS; ds++) {
+      const system = (startS - 1 + ds) % MAP_SYSTEMS + 1;
+      if (systemOccupiedByPirate(universe, galaxy, system)) continue;
+      const slot = pickEmptySlot(
+        universe,
+        galaxy,
+        system,
+        `${seedKey}:slot:${galaxy}:${system}`
+      );
+      if (slot != null) return { galaxy, system, slot };
+    }
+  }
+  return null;
+}
+function respawnDestroyedPirates(universe, now) {
+  const seed = universe.seed ?? universe.id;
+  const bases = universe.pirateBases ?? {};
+  for (const id of Object.keys(bases)) {
+    const base = bases[id];
+    if (base.destroyedAt == null) continue;
+    if (now < pirateRespawnAt(base.destroyedAt, base.id)) continue;
+    const site = findRespawnSite(universe, `${seed}:respawn:${base.id}:${now}`);
+    delete bases[id];
+    if (!site) continue;
+    const next = createPirateBase(
+      seed,
+      site.galaxy,
+      site.system,
+      site.slot,
+      now,
+      0
+    );
+    bases[next.id] = next;
+  }
+}
+function planetDefensePower(planet, universe) {
+  const owner = universe.players[planet.ownerPlayerId];
+  return fleetCombatPower(planet.ships, owner?.research) + defenseCombatPower(planet.defenses ?? emptyDefenses(), owner?.research);
+}
+function pickRaidTarget(universe, base, now) {
+  const roll = hashSeed(`${base.id}:target:${base.lastRaidAt}:${now}`);
+  const others = activePirateBases(universe).filter((b) => b.id !== base.id);
+  const planets = Object.values(universe.planets).filter(
+    (p) => p.kind !== "moon"
+  );
+  if (planets.length > 0 && (others.length === 0 || roll % 10 < 7)) {
+    const planet = planets[roll % planets.length];
+    return { kind: "planet", planet };
+  }
+  if (others.length > 0) {
+    const other = others[roll % others.length];
+    return { kind: "pirate", other };
+  }
+  return null;
+}
+function applyPirateRaidOnPlanet(universe, base, planet, now) {
+  const owner = universe.players[planet.ownerPlayerId];
+  if (!owner) return;
+  const defPower = planetDefensePower(planet, universe);
+  const raidFleet = scalePirateRaidFleet(base.ships, defPower);
+  if (fleetShipCount(raidFleet) < 1) return;
+  const combat = resolveCombat(
+    raidFleet,
+    planet.ships,
+    planet.defenses ?? emptyDefenses(),
+    void 0,
+    owner.research
+  );
+  planet.ships = combat.defenderAfter;
+  planet.defenses = combat.defensesAfter;
+  const sent = fleetShipCount(raidFleet);
+  const survived = fleetShipCount(combat.attackerAfter);
+  if (sent > 0) {
+    const keep = survived / sent;
+    base.ships = scaleShips(base.ships, Math.min(1, 0.5 + keep * 0.5));
+  }
+  if (combat.outcome === "attacker_win") {
+    const loot = computeRaidLoot(planet.resources, combat.attackerAfter);
+    subtractCargo(planet, loot);
+    base.resources = {
+      metal: base.resources.metal + loot.metal,
+      crystal: base.resources.crystal + loot.crystal,
+      deuterium: base.resources.deuterium + loot.deuterium
+    };
+  } else if (combat.outcome === "defender_win") {
+    owner.starshards = (owner.starshards ?? 0) + PIRATE_DEFENSE_WIN_STARSHARDS;
+    universe.players[owner.id] = owner;
+  }
+  if (fleetShipCount(base.ships) <= 0) {
+    markPirateDestroyed(base, now);
+  }
+}
+function applyPirateRaidOnPirate(universe, base, other, now) {
+  const raidFleet = scalePirateRaidFleet(
+    base.ships,
+    fleetCombatPower(other.ships)
+  );
+  if (fleetShipCount(raidFleet) < 1) return;
+  const combat = resolveCombat(raidFleet, other.ships, emptyDefenses());
+  other.ships = combat.defenderAfter;
+  const sent = fleetShipCount(raidFleet);
+  const survived = fleetShipCount(combat.attackerAfter);
+  if (sent > 0) {
+    const keep = survived / sent;
+    base.ships = scaleShips(base.ships, Math.min(1, 0.5 + keep * 0.5));
+  }
+  if (combat.outcome === "attacker_win") {
+    const loot = computeRaidLoot(other.resources, combat.attackerAfter);
+    other.resources = {
+      metal: Math.max(0, other.resources.metal - loot.metal),
+      crystal: Math.max(0, other.resources.crystal - loot.crystal),
+      deuterium: Math.max(0, other.resources.deuterium - loot.deuterium)
+    };
+    base.resources = {
+      metal: base.resources.metal + loot.metal,
+      crystal: base.resources.crystal + loot.crystal,
+      deuterium: base.resources.deuterium + loot.deuterium
+    };
+  }
+  if (fleetShipCount(other.ships) <= 0) {
+    markPirateDestroyed(other, now);
+  }
+  if (fleetShipCount(base.ships) <= 0) {
+    markPirateDestroyed(base, now);
+  }
+}
+function runDuePirateRaids(universe, now) {
+  for (const base of activePirateBases(universe)) {
+    const dueAt = base.lastRaidAt + nextRaidIntervalMs(base.id, base.lastRaidAt);
+    if (now < dueAt) continue;
+    const target = pickRaidTarget(universe, base, now);
+    base.lastRaidAt = now;
+    if (!target) continue;
+    if (target.kind === "planet") {
+      applyPirateRaidOnPlanet(universe, base, target.planet, now);
+    } else {
+      applyPirateRaidOnPirate(universe, base, target.other, now);
+    }
+  }
+}
+function tickPirates(universe, now) {
+  if (!universe.pirateBases) universe.pirateBases = {};
+  for (const base of Object.values(universe.pirateBases)) {
+    growPirateBase(base, now);
+  }
+  runDuePirateRaids(universe, now);
+  respawnDestroyedPirates(universe, now);
+}
+function resolvePirateRaidArrival(universe, fleet, now) {
+  const baseId = fleet.targetPirateBaseId;
+  const base = baseId ? universe.pirateBases?.[baseId] : null;
+  if (!base || base.destroyedAt != null) {
+    return;
+  }
+  const owner = universe.players[fleet.ownerPlayerId];
+  const defenderBefore = { ...base.ships };
+  const tierAtFight = base.tier;
+  const combat = resolveCombat(
+    fleet.ships,
+    defenderBefore,
+    emptyDefenses(),
+    owner?.research
+  );
+  base.ships = combat.defenderAfter;
+  let loot = emptyCargo();
+  if (combat.outcome === "attacker_win") {
+    loot = computeRaidLoot(base.resources, combat.attackerAfter);
+    base.resources = {
+      metal: Math.max(0, base.resources.metal - loot.metal),
+      crystal: Math.max(0, base.resources.crystal - loot.crystal),
+      deuterium: Math.max(0, base.resources.deuterium - loot.deuterium)
+    };
+    markPirateDestroyed(base, now);
+    if (owner) {
+      owner.starshards = (owner.starshards ?? 0) + pirateDestroyStarshards(tierAtFight);
+      universe.players[owner.id] = owner;
+    }
+  }
+  const reportId = `rpt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  universe.reports[reportId] = {
+    id: reportId,
+    at: now,
+    missionId: fleet.id,
+    attackerPlayerId: fleet.ownerPlayerId,
+    defenderPlayerId: "npc_pirates",
+    attackerName: owner?.name ?? "Unknown",
+    defenderName: base.name,
+    targetCoords: { ...base.coords },
+    attackerBefore: { ...fleet.ships },
+    attackerAfter: combat.attackerAfter,
+    defenderBefore,
+    defenderAfter: combat.defenderAfter,
+    defensesBefore: emptyDefenses(),
+    defensesAfter: emptyDefenses(),
+    loot,
+    debrisCreated: emptyCargo(),
+    outcome: combat.outcome,
+    rounds: combat.rounds,
+    summary: combat.outcome === "attacker_win" ? `${combat.summary} Pirate base destroyed (+${pirateDestroyStarshards(tierAtFight)} Starshards).` : combat.summary,
+    moonFormed: false
+  };
+  fleet.ships = combat.attackerAfter;
+  fleet.cargo = loot;
+  fleet.reportId = reportId;
+}
+
+// packages/game/src/world-bootstrap.ts
+function emptyBuildings() {
+  return {
+    metalMine: 0,
+    crystalMine: 0,
+    deutSynth: 0,
+    solarPlant: 0,
+    metalStorage: 0,
+    crystalStorage: 0,
+    deutTank: 0,
+    shipyard: 0,
+    researchLab: 0,
+    lunarBase: 0,
+    sensorArray: 0,
+    jumpGate: 0
+  };
+}
+function emptyShips() {
+  return emptyFleetShips();
+}
+function emptyCargo() {
+  return { metal: 0, crystal: 0, deuterium: 0 };
+}
+function fieldsSeedForCoords(universeSeed, coords) {
+  return `${universeSeed}:fields:${coords.galaxy}:${coords.system}:${coords.slot}`;
+}
+function createUniverse(name = "Alpha Drift", speed = 1, fleetSpeed = speed) {
+  const now = Date.now();
+  const id = `uni_${now.toString(36)}`;
+  const universe = {
+    id,
+    name,
+    speed,
+    fleetSpeed,
+    createdAt: now,
+    schemaVersion: UNIVERSE_SCHEMA_VERSION,
+    seed: `seed_${id}`,
+    players: {},
+    planets: {},
+    fleets: {},
+    reports: {},
+    spyReports: {},
+    expeditionReports: {},
+    debris: {},
+    asteroids: {},
+    pirateBases: {}
+  };
+  seedUniverseAsteroids(universe);
+  seedUniversePirates(universe, now);
+  return universe;
+}
+function nextCoords(universe) {
+  const used = new Set(
+    Object.values(universe.planets).filter((p) => p.kind !== "moon").map((p) => coordsKey(p.coords))
+  );
+  for (let galaxy = 1; galaxy <= MAP_GALAXIES; galaxy++) {
+    for (let system = 1; system <= MAP_SYSTEMS; system++) {
+      for (const slot of HOME_SLOT_PREFERENCE) {
+        if (slot < 1 || slot > MAP_SLOTS) continue;
+        const key = `${galaxy}:${system}:${slot}`;
+        if (!used.has(key)) {
+          return { galaxy, system, slot };
+        }
+      }
+    }
+  }
+  throw new Error("Universe planet slots are full.");
+}
+function planetAtCoords(universe, coords) {
+  const key = coordsKey(coords);
+  return Object.values(universe.planets).find(
+    (p) => p.kind !== "moon" && coordsKey(p.coords) === key
+  ) ?? null;
+}
+function moonAtCoords(universe, coords) {
+  const key = coordsKey(coords);
+  return Object.values(universe.planets).find(
+    (p) => p.kind === "moon" && coordsKey(p.coords) === key
+  ) ?? null;
+}
+function ensureUniverseShape(universe) {
+  if (!universe.fleets) universe.fleets = {};
+  if (!universe.reports) universe.reports = {};
+  if (!universe.spyReports) universe.spyReports = {};
+  if (!universe.expeditionReports) universe.expeditionReports = {};
+  if (!universe.debris) universe.debris = {};
+  if (!universe.asteroids) universe.asteroids = {};
+  if (!universe.pirateBases) universe.pirateBases = {};
+  if (!universe.fleetSpeed) universe.fleetSpeed = universe.speed || 1;
+  if (!universe.seed) universe.seed = `seed_${universe.id}`;
+  for (const player of Object.values(universe.players)) {
+    if (!player.planetIds?.length) {
+      player.planetIds = [player.homePlanetId];
+    }
+    if (!player.activePlanetId) {
+      player.activePlanetId = player.homePlanetId;
+    }
+    if (!player.research) player.research = emptyResearch();
+    if (player.researchQueue === void 0) player.researchQueue = null;
+    if (player.starshards === void 0) player.starshards = 0;
+    if (!player.officers) player.officers = [];
+    if (!player.skillsUnlocked) player.skillsUnlocked = [];
+  }
+  const seed = universe.seed ?? universe.id;
+  for (const planet of Object.values(universe.planets)) {
+    if (!planet.kind) planet.kind = "planet";
+    if (planet.parentPlanetId === void 0) planet.parentPlanetId = null;
+    if (planet.moonId === void 0) planet.moonId = null;
+    if (!planet.defenses) planet.defenses = emptyDefenses();
+    if (planet.defenseQueue === void 0) planet.defenseQueue = null;
+    if (!planet.buildings.researchLab) planet.buildings.researchLab = 0;
+    if (!planet.buildings.lunarBase) planet.buildings.lunarBase = 0;
+    if (!planet.buildings.sensorArray) planet.buildings.sensorArray = 0;
+    if (!planet.buildings.jumpGate) planet.buildings.jumpGate = 0;
+    if (planet.kind !== "moon" && (typeof planet.fieldsCap !== "number" || planet.fieldsCap <= 0)) {
+      planet.fieldsCap = rollPlanetFields(
+        planet.coords.slot,
+        fieldsSeedForCoords(seed, planet.coords)
+      );
+    }
+    for (const id of SHIP_ORDER) {
+      if (planet.ships[id] === void 0) planet.ships[id] = 0;
+    }
+    if (!planet.ownerPlayerId) {
+      const owner = Object.values(universe.players).find(
+        (p) => p.homePlanetId === planet.id || p.planetIds?.includes(planet.id)
+      );
+      planet.ownerPlayerId = owner?.id ?? "";
+    }
+  }
+}
+function joinUniverse(universe, playerName, now = Date.now()) {
+  ensureUniverseShape(universe);
+  const trimmed = playerName.trim().slice(0, 24);
+  if (!trimmed) {
+    throw new Error("Commander name is required.");
+  }
+  const existing = Object.values(universe.players).find(
+    (p) => p.name.toLowerCase() === trimmed.toLowerCase()
+  );
+  if (existing) {
+    const planet2 = universe.planets[existing.activePlanetId] ?? universe.planets[existing.homePlanetId];
+    if (!planet2) throw new Error("Player home planet missing.");
+    return { player: existing, planet: planet2 };
+  }
+  const playerId = `plyr_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  const planetId = `plnt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  const coords = nextCoords(universe);
+  const seed = universe.seed ?? universe.id;
+  const fieldsCap2 = rollPlanetFields(
+    coords.slot,
+    fieldsSeedForCoords(seed, coords)
+  );
+  const planet = {
+    id: planetId,
+    ownerPlayerId: playerId,
+    name: `${trimmed}'s Outpost`,
+    coords,
+    kind: "planet",
+    parentPlanetId: null,
+    moonId: null,
+    fieldsCap: fieldsCap2,
+    resources: { ...STARTING_RESOURCES },
+    lastTickAt: now,
+    buildings: emptyBuildings(),
+    ships: emptyShips(),
+    defenses: emptyDefenses(),
+    buildQueue: null,
+    shipQueue: null,
+    defenseQueue: null
+  };
+  planet.buildings.metalMine = 1;
+  planet.buildings.crystalMine = 1;
+  planet.buildings.solarPlant = 1;
+  const player = {
+    id: playerId,
+    name: trimmed,
+    homePlanetId: planetId,
+    planetIds: [planetId],
+    activePlanetId: planetId,
+    research: emptyResearch(),
+    researchQueue: null,
+    createdAt: now,
+    starshards: 0,
+    officers: [],
+    skillsUnlocked: []
+  };
+  universe.players[playerId] = player;
+  universe.planets[planetId] = planet;
+  return { player, planet };
+}
+function activePlanet(universe, player) {
+  const id = player.activePlanetId || player.homePlanetId;
+  return universe.planets[id] ?? universe.planets[player.homePlanetId] ?? null;
+}
+function bestLabLevel(universe, player) {
+  let best = 0;
+  for (const id of player.planetIds) {
+    const p = universe.planets[id];
+    if (p) best = Math.max(best, p.buildings.researchLab ?? 0);
+  }
+  return best;
+}
+
 // packages/game/src/world-moons.ts
 function moonRoll(seed) {
   let h = 2166136261;
@@ -3223,6 +3623,15 @@ function moonChancePercent(debris) {
   const total = Math.max(0, debris.metal + debris.crystal);
   if (total < MOON_DEBRIS_MIN) return 0;
   return Math.min(MOON_CHANCE_CAP, Math.floor(total / 1e3));
+}
+function sensorPhalanxRange(level) {
+  return Math.max(0, Math.floor(level));
+}
+function inSensorPhalanxRange(moonCoords, targetCoords, sensorLevel) {
+  const range = sensorPhalanxRange(sensorLevel);
+  if (range < 1) return false;
+  if (moonCoords.galaxy !== targetCoords.galaxy) return false;
+  return Math.abs(moonCoords.system - targetCoords.system) <= range;
 }
 function ownedPlanetCount(universe, playerId) {
   const player = universe.players[playerId];
@@ -3252,6 +3661,7 @@ function tryFormMoon(universe, parent, debrisCreated, reportId, now) {
     kind: "moon",
     parentPlanetId: parent.id,
     moonId: null,
+    fieldsCap: MOON_FIELDS_BASE,
     resources: { metal: 0, crystal: 0, deuterium: 0 },
     lastTickAt: now,
     buildings: emptyBuildings(),
@@ -3531,6 +3941,15 @@ function resolveFleetArrival(universe, fleet, now) {
         delete universe.fleets[fleet.id];
         return;
       }
+    } else if (fleet.mission === "jump") {
+      const target = fleet.targetPlanetId ? universe.planets[fleet.targetPlanetId] : null;
+      if (!target || target.kind !== "moon" || target.ownerPlayerId !== fleet.ownerPlayerId) {
+        delete universe.fleets[fleet.id];
+        return;
+      }
+      addShipsToPlanet(target, fleet.ships);
+      delete universe.fleets[fleet.id];
+      return;
     } else if (fleet.mission === "colonize") {
       const occupied = planetAtCoords(universe, fleet.targetCoords);
       if (occupied) {
@@ -3599,6 +4018,8 @@ function resolveFleetArrival(universe, fleet, now) {
       }
     } else if (fleet.mission === "expedition") {
       resolveExpeditionArrival(universe, fleet, now);
+    } else if (fleet.mission === "pirateRaid") {
+      resolvePirateRaidArrival(universe, fleet, now);
     }
     const returnSecs = flightSecondsOneWay(
       fleet.targetCoords,
@@ -3653,6 +4074,7 @@ function advanceUniverse(universe, now = Date.now()) {
     );
   }
   advanceFleets(universe, now);
+  tickPirates(universe, now);
   pruneSpyReports(universe, now);
 }
 
@@ -3689,7 +4111,10 @@ function queueBuildingUpgrade(universe, playerId, buildingId, now = Date.now(), 
     };
   }
   if (buildingId === "sensorArray" && (planet.buildings.lunarBase ?? 0) < 1) {
-    return { ok: false, error: "Sensor Array needs Lunar Base level 1." };
+    return { ok: false, error: "Sensor Phalanx needs Lunar Base level 1." };
+  }
+  if (buildingId === "jumpGate" && (planet.buildings.lunarBase ?? 0) < 1) {
+    return { ok: false, error: "Jump Gate needs Lunar Base level 1." };
   }
   if (planet.buildQueue) {
     return { ok: false, error: "A building is already under construction." };
@@ -3853,11 +4278,12 @@ function queueResearch(universe, playerId, researchId, now = Date.now()) {
 }
 
 // packages/game/src/world-launch-target.ts
-function resolveLaunchTarget(universe, player, origin, mission, ships, targetPlanetId, targetCoordsOpt, targetAsteroidIdOpt) {
+function resolveLaunchTarget(universe, player, origin, mission, ships, targetPlanetId, targetCoordsOpt, targetAsteroidIdOpt, targetPirateBaseIdOpt) {
   let targetCoords;
   let targetPlanet = null;
   let targetPlayerId = null;
   let targetAsteroidId = null;
+  let targetPirateBaseId = null;
   if (mission === "expedition") {
     if (!targetCoordsOpt) {
       return { ok: false, error: "targetCoords required for expedition." };
@@ -3884,7 +4310,28 @@ function resolveLaunchTarget(universe, player, origin, mission, ships, targetPla
       targetCoords,
       targetPlanet: null,
       targetPlayerId: null,
-      targetAsteroidId: null
+      targetAsteroidId: null,
+      targetPirateBaseId: null
+    };
+  }
+  if (mission === "pirateRaid") {
+    const pirateId = targetPirateBaseIdOpt?.trim();
+    if (!pirateId) {
+      return { ok: false, error: "pirateBaseId required for pirateRaid." };
+    }
+    const base = universe.pirateBases?.[pirateId];
+    if (!base || base.destroyedAt != null) {
+      return { ok: false, error: "Pirate base not found." };
+    }
+    targetPirateBaseId = pirateId;
+    targetCoords = { ...base.coords };
+    return {
+      ok: true,
+      targetCoords,
+      targetPlanet: null,
+      targetPlayerId: null,
+      targetAsteroidId: null,
+      targetPirateBaseId
     };
   }
   if (mission === "harvestAsteroid") {
@@ -3906,7 +4353,8 @@ function resolveLaunchTarget(universe, player, origin, mission, ships, targetPla
       targetCoords,
       targetPlanet: null,
       targetPlayerId: null,
-      targetAsteroidId
+      targetAsteroidId,
+      targetPirateBaseId: null
     };
   }
   if (mission === "colonize" || mission === "harvest") {
@@ -3924,6 +4372,9 @@ function resolveLaunchTarget(universe, player, origin, mission, ships, targetPla
     if (mission === "colonize") {
       if (targetPlanet) {
         return { ok: false, error: "Slot is already occupied." };
+      }
+      if (pirateBaseAtCoords(universe, targetCoords)) {
+        return { ok: false, error: "Pirate base occupies that slot." };
       }
       if ((ships.colonyShip ?? 0) < 1) {
         return { ok: false, error: "Colonize requires a Colony Ship." };
@@ -3979,6 +4430,25 @@ function resolveLaunchTarget(universe, player, origin, mission, ships, targetPla
       if ((ships.probe ?? 0) < 1) {
         return { ok: false, error: "Espionage requires a Spy Probe." };
       }
+    } else if (mission === "jump") {
+      if (origin.kind !== "moon") {
+        return { ok: false, error: "Jump Gate hops must start from a moon." };
+      }
+      if ((origin.buildings.jumpGate ?? 0) < 1) {
+        return { ok: false, error: "Origin moon needs Jump Gate level 1." };
+      }
+      if (targetPlanet.kind !== "moon") {
+        return { ok: false, error: "Jump Gate hops must target a moon." };
+      }
+      if (targetPlanet.ownerPlayerId !== player.id) {
+        return { ok: false, error: "Jump Gate only links your own moons." };
+      }
+      if (targetPlanet.id === origin.id) {
+        return { ok: false, error: "Cannot jump to the same moon." };
+      }
+      if ((targetPlanet.buildings.jumpGate ?? 0) < 1) {
+        return { ok: false, error: "Target moon needs Jump Gate level 1." };
+      }
     }
   }
   return {
@@ -3986,7 +4456,8 @@ function resolveLaunchTarget(universe, player, origin, mission, ships, targetPla
     targetCoords,
     targetPlanet,
     targetPlayerId,
-    targetAsteroidId
+    targetAsteroidId,
+    targetPirateBaseId
   };
 }
 
@@ -3999,7 +4470,9 @@ var MISSIONS = [
   "colonize",
   "harvest",
   "harvestAsteroid",
-  "expedition"
+  "expedition",
+  "pirateRaid",
+  "jump"
 ];
 function launchFleet(universe, playerIdOrOpts, targetPlanetId, mission, shipsInput, nowArg) {
   const opts = typeof playerIdOrOpts === "string" ? {
@@ -4040,10 +4513,17 @@ function launchFleet(universe, playerIdOrOpts, targetPlanetId, mission, shipsInp
     ships,
     opts.targetPlanetId,
     opts.targetCoords,
-    opts.asteroidId
+    opts.asteroidId,
+    opts.pirateBaseId
   );
   if (!target.ok) return target;
-  const { targetCoords, targetPlanet, targetPlayerId, targetAsteroidId } = target;
+  const {
+    targetCoords,
+    targetPlanet,
+    targetPlayerId,
+    targetAsteroidId,
+    targetPirateBaseId
+  } = target;
   for (const id of SHIP_ORDER) {
     const need = ships[id] ?? 0;
     const have = origin.ships[id] ?? 0;
@@ -4092,7 +4572,7 @@ function launchFleet(universe, playerIdOrOpts, targetPlanetId, mission, shipsInp
     crystal: 0,
     deuterium: fuel
   });
-  const oneWay = flightSecondsOneWay(
+  const oneWay = opts.mission === "jump" ? 1 : flightSecondsOneWay(
     origin.coords,
     targetCoords,
     ships,
@@ -4108,6 +4588,7 @@ function launchFleet(universe, playerIdOrOpts, targetPlanetId, mission, shipsInp
     targetPlayerId,
     targetCoords,
     targetAsteroidId,
+    targetPirateBaseId,
     mission: opts.mission,
     ships: { ...ships },
     cargo: { ...cargo },
@@ -4227,8 +4708,9 @@ function playerView(universe, playerId, now = Date.now(), galaxy, system) {
   const expeditionReports = Object.values(universe.expeditionReports ?? {}).filter((r) => r.playerId === playerId).sort((a, b) => b.at - a.at).slice(0, 12);
   const g = galaxy ?? planet.coords.galaxy;
   const s = system ?? planet.coords.system;
-  const sensorContacts = planet.kind === "moon" && (planet.buildings.sensorArray ?? 0) >= 1 ? Object.values(universe.fleets).filter(
-    (f) => f.phase === "outbound" && f.targetCoords.galaxy === planet.coords.galaxy && f.targetCoords.system === planet.coords.system
+  const sensorLevel = planet.buildings.sensorArray ?? 0;
+  const sensorContacts = planet.kind === "moon" && sensorLevel >= 1 ? Object.values(universe.fleets).filter(
+    (f) => f.phase === "outbound" && inSensorPhalanxRange(planet.coords, f.targetCoords, sensorLevel)
   ).sort((a, b) => a.arrivesAt - b.arrivesAt).slice(0, 20) : [];
   return {
     now,
@@ -4249,7 +4731,8 @@ function playerView(universe, playerId, now = Date.now(), galaxy, system) {
         coords: p.coords,
         isHome: p.id === player.homePlanetId,
         isActive: p.id === player.activePlanetId,
-        isMoon: p.kind === "moon"
+        isMoon: p.kind === "moon",
+        jumpGateLevel: p.buildings.jumpGate ?? 0
       };
     }).filter((x) => x !== null),
     economy: economySnapshot(
@@ -10435,6 +10918,7 @@ function createApp() {
         targetPlanetId: body.targetPlanetId,
         targetCoords: body.targetCoords,
         asteroidId: body.asteroidId,
+        pirateBaseId: body.pirateBaseId,
         cargo: body.cargo,
         originPlanetId: body.originPlanetId
       });

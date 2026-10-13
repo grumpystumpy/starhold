@@ -27,6 +27,7 @@ import {
 import { resolveEspionage } from "./world-espionage.js";
 import { resolveExpeditionArrival } from "./world-expedition.js";
 import { ownedPlanetCount } from "./world-moons.js";
+import { resolvePirateRaidArrival, tickPirates } from "./world-pirates.js";
 import { pruneSpyReports } from "./world-spy-prune.js";
 import {
   addCargoToPlanet,
@@ -85,13 +86,26 @@ export function resolveFleetArrival(
       const target = fleet.targetPlanetId
         ? universe.planets[fleet.targetPlanetId]
         : null;
-      // Park on own colonies — dock ships, no return leg.
       if (target && target.ownerPlayerId === fleet.ownerPlayerId) {
         addShipsToPlanet(target, fleet.ships);
         delete universe.fleets[fleet.id];
         return;
       }
-      // Rival visit: fall through to return-leg scheduling below.
+    } else if (fleet.mission === "jump") {
+      const target = fleet.targetPlanetId
+        ? universe.planets[fleet.targetPlanetId]
+        : null;
+      if (
+        !target ||
+        target.kind !== "moon" ||
+        target.ownerPlayerId !== fleet.ownerPlayerId
+      ) {
+        delete universe.fleets[fleet.id];
+        return;
+      }
+      addShipsToPlanet(target, fleet.ships);
+      delete universe.fleets[fleet.id];
+      return;
     } else if (fleet.mission === "colonize") {
       const occupied = planetAtCoords(universe, fleet.targetCoords);
       if (occupied) {
@@ -163,6 +177,8 @@ export function resolveFleetArrival(
       }
     } else if (fleet.mission === "expedition") {
       resolveExpeditionArrival(universe, fleet, now);
+    } else if (fleet.mission === "pirateRaid") {
+      resolvePirateRaidArrival(universe, fleet, now);
     }
 
     const returnSecs = flightSecondsOneWay(
@@ -224,5 +240,6 @@ export function advanceUniverse(universe: UniverseState, now = Date.now()): void
     );
   }
   advanceFleets(universe, now);
+  tickPirates(universe, now);
   pruneSpyReports(universe, now);
 }

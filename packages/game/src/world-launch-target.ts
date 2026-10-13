@@ -15,6 +15,7 @@ import type {
   UniverseState,
 } from "./types.js";
 import { planetAtCoords } from "./world-bootstrap.js";
+import { pirateBaseAtCoords } from "./world-pirates.js";
 import { getDebris } from "./world-tick.js";
 
 export type LaunchTargetResult =
@@ -24,6 +25,7 @@ export type LaunchTargetResult =
       targetPlanet: PlanetState | null;
       targetPlayerId: string | null;
       targetAsteroidId: string | null;
+      targetPirateBaseId: string | null;
     }
   | { ok: false; error: string };
 
@@ -36,11 +38,13 @@ export function resolveLaunchTarget(
   targetPlanetId: string | undefined,
   targetCoordsOpt: Coordinates | undefined,
   targetAsteroidIdOpt?: string,
+  targetPirateBaseIdOpt?: string,
 ): LaunchTargetResult {
   let targetCoords: Coordinates;
   let targetPlanet: PlanetState | null = null;
   let targetPlayerId: string | null = null;
   let targetAsteroidId: string | null = null;
+  let targetPirateBaseId: string | null = null;
 
   if (mission === "expedition") {
     if (!targetCoordsOpt) {
@@ -75,6 +79,28 @@ export function resolveLaunchTarget(
       targetPlanet: null,
       targetPlayerId: null,
       targetAsteroidId: null,
+      targetPirateBaseId: null,
+    };
+  }
+
+  if (mission === "pirateRaid") {
+    const pirateId = targetPirateBaseIdOpt?.trim();
+    if (!pirateId) {
+      return { ok: false, error: "pirateBaseId required for pirateRaid." };
+    }
+    const base = universe.pirateBases?.[pirateId];
+    if (!base || base.destroyedAt != null) {
+      return { ok: false, error: "Pirate base not found." };
+    }
+    targetPirateBaseId = pirateId;
+    targetCoords = { ...base.coords };
+    return {
+      ok: true,
+      targetCoords,
+      targetPlanet: null,
+      targetPlayerId: null,
+      targetAsteroidId: null,
+      targetPirateBaseId,
     };
   }
 
@@ -98,6 +124,7 @@ export function resolveLaunchTarget(
       targetPlanet: null,
       targetPlayerId: null,
       targetAsteroidId,
+      targetPirateBaseId: null,
     };
   }
 
@@ -123,6 +150,9 @@ export function resolveLaunchTarget(
     if (mission === "colonize") {
       if (targetPlanet) {
         return { ok: false, error: "Slot is already occupied." };
+      }
+      if (pirateBaseAtCoords(universe, targetCoords)) {
+        return { ok: false, error: "Pirate base occupies that slot." };
       }
       if ((ships.colonyShip ?? 0) < 1) {
         return { ok: false, error: "Colonize requires a Colony Ship." };
@@ -165,7 +195,6 @@ export function resolveLaunchTarget(
       if (targetPlanet.id === origin.id) {
         return { ok: false, error: "Cannot deploy to the same planet." };
       }
-      // Own worlds: park (dock). Rivals: peaceful visit + return.
     } else if (mission === "raid") {
       if (targetPlanet.id === origin.id) {
         return { ok: false, error: "Cannot send a fleet to your own planet." };
@@ -183,6 +212,25 @@ export function resolveLaunchTarget(
       if ((ships.probe ?? 0) < 1) {
         return { ok: false, error: "Espionage requires a Spy Probe." };
       }
+    } else if (mission === "jump") {
+      if (origin.kind !== "moon") {
+        return { ok: false, error: "Jump Gate hops must start from a moon." };
+      }
+      if ((origin.buildings.jumpGate ?? 0) < 1) {
+        return { ok: false, error: "Origin moon needs Jump Gate level 1." };
+      }
+      if (targetPlanet.kind !== "moon") {
+        return { ok: false, error: "Jump Gate hops must target a moon." };
+      }
+      if (targetPlanet.ownerPlayerId !== player.id) {
+        return { ok: false, error: "Jump Gate only links your own moons." };
+      }
+      if (targetPlanet.id === origin.id) {
+        return { ok: false, error: "Cannot jump to the same moon." };
+      }
+      if ((targetPlanet.buildings.jumpGate ?? 0) < 1) {
+        return { ok: false, error: "Target moon needs Jump Gate level 1." };
+      }
     }
   }
 
@@ -192,5 +240,6 @@ export function resolveLaunchTarget(
     targetPlanet,
     targetPlayerId,
     targetAsteroidId,
+    targetPirateBaseId,
   };
 }

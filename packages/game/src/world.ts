@@ -30,9 +30,11 @@ export {
   resolveExpeditionArrival,
 } from "./world-expedition.js";
 export {
+  inSensorPhalanxRange,
   moonChancePercent,
   moonRoll,
   ownedPlanetCount,
+  sensorPhalanxRange,
   tryFormMoon,
 } from "./world-moons.js";
 export { moonAtCoords } from "./world-bootstrap.js";
@@ -48,3 +50,16 @@ export {
   rollAsteroidCount,
   seedUniverseAsteroids,
 } from "./world-asteroids.js";
+export {
+  activePirateBases,
+  createPirateBase,
+  pirateBaseAtCoords,
+  pirateBaseId,
+  pirateDestroyStarshards,
+  pirateRespawnAt,
+  pirateShipsForTier,
+  resolvePirateRaidArrival,
+  scalePirateRaidFleet,
+  seedUniversePirates,
+  tickPirates,
+} from "./world-pirates.js";

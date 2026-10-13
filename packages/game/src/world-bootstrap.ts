@@ -22,6 +22,7 @@ import type {
   UniverseState,
 } from "./types.js";
 import { seedUniverseAsteroids } from "./world-asteroids.js";
+import { seedUniversePirates } from "./world-pirates.js";
 
 export function emptyBuildings(): PlanetState["buildings"] {
   return {
@@ -36,6 +37,7 @@ export function emptyBuildings(): PlanetState["buildings"] {
     researchLab: 0,
     lunarBase: 0,
     sensorArray: 0,
+    jumpGate: 0,
   };
 }
 
@@ -80,10 +82,10 @@ export function createUniverse(
     pirateBases: {},
   };
   seedUniverseAsteroids(universe);
+  seedUniversePirates(universe, now);
   return universe;
 }
 
-/** Next free home/colony slot — mid slots preferred for homes. */
 export function nextCoords(universe: UniverseState): Coordinates {
   const used = new Set(
     Object.values(universe.planets)
@@ -128,7 +130,6 @@ export function moonAtCoords(
   );
 }
 
-/** Older in-memory shapes may lack newer collections. */
 export function ensureUniverseShape(universe: UniverseState): void {
   if (!universe.fleets) universe.fleets = {};
   if (!universe.reports) universe.reports = {};
@@ -139,9 +140,6 @@ export function ensureUniverseShape(universe: UniverseState): void {
   if (!universe.pirateBases) universe.pirateBases = {};
   if (!universe.fleetSpeed) universe.fleetSpeed = universe.speed || 1;
   if (!universe.seed) universe.seed = `seed_${universe.id}`;
-  if (universe.schemaVersion === undefined) {
-    // Leave missing version as-is for migrator detection; do not bump here.
-  }
   for (const player of Object.values(universe.players)) {
     if (!player.planetIds?.length) {
       player.planetIds = [player.homePlanetId];
@@ -165,6 +163,7 @@ export function ensureUniverseShape(universe: UniverseState): void {
     if (!planet.buildings.researchLab) planet.buildings.researchLab = 0;
     if (!planet.buildings.lunarBase) planet.buildings.lunarBase = 0;
     if (!planet.buildings.sensorArray) planet.buildings.sensorArray = 0;
+    if (!planet.buildings.jumpGate) planet.buildings.jumpGate = 0;
     if (
       planet.kind !== "moon" &&
       (typeof planet.fieldsCap !== "number" || planet.fieldsCap <= 0)
@@ -236,7 +235,6 @@ export function joinUniverse(
     defenseQueue: null,
   };
 
-  // Gentle kickstart so first upgrades feel reachable without a long wait.
   planet.buildings.metalMine = 1;
   planet.buildings.crystalMine = 1;
   planet.buildings.solarPlant = 1;

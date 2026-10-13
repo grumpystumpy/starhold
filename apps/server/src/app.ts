@@ -275,6 +275,7 @@ export function createApp(): Hono {
       targetPlanetId?: string;
       targetCoords?: Coordinates;
       asteroidId?: string;
+      pirateBaseId?: string;
       mission?: MissionType;
       ships?: Partial<FleetShips>;
       cargo?: Partial<Resources>;
@@ -291,6 +292,7 @@ export function createApp(): Hono {
         targetPlanetId: body.targetPlanetId,
         targetCoords: body.targetCoords,
         asteroidId: body.asteroidId,
+        pirateBaseId: body.pirateBaseId,
         cargo: body.cargo,
         originPlanetId: body.originPlanetId,
       });

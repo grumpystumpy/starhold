@@ -1,9 +1,11 @@
 import {
   MOON_CHANCE_CAP,
   MOON_DEBRIS_MIN,
+  MOON_FIELDS_BASE,
 } from "./catalog.js";
 import { emptyDefenses } from "./formulas.js";
 import type {
+  Coordinates,
   PlanetState,
   Resources,
   UniverseState,
@@ -24,6 +26,26 @@ export function moonChancePercent(debris: Resources): number {
   const total = Math.max(0, debris.metal + debris.crystal);
   if (total < MOON_DEBRIS_MIN) return 0;
   return Math.min(MOON_CHANCE_CAP, Math.floor(total / 1000));
+}
+
+/**
+ * Sensor Phalanx range in systems (same galaxy).
+ * Level 0 → none; level N → ±N systems inclusive of own system.
+ */
+export function sensorPhalanxRange(level: number): number {
+  return Math.max(0, Math.floor(level));
+}
+
+/** True when target coords are inside a Sensor Phalanx of the given moon. */
+export function inSensorPhalanxRange(
+  moonCoords: Coordinates,
+  targetCoords: Coordinates,
+  sensorLevel: number,
+): boolean {
+  const range = sensorPhalanxRange(sensorLevel);
+  if (range < 1) return false;
+  if (moonCoords.galaxy !== targetCoords.galaxy) return false;
+  return Math.abs(moonCoords.system - targetCoords.system) <= range;
 }
 
 /** Count planets (not moons) toward Astrophysics colony cap. */
@@ -71,6 +93,7 @@ export function tryFormMoon(
     kind: "moon",
     parentPlanetId: parent.id,
     moonId: null,
+    fieldsCap: MOON_FIELDS_BASE,
     resources: { metal: 0, crystal: 0, deuterium: 0 },
     lastTickAt: now,
     buildings: emptyBuildings(),
