@@ -34,10 +34,12 @@ import {
   clearOccupationIfRecaptured,
   createUniverse,
   joinUniverse,
+  launchFleet,
   resolveMiniPlanetChoice,
   startOccupation,
   swarmProduce,
 } from "./world.js";
+import { addDebris } from "./world-tick.js";
 
 describe("Round 2 ship catalog fixtures (Micah amendments)", () => {
   it("Void Titan (3rd largest) moon-killer stats", () => {
@@ -64,10 +66,12 @@ describe("Round 2 ship catalog fixtures (Micah amendments)", () => {
     const s = SHIPS.worldEater;
     assert.equal(s.name, "World Eater");
     assert.equal(s.cargo, 0);
+    assert.equal(s.attack, 300_000);
     assert.equal(s.shipyardLevel, 15);
     assert.ok(s.cost.metal > SHIPS.swarmMothership.cost.metal);
     assert.ok(s.shipyardLevel > SHIPS.swarmMothership.shipyardLevel);
     assert.ok(s.shipyardLevel > SHIPS.voidforgeTitan.shipyardLevel);
+    assert.ok(s.attack > SHIPS.voidforgeTitan.attack);
     assert.ok(s.attack > SHIPS.swarmMothership.attack);
     assert.ok(s.shield > SHIPS.swarmMothership.shield);
     assert.ok(s.hull > SHIPS.swarmMothership.hull);
@@ -93,11 +97,37 @@ describe("Round 2 ship catalog fixtures (Micah amendments)", () => {
     const s = SHIPS.swarmMothership;
     assert.equal(s.cargo, 150_050_000);
     assert.equal(s.attack, 3_000);
-    assert.equal(s.shield, 202_000);
-    assert.equal(s.hull, 120_000);
+    assert.equal(s.shield, 450_000);
+    assert.equal(s.hull, 100_000);
     assert.equal(s.shipyardLevel, 13);
     assert.ok(s.shipyardLevel > SHIPS.voidforgeTitan.shipyardLevel);
     assert.ok(s.shipyardLevel < SHIPS.worldEater.shipyardLevel);
+    assert.equal(
+      canCollectDebris(normalizeFleetShips({ swarmMothership: 1 })),
+      true,
+    );
+  });
+
+  it("Swarm Mothership can harvest debris fields", () => {
+    const universe = createUniverse("MS Harvest Drift", 8);
+    const a = joinUniverse(universe, "SwarmSalvage", 240_000_000);
+    const coords = { ...a.planet.coords, slot: 3 };
+    addDebris(universe, coords, { metal: 5_000, crystal: 2_000, deuterium: 0 });
+    universe.planets[a.planet.id].ships.swarmMothership = 1;
+    universe.planets[a.planet.id].resources.deuterium = 50_000;
+    const harvest = launchFleet(universe, {
+      playerId: a.player.id,
+      mission: "harvest",
+      targetCoords: coords,
+      ships: { swarmMothership: 1 },
+      now: 240_000_100,
+    });
+    assert.equal(harvest.ok, true, harvest.ok ? "" : harvest.error);
+    if (!harvest.ok) return;
+    advanceUniverse(universe, harvest.fleet.arrivesAt);
+    const ret = universe.fleets[harvest.fleet.id];
+    assert.ok(ret);
+    assert.ok(ret.cargo.metal + ret.cargo.crystal > 0);
   });
 });
 
@@ -195,7 +225,7 @@ describe("Swarm combat intercept + kamikaze", () => {
         swarmHarvester: 3,
       }),
       defenses: emptyDefenses(),
-      residual: { swarmMothership: (202_000 + 120_000) * 0.75 },
+      residual: { swarmMothership: (450_000 + 100_000) * 0.75 },
     };
     const enemy = {
       ships: normalizeFleetShips({ scout: 5 }),
