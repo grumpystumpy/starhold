@@ -20,6 +20,8 @@ import type {
 import { playerBoosts } from "./world-boosts.js";
 import { emptyCargo } from "./world-bootstrap.js";
 import { tryFormMoon } from "./world-moons.js";
+import { clearOccupationIfRecaptured } from "./world-occupation.js";
+import { maybeDestroyMoonWithTitans } from "./world-round2.js";
 import { addDebris, subtractCargo } from "./world-tick.js";
 
 /** Resolve outbound raid at target; mutates fleet cargo/ships/reportId. */
@@ -91,10 +93,38 @@ export function resolveRaidArrival(
   }
 
   const reportId = `rpt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
-  const moon = tryFormMoon(universe, target, debrisCreated, reportId, now);
-  const summary = moon
-    ? `${combat.summary} A moon coalesced from the debris field.`
-    : combat.summary;
+  let summary = combat.summary;
+  let moonFormed = false;
+  let moonDestroyed = false;
+  let moonKillChancePct: number | undefined;
+
+  if (target.kind === "moon" && combat.outcome === "attacker_win") {
+    const kill = maybeDestroyMoonWithTitans(
+      universe,
+      target,
+      combat.attackerAfter,
+      reportId,
+    );
+    moonKillChancePct = kill.chancePct;
+    if (kill.destroyed) {
+      moonDestroyed = true;
+      summary = `${combat.summary} Voidforge Titan shattered the moon (${kill.chancePct}% chance).`;
+    }
+  } else {
+    const moon = tryFormMoon(universe, target, debrisCreated, reportId, now);
+    moonFormed = Boolean(moon);
+    if (moon) {
+      summary = `${combat.summary} A moon coalesced from the debris field.`;
+    }
+  }
+
+  if (combat.outcome === "attacker_win") {
+    // Owner recapture: attacking own occupied world clears occupation.
+    clearOccupationIfRecaptured(universe, target.id, fleet.ownerPlayerId);
+  } else if (combat.outcome === "defender_win") {
+    clearOccupationIfRecaptured(universe, target.id, target.ownerPlayerId);
+  }
+
   const report: CombatReport = {
     id: reportId,
     at: now,
@@ -115,7 +145,9 @@ export function resolveRaidArrival(
     outcome: combat.outcome,
     rounds: combat.rounds,
     summary,
-    moonFormed: Boolean(moon),
+    moonFormed,
+    moonDestroyed: moonDestroyed || undefined,
+    moonKillChancePct,
   };
   universe.reports[reportId] = report;
 
