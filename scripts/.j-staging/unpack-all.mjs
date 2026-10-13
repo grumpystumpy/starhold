@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-const fs = require("fs");
-const zlib = require("zlib");
-const path = require("path");
+import fs from "fs";
+import zlib from "zlib";
+import path from "path";
+
 const manifest = JSON.parse(fs.readFileSync("scripts/.j-staging/manifest.json", "utf8"));
 for (const { path: dest, staging } of manifest) {
   const b64 = fs.readFileSync(staging, "utf8").trim();
