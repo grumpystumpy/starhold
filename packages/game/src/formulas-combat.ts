@@ -266,7 +266,7 @@ function mothershipHullFraction(
 }
 
 /**
- * When mothership hull fraction < 30%, each harvester suicides:
+ * When mothership hull fraction &lt; 30%, each harvester suicides:
  * shieldDmg + hullDmg to a focus enemy combatant.
  */
 export function applyHarvesterKamikaze(
