@@ -25,6 +25,11 @@ export const SHIP_ART: Record<ShipId, string> = {
   probe: "/assets/ships/probe.svg",
   recycler: "/assets/ships/recycler.svg",
   colonyShip: "/assets/ships/colony-ship.svg",
+  voidforgeTitan: "/assets/ships/voidforge-titan.svg",
+  worldEater: "/assets/ships/world-eater.svg",
+  swarmDrone: "/assets/ships/swarm-drone.svg",
+  swarmHarvester: "/assets/ships/swarm-harvester.svg",
+  swarmMothership: "/assets/ships/swarm-mothership.svg",
 };
 
 export const DEFENSE_ART: Record<DefenseId, string> = {

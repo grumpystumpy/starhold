@@ -6,8 +6,8 @@ import {
   fuelCostOneWay,
   flightSecondsOneWay,
   maxExpeditions,
+  normalizeFleetShips,
   type Coordinates,
-  type FleetShips,
   type MissionType,
   type PlayerView,
   type Resources,
@@ -182,16 +182,7 @@ export function fleetComposer(
     options.length === 0 ||
     (mission === "expedition" && expeditionActive >= expeditionCap);
 
-  const sampleShips: FleetShips = {
-    scout: 1,
-    hauler: 0,
-    interceptor: 0,
-    cruiser: 0,
-    bomber: 0,
-    probe: 0,
-    recycler: 0,
-    colonyShip: 0,
-  };
+  const sampleShips = normalizeFleetShips({ scout: 1 });
   const sampleTarget = rivals[0]?.coords ?? view.planet.coords;
   const sampleEta = flightSecondsOneWay(
     view.planet.coords,
