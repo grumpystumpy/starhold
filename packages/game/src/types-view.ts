@@ -165,6 +165,8 @@ export interface PlayerView {
   /** Derived production / energy for UI */
   economy: EconomySnapshot;
   roster: PublicPlayer[];
+  /** Empire points ranking (all players, points desc). */
+  highscores: HighscoreEntry[];
   galaxy: GalaxyView;
   /** Own active fleets (outbound / returning) */
   fleets: FleetMission[];
@@ -182,6 +184,16 @@ export interface PublicPlayer {
   coords: Coordinates;
   pointsHint: number;
   planetId: string;
+}
+
+/** Ranked empire scoreboard row. */
+export interface HighscoreEntry {
+  rank: number;
+  playerId: string;
+  name: string;
+  points: number;
+  coords: Coordinates;
+  planetCount: number;
 }
 
 export interface EconomySnapshot {

@@ -1,7 +1,14 @@
 import { MAP_GALAXIES, MAP_SLOTS, MAP_SYSTEMS } from "./catalog.js";
-import { economySnapshot, roughPoints } from "./formulas.js";
+import {
+  economySnapshot,
+  planetPoints,
+  researchPoints,
+  shipStockPoints,
+} from "./formulas.js";
 import type {
   GalaxyView,
+  HighscoreEntry,
+  PlayerState,
   PlayerView,
   PublicPlayer,
   UniverseState,
@@ -14,6 +21,41 @@ import {
 } from "./world-bootstrap.js";
 import { getDebris } from "./world-tick.js";
 
+/** Empire total: all planets + in-flight ships + research once. */
+export function empirePoints(
+  universe: UniverseState,
+  player: PlayerState,
+): number {
+  let points = researchPoints(player.research);
+  for (const id of player.planetIds ?? []) {
+    const planet = universe.planets[id];
+    if (planet) points += planetPoints(planet);
+  }
+  for (const fleet of Object.values(universe.fleets)) {
+    if (fleet.ownerPlayerId === player.id) {
+      points += shipStockPoints(fleet.ships);
+    }
+  }
+  return Math.floor(points);
+}
+
+export function highscoresBoard(universe: UniverseState): HighscoreEntry[] {
+  const rows = Object.values(universe.players).map((p) => {
+    const home = universe.planets[p.homePlanetId];
+    return {
+      playerId: p.id,
+      name: p.name,
+      points: empirePoints(universe, p),
+      coords: home?.coords ?? { galaxy: 0, system: 0, slot: 0 },
+      planetCount: p.planetIds?.length ?? 0,
+    };
+  });
+  rows.sort(
+    (a, b) => b.points - a.points || a.playerId.localeCompare(b.playerId),
+  );
+  return rows.map((r, i) => ({ ...r, rank: i + 1 }));
+}
+
 export function publicRoster(universe: UniverseState): PublicPlayer[] {
   return Object.values(universe.players).map((p) => {
     const planet = universe.planets[p.homePlanetId];
@@ -21,7 +63,7 @@ export function publicRoster(universe: UniverseState): PublicPlayer[] {
       id: p.id,
       name: p.name,
       coords: planet?.coords ?? { galaxy: 0, system: 0, slot: 0 },
-      pointsHint: planet ? roughPoints(planet, p.research) : 0,
+      pointsHint: empirePoints(universe, p),
       planetId: p.homePlanetId,
     };
   });
@@ -49,8 +91,7 @@ export function galaxyViewFor(
       planetId: planet?.id ?? null,
       playerId: owner?.id ?? null,
       playerName: owner?.name ?? null,
-      pointsHint:
-        planet && owner ? roughPoints(planet, owner.research) : 0,
+      pointsHint: planet ? Math.floor(planetPoints(planet)) : 0,
       debris: debris
         ? { metal: debris.metal, crystal: debris.crystal }
         : null,
@@ -128,6 +169,7 @@ export function playerView(
       player.research.energyTech ?? 0,
     ),
     roster: publicRoster(universe),
+    highscores: highscoresBoard(universe),
     galaxy: galaxyViewFor(universe, playerId, g, s),
     fleets,
     reports,

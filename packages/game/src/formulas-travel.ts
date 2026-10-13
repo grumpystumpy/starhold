@@ -63,10 +63,21 @@ export function emptyDefenses(): DefenseStock {
   return out;
 }
 
-export function roughPoints(
-  planet: PlanetState,
-  research?: ResearchLevels,
+/** Unfloored cost/1000 for a ship stock (docked or in flight). */
+export function shipStockPoints(
+  ships: Partial<Record<ShipId, number>>,
 ): number {
+  let points = 0;
+  for (const [id, count] of Object.entries(ships)) {
+    if (!count) continue;
+    const c = SHIPS[id as ShipId].cost;
+    points += ((c.metal + c.crystal + c.deuterium) * count) / 1000;
+  }
+  return points;
+}
+
+/** Unfloored buildings + docked ships + defenses (no research). */
+export function planetPoints(planet: PlanetState): number {
   let points = 0;
   for (const [id, level] of Object.entries(planet.buildings)) {
     for (let L = 0; L < level; L++) {
@@ -74,22 +85,33 @@ export function roughPoints(
       points += (c.metal + c.crystal + c.deuterium) / 1000;
     }
   }
-  for (const [id, count] of Object.entries(planet.ships)) {
-    const c = SHIPS[id as ShipId].cost;
-    points += ((c.metal + c.crystal + c.deuterium) * count) / 1000;
-  }
+  points += shipStockPoints(planet.ships);
   for (const [id, count] of Object.entries(planet.defenses ?? {})) {
     const c = DEFENSES[id as DefenseId].cost;
     points += ((c.metal + c.crystal + c.deuterium) * count) / 1000;
   }
-  if (research) {
-    for (const [id, level] of Object.entries(research)) {
-      for (let L = 0; L < level; L++) {
-        const c = researchUpgradeCost(id as ResearchId, L);
-        points += (c.metal + c.crystal + c.deuterium) / 1000;
-      }
+  return points;
+}
+
+/** Unfloored research tree cost/1000 (once per empire). */
+export function researchPoints(research: ResearchLevels): number {
+  let points = 0;
+  for (const [id, level] of Object.entries(research)) {
+    for (let L = 0; L < level; L++) {
+      const c = researchUpgradeCost(id as ResearchId, L);
+      points += (c.metal + c.crystal + c.deuterium) / 1000;
     }
   }
+  return points;
+}
+
+/** Single-planet hint (optional research). Prefer empirePoints for rankings. */
+export function roughPoints(
+  planet: PlanetState,
+  research?: ResearchLevels,
+): number {
+  let points = planetPoints(planet);
+  if (research) points += researchPoints(research);
   return Math.floor(points);
 }
 
