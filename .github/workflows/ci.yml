@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  unit-and-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Production build
+        run: npm run build
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Start API + static
+        run: |
+          PORT=3001 npm start &
+          echo $! > /tmp/starhold-server.pid
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:3001/api/health >/dev/null; then
+              echo "server up"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "server failed to become healthy"
+          exit 1
+
+      - name: Playwright e2e (Upgrade, Shipyard, fleets)
+        env:
+          STARHOLD_WEB: http://127.0.0.1:3001
+          STARHOLD_API: http://127.0.0.1:3001
+        run: npm run e2e
+
+      - name: Stop server
+        if: always()
+        run: |
+          if [ -f /tmp/starhold-server.pid ]; then
+            kill "$(cat /tmp/starhold-server.pid)" || true
+          fi
