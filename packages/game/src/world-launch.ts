@@ -29,6 +29,7 @@ const MISSIONS: MissionType[] = [
   "espionage",
   "colonize",
   "harvest",
+  "harvestAsteroid",
   "expedition",
 ];
 
@@ -40,6 +41,8 @@ export interface LaunchFleetOpts {
   targetPlanetId?: string;
   /** Empty/debris coords (colonize/harvest) or override. */
   targetCoords?: Coordinates;
+  /** Asteroid field id for harvestAsteroid. */
+  asteroidId?: string;
   /** Cargo to load for transport. */
   cargo?: Partial<Resources>;
   now?: number;
@@ -115,9 +118,11 @@ export function launchFleet(
     ships,
     opts.targetPlanetId,
     opts.targetCoords,
+    opts.asteroidId,
   );
   if (!target.ok) return target;
-  const { targetCoords, targetPlanet, targetPlayerId } = target;
+  const { targetCoords, targetPlanet, targetPlayerId, targetAsteroidId } =
+    target;
 
   for (const id of SHIP_ORDER) {
     const need = ships[id] ?? 0;
@@ -186,6 +191,7 @@ export function launchFleet(
     targetPlanetId: targetPlanet?.id ?? null,
     targetPlayerId,
     targetCoords,
+    targetAsteroidId,
     mission: opts.mission,
     ships: { ...ships },
     cargo: { ...cargo },
