@@ -1,0 +1,40 @@
+planet"; planet: PlanetState }
+  | { kind: "pirate"; other: PirateBase }
+  | null {
+  const roll = hashSeed(`${base.id}:target:${base.lastRaidAt}:${now}`);
+  const others = activePirateBases(universe).filter((b) => b.id !== base.id);
+  const planets = Object.values(universe.planets).filter(
+    (p) => p.kind !== "moon",
+  );
+
+  if (planets.length > 0 && (others.length === 0 || roll % 10 < 7)) {
+    const planet = planets[roll % planets.length]!;
+    return { kind: "planet", planet };
+  }
+  if (others.length > 0) {
+    const other = others[roll % others.length]!;
+    return { kind: "pirate", other };
+  }
+  return null;
+}
+
+function applyPirateRaidOnPlanet(
+  universe: UniverseState,
+  base: PirateBase,
+  planet: PlanetState,
+  now: number,
+): void {
+  const owner = universe.players[planet.ownerPlayerId];
+  if (!owner) return;
+  const defPower = planetDefensePower(planet, universe);
+  const raidFleet = scalePirateRaidFleet(base.ships, defPower);
+  if (fleetShipCount(raidFleet) < 1) return;
+
+  const combat = resolveCombat(
+    raidFleet,
+    planet.ships,
+    planet.defenses ?? emptyDefenses(),
+    undefined,
+    effectiveCombatResearch(owner),
+  );
+  planet.ships = combat.defenderAfte
