@@ -21,8 +21,36 @@ export const DEBRIS_FROM_SHIPS = 0.3;
 /** Minimum one-way flight seconds after speed scaling. */
 export const MIN_FLIGHT_SECONDS = 8;
 
-/** Soft building-field budget (levels sum toward this). */
+/**
+ * Legacy flat field budget (prototype). Prefer per-planet `fieldsCap`
+ * from `rollPlanetFields` (universe contract v1).
+ */
 export const PLANET_FIELDS = 200;
+
+/** Half-width of the per-slot field roll band (v1 tunable). */
+export const FIELD_BAND = 15;
+
+/** Hard floor after band roll (slots 1 and 15). */
+export const FIELD_MIN = 250;
+
+/** Center field budget by planet slot (1–15). Peak at slot 8. */
+export const FIELD_CENTER_BY_SLOT: Readonly<Record<number, number>> = {
+  1: 265,
+  2: 290,
+  3: 315,
+  4: 335,
+  5: 350,
+  6: 362,
+  7: 372,
+  8: 385,
+  9: 372,
+  10: 362,
+  11: 350,
+  12: 335,
+  13: 315,
+  14: 290,
+  15: 265,
+};
 
 /** Moon field budget: base free field + per Lunar Base level. */
 export const MOON_FIELDS_BASE = 1;
@@ -121,10 +149,65 @@ export const MINE_BASE_PER_HOUR = {
 
 export const MINE_GROWTH = 1.1;
 
-/** Map bounds for the prototype galaxy browser. */
-export const MAP_GALAXIES = 1;
-export const MAP_SYSTEMS = 9;
-export const MAP_SLOTS = 8;
+/** Map bounds (universe contract v1): 10×399×15 + deep space. */
+export const MAP_GALAXIES = 10;
+export const MAP_SYSTEMS = 399;
+export const MAP_SLOTS = 15;
 
-/** Deep-space slot beyond planet slots (expedition destination). */
-export const EXPEDITION_SLOT = MAP_SLOTS + 1;
+/** Deep-space / expedition slot — not colonizable. */
+export const DEEP_SPACE_SLOT = 16;
+export const EXPEDITION_SLOT = DEEP_SPACE_SLOT;
+
+/**
+ * KV / UniverseState schema version.
+ * Prototype blobs without this field are treated as `1`.
+ * Contract map resize (1×9×8 → 10×399×15) requires reset at `2`.
+ */
+export const UNIVERSE_SCHEMA_VERSION = 2;
+
+/** Homeworld join: prefer mid slots, then fall outward. */
+export const HOME_SLOT_PREFERENCE: readonly number[] = [
+  4, 5, 6, 7, 8, 9, 10, 11, 12, 3, 13, 2, 14, 1, 15,
+];
+
+/** Asteroids per system roll weights (v1): 0 / 1 / 2. */
+export const ASTEROID_COUNT_WEIGHTS = [
+  { count: 0, weight: 70 },
+  { count: 1, weight: 25 },
+  { count: 2, weight: 5 },
+] as const;
+
+/** Harvest cycles before an asteroid field despawns. */
+export const ASTEROID_RICHNESS = 3;
+
+/**
+ * Position production multipliers by slot (slot 8 = 1.0× on all axes).
+ * Applied after mine level / energy factor / PRODUCTION_MULT.
+ */
+export const SLOT_PRODUCTION_MULT: Readonly<
+  Record<
+    number,
+    {
+      metal: number;
+      crystal: number;
+      deuterium: number;
+      energy: number;
+    }
+  >
+> = {
+  1: { metal: 1.0, crystal: 1.3, deuterium: 0.7, energy: 1.3 },
+  2: { metal: 1.0, crystal: 1.25, deuterium: 0.75, energy: 1.25 },
+  3: { metal: 1.0, crystal: 1.2, deuterium: 0.8, energy: 1.2 },
+  4: { metal: 1.0, crystal: 1.15, deuterium: 0.85, energy: 1.15 },
+  5: { metal: 1.0, crystal: 1.1, deuterium: 0.9, energy: 1.1 },
+  6: { metal: 1.0, crystal: 1.05, deuterium: 0.95, energy: 1.05 },
+  7: { metal: 1.0, crystal: 1.02, deuterium: 0.98, energy: 1.02 },
+  8: { metal: 1.0, crystal: 1.0, deuterium: 1.0, energy: 1.0 },
+  9: { metal: 1.0, crystal: 0.98, deuterium: 1.02, energy: 0.98 },
+  10: { metal: 1.0, crystal: 0.95, deuterium: 1.05, energy: 0.95 },
+  11: { metal: 1.0, crystal: 0.9, deuterium: 1.1, energy: 0.9 },
+  12: { metal: 1.0, crystal: 0.85, deuterium: 1.15, energy: 0.85 },
+  13: { metal: 1.0, crystal: 0.8, deuterium: 1.2, energy: 0.8 },
+  14: { metal: 1.0, crystal: 0.75, deuterium: 1.25, energy: 0.75 },
+  15: { metal: 1.0, crystal: 0.7, deuterium: 1.3, energy: 0.7 },
+};
