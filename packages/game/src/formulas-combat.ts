@@ -394,3 +394,8 @@ export function maxFleetSlots(computerTech: number): number {
 export function maxColonies(astrophysics: number): number {
   return 1 + Math.max(0, astrophysics);
 }
+
+/** Concurrent deep-space expeditions (home empire). */
+export function maxExpeditions(astrophysics: number): number {
+  return 1 + Math.max(0, astrophysics);
+}
