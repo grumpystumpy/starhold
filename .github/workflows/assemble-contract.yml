@@ -1,0 +1,35 @@
+name: Assemble contract (one-shot)
+
+on:
+  push:
+    branches: [cursor/we-ms-balance-056d]
+    paths:
+      - ".github/workflows/assemble-contract.yml"
+      - ".cursor-staging/we-ms-contract/**"
+
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cursor/we-ms-balance-056d
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Unpack contract and cleanup
+        run: |
+          set -euo pipefail
+          ST=.cursor-staging/we-ms-contract
+          cat "$ST"/part-*.b64 | tr -d '\n' | base64 -d | gzip -dc > docs/design/round2-contract.md
+          # verify markers
+          grep -q '300_000' docs/design/round2-contract.md
+          grep -q '450_000' docs/design/round2-contract.md
+          rm -rf .cursor-staging/we-ms-contract
+          rm -f .github/workflows/assemble-contract.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A docs/design/round2-contract.md .cursor-staging .github/workflows/assemble-contract.yml
+          git commit -m "docs: sync round2-contract balance roles (assembled)"
+          git push origin HEAD:cursor/we-ms-balance-056d
