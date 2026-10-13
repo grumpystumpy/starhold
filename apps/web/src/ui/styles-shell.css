@@ -28,6 +28,12 @@
   border-color: var(--accent);
 }
 
+.resource-bar .res.starshards .claim-daily {
+  margin-top: 0.2rem;
+  font-size: 0.75rem;
+  padding: 0.15rem 0.45rem;
+}
+
 .shell-body {
   display: grid;
   grid-template-columns: 11rem minmax(0, 1fr) 12.5rem;
