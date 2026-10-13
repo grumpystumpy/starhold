@@ -48,3 +48,16 @@ export {
   rollAsteroidCount,
   seedUniverseAsteroids,
 } from "./world-asteroids.js";
+export {
+  activePirateBases,
+  createPirateBase,
+  pirateBaseAtCoords,
+  pirateBaseId,
+  pirateDestroyStarshards,
+  pirateRespawnAt,
+  pirateShipsForTier,
+  resolvePirateRaidArrival,
+  scalePirateRaidFleet,
+  seedUniversePirates,
+  tickPirates,
+} from "./world-pirates.js";

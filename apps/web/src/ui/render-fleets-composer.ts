@@ -86,6 +86,13 @@ export function fleetComposer(
         `<option value="coords:${c.galaxy}:${c.system}:${c.slot}">Deep space ${fmtCoords(c)}</option>`,
       );
     }
+  } else if (mission === "pirateRaid") {
+    const pirate = view.galaxy.pirateBase;
+    if (pirate) {
+      options.push(
+        `<option value="pirate:${escapeAttr(pirate.id)}">${escapeHtml(pirate.name)} · T${pirate.tier} · ${pirate.threatHint} · ${fmtCoords(pirate.coords)}</option>`,
+      );
+    }
   } else {
     for (const r of rivals) {
       options.push(
@@ -102,13 +109,15 @@ export function fleetComposer(
   }
 
   let selected =
-    draft?.asteroidId != null
-      ? `asteroid:${draft.asteroidId}`
-      : draft?.targetPlanetId != null
-        ? `planet:${draft.targetPlanetId}`
-        : draft?.targetCoords
-          ? `coords:${draft.targetCoords.galaxy}:${draft.targetCoords.system}:${draft.targetCoords.slot}`
-          : options[0]?.match(/value="([^"]+)"/)?.[1] ?? "";
+    draft?.pirateBaseId != null
+      ? `pirate:${draft.pirateBaseId}`
+      : draft?.asteroidId != null
+        ? `asteroid:${draft.asteroidId}`
+        : draft?.targetPlanetId != null
+          ? `planet:${draft.targetPlanetId}`
+          : draft?.targetCoords
+            ? `coords:${draft.targetCoords.galaxy}:${draft.targetCoords.system}:${draft.targetCoords.slot}`
+            : options[0]?.match(/value="([^"]+)"/)?.[1] ?? "";
 
   if (selected && !options.some((o) => o.includes(`value="${selected}"`))) {
     selected = options[0]?.match(/value="([^"]+)"/)?.[1] ?? "";
@@ -152,7 +161,9 @@ export function fleetComposer(
                 ? `<p class="hint">No debris in this system yet — win a raid that destroys ships.</p>`
                 : mission === "harvestAsteroid"
                   ? `<p class="hint">No asteroids in this system — browse another system.</p>`
-                  : `<p class="hint" data-testid="fleet-need-rival">Join a second commander (another tab) to unlock raid / spy targets.</p>`
+                  : mission === "pirateRaid"
+                    ? `<p class="hint">No pirate base in this system — browse the galaxy for NPC activity.</p>`
+                    : `<p class="hint" data-testid="fleet-need-rival">Join a second commander (another tab) to unlock raid / spy targets.</p>`
         : "";
   const launchBlocked =
     busy ||
@@ -193,6 +204,7 @@ export function fleetComposer(
       harvest: "Harvest debris",
       harvestAsteroid: "Harvest asteroid (Recycler)",
       expedition: "Expedition (deep space)",
+      pirateRaid: "Raid pirate base",
     };
     return `<label><input type="radio" name="fleet-mission" value="${m}" data-testid="mission-${m}" ${mission === m ? "checked" : ""} ${busy ? "disabled" : ""} /> ${labels[m]}</label>`;
   }).join("");

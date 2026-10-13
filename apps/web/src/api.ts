@@ -110,6 +110,7 @@ export async function launchFleetMission(
     targetPlanetId?: string;
     targetCoords?: Coordinates;
     asteroidId?: string;
+    pirateBaseId?: string;
     cargo?: Partial<Resources>;
   },
 ): Promise<PlayerView> {

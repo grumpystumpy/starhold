@@ -22,6 +22,7 @@ import type {
   UniverseState,
 } from "./types.js";
 import { seedUniverseAsteroids } from "./world-asteroids.js";
+import { seedUniversePirates } from "./world-pirates.js";
 
 export function emptyBuildings(): PlanetState["buildings"] {
   return {
@@ -80,6 +81,7 @@ export function createUniverse(
     pirateBases: {},
   };
   seedUniverseAsteroids(universe);
+  seedUniversePirates(universe, now);
   return universe;
 }
 

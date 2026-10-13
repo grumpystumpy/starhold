@@ -15,12 +15,14 @@ export const MISSIONS: MissionType[] = [
   "harvest",
   "harvestAsteroid",
   "expedition",
+  "pirateRaid",
 ];
 
 export type FleetDraft = {
   targetPlanetId: string | null;
   targetCoords: Coordinates | null;
   asteroidId: string | null;
+  pirateBaseId: string | null;
   mission: MissionType;
   counts: Partial<FleetShips>;
   cargo: Partial<Resources>;
@@ -75,10 +77,13 @@ export function salvageFleetForm(root: HTMLElement): FleetDraft | null {
   let targetPlanetId: string | null = null;
   let targetCoords: Coordinates | null = null;
   let asteroidId: string | null = null;
+  let pirateBaseId: string | null = null;
   if (value.startsWith("planet:")) {
     targetPlanetId = value.slice("planet:".length);
   } else if (value.startsWith("asteroid:")) {
     asteroidId = value.slice("asteroid:".length);
+  } else if (value.startsWith("pirate:")) {
+    pirateBaseId = value.slice("pirate:".length);
   } else if (value.startsWith("coords:")) {
     const [g, s, slot] = value
       .slice("coords:".length)
@@ -90,6 +95,7 @@ export function salvageFleetForm(root: HTMLElement): FleetDraft | null {
     targetPlanetId,
     targetCoords,
     asteroidId,
+    pirateBaseId,
     mission: parseMission(missionEl?.value),
     counts,
     cargo,

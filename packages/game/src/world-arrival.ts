@@ -27,6 +27,7 @@ import {
 import { resolveEspionage } from "./world-espionage.js";
 import { resolveExpeditionArrival } from "./world-expedition.js";
 import { ownedPlanetCount } from "./world-moons.js";
+import { resolvePirateRaidArrival, tickPirates } from "./world-pirates.js";
 import { pruneSpyReports } from "./world-spy-prune.js";
 import {
   addCargoToPlanet,
@@ -163,6 +164,8 @@ export function resolveFleetArrival(
       }
     } else if (fleet.mission === "expedition") {
       resolveExpeditionArrival(universe, fleet, now);
+    } else if (fleet.mission === "pirateRaid") {
+      resolvePirateRaidArrival(universe, fleet, now);
     }
 
     const returnSecs = flightSecondsOneWay(
@@ -224,5 +227,6 @@ export function advanceUniverse(universe: UniverseState, now = Date.now()): void
     );
   }
   advanceFleets(universe, now);
+  tickPirates(universe, now);
   pruneSpyReports(universe, now);
 }
