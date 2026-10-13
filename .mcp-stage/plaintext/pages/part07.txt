@@ -1,0 +1,38 @@
+an,
+  fleetDraft: FleetDraft | null,
+): string {
+  switch (page) {
+    case "overview":
+      return overviewPage(view);
+    case "resources":
+      return resourcesPage(view, busy);
+    case "facilities":
+      return facilitiesPage(view, busy);
+    case "research":
+      return researchPage(view, busy);
+    case "shipyard":
+      return shipyardPage(view, busy);
+    case "defense":
+      return defensePage(view, busy);
+    case "fleet":
+      return fleetPage(view, busy, fleetDraft);
+    case "galaxy":
+      return galaxyPanel(view, busy);
+    case "officers":
+      return officersPanelHtml(view, busy);
+    case "skills":
+      return skillsPanelHtml(view, busy);
+    case "highscore":
+      return highscorePage(view);
+    case "messages":
+      return stubPanel(
+        "Messages",
+        "Combat, espionage, and empire mail will land here. Check Fleet for reports for now.",
+        "messages-stub",
+      );
+    default: {
+      const _exhaustive: never = page;
+      return _exhaustive;
+    }
+  }
+}
