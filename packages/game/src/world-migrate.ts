@@ -7,8 +7,10 @@ export function universeSchemaVersion(universe: UniverseState): number {
 }
 
 /**
- * Load-path helper: current schema keeps the blob (shape-normalized);
- * older schemas (prototype 1×9×8) trigger a full universe reset.
+ * Load-path helper:
+ * - Current schema: shape-normalize in place.
+ * - Schema 2 → 3 (Round 2): additive backfill (levels, …), no map reset.
+ * - Older schemas (prototype / v1): full universe reset + archive.
  * Idempotent — never half-applies a map resize in place.
  */
 export function migrateOrResetUniverse(
@@ -22,6 +24,13 @@ export function migrateOrResetUniverse(
   const version = universeSchemaVersion(data);
   if (version >= UNIVERSE_SCHEMA_VERSION && data.id) {
     ensureUniverseShape(data);
+    return { universe: data, didReset: false, archived: null };
+  }
+
+  // Additive Round 2 bump: keep players/map, backfill missing fields.
+  if (version === 2 && UNIVERSE_SCHEMA_VERSION >= 3 && data.id) {
+    ensureUniverseShape(data);
+    data.schemaVersion = UNIVERSE_SCHEMA_VERSION;
     return { universe: data, didReset: false, archived: null };
   }
 
