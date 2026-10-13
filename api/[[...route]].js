@@ -2142,7 +2142,25 @@ var MAX_COMBAT_ROUNDS = 6;
 var RAID_LOOT_SHARE = 0.5;
 var DEBRIS_FROM_SHIPS = 0.3;
 var MIN_FLIGHT_SECONDS = 8;
-var PLANET_FIELDS = 200;
+var FIELD_BAND = 15;
+var FIELD_MIN = 250;
+var FIELD_CENTER_BY_SLOT = {
+  1: 265,
+  2: 290,
+  3: 315,
+  4: 335,
+  5: 350,
+  6: 362,
+  7: 372,
+  8: 385,
+  9: 372,
+  10: 362,
+  11: 350,
+  12: 335,
+  13: 315,
+  14: 290,
+  15: 265
+};
 var MOON_FIELDS_BASE = 1;
 var MOON_FIELDS_PER_LUNAR_BASE = 3;
 var MOON_DEBRIS_MIN = 5e3;
@@ -2192,10 +2210,79 @@ var MINE_BASE_PER_HOUR = {
   deuterium: 10
 };
 var MINE_GROWTH = 1.1;
-var MAP_GALAXIES = 1;
-var MAP_SYSTEMS = 9;
-var MAP_SLOTS = 8;
-var EXPEDITION_SLOT = MAP_SLOTS + 1;
+var MAP_GALAXIES = 10;
+var MAP_SYSTEMS = 399;
+var MAP_SLOTS = 15;
+var DEEP_SPACE_SLOT = 16;
+var EXPEDITION_SLOT = DEEP_SPACE_SLOT;
+var UNIVERSE_SCHEMA_VERSION = 2;
+var HOME_SLOT_PREFERENCE = [
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  3,
+  13,
+  2,
+  14,
+  1,
+  15
+];
+var ASTEROID_COUNT_WEIGHTS = [
+  { count: 0, weight: 70 },
+  { count: 1, weight: 25 },
+  { count: 2, weight: 5 }
+];
+var ASTEROID_RICHNESS = 3;
+var SLOT_PRODUCTION_MULT = {
+  1: { metal: 1, crystal: 1.3, deuterium: 0.7, energy: 1.3 },
+  2: { metal: 1, crystal: 1.25, deuterium: 0.75, energy: 1.25 },
+  3: { metal: 1, crystal: 1.2, deuterium: 0.8, energy: 1.2 },
+  4: { metal: 1, crystal: 1.15, deuterium: 0.85, energy: 1.15 },
+  5: { metal: 1, crystal: 1.1, deuterium: 0.9, energy: 1.1 },
+  6: { metal: 1, crystal: 1.05, deuterium: 0.95, energy: 1.05 },
+  7: { metal: 1, crystal: 1.02, deuterium: 0.98, energy: 1.02 },
+  8: { metal: 1, crystal: 1, deuterium: 1, energy: 1 },
+  9: { metal: 1, crystal: 0.98, deuterium: 1.02, energy: 0.98 },
+  10: { metal: 1, crystal: 0.95, deuterium: 1.05, energy: 0.95 },
+  11: { metal: 1, crystal: 0.9, deuterium: 1.1, energy: 0.9 },
+  12: { metal: 1, crystal: 0.85, deuterium: 1.15, energy: 0.85 },
+  13: { metal: 1, crystal: 0.8, deuterium: 1.2, energy: 0.8 },
+  14: { metal: 1, crystal: 0.75, deuterium: 1.25, energy: 0.75 },
+  15: { metal: 1, crystal: 0.7, deuterium: 1.3, energy: 0.7 }
+};
+
+// packages/game/src/formulas-position.ts
+function hashSeed(seed) {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+var NEUTRAL_MULT = {
+  metal: 1,
+  crystal: 1,
+  deuterium: 1,
+  energy: 1
+};
+function productionMultForSlot(slot) {
+  const row = SLOT_PRODUCTION_MULT[slot];
+  if (!row) return { ...NEUTRAL_MULT };
+  return { ...row };
+}
+function rollPlanetFields(slot, seed) {
+  const center = FIELD_CENTER_BY_SLOT[slot] ?? FIELD_CENTER_BY_SLOT[8];
+  const span = FIELD_BAND * 2 + 1;
+  const offset = hashSeed(seed) % span - FIELD_BAND;
+  return Math.max(FIELD_MIN, center + offset);
+}
 
 // packages/game/src/formulas-build.ts
 function isMoon(planet) {
@@ -2210,7 +2297,13 @@ function fieldsCap(planet) {
     const lunar = planet.buildings.lunarBase ?? 0;
     return MOON_FIELDS_BASE + lunar * MOON_FIELDS_PER_LUNAR_BASE;
   }
-  return PLANET_FIELDS;
+  if (typeof planet.fieldsCap === "number" && planet.fieldsCap > 0) {
+    return planet.fieldsCap;
+  }
+  return rollPlanetFields(
+    planet.coords.slot,
+    `${planet.id}:${planet.coords.galaxy}:${planet.coords.system}:${planet.coords.slot}`
+  );
 }
 function buildingUpgradeCost(buildingId, currentLevel) {
   const def = BUILDINGS[buildingId];
@@ -2296,7 +2389,9 @@ function energyUsed(planet) {
   return used;
 }
 function energyProduced(planet) {
-  return solarEnergy(planet.buildings.solarPlant ?? 0);
+  const base = solarEnergy(planet.buildings.solarPlant ?? 0);
+  const mult = productionMultForSlot(planet.coords.slot).energy;
+  return Math.floor(base * mult);
 }
 function energyFactor(planet) {
   const used = energyUsed(planet);
@@ -2325,10 +2420,11 @@ function productionPerHour(planet, universeSpeed = 1, energyTechLevel = 0) {
   const factor = energyFactor(planet);
   const techBonus = 1 + energyTechLevel * 0.02;
   const incomeScale = universeSpeed * PRODUCTION_MULT * techBonus;
+  const pos = productionMultForSlot(planet.coords.slot);
   return {
-    metal: mineOutputPerHour("metal", planet.buildings.metalMine ?? 0) * factor * incomeScale,
-    crystal: mineOutputPerHour("crystal", planet.buildings.crystalMine ?? 0) * factor * incomeScale,
-    deuterium: mineOutputPerHour("deuterium", planet.buildings.deutSynth ?? 0) * factor * incomeScale
+    metal: mineOutputPerHour("metal", planet.buildings.metalMine ?? 0) * factor * incomeScale * pos.metal,
+    crystal: mineOutputPerHour("crystal", planet.buildings.crystalMine ?? 0) * factor * incomeScale * pos.crystal,
+    deuterium: mineOutputPerHour("deuterium", planet.buildings.deutSynth ?? 0) * factor * incomeScale * pos.deuterium
   };
 }
 function canAfford(have, cost) {
@@ -2419,7 +2515,8 @@ function economySnapshot(planet, universeSpeed = 1, energyTechLevel = 0) {
       used,
       cap: fieldsCap(planet),
       remaining: fieldsRemaining(planet)
-    }
+    },
+    positionMult: productionMultForSlot(planet.coords.slot)
   };
 }
 function emptyFleetShips() {
@@ -2730,6 +2827,93 @@ function maxExpeditions(astrophysics) {
   return 1 + Math.max(0, astrophysics);
 }
 
+// packages/game/src/world-asteroids.ts
+function asteroidId(galaxy, system, index) {
+  return `ast:${galaxy}:${system}:a${index}`;
+}
+function rollInRange(seed, min, max) {
+  const span = max - min + 1;
+  return min + hashSeed(seed) % span;
+}
+function rollAsteroidCount(universeSeed, galaxy, system) {
+  const totalWeight = ASTEROID_COUNT_WEIGHTS.reduce(
+    (sum, row) => sum + row.weight,
+    0
+  );
+  let roll = hashSeed(`${universeSeed}:ast-count:${galaxy}:${system}`) % totalWeight;
+  for (const row of ASTEROID_COUNT_WEIGHTS) {
+    if (roll < row.weight) return row.count;
+    roll -= row.weight;
+  }
+  return 0;
+}
+function createAsteroidField(universeSeed, galaxy, system, index) {
+  const id = asteroidId(galaxy, system, index);
+  const richness = ASTEROID_RICHNESS;
+  const metalPer = rollInRange(`${universeSeed}:${id}:m`, 2e3, 8e3) * richness;
+  const crystalPer = rollInRange(`${universeSeed}:${id}:c`, 1e3, 4e3) * richness;
+  const deutPer = rollInRange(`${universeSeed}:${id}:d`, 0, 500) * richness;
+  const coords = {
+    galaxy,
+    system,
+    slot: 100 + index
+  };
+  return {
+    id,
+    coords,
+    metal: metalPer,
+    crystal: crystalPer,
+    deuterium: deutPer,
+    richness
+  };
+}
+function seedUniverseAsteroids(universe) {
+  const seed = universe.seed ?? universe.id;
+  const asteroids = {};
+  for (let galaxy = 1; galaxy <= MAP_GALAXIES; galaxy++) {
+    for (let system = 1; system <= MAP_SYSTEMS; system++) {
+      const count = rollAsteroidCount(seed, galaxy, system);
+      for (let i = 0; i < count; i++) {
+        const field = createAsteroidField(seed, galaxy, system, i);
+        asteroids[field.id] = field;
+      }
+    }
+  }
+  universe.asteroids = asteroids;
+}
+function asteroidsInSystem(universe, galaxy, system) {
+  const out = [];
+  for (const field of Object.values(universe.asteroids ?? {})) {
+    if (field.coords.galaxy === galaxy && field.coords.system === system) {
+      out.push(field);
+    }
+  }
+  out.sort((a, b) => a.id.localeCompare(b.id));
+  return out;
+}
+function harvestAsteroidField(universe, asteroidId2, cargoCap) {
+  const field = universe.asteroids?.[asteroidId2];
+  if (!field || field.richness <= 0 || cargoCap <= 0) {
+    return { metal: 0, crystal: 0, deuterium: 0 };
+  }
+  let remaining = cargoCap;
+  const takeMetal = Math.min(field.metal, remaining);
+  remaining -= takeMetal;
+  const takeCrystal = Math.min(field.crystal, remaining);
+  remaining -= takeCrystal;
+  const takeDeut = Math.min(field.deuterium, remaining);
+  field.metal -= takeMetal;
+  field.crystal -= takeCrystal;
+  field.deuterium -= takeDeut;
+  field.richness -= 1;
+  if (field.richness <= 0 || field.metal <= 0 && field.crystal <= 0 && field.deuterium <= 0) {
+    delete universe.asteroids[asteroidId2];
+  } else {
+    universe.asteroids[asteroidId2] = field;
+  }
+  return { metal: takeMetal, crystal: takeCrystal, deuterium: takeDeut };
+}
+
 // packages/game/src/world-bootstrap.ts
 function emptyBuildings() {
   return {
@@ -2752,22 +2936,32 @@ function emptyShips() {
 function emptyCargo() {
   return { metal: 0, crystal: 0, deuterium: 0 };
 }
+function fieldsSeedForCoords(universeSeed, coords) {
+  return `${universeSeed}:fields:${coords.galaxy}:${coords.system}:${coords.slot}`;
+}
 function createUniverse(name = "Alpha Drift", speed = 1, fleetSpeed = speed) {
   const now = Date.now();
-  return {
-    id: `uni_${now.toString(36)}`,
+  const id = `uni_${now.toString(36)}`;
+  const universe = {
+    id,
     name,
     speed,
     fleetSpeed,
     createdAt: now,
+    schemaVersion: UNIVERSE_SCHEMA_VERSION,
+    seed: `seed_${id}`,
     players: {},
     planets: {},
     fleets: {},
     reports: {},
     spyReports: {},
     expeditionReports: {},
-    debris: {}
+    debris: {},
+    asteroids: {},
+    pirateBases: {}
   };
+  seedUniverseAsteroids(universe);
+  return universe;
 }
 function nextCoords(universe) {
   const used = new Set(
@@ -2775,7 +2969,8 @@ function nextCoords(universe) {
   );
   for (let galaxy = 1; galaxy <= MAP_GALAXIES; galaxy++) {
     for (let system = 1; system <= MAP_SYSTEMS; system++) {
-      for (let slot = 1; slot <= MAP_SLOTS; slot++) {
+      for (const slot of HOME_SLOT_PREFERENCE) {
+        if (slot < 1 || slot > MAP_SLOTS) continue;
         const key = `${galaxy}:${system}:${slot}`;
         if (!used.has(key)) {
           return { galaxy, system, slot };
@@ -2783,7 +2978,7 @@ function nextCoords(universe) {
       }
     }
   }
-  throw new Error("Universe planet slots are full (prototype map).");
+  throw new Error("Universe planet slots are full.");
 }
 function planetAtCoords(universe, coords) {
   const key = coordsKey(coords);
@@ -2803,7 +2998,12 @@ function ensureUniverseShape(universe) {
   if (!universe.spyReports) universe.spyReports = {};
   if (!universe.expeditionReports) universe.expeditionReports = {};
   if (!universe.debris) universe.debris = {};
+  if (!universe.asteroids) universe.asteroids = {};
+  if (!universe.pirateBases) universe.pirateBases = {};
   if (!universe.fleetSpeed) universe.fleetSpeed = universe.speed || 1;
+  if (!universe.seed) universe.seed = `seed_${universe.id}`;
+  if (universe.schemaVersion === void 0) {
+  }
   for (const player of Object.values(universe.players)) {
     if (!player.planetIds?.length) {
       player.planetIds = [player.homePlanetId];
@@ -2813,7 +3013,11 @@ function ensureUniverseShape(universe) {
     }
     if (!player.research) player.research = emptyResearch();
     if (player.researchQueue === void 0) player.researchQueue = null;
+    if (player.starshards === void 0) player.starshards = 0;
+    if (!player.officers) player.officers = [];
+    if (!player.skillsUnlocked) player.skillsUnlocked = [];
   }
+  const seed = universe.seed ?? universe.id;
   for (const planet of Object.values(universe.planets)) {
     if (!planet.kind) planet.kind = "planet";
     if (planet.parentPlanetId === void 0) planet.parentPlanetId = null;
@@ -2823,6 +3027,12 @@ function ensureUniverseShape(universe) {
     if (!planet.buildings.researchLab) planet.buildings.researchLab = 0;
     if (!planet.buildings.lunarBase) planet.buildings.lunarBase = 0;
     if (!planet.buildings.sensorArray) planet.buildings.sensorArray = 0;
+    if (planet.kind !== "moon" && (typeof planet.fieldsCap !== "number" || planet.fieldsCap <= 0)) {
+      planet.fieldsCap = rollPlanetFields(
+        planet.coords.slot,
+        fieldsSeedForCoords(seed, planet.coords)
+      );
+    }
     for (const id of SHIP_ORDER) {
       if (planet.ships[id] === void 0) planet.ships[id] = 0;
     }
@@ -2851,6 +3061,11 @@ function joinUniverse(universe, playerName, now = Date.now()) {
   const playerId = `plyr_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
   const planetId = `plnt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
   const coords = nextCoords(universe);
+  const seed = universe.seed ?? universe.id;
+  const fieldsCap2 = rollPlanetFields(
+    coords.slot,
+    fieldsSeedForCoords(seed, coords)
+  );
   const planet = {
     id: planetId,
     ownerPlayerId: playerId,
@@ -2859,6 +3074,7 @@ function joinUniverse(universe, playerName, now = Date.now()) {
     kind: "planet",
     parentPlanetId: null,
     moonId: null,
+    fieldsCap: fieldsCap2,
     resources: { ...STARTING_RESOURCES },
     lastTickAt: now,
     buildings: emptyBuildings(),
@@ -2879,7 +3095,10 @@ function joinUniverse(universe, playerName, now = Date.now()) {
     activePlanetId: planetId,
     research: emptyResearch(),
     researchQueue: null,
-    createdAt: now
+    createdAt: now,
+    starshards: 0,
+    officers: [],
+    skillsUnlocked: []
   };
   universe.players[playerId] = player;
   universe.planets[planetId] = planet;
@@ -3322,14 +3541,19 @@ function resolveFleetArrival(universe, fleet, now) {
       } else if (ownedPlanetCount(universe, owner.id) >= maxColonies(owner.research.astrophysics)) {
       } else {
         const planetId = `plnt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+        const colonyCoords = { ...fleet.targetCoords };
         const colony = {
           id: planetId,
           ownerPlayerId: owner.id,
           name: `${owner.name}'s Colony`,
-          coords: { ...fleet.targetCoords },
+          coords: colonyCoords,
           kind: "planet",
           parentPlanetId: null,
           moonId: null,
+          fieldsCap: rollPlanetFields(
+            colonyCoords.slot,
+            fieldsSeedForCoords(universe.seed ?? universe.id, colonyCoords)
+          ),
           resources: { metal: 500, crystal: 500, deuterium: 0 },
           lastTickAt: now,
           buildings: emptyBuildings(),
@@ -3366,6 +3590,12 @@ function resolveFleetArrival(universe, fleet, now) {
         if (field.metal <= 0 && field.crystal <= 0) {
           delete universe.debris[coordsKey(fleet.targetCoords)];
         }
+      }
+    } else if (fleet.mission === "harvestAsteroid") {
+      const asteroidId2 = fleet.targetAsteroidId;
+      if (asteroidId2) {
+        const cap = fleetCargoCapacityForHarvest(fleet.ships);
+        fleet.cargo = harvestAsteroidField(universe, asteroidId2, cap);
       }
     } else if (fleet.mission === "expedition") {
       resolveExpeditionArrival(universe, fleet, now);
@@ -3623,10 +3853,11 @@ function queueResearch(universe, playerId, researchId, now = Date.now()) {
 }
 
 // packages/game/src/world-launch-target.ts
-function resolveLaunchTarget(universe, player, origin, mission, ships, targetPlanetId, targetCoordsOpt) {
+function resolveLaunchTarget(universe, player, origin, mission, ships, targetPlanetId, targetCoordsOpt, targetAsteroidIdOpt) {
   let targetCoords;
   let targetPlanet = null;
   let targetPlayerId = null;
+  let targetAsteroidId = null;
   if (mission === "expedition") {
     if (!targetCoordsOpt) {
       return { ok: false, error: "targetCoords required for expedition." };
@@ -3648,7 +3879,35 @@ function resolveLaunchTarget(universe, player, origin, mission, ships, targetPla
         error: `Expedition limit reached (Astrophysics \u2192 ${cap} concurrent).`
       };
     }
-    return { ok: true, targetCoords, targetPlanet: null, targetPlayerId: null };
+    return {
+      ok: true,
+      targetCoords,
+      targetPlanet: null,
+      targetPlayerId: null,
+      targetAsteroidId: null
+    };
+  }
+  if (mission === "harvestAsteroid") {
+    const asteroidId2 = targetAsteroidIdOpt?.trim();
+    if (!asteroidId2) {
+      return { ok: false, error: "asteroidId required for harvestAsteroid." };
+    }
+    const field = universe.asteroids?.[asteroidId2];
+    if (!field || field.richness <= 0) {
+      return { ok: false, error: "Asteroid field not found." };
+    }
+    if ((ships.recycler ?? 0) < 1) {
+      return { ok: false, error: "Asteroid harvest requires a Recycler." };
+    }
+    targetAsteroidId = asteroidId2;
+    targetCoords = { ...field.coords };
+    return {
+      ok: true,
+      targetCoords,
+      targetPlanet: null,
+      targetPlayerId: null,
+      targetAsteroidId
+    };
   }
   if (mission === "colonize" || mission === "harvest") {
     if (!targetCoordsOpt) {
@@ -3722,7 +3981,13 @@ function resolveLaunchTarget(universe, player, origin, mission, ships, targetPla
       }
     }
   }
-  return { ok: true, targetCoords, targetPlanet, targetPlayerId };
+  return {
+    ok: true,
+    targetCoords,
+    targetPlanet,
+    targetPlayerId,
+    targetAsteroidId
+  };
 }
 
 // packages/game/src/world-launch.ts
@@ -3733,6 +3998,7 @@ var MISSIONS = [
   "espionage",
   "colonize",
   "harvest",
+  "harvestAsteroid",
   "expedition"
 ];
 function launchFleet(universe, playerIdOrOpts, targetPlanetId, mission, shipsInput, nowArg) {
@@ -3773,10 +4039,11 @@ function launchFleet(universe, playerIdOrOpts, targetPlanetId, mission, shipsInp
     opts.mission,
     ships,
     opts.targetPlanetId,
-    opts.targetCoords
+    opts.targetCoords,
+    opts.asteroidId
   );
   if (!target.ok) return target;
-  const { targetCoords, targetPlanet, targetPlayerId } = target;
+  const { targetCoords, targetPlanet, targetPlayerId, targetAsteroidId } = target;
   for (const id of SHIP_ORDER) {
     const need = ships[id] ?? 0;
     const have = origin.ships[id] ?? 0;
@@ -3840,6 +4107,7 @@ function launchFleet(universe, playerIdOrOpts, targetPlanetId, mission, shipsInp
     targetPlanetId: targetPlanet?.id ?? null,
     targetPlayerId,
     targetCoords,
+    targetAsteroidId,
     mission: opts.mission,
     ships: { ...ships },
     cargo: { ...cargo },
@@ -3911,14 +4179,38 @@ function galaxyViewFor(universe, playerId, galaxy, system) {
       planetId: planet?.id ?? null,
       playerId: owner?.id ?? null,
       playerName: owner?.name ?? null,
+      allianceTag: null,
       pointsHint: planet ? Math.floor(planetPoints(planet)) : 0,
       debris: debris ? { metal: debris.metal, crystal: debris.crystal } : null,
       isOwn: owner?.id === playerId,
       hasMoon: Boolean(moon),
-      moonId: moon?.id ?? null
+      moonId: moon?.id ?? null,
+      activity: planet ? "planet" : "empty"
     });
   }
-  return { galaxy: g, system: s, slots };
+  const pirate = Object.values(universe.pirateBases ?? {}).find(
+    (b) => b.destroyedAt == null && b.coords.galaxy === g && b.coords.system === s
+  );
+  if (pirate) {
+    const slot = slots.find((row) => row.coords.slot === pirate.coords.slot);
+    if (slot && slot.activity === "empty") {
+      slot.activity = "pirate";
+    }
+  }
+  return {
+    galaxy: g,
+    system: s,
+    slots,
+    deepSpace: { coords: { galaxy: g, system: s, slot: DEEP_SPACE_SLOT } },
+    asteroids: asteroidsInSystem(universe, g, s),
+    pirateBase: pirate ? {
+      id: pirate.id,
+      coords: pirate.coords,
+      name: pirate.name,
+      tier: pirate.tier,
+      threatHint: pirate.tier >= 5 ? "high" : pirate.tier >= 2 ? "medium" : "low"
+    } : null
+  };
 }
 function playerView(universe, playerId, now = Date.now(), galaxy, system) {
   advanceUniverse(universe, now);
@@ -3972,8 +4264,33 @@ function playerView(universe, playerId, now = Date.now(), galaxy, system) {
     reports,
     spyReports,
     expeditionReports,
-    sensorContacts
+    sensorContacts,
+    starshards: player.starshards ?? 0,
+    officers: player.officers ?? [],
+    skillsUnlocked: player.skillsUnlocked ?? []
   };
+}
+
+// packages/game/src/world-migrate.ts
+function universeSchemaVersion(universe) {
+  return universe.schemaVersion ?? 1;
+}
+function migrateOrResetUniverse(data, opts) {
+  const version = universeSchemaVersion(data);
+  if (version >= UNIVERSE_SCHEMA_VERSION && data.id) {
+    ensureUniverseShape(data);
+    return { universe: data, didReset: false, archived: null };
+  }
+  const fresh = createUniverse(
+    opts?.name ?? data.name ?? "Alpha Drift",
+    opts?.speed ?? data.speed ?? 1,
+    opts?.fleetSpeed ?? data.fleetSpeed ?? data.speed ?? 1
+  );
+  ensureUniverseShape(fresh);
+  return { universe: fresh, didReset: true, archived: data };
+}
+function archiveUniverseKey(universeId, ts = Date.now()) {
+  return `starhold:universe:archive:${universeId}:${ts}`;
 }
 
 // node_modules/uncrypto/dist/crypto.node.mjs
@@ -9785,7 +10102,7 @@ var Redis2 = class _Redis extends Redis {
 // apps/server/src/store.ts
 var UNIVERSE_NAME = process.env.STARHOLD_UNIVERSE_NAME ?? "Alpha Drift";
 var UNIVERSE_SPEED = Number(process.env.STARHOLD_UNIVERSE_SPEED ?? 8);
-var REDIS_KEY = process.env.STARHOLD_UNIVERSE_KEY ?? "starhold:universe:v1";
+var REDIS_KEY = process.env.STARHOLD_UNIVERSE_KEY ?? `starhold:universe:v${UNIVERSE_SCHEMA_VERSION}`;
 var LOCK_KEY = `${REDIS_KEY}:lock`;
 var memoryUniverse = null;
 var redis;
@@ -9829,10 +10146,30 @@ async function loadUniverse(client) {
     ensureUniverseShape(memoryUniverse);
     return memoryUniverse;
   }
-  const data = await client.get(REDIS_KEY);
+  let data = await client.get(REDIS_KEY);
+  if (!data || typeof data !== "object" || !data.id) {
+    const legacy = await client.get("starhold:universe:v1");
+    if (legacy && typeof legacy === "object" && legacy.id) {
+      data = legacy;
+    }
+  }
   if (data && typeof data === "object" && data.id) {
-    ensureUniverseShape(data);
-    return data;
+    const migrated = migrateOrResetUniverse(data, {
+      name: UNIVERSE_NAME,
+      speed: UNIVERSE_SPEED
+    });
+    if (migrated.didReset && migrated.archived) {
+      const archiveKey = archiveUniverseKey(
+        migrated.archived.id,
+        Date.now()
+      );
+      await client.set(archiveKey, migrated.archived);
+      await client.set(REDIS_KEY, migrated.universe);
+      await client.del("starhold:universe:v1").catch(() => void 0);
+      return migrated.universe;
+    }
+    ensureUniverseShape(migrated.universe);
+    return migrated.universe;
   }
   const created = freshUniverse();
   ensureUniverseShape(created);
@@ -10097,6 +10434,7 @@ function createApp() {
         ships: body.ships ?? {},
         targetPlanetId: body.targetPlanetId,
         targetCoords: body.targetCoords,
+        asteroidId: body.asteroidId,
         cargo: body.cargo,
         originPlanetId: body.originPlanetId
       });
