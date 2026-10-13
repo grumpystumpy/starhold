@@ -26,7 +26,12 @@ export type ShipId =
   | "bomber"
   | "probe"
   | "recycler"
-  | "colonyShip";
+  | "colonyShip"
+  | "voidforgeTitan"
+  | "worldEater"
+  | "swarmDrone"
+  | "swarmHarvester"
+  | "swarmMothership";
 
 export type DefenseId = "laserBattery" | "shieldDome";
 
@@ -38,7 +43,8 @@ export type ResearchId =
   | "shieldingTech"
   | "espionageTech"
   | "astrophysics"
-  | "computerTech";
+  | "computerTech"
+  | "swarmHold";
 
 /**
  * Missions:
@@ -107,6 +113,13 @@ export interface ShipDef {
   speed: number;
   /** Deuterium burned per distance unit (one-way) */
   fuelPerDistance: number;
+  /** Minimum research levels to queue at shipyard (v1 Round 2). */
+  researchReq?: Partial<Record<ResearchId, number>>;
+  /**
+   * When true, hull must ride with a Swarm Mothership (not free-flying alone).
+   * Count toward mothership swarm capacity.
+   */
+  swarmCarried?: boolean;
 }
 
 export interface DefenseDef {
@@ -226,6 +239,18 @@ export interface PirateBase {
   lastRaidAt: number;
   destroyedAt: number | null;
 }
+
+/** Swarm Mothership occupation of an enemy body (Round 2). */
+export interface OccupationState {
+  planetId: string;
+  occupierPlayerId: string;
+  mothershipFleetId: string;
+  startedAt: number;
+  endsAt: number;
+}
+
+/** Post-battle choice when ≥5 World Eaters win on a mini planet (K wires full flow). */
+export type MiniPlanetResolveChoice = "capture" | "destroy";
 
 export interface SlotProductionMult {
   metal: number;
