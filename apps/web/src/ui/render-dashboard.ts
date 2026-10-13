@@ -18,6 +18,7 @@ import {
 } from "./assets";
 import { fmt, fmtCoords, fmtEta, remainingSeconds } from "./format";
 import {
+  expeditionReportsHtml,
   fleetComposer,
   fleetsInFlight,
   galaxyPanel,
@@ -45,6 +46,7 @@ export function dashboardHtml(
   const fleets = view.fleets ?? [];
   const reports = view.reports ?? [];
   const spyReports = view.spyReports ?? [];
+  const expeditionReports = view.expeditionReports ?? [];
   const now = view.now;
   const hangarEmpty = SHIP_ORDER.every((id) => (planet.ships[id] ?? 0) <= 0);
 
@@ -145,6 +147,7 @@ export function dashboardHtml(
           ${fleetsInFlight(fleets, roster, now)}
           ${reportsHtml(reports, player.id)}
           ${spyReportsHtml(spyReports)}
+          ${expeditionReportsHtml(expeditionReports)}
         </section>
         <section class="panel">
           <h2>Universe roster</h2>

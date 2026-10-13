@@ -95,6 +95,31 @@ export function spyReportsHtml(reports: PlayerView["spyReports"]): string {
   `;
 }
 
+export function expeditionReportsHtml(
+  reports: PlayerView["expeditionReports"],
+): string {
+  if (!reports?.length) {
+    return `<p class="hint">No expedition reports yet.</p>`;
+  }
+  return `
+    <h3 class="subhead">Expedition reports</h3>
+    <ul class="reports" data-testid="expedition-reports">
+      ${reports
+        .map((r) => {
+          const cargo =
+            r.cargoGained.metal +
+              r.cargoGained.crystal +
+              r.cargoGained.deuterium >
+            0
+              ? ` · ${fmt(r.cargoGained.metal)}/${fmt(r.cargoGained.crystal)}/${fmt(r.cargoGained.deuterium)}`
+              : "";
+          return `<li data-testid="expedition-${r.id}"><strong>${escapeHtml(r.kind)}</strong> @ ${fmtCoords(r.targetCoords)}${cargo}<br/><span class="meta">${escapeHtml(r.summary)}</span></li>`;
+        })
+        .join("")}
+    </ul>
+  `;
+}
+
 export function galaxyPanel(
   view: PlayerView,
   busy: boolean,
