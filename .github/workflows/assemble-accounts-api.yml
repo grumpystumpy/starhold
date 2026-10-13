@@ -1,0 +1,44 @@
+name: assemble-accounts-api
+on:
+  workflow_dispatch:
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cursor/accounts-multiplayer-093d
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install and build Vercel API bundle
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build:vercel
+      - name: Commit api bundle if changed
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -f "api/[[...route]].js" ]; then
+            git add "api/[[...route]].js"
+            git commit -m "feat(accounts): assemble Vercel api/[[...route]].js" || echo "No api bundle changes"
+            git push origin HEAD:cursor/accounts-multiplayer-093d
+          else
+            echo "api/[[...route]].js missing after build" >&2
+            exit 1
+          fi
+      - name: Remove assemble workflow
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin cursor/accounts-multiplayer-093d
+          rm -f .github/workflows/assemble-accounts-api.yml
+          git add -A
+          git commit -m "ci(accounts): remove assemble-accounts-api workflow" || exit 0
+          git push origin HEAD:cursor/accounts-multiplayer-093d
