@@ -2137,7 +2137,205 @@ function rapidFireFactor(firer, target) {
   return n >= 1 ? n : 1;
 }
 
+// packages/game/src/catalog-officers.ts
+var OFFICER_DURATION_MS = 7 * 24 * 60 * 60 * 1e3;
+var OFFICER_ORDER = [
+  "quartermaster",
+  "archivist",
+  "navigator",
+  "warden",
+  "engineer",
+  "spymaster"
+];
+var OFFICERS = {
+  quartermaster: {
+    id: "quartermaster",
+    name: "Quartermaster",
+    description: "Boosts mine output while on duty.",
+    cost: 50,
+    durationMs: OFFICER_DURATION_MS,
+    effects: [{ kind: "mineOutput", value: 1.1 }]
+  },
+  archivist: {
+    id: "archivist",
+    name: "Archivist",
+    description: "Speeds empire research projects.",
+    cost: 50,
+    durationMs: OFFICER_DURATION_MS,
+    effects: [{ kind: "researchSpeed", value: 1.15 }]
+  },
+  navigator: {
+    id: "navigator",
+    name: "Navigator",
+    description: "Faster fleets and one extra fleet slot.",
+    cost: 60,
+    durationMs: OFFICER_DURATION_MS,
+    effects: [
+      { kind: "fleetSpeed", value: 1.1 },
+      { kind: "fleetSlots", value: 1 }
+    ]
+  },
+  warden: {
+    id: "warden",
+    name: "Warden",
+    description: "Hardens planetary defenses in combat.",
+    cost: 60,
+    durationMs: OFFICER_DURATION_MS,
+    effects: [{ kind: "defensePower", value: 1.15 }]
+  },
+  engineer: {
+    id: "engineer",
+    name: "Engineer",
+    description: "Increases solar / energy output.",
+    cost: 40,
+    durationMs: OFFICER_DURATION_MS,
+    effects: [{ kind: "energyOutput", value: 1.15 }]
+  },
+  spymaster: {
+    id: "spymaster",
+    name: "Spymaster",
+    description: "Raises espionage detail floor.",
+    cost: 70,
+    durationMs: OFFICER_DURATION_MS,
+    effects: [{ kind: "espionageLevel", value: 1 }]
+  }
+};
+
+// packages/game/src/catalog-skills.ts
+var SKILL_ORDER = [
+  "eco_mines_1",
+  "eco_energy_1",
+  "eco_mines_2",
+  "eco_capstone",
+  "mil_fleet_1",
+  "mil_slots_1",
+  "mil_def_1",
+  "mil_capstone",
+  "exp_spy_1",
+  "exp_research_1",
+  "exp_spy_2",
+  "exp_capstone"
+];
+var SKILLS = {
+  eco_mines_1: {
+    id: "eco_mines_1",
+    branch: "economy",
+    name: "Strip Mining I",
+    description: "Permanent +5% mine output.",
+    cost: 25,
+    requires: [],
+    effects: [{ kind: "mineOutput", value: 1.05 }]
+  },
+  eco_energy_1: {
+    id: "eco_energy_1",
+    branch: "economy",
+    name: "Grid Tuning I",
+    description: "Permanent +5% energy output.",
+    cost: 25,
+    requires: [],
+    effects: [{ kind: "energyOutput", value: 1.05 }]
+  },
+  eco_mines_2: {
+    id: "eco_mines_2",
+    branch: "economy",
+    name: "Strip Mining II",
+    description: "Further +5% mine output.",
+    cost: 40,
+    requires: ["eco_mines_1"],
+    effects: [{ kind: "mineOutput", value: 1.05 }]
+  },
+  eco_capstone: {
+    id: "eco_capstone",
+    branch: "economy",
+    name: "Industrial Doctrine",
+    description: "Capstone: +5% mines and +5% energy.",
+    cost: 60,
+    requires: ["eco_mines_2", "eco_energy_1"],
+    effects: [
+      { kind: "mineOutput", value: 1.05 },
+      { kind: "energyOutput", value: 1.05 }
+    ]
+  },
+  mil_fleet_1: {
+    id: "mil_fleet_1",
+    branch: "military",
+    name: "Warp Discipline I",
+    description: "Permanent +5% fleet speed.",
+    cost: 25,
+    requires: [],
+    effects: [{ kind: "fleetSpeed", value: 1.05 }]
+  },
+  mil_slots_1: {
+    id: "mil_slots_1",
+    branch: "military",
+    name: "Command Bandwidth",
+    description: "Permanent +1 fleet slot.",
+    cost: 25,
+    requires: [],
+    effects: [{ kind: "fleetSlots", value: 1 }]
+  },
+  mil_def_1: {
+    id: "mil_def_1",
+    branch: "military",
+    name: "Hardened Emplacements",
+    description: "Permanent +5% defense power.",
+    cost: 40,
+    requires: ["mil_fleet_1"],
+    effects: [{ kind: "defensePower", value: 1.05 }]
+  },
+  mil_capstone: {
+    id: "mil_capstone",
+    branch: "military",
+    name: "War College",
+    description: "Capstone: +5% fleet speed and defense.",
+    cost: 60,
+    requires: ["mil_def_1", "mil_slots_1"],
+    effects: [
+      { kind: "fleetSpeed", value: 1.05 },
+      { kind: "defensePower", value: 1.05 }
+    ]
+  },
+  exp_spy_1: {
+    id: "exp_spy_1",
+    branch: "exploration",
+    name: "Sensor Craft I",
+    description: "Permanent +1 espionage detail.",
+    cost: 25,
+    requires: [],
+    effects: [{ kind: "espionageLevel", value: 1 }]
+  },
+  exp_research_1: {
+    id: "exp_research_1",
+    branch: "exploration",
+    name: "Archive Protocols",
+    description: "Permanent +5% research speed.",
+    cost: 25,
+    requires: [],
+    effects: [{ kind: "researchSpeed", value: 1.05 }]
+  },
+  exp_spy_2: {
+    id: "exp_spy_2",
+    branch: "exploration",
+    name: "Sensor Craft II",
+    description: "Further +1 espionage detail.",
+    cost: 40,
+    requires: ["exp_spy_1"],
+    effects: [{ kind: "espionageLevel", value: 1 }]
+  },
+  exp_capstone: {
+    id: "exp_capstone",
+    branch: "exploration",
+    name: "Deep Survey Corps",
+    description: "Capstone: +10% research speed.",
+    cost: 60,
+    requires: ["exp_spy_2", "exp_research_1"],
+    effects: [{ kind: "researchSpeed", value: 1.1 }]
+  }
+};
+
 // packages/game/src/catalog.ts
+var STARSHARDS_DAILY_LOGIN = 15;
+var STARSHARDS_HIGHSCORE_TOP3 = 50;
 var MAX_COMBAT_ROUNDS = 6;
 var RAID_LOOT_SHARE = 0.5;
 var DEBRIS_FROM_SHIPS = 0.3;
@@ -2388,15 +2586,15 @@ function energyUsed(planet) {
   }
   return used;
 }
-function energyProduced(planet) {
+function energyProduced(planet, energyOutputMult = 1) {
   const base = solarEnergy(planet.buildings.solarPlant ?? 0);
   const mult = productionMultForSlot(planet.coords.slot).energy;
-  return Math.floor(base * mult);
+  return Math.floor(base * mult * Math.max(0, energyOutputMult));
 }
-function energyFactor(planet) {
+function energyFactor(planet, energyOutputMult = 1) {
   const used = energyUsed(planet);
   if (used <= 0) return 1;
-  const produced = energyProduced(planet);
+  const produced = energyProduced(planet, energyOutputMult);
   return Math.min(1, produced / used);
 }
 function storageFor(planet) {
@@ -2416,10 +2614,12 @@ function fieldsUsed(planet) {
 function fieldsRemaining(planet) {
   return Math.max(0, fieldsCap(planet) - fieldsUsed(planet));
 }
-function productionPerHour(planet, universeSpeed = 1, energyTechLevel = 0) {
-  const factor = energyFactor(planet);
+function productionPerHour(planet, universeSpeed = 1, energyTechLevel = 0, boosts) {
+  const energyMult = boosts?.energyOutput ?? 1;
+  const mineMult = boosts?.mineOutput ?? 1;
+  const factor = energyFactor(planet, energyMult);
   const techBonus = 1 + energyTechLevel * 0.02;
-  const incomeScale = universeSpeed * PRODUCTION_MULT * techBonus;
+  const incomeScale = universeSpeed * PRODUCTION_MULT * techBonus * mineMult;
   const pos = productionMultForSlot(planet.coords.slot);
   return {
     metal: mineOutputPerHour("metal", planet.buildings.metalMine ?? 0) * factor * incomeScale * pos.metal,
@@ -2497,18 +2697,20 @@ function researchPoints(research) {
   }
   return points;
 }
-function economySnapshot(planet, universeSpeed = 1, energyTechLevel = 0) {
+function economySnapshot(planet, universeSpeed = 1, energyTechLevel = 0, boosts) {
   const used = fieldsUsed(planet);
+  const energyMult = boosts?.energyOutput ?? 1;
   return {
     productionPerHour: productionPerHour(
       planet,
       universeSpeed,
-      energyTechLevel
+      energyTechLevel,
+      boosts
     ),
     energy: {
-      produced: energyProduced(planet),
+      produced: energyProduced(planet, energyMult),
       used: energyUsed(planet),
-      factor: energyFactor(planet)
+      factor: energyFactor(planet, energyMult)
     },
     storage: storageFor(planet),
     fields: {
@@ -2713,7 +2915,8 @@ function collectFire(firerShips, firerDefenses, targetShips, targetDefenses, fir
   }
   return shots;
 }
-function resolveCombat(attacker, defender, defenses = emptyDefenses(), attackerResearch, defenderResearch) {
+function resolveCombat(attacker, defender, defenses = emptyDefenses(), attackerResearch, defenderResearch, mods) {
+  const defensePowerMult = Math.max(0.01, mods?.defensePower ?? 1);
   const atkSide = {
     ships: normalizeFleetShips(attacker),
     defenses: emptyDefenses(),
@@ -2762,10 +2965,20 @@ function resolveCombat(attacker, defender, defenses = emptyDefenses(), attackerR
       defenderResearch
     );
     for (const shot of atkShots) {
-      applyDamageToTarget(defSide, shot.target, shot.damage, defenderResearch);
+      applyDamageToTarget(
+        defSide,
+        shot.target,
+        shot.damage / defensePowerMult,
+        defenderResearch
+      );
     }
     for (const shot of defShots) {
-      applyDamageToTarget(atkSide, shot.target, shot.damage, attackerResearch);
+      applyDamageToTarget(
+        atkSide,
+        shot.target,
+        shot.damage * defensePowerMult,
+        attackerResearch
+      );
     }
     const atkAlive2 = shipCount(atkSide.ships) > 0;
     const defAlive2 = shipCount(defSide.ships) + defenseCount(defSide.defenses) > 0;
@@ -3016,6 +3229,9 @@ function ensureUniverseShape(universe) {
     if (player.starshards === void 0) player.starshards = 0;
     if (!player.officers) player.officers = [];
     if (!player.skillsUnlocked) player.skillsUnlocked = [];
+    if (player.highscoreStarshardsClaimed === void 0) {
+      player.highscoreStarshardsClaimed = false;
+    }
   }
   const seed = universe.seed ?? universe.id;
   for (const planet of Object.values(universe.planets)) {
@@ -3098,7 +3314,8 @@ function joinUniverse(universe, playerName, now = Date.now()) {
     createdAt: now,
     starshards: 0,
     officers: [],
-    skillsUnlocked: []
+    skillsUnlocked: [],
+    highscoreStarshardsClaimed: false
   };
   universe.players[playerId] = player;
   universe.planets[planetId] = planet;
@@ -3118,7 +3335,7 @@ function bestLabLevel(universe, player) {
 }
 
 // packages/game/src/world-tick.ts
-function advancePlanet(planet, universeSpeed, now, energyTechLevel = 0) {
+function advancePlanet(planet, universeSpeed, now, energyTechLevel = 0, boosts) {
   let state = {
     ...planet,
     resources: { ...planet.resources },
@@ -3143,7 +3360,12 @@ function advancePlanet(planet, universeSpeed, now, energyTechLevel = 0) {
   }
   const elapsedMs = Math.max(0, now - state.lastTickAt);
   if (elapsedMs > 0) {
-    const rates = productionPerHour(state, universeSpeed, energyTechLevel);
+    const rates = productionPerHour(
+      state,
+      universeSpeed,
+      energyTechLevel,
+      boosts
+    );
     const hours = elapsedMs / 36e5;
     const caps = storageFor(state);
     state.resources = clampToStorage(
@@ -3208,6 +3430,73 @@ function addDebris(universe, coords, add) {
 }
 function getDebris(universe, coords) {
   return universe.debris[coordsKey(coords)] ?? null;
+}
+
+// packages/game/src/world-boosts.ts
+function emptyBoosts() {
+  return {
+    mineOutput: 1,
+    researchSpeed: 1,
+    fleetSpeed: 1,
+    fleetSlots: 0,
+    defensePower: 1,
+    energyOutput: 1,
+    espionageLevel: 0
+  };
+}
+function applyEffect(boosts, effect) {
+  switch (effect.kind) {
+    case "mineOutput":
+    case "researchSpeed":
+    case "fleetSpeed":
+    case "defensePower":
+    case "energyOutput":
+      boosts[effect.kind] *= effect.value;
+      break;
+    case "fleetSlots":
+    case "espionageLevel":
+      boosts[effect.kind] += effect.value;
+      break;
+    default: {
+      const _exhaustive = effect.kind;
+      throw new Error(`Unhandled effect kind: ${_exhaustive}`);
+    }
+  }
+}
+function pruneExpiredOfficers(player, now) {
+  const live = (player.officers ?? []).filter((o) => o.expiresAt > now);
+  player.officers = live;
+  return live;
+}
+function playerBoosts(player, now) {
+  const boosts = emptyBoosts();
+  if (!player) return boosts;
+  const officers = pruneExpiredOfficers(player, now);
+  for (const o of officers) {
+    const def = OFFICERS[o.officerId];
+    if (!def) continue;
+    for (const effect of def.effects) applyEffect(boosts, effect);
+  }
+  for (const id of player.skillsUnlocked ?? []) {
+    const def = SKILLS[id];
+    if (!def) continue;
+    for (const effect of def.effects) applyEffect(boosts, effect);
+  }
+  return boosts;
+}
+function grantStarshards(player, amount) {
+  const add = Math.max(0, Math.floor(amount));
+  player.starshards = Math.max(0, Math.floor(player.starshards ?? 0) + add);
+  return player.starshards;
+}
+function utcDayKey(now) {
+  return new Date(now).toISOString().slice(0, 10);
+}
+function canClaimDailyLogin(player, now) {
+  return player.lastDailyLoginUtc !== utcDayKey(now);
+}
+function expeditionStarshardsAmount(roll) {
+  return 5 + roll % 21;
 }
 
 // packages/game/src/world-moons.ts
@@ -3278,12 +3567,14 @@ function resolveRaidArrival(universe, fleet, target, now) {
   const defenderOwner = universe.players[target.ownerPlayerId];
   const defenderBefore = { ...target.ships };
   const defensesBefore = { ...target.defenses ?? emptyDefenses() };
+  const defensePower = playerBoosts(defenderOwner, now).defensePower;
   const combat = resolveCombat(
     fleet.ships,
     defenderBefore,
     defensesBefore,
     owner?.research,
-    defenderOwner?.research
+    defenderOwner?.research,
+    { defensePower }
   );
   target.ships = combat.defenderAfter;
   target.defenses = combat.defensesAfter;
@@ -3340,8 +3631,9 @@ function resolveEspionage(universe, fleet, target, now) {
   const spy = universe.players[fleet.ownerPlayerId];
   const targetOwner = universe.players[target.ownerPlayerId];
   if (!spy || !targetOwner) return;
+  const spyBoost = playerBoosts(spy, now).espionageLevel;
   const detail = espionageDetail(
-    spy.research.espionageTech ?? 0,
+    (spy.research.espionageTech ?? 0) + spyBoost,
     target.buildings.researchLab ?? 0
   );
   const reportId = `spy_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
@@ -3376,7 +3668,8 @@ function expeditionRoll(fleetId, at) {
 function expeditionKindFromRoll(roll) {
   if (roll < 40) return "resources";
   if (roll < 55) return "ships";
-  if (roll < 75) return "nothing";
+  if (roll < 70) return "nothing";
+  if (roll < 75) return "starshards";
   return "pirates";
 }
 function scaleShipsKeep(ships, keepRatio) {
@@ -3412,6 +3705,7 @@ function resolveExpeditionArrival(universe, fleet, now) {
   const before = normalizeFleetShips(fleet.ships);
   let cargoGained = { metal: 0, crystal: 0, deuterium: 0 };
   const shipsDelta = {};
+  let starshardsGained = 0;
   let summary;
   switch (kind) {
     case "resources": {
@@ -3437,6 +3731,17 @@ function resolveExpeditionArrival(universe, fleet, now) {
     case "nothing": {
       fleet.cargo = { metal: 0, crystal: 0, deuterium: 0 };
       summary = "Empty void \u2014 instruments found nothing of value.";
+      break;
+    }
+    case "starshards": {
+      fleet.cargo = { metal: 0, crystal: 0, deuterium: 0 };
+      starshardsGained = expeditionStarshardsAmount(roll);
+      const owner = universe.players[fleet.ownerPlayerId];
+      if (owner) {
+        grantStarshards(owner, starshardsGained);
+        universe.players[owner.id] = owner;
+      }
+      summary = `Rare stellar fragment cache \u2014 +${starshardsGained} Starshards.`;
       break;
     }
     case "pirates": {
@@ -3471,6 +3776,7 @@ function resolveExpeditionArrival(universe, fleet, now) {
     kind,
     cargoGained,
     shipsDelta,
+    starshardsGained: starshardsGained || void 0,
     summary
   };
   universe.expeditionReports[reportId] = report;
@@ -3645,11 +3951,13 @@ function advanceUniverse(universe, now = Date.now()) {
     const planet = universe.planets[id];
     const owner = universe.players[planet.ownerPlayerId];
     const energyTech = owner?.research.energyTech ?? 0;
+    const boosts = playerBoosts(owner, now);
     universe.planets[id] = advancePlanet(
       planet,
       universe.speed,
       now,
-      energyTech
+      energyTech,
+      { mineOutput: boosts.mineOutput, energyOutput: boosts.energyOutput }
     );
   }
   advanceFleets(universe, now);
@@ -3834,10 +4142,11 @@ function queueResearch(universe, playerId, researchId, now = Date.now()) {
   if (!canAfford(planet.resources, cost)) {
     return { ok: false, error: "Not enough resources on active planet." };
   }
+  const researchSpeed = playerBoosts(player, now).researchSpeed;
   const seconds = Math.max(
     1,
     Math.ceil(
-      researchUpgradeSeconds(researchId, current, lab) / universe.speed
+      researchUpgradeSeconds(researchId, current, lab) / universe.speed / Math.max(0.01, researchSpeed)
     )
   );
   planet.resources = spend(planet.resources, cost);
@@ -4023,13 +4332,15 @@ function launchFleet(universe, playerIdOrOpts, targetPlanetId, mission, shipsInp
   advanceUniverse(universe, now);
   const origin = resolveActionPlanet(universe, player, opts.originPlanetId);
   if (!origin) return { ok: false, error: "Planet missing." };
+  const boosts = playerBoosts(player, now);
+  const slotCap = maxFleetSlots(player.research.computerTech) + boosts.fleetSlots;
   const activeFleets = Object.values(universe.fleets).filter(
     (f) => f.ownerPlayerId === player.id
   ).length;
-  if (activeFleets >= maxFleetSlots(player.research.computerTech)) {
+  if (activeFleets >= slotCap) {
     return {
       ok: false,
-      error: `Fleet slot limit reached (Computer Tech \u2192 ${maxFleetSlots(player.research.computerTech)} slots).`
+      error: `Fleet slot limit reached (Computer Tech \u2192 ${slotCap} slots).`
     };
   }
   const target = resolveLaunchTarget(
@@ -4096,7 +4407,7 @@ function launchFleet(universe, playerIdOrOpts, targetPlanetId, mission, shipsInp
     origin.coords,
     targetCoords,
     ships,
-    universe.fleetSpeed,
+    universe.fleetSpeed * Math.max(0.01, boosts.fleetSpeed),
     player.research.combustionDrive ?? 0
   );
   const fleetId = `flt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
@@ -4212,13 +4523,27 @@ function galaxyViewFor(universe, playerId, galaxy, system) {
     } : null
   };
 }
+function maybeGrantHighscoreStarshards(universe, playerId) {
+  const player = universe.players[playerId];
+  if (!player || player.highscoreStarshardsClaimed) return;
+  if (Object.keys(universe.players).length < 2) return;
+  const board = highscoresBoard(universe);
+  const row = board.find((e) => e.playerId === playerId);
+  if (!row || row.rank > 3) return;
+  player.highscoreStarshardsClaimed = true;
+  grantStarshards(player, STARSHARDS_HIGHSCORE_TOP3);
+  universe.players[player.id] = player;
+}
 function playerView(universe, playerId, now = Date.now(), galaxy, system) {
   advanceUniverse(universe, now);
   ensureUniverseShape(universe);
   const player = universe.players[playerId];
   if (!player) throw new Error("Unknown player.");
+  pruneExpiredOfficers(player, now);
+  maybeGrantHighscoreStarshards(universe, playerId);
   const planet = activePlanet(universe, player);
   if (!planet) throw new Error("Planet missing.");
+  const boosts = playerBoosts(player, now);
   const fleets = Object.values(universe.fleets).filter((f) => f.ownerPlayerId === playerId).sort((a, b) => a.arrivesAt - b.arrivesAt);
   const reports = Object.values(universe.reports).filter(
     (r) => r.attackerPlayerId === playerId || r.defenderPlayerId === playerId
@@ -4255,7 +4580,8 @@ function playerView(universe, playerId, now = Date.now(), galaxy, system) {
     economy: economySnapshot(
       planet,
       universe.speed,
-      player.research.energyTech ?? 0
+      player.research.energyTech ?? 0,
+      { mineOutput: boosts.mineOutput, energyOutput: boosts.energyOutput }
     ),
     roster: publicRoster(universe),
     highscores: highscoresBoard(universe),
@@ -4267,7 +4593,10 @@ function playerView(universe, playerId, now = Date.now(), galaxy, system) {
     sensorContacts,
     starshards: player.starshards ?? 0,
     officers: player.officers ?? [],
-    skillsUnlocked: player.skillsUnlocked ?? []
+    skillsUnlocked: player.skillsUnlocked ?? [],
+    officerCatalog: OFFICER_ORDER.map((id) => OFFICERS[id]),
+    skillCatalog: SKILL_ORDER.map((id) => SKILLS[id]),
+    dailyLoginAvailable: canClaimDailyLogin(player, now)
   };
 }
 
@@ -4291,6 +4620,74 @@ function migrateOrResetUniverse(data, opts) {
 }
 function archiveUniverseKey(universeId, ts = Date.now()) {
   return `starhold:universe:archive:${universeId}:${ts}`;
+}
+
+// packages/game/src/world-starshards.ts
+function claimDailyLogin(universe, playerId, now = Date.now()) {
+  const player = universe.players[playerId];
+  if (!player) return { ok: false, error: "Unknown player." };
+  advanceUniverse(universe, now);
+  if (!canClaimDailyLogin(player, now)) {
+    return { ok: false, error: "Daily Starshards already claimed today (UTC)." };
+  }
+  player.lastDailyLoginUtc = utcDayKey(now);
+  grantStarshards(player, STARSHARDS_DAILY_LOGIN);
+  universe.players[player.id] = player;
+  return { ok: true, starshardsGranted: STARSHARDS_DAILY_LOGIN };
+}
+function activateOfficer(universe, playerId, officerId, now = Date.now()) {
+  const player = universe.players[playerId];
+  if (!player) return { ok: false, error: "Unknown player." };
+  const def = OFFICERS[officerId];
+  if (!def) return { ok: false, error: "Unknown officer." };
+  advanceUniverse(universe, now);
+  pruneExpiredOfficers(player, now);
+  const balance = Math.floor(player.starshards ?? 0);
+  if (balance < def.cost) {
+    return {
+      ok: false,
+      error: `Need ${def.cost} Starshards (have ${balance}).`
+    };
+  }
+  player.starshards = balance - def.cost;
+  const others = (player.officers ?? []).filter(
+    (o) => o.officerId !== officerId
+  );
+  others.push({
+    officerId,
+    activatedAt: now,
+    expiresAt: now + def.durationMs
+  });
+  player.officers = others;
+  universe.players[player.id] = player;
+  return { ok: true };
+}
+function unlockSkill(universe, playerId, skillId, now = Date.now()) {
+  const player = universe.players[playerId];
+  if (!player) return { ok: false, error: "Unknown player." };
+  const def = SKILLS[skillId];
+  if (!def) return { ok: false, error: "Unknown skill." };
+  advanceUniverse(universe, now);
+  const unlocked = new Set(player.skillsUnlocked ?? []);
+  if (unlocked.has(skillId)) {
+    return { ok: false, error: "Skill already unlocked." };
+  }
+  for (const req of def.requires) {
+    if (!unlocked.has(req)) {
+      return { ok: false, error: `Requires skill ${req} first.` };
+    }
+  }
+  const balance = Math.floor(player.starshards ?? 0);
+  if (balance < def.cost) {
+    return {
+      ok: false,
+      error: `Need ${def.cost} Starshards (have ${balance}).`
+    };
+  }
+  player.starshards = balance - def.cost;
+  player.skillsUnlocked = [...unlocked, skillId];
+  universe.players[player.id] = player;
+  return { ok: true };
 }
 
 // node_modules/uncrypto/dist/crypto.node.mjs
@@ -10438,6 +10835,43 @@ function createApp() {
         cargo: body.cargo,
         originPlanetId: body.originPlanetId
       });
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId));
+    });
+  });
+  app2.post("/api/claim-daily", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    if (!body.playerId) {
+      return c.json({ error: "playerId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = claimDailyLogin(universe, body.playerId);
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId));
+    });
+  });
+  app2.post("/api/activate-officer", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    if (!body.playerId || !body.officerId) {
+      return c.json({ error: "playerId and officerId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = activateOfficer(
+        universe,
+        body.playerId,
+        body.officerId
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId));
+    });
+  });
+  app2.post("/api/unlock-skill", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    if (!body.playerId || !body.skillId) {
+      return c.json({ error: "playerId and skillId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = unlockSkill(universe, body.playerId, body.skillId);
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId));
     });
