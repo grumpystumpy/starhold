@@ -13,6 +13,7 @@ import type {
   UniverseState,
 } from "./types.js";
 import { emptyCargo } from "./world-bootstrap.js";
+import { tryFormMoon } from "./world-moons.js";
 import { addDebris, subtractCargo } from "./world-tick.js";
 
 /** Resolve outbound raid at target; mutates fleet cargo/ships/reportId. */
@@ -56,6 +57,10 @@ export function resolveRaidArrival(
   }
 
   const reportId = `rpt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  const moon = tryFormMoon(universe, target, debrisCreated, reportId, now);
+  const summary = moon
+    ? `${combat.summary} A moon coalesced from the debris field.`
+    : combat.summary;
   const report: CombatReport = {
     id: reportId,
     at: now,
@@ -75,7 +80,8 @@ export function resolveRaidArrival(
     debrisCreated,
     outcome: combat.outcome,
     rounds: combat.rounds,
-    summary: combat.summary,
+    summary,
+    moonFormed: Boolean(moon),
   };
   universe.reports[reportId] = report;
 
