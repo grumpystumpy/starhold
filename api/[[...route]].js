@@ -9253,22 +9253,36 @@ var REDIS_KEY = process.env.STARHOLD_UNIVERSE_KEY ?? "starhold:universe:v1";
 var LOCK_KEY = `${REDIS_KEY}:lock`;
 var memoryUniverse = null;
 var redis;
-function hasUpstashEnv() {
-  return Boolean(
-    process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-  );
+var resolvedMode;
+function redisCredentials() {
+  const upstashUrl = process.env.UPSTASH_REDIS_REST_URL?.trim();
+  const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
+  if (upstashUrl && upstashToken) {
+    return { url: upstashUrl, token: upstashToken, mode: "upstash" };
+  }
+  const kvUrl = process.env.KV_REST_API_URL?.trim();
+  const kvToken = process.env.KV_REST_API_TOKEN?.trim();
+  if (kvUrl && kvToken) {
+    return { url: kvUrl, token: kvToken, mode: "kv" };
+  }
+  return null;
 }
 function getRedis() {
   if (redis !== void 0) return redis;
-  if (!hasUpstashEnv()) {
+  const creds = redisCredentials();
+  if (!creds) {
     redis = null;
+    resolvedMode = "memory";
     return null;
   }
-  redis = Redis2.fromEnv();
+  resolvedMode = creds.mode;
+  redis = new Redis2({ url: creds.url, token: creds.token });
   return redis;
 }
 function storageMode() {
-  return hasUpstashEnv() ? "upstash" : "memory";
+  if (resolvedMode) return resolvedMode;
+  const creds = redisCredentials();
+  return creds?.mode ?? "memory";
 }
 function freshUniverse() {
   return createUniverse(UNIVERSE_NAME, UNIVERSE_SPEED);
