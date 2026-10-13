@@ -1,0 +1,44 @@
+name: assemble-accounts-sources
+on:
+  push:
+    branches: [cursor/accounts-multiplayer-093d]
+    paths: [.cursor-staging/accounts/t/READY]
+  workflow_dispatch:
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cursor/accounts-multiplayer-093d
+      - name: Assemble and verify
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import json, pathlib, hashlib, sys
+          root = pathlib.Path(".")
+          man = json.loads((root / ".cursor-staging/accounts/t/manifest.json").read_text())
+          for f in man["files"]:
+              d = root / ".cursor-staging/accounts/t" / f["safe"]
+              parts = sorted(d.glob("*.txt"))
+              assert len(parts) == f["slices"], (f["path"], len(parts), f["slices"])
+              content = "".join(p.read_text() for p in parts)
+              h = hashlib.sha256(content.encode()).hexdigest()
+              assert h == f["sha256"] and len(content) == f["len"], (f["path"], h, f["sha256"])
+              out = root / f["path"]
+              out.parent.mkdir(parents=True, exist_ok=True)
+              out.write_text(content)
+              print("OK", f["path"], len(content))
+          PY
+      - name: Commit assembled sources
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -rf .cursor-staging
+          rm -f .github/workflows/assemble-accounts-sources.yml
+          git add -A
+          git commit -m "feat(accounts): assemble remaining sources from verified slices" || exit 0
+          git push origin HEAD:cursor/accounts-multiplayer-093d
