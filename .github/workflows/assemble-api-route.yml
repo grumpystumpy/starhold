@@ -9,7 +9,7 @@ on:
       - "apps/server/**"
       - "apps/web/**"
       - "scripts/bundle-api.mjs"
-      - "scripts/.j-staging/**"
+      - ".cursor-staging/j2/**"
 
 jobs:
   assemble:
@@ -29,11 +29,10 @@ jobs:
 
       - name: Unpack staged Micah amendments
         run: |
-          if [ -f scripts/.j-staging/unpack-all.mjs ]; then
-            node scripts/.j-staging/unpack-all.mjs
+          if [ -f .cursor-staging/j2/unpack-all.mjs ]; then
+            node .cursor-staging/j2/unpack-all.mjs
           fi
-          # Remove staging artifacts (including legacy part files)
-          rm -rf scripts/.j-staging
+          rm -rf .cursor-staging scripts/.j-staging
 
       - name: Install + rebuild API bundle
         run: |
