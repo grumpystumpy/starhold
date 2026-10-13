@@ -1,6 +1,7 @@
 import type {
   BuildingId,
   DefenseId,
+  OfficerId,
   ResearchId,
   ShipId,
 } from "@starhold/game";
@@ -15,14 +16,17 @@ import {
   setFlash,
 } from "./session";
 import {
+  doActivateOfficer,
   doBuild,
   doBuildDefense,
+  doClaimDaily,
   doGalaxyNav,
   doJoin,
   doLaunchFleet,
   doRefresh,
   doResearch,
   doSelectPlanet,
+  doUnlockSkill,
   doUpgrade,
 } from "./main-actions";
 import { readFleetForm } from "./main-fleet-form";
@@ -136,6 +140,30 @@ export function bindClickHandlers(): void {
           void doResearch(researchId);
           return;
         }
+      }
+
+      if (closestActionEl(target, "[data-claim-daily]")) {
+        ev.preventDefault();
+        void doClaimDaily();
+        return;
+      }
+
+      const officerBtn = closestActionEl(target, "[data-activate-officer]");
+      if (officerBtn) {
+        ev.preventDefault();
+        const officerId = officerBtn.getAttribute(
+          "data-activate-officer",
+        ) as OfficerId | null;
+        if (officerId) void doActivateOfficer(officerId);
+        return;
+      }
+
+      const skillBtn = closestActionEl(target, "[data-unlock-skill]");
+      if (skillBtn) {
+        ev.preventDefault();
+        const skillId = skillBtn.getAttribute("data-unlock-skill");
+        if (skillId) void doUnlockSkill(skillId);
+        return;
       }
 
       if (closestActionEl(target, "#refresh-btn")) {

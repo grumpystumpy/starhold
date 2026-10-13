@@ -4,6 +4,7 @@ import type {
   DefenseId,
   FleetShips,
   MissionType,
+  OfficerId,
   PlayerView,
   ResearchId,
   Resources,
@@ -118,6 +119,39 @@ export async function launchFleetMission(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ playerId, ...opts }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function claimDaily(playerId: string): Promise<PlayerView> {
+  const res = await fetch("/api/claim-daily", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function activateOfficerHire(
+  playerId: string,
+  officerId: OfficerId,
+): Promise<PlayerView> {
+  const res = await fetch("/api/activate-officer", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, officerId }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function unlockSkillNode(
+  playerId: string,
+  skillId: string,
+): Promise<PlayerView> {
+  const res = await fetch("/api/unlock-skill", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, skillId }),
   });
   return parse<PlayerView>(res);
 }
