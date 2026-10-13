@@ -11,7 +11,7 @@ Planets can gain a **moon** after heavy combat debris — a second body at the s
 | Storage | Moons are `PlanetState` with `kind: "moon"`, `parentPlanetId`, same `coords` as parent |
 | Parent | Planet gets `moonId` when a moon exists |
 | Ownership | Moon owned by the **planet owner** at formation |
-|Slots | Moons do **not** consume galaxy slots; `planetAtCoords` / `nextCoords` ignore moons |
+| Slots | Moons do **not** consume galaxy slots; `planetAtCoords` / `nextCoords` ignore moons |
 | Empire list | Moon ids are in `player.planetIds` (switcher / transport / deploy / jump) |
 | Colony cap | `maxColonies` counts **planets only** (not moons) |
 
