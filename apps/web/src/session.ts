@@ -44,7 +44,7 @@ export const session = {
   armedResearch: null as ResearchId | null,
   /** Galaxy browser system override (null = follow active planet). */
   galaxySystem: null as number | null,
-  /** Classic left-nav page. */
+  /** Active routed page (synced to URL pathname). */
   activePage: "overview" as NavPage,
   /** Ignore duplicate click after pointerup already dispatched the armed action. */
   suppressClickUntil: 0,
@@ -140,13 +140,14 @@ export function readDefenseCount(defenseId: DefenseId): number {
   return Math.max(1, Math.min(50, Number(countInput?.value) || 1));
 }
 
+/**
+ * Drop join-only `commander` bootstrap param.
+ * Deep-link `playerId` / `planet` are kept by `syncSessionUrl` after resume.
+ */
 export function stripJoinParams(): void {
   const url = new URL(window.location.href);
-  if (!url.searchParams.has("commander") && !url.searchParams.has("playerId")) {
-    return;
-  }
+  if (!url.searchParams.has("commander")) return;
   url.searchParams.delete("commander");
-  url.searchParams.delete("playerId");
   const next = `${url.pathname}${url.search}${url.hash}`;
   window.history.replaceState({}, "", next || "/");
 }

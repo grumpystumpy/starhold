@@ -8,6 +8,7 @@ import {
   setFlash,
   stripJoinParams,
 } from "./session";
+import { syncSessionUrl } from "./ui/router";
 
 export function startPolling(playerId: string): void {
   stopPolling();
@@ -60,6 +61,7 @@ export async function doJoin(name: string): Promise<void> {
     localStorage.setItem(SESSION_KEY, session.view.player.id);
     setFlash("notice", `Joined as ${session.view.player.name}.`);
     stripJoinParams();
+    syncSessionUrl({ replace: true });
     startPolling(session.view.player.id);
   } catch (err) {
     session.error = null;
@@ -139,6 +141,7 @@ export async function doSelectPlanet(planetId: string): Promise<void> {
   try {
     session.view = await selectPlanet(session.view.player.id, planetId);
     session.galaxySystem = session.view.planet.coords.system;
+    syncSessionUrl({ replace: true, planetId });
     setFlash("notice", `Switched to ${session.view.planet.name}.`);
   } catch (err) {
     setFlash(
