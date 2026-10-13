@@ -14,6 +14,7 @@ export const BUILDING_ART: Record<BuildingId, string> = {
   lunarBase: "/assets/buildings/lunar-base.svg",
   sensorArray: "/assets/buildings/sensor-array.svg",
   jumpGate: "/assets/buildings/jump-gate.svg",
+  chronoLathe: "/assets/buildings/chrono-lathe.svg",
 };
 
 export const SHIP_ART: Record<ShipId, string> = {
@@ -25,6 +26,11 @@ export const SHIP_ART: Record<ShipId, string> = {
   probe: "/assets/ships/probe.svg",
   recycler: "/assets/ships/recycler.svg",
   colonyShip: "/assets/ships/colony-ship.svg",
+  voidforgeTitan: "/assets/ships/voidforge-titan.svg",
+  worldEater: "/assets/ships/world-eater.svg",
+  swarmDrone: "/assets/ships/swarm-drone.svg",
+  swarmHarvester: "/assets/ships/swarm-harvester.svg",
+  swarmMothership: "/assets/ships/swarm-mothership.svg",
 };
 
 export const DEFENSE_ART: Record<DefenseId, string> = {
