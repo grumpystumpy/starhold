@@ -1,0 +1,38 @@
+
+}
+
+function facilitiesPage(view: PlayerView, busy: boolean): string {
+  const { planet, universe, now } = view;
+  const ids =
+    planet.kind === "moon"
+      ? FACILITY_BUILDINGS_MOON
+      : FACILITY_BUILDINGS_PLANET;
+  return `
+    <section class="panel" data-testid="facilities-panel">
+      <h2>Facilities</h2>
+      ${ids.map((id) => buildingRow(id, planet, universe.speed, now, busy)).join("")}
+      ${
+        buildQueueHtml(planet, now) ||
+        `<p class="hint">Shipyard and Research Lab unlock production and techs.</p>`
+      }
+    </section>`;
+}
+
+function researchPage(view: PlayerView, busy: boolean): string {
+  const { player, now } = view;
+  return `
+    <section class="panel" data-testid="research-panel">
+      <h2>Research</h2>
+      ${RESEARCH_ORDER.map((id) => researchRow(id, view, busy)).join("")}
+      ${
+        researchQueueHtml(player, now) ||
+        `<p class="hint">Build a Research Lab first. One empire-wide project at a time.</p>`
+      }
+    </section>`;
+}
+
+function shipyardPage(view: PlayerView, busy: boolean): string {
+  const { planet, now } = view;
+  const hangarEmpty = SHIP_ORDER.every((id) => (planet.ships[id] ?? 0) <= 0);
+  return `
+    <section cl
