@@ -5,6 +5,7 @@ import {
   MAP_SYSTEMS,
 } from "./catalog.js";
 import { maxColonies, maxExpeditions } from "./formulas.js";
+import { ownedPlanetCount } from "./world-moons.js";
 import type {
   Coordinates,
   FleetShips,
@@ -94,7 +95,10 @@ export function resolveLaunchTarget(
       if ((ships.colonyShip ?? 0) < 1) {
         return { ok: false, error: "Colonize requires a Colony Ship." };
       }
-      if (player.planetIds.length >= maxColonies(player.research.astrophysics)) {
+      if (
+        ownedPlanetCount(universe, player.id) >=
+        maxColonies(player.research.astrophysics)
+      ) {
         return {
           ok: false,
           error: `Colony limit reached (Astrophysics → ${maxColonies(player.research.astrophysics)} worlds).`,
