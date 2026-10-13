@@ -85,6 +85,7 @@ export {
   grantPlayerXp,
   levelBonuses,
   playerProgressView,
+  XP_MIX_TARGET,
   xpForBuilding,
   xpForCombatLose,
   xpForCombatWin,

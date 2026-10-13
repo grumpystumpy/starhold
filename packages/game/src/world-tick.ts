@@ -6,7 +6,6 @@ import {
   grantPlayerXp,
   productionPerHour,
   storageFor,
-  xpForBuilding,
   xpForResearch,
 } from "./formulas.js";
 import type {
@@ -26,7 +25,7 @@ export function advancePlanet(
   now: number,
   energyTechLevel = 0,
   boosts?: { mineOutput?: number; energyOutput?: number },
-  owner?: PlayerState,
+  _owner?: PlayerState,
 ): PlanetState {
   let state = {
     ...planet,
@@ -40,7 +39,7 @@ export function advancePlanet(
     const { buildingId, targetLevel } = state.buildQueue;
     state.buildings[buildingId] = targetLevel;
     state.buildQueue = null;
-    if (owner) grantPlayerXp(owner, xpForBuilding(targetLevel));
+    // Buildings grant no XP (Micah amendment / Round 2 rebalance).
   }
 
   if (state.shipQueue && state.shipQueue.completesAt <= now) {

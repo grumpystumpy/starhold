@@ -234,18 +234,25 @@ interface PlayerProgress {
 // xpToNext(L) = floor(100 * L^1.45)   // v1
 ```
 
-### XP awards (v1)
+### XP awards (v1.1 — Micah mix)
+
+**Target mix** of a typical player's XP earnings (per ~100 XP): **combat 80% · pirates 8% · expeditions 8% · research 4% · buildings 0%**.  
+`xpToNext(L) = floor(100 × L^1.45)` unchanged.
 
 | Source | XP |
 |--------|---:|
-| Complete building upgrade (per level completed) | `8 + 2 * targetLevel` |
-| Complete research level | `12 + 3 * targetLevel` |
-| Win combat (raid / pirate / defense) | `25 + floor(destroyedEnemyCost / 500)` capped `+200` |
-| Lose combat (participated) | `8` |
-| Expedition resolve (any non-empty outcome) | `15` |
-| Expedition mini-planet discovery | `40` |
-| Destroy pirate base | `50 + 10 * baseLevel` |
-| Kill pirate ships (per 1000 ship cost destroyed) | `5` (stacking, cap `100` / battle) |
+| Complete building upgrade | **0** (no XP) |
+| Complete research level | `2 + targetLevel` |
+| Win combat (raid / pirate fight / defense) | `19 + floor(destroyedEnemyCost / 500)` bonus capped `+56` (max 75) |
+| Lose combat (participated) | `4` |
+| Expedition resolve (any non-empty outcome) | `4` |
+| Expedition mini-planet discovery | `10` (rare; outside typical pack) |
+| Destroy pirate base | `4 + baseLevel` |
+| Kill pirate ships (per 1000 ship cost destroyed) | `1` (stacking, cap `10` / battle) |
+
+**Bucket rules:** combat-win/lose XP counts as **combat** even in pirate fights; pirate-only awards are base destroy + pirate ship kills. Buildings never grant XP.
+
+**Reference earn pack (~100 XP):** 3× PvP win @19 + 1× lose @4 + 1× pirateRaid win (combat 19 + destroy tier-2 @6 + kills ~2) + 2× expedition @4 + 1× research targetLevel 2 @4 → combat 80 · pirates 8 · expeditions 8 · research 4 · buildings 0.
 
 ### Per-level bonuses (applied at level L; L starts 1 → bonuses use `(L - 1)`)
 
