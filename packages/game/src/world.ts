@@ -36,3 +36,15 @@ export {
   tryFormMoon,
 } from "./world-moons.js";
 export { moonAtCoords } from "./world-bootstrap.js";
+export {
+  archiveUniverseKey,
+  migrateOrResetUniverse,
+  universeSchemaVersion,
+} from "./world-migrate.js";
+export {
+  asteroidId,
+  asteroidsInSystem,
+  harvestAsteroidField,
+  rollAsteroidCount,
+  seedUniverseAsteroids,
+} from "./world-asteroids.js";
