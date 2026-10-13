@@ -8,10 +8,14 @@ import {
   storageFor,
   xpForResearch,
 } from "./formulas.js";
+import {
+  batchUnitsProduced,
+} from "./formulas.js";
 import type {
   Coordinates,
   DebrisField,
   DefenseQueueItem,
+  FleetMission,
   FleetShips,
   PlanetState,
   PlayerState,
@@ -151,6 +155,41 @@ export function advancePlanet(
   }
 
   return state;
+}
+
+/** Advance mothership in-flight drone production (sub-second batching). */
+export function advanceFleetSwarmProduce(
+  fleet: FleetMission,
+  now: number,
+): void {
+  const job = fleet.swarmProduce;
+  if (!job || job.remaining <= 0) {
+    fleet.swarmProduce = null;
+    return;
+  }
+  const unitSec = Math.max(1e-9, job.unitSeconds);
+  const elapsedSec = Math.max(0, (now - job.progressAt) / 1000);
+  let batch: number;
+  if (unitSec < 1) {
+    batch = batchUnitsProduced(elapsedSec, unitSec, job.remaining);
+  } else if (elapsedSec >= unitSec * job.remaining) {
+    batch = job.remaining;
+  } else {
+    batch = Math.floor(elapsedSec / unitSec);
+  }
+  if (batch <= 0) return;
+  fleet.ships.swarmDrone = (fleet.ships.swarmDrone ?? 0) + batch;
+  const remaining = job.remaining - batch;
+  if (remaining <= 0) {
+    fleet.swarmProduce = null;
+    return;
+  }
+  const leftoverSec = elapsedSec - batch * unitSec;
+  fleet.swarmProduce = {
+    remaining,
+    unitSeconds: unitSec,
+    progressAt: now - leftoverSec * 1000,
+  };
 }
 
 export function advanceResearch(
