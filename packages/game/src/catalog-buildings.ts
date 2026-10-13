@@ -113,4 +113,13 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
     costGrowth: 2,
     baseBuildSeconds: 60,
   },
+  chronoLathe: {
+    id: "chronoLathe",
+    name: "Chrono Lathe",
+    description:
+      "Late-game assembler. Each level multiplies building, ship, and defense build times by 0.1^level. Does not affect research.",
+    baseCost: { metal: 1_000_000, crystal: 500_000, deuterium: 200_000 },
+    costGrowth: 2.5,
+    baseBuildSeconds: 3_600,
+  },
 };
