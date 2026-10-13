@@ -1,0 +1,26 @@
+{
+  "parts": 7,
+  "files": [
+    "apps/server/src/app.ts",
+    "apps/web/src/api.ts",
+    "apps/web/src/main-handlers-click.ts",
+    "apps/web/src/ui/render-dashboard.ts",
+    "apps/web/src/ui/render-officers-skills.ts",
+    "apps/web/src/ui/styles-panels.css",
+    "packages/game/src/expeditions.test.ts",
+    "packages/game/src/formulas-build.ts",
+    "packages/game/src/formulas-combat.ts",
+    "packages/game/src/formulas-travel.ts",
+    "packages/game/src/types-view.ts",
+    "packages/game/src/world-arrival-raid.ts",
+    "packages/game/src/world-arrival.ts",
+    "packages/game/src/world-bootstrap.ts",
+    "packages/game/src/world-expedition.ts",
+    "packages/game/src/world-launch.ts",
+    "packages/game/src/world-research-queue.ts",
+    "packages/game/src/world-tick.ts",
+    "packages/game/src/world-view.ts"
+  ],
+  "sha256": "dad977b5611b4a02aafaf0d0a6442653e6c2af0209312a14de598296666c7098",
+  "gzip_sha256": "72ee723c7941cf7534c75f0d7d82ed0aab4cce1d5c1ac724de652f50b90a6444"
+}
