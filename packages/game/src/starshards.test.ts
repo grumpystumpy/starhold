@@ -132,7 +132,7 @@ describe("Thread D Starshards / officers / skills", () => {
     const view = playerView(universe, a.player.id, 164_000_000);
     assert.equal(view.starshards, 0);
     assert.equal(view.officerCatalog.length, 6);
-    assert.equal(view.skillCatalog.length, 12);
+    assert.equal(view.skillCatalog.length, 13);
     assert.equal(view.dailyLoginAvailable, true);
     assert.deepEqual(view.officers, []);
     assert.deepEqual(view.skillsUnlocked, []);

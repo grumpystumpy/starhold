@@ -7,10 +7,12 @@ import {
   type FleetShips,
   type MissionType,
   type OfficerId,
+  type QueueKind,
   type ResearchId,
   type Resources,
   type ShipId,
   activateOfficer,
+  cancelQueueItem,
   claimDailyLogin,
   ensureUniverseShape,
   joinUniverse,
@@ -20,6 +22,7 @@ import {
   queueDefenseBuild,
   queueResearch,
   queueShipBuild,
+  reorderQueue,
   setActivePlanet,
   unlockSkill,
 } from "@starhold/game";
@@ -249,6 +252,137 @@ export function createApp(): Hono {
     }
     return withUniverse((universe) => {
       const result = queueResearch(universe, body.playerId!, body.researchId!);
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  /** Round 2 aliases — same handlers as upgrade / build-ship / build-defense / research. */
+  app.post("/api/queue/building", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      buildingId?: BuildingId;
+      planetId?: string;
+    };
+    if (!body.playerId || !body.buildingId) {
+      return c.json({ error: "playerId and buildingId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = queueBuildingUpgrade(
+        universe,
+        body.playerId!,
+        body.buildingId!,
+        Date.now(),
+        body.planetId,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  app.post("/api/queue/ship", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      shipId?: ShipId;
+      count?: number;
+      planetId?: string;
+    };
+    if (!body.playerId || !body.shipId) {
+      return c.json({ error: "playerId and shipId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = queueShipBuild(
+        universe,
+        body.playerId!,
+        body.shipId!,
+        body.count ?? 1,
+        Date.now(),
+        body.planetId,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  app.post("/api/queue/defense", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      defenseId?: DefenseId;
+      count?: number;
+      planetId?: string;
+    };
+    if (!body.playerId || !body.defenseId) {
+      return c.json({ error: "playerId and defenseId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = queueDefenseBuild(
+        universe,
+        body.playerId!,
+        body.defenseId!,
+        body.count ?? 1,
+        Date.now(),
+        body.planetId,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  app.post("/api/queue/research", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      researchId?: ResearchId;
+    };
+    if (!body.playerId || !body.researchId) {
+      return c.json({ error: "playerId and researchId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = queueResearch(universe, body.playerId!, body.researchId!);
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  app.post("/api/queue/cancel", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      planetId?: string;
+      kind?: QueueKind;
+      itemId?: string;
+    };
+    if (!body.playerId || !body.kind || !body.itemId) {
+      return c.json({ error: "playerId, kind, and itemId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = cancelQueueItem(universe, body.playerId!, {
+        kind: body.kind!,
+        itemId: body.itemId!,
+        planetId: body.planetId,
+      });
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  app.post("/api/queue/reorder", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      planetId?: string;
+      kind?: QueueKind;
+      orderedIds?: string[];
+    };
+    if (!body.playerId || !body.kind || !Array.isArray(body.orderedIds)) {
+      return c.json(
+        { error: "playerId, kind, and orderedIds required." },
+        400,
+      );
+    }
+    return withUniverse((universe) => {
+      const result = reorderQueue(universe, body.playerId!, {
+        kind: body.kind!,
+        orderedIds: body.orderedIds!,
+        planetId: body.planetId,
+      });
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
     });

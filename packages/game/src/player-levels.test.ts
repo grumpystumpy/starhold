@@ -147,16 +147,17 @@ describe("Thread I XP grants live", () => {
     );
     assert.equal(q.ok, true);
     const queued = universe.planets[a.planet.id].buildQueue;
-    assert.ok(queued);
-    advanceUniverse(universe, queued!.completesAt);
-    assert.equal(universe.planets[a.planet.id].buildQueue, null);
+    assert.ok(queued.length > 0);
+    advanceUniverse(universe, queued[0]!.completesAt);
+    assert.equal(universe.planets[a.planet.id].buildQueue.length, 0);
     assert.equal(universe.players[a.player.id].xpTotal, beforeXp);
 
     const beforeR = universe.players[a.player.id].xpTotal ?? 0;
     const rq = queueResearch(universe, a.player.id, "energyTech", 301_100_000);
     assert.equal(rq.ok, true);
-    const rTarget = universe.players[a.player.id].researchQueue!.targetLevel;
-    const rDone = universe.players[a.player.id].researchQueue!.completesAt;
+    const rFront = universe.players[a.player.id].researchQueue[0]!;
+    const rTarget = rFront.targetLevel;
+    const rDone = rFront.completesAt;
     advanceUniverse(universe, rDone);
     assert.equal(
       universe.players[a.player.id].xpTotal,
@@ -289,38 +290,31 @@ describe("Thread I level bonuses wired", () => {
       304_000_300,
     );
     assert.equal(q.ok, true);
-    const expectedBuild = Math.max(
-      1,
-      Math.ceil((rawBuild * lb.buildTime) / universe.speed),
-    );
-    const actualBuild = Math.round(
-      (body().buildQueue!.completesAt - 304_000_300) / 1000,
-    );
-    assert.equal(actualBuild, expectedBuild);
+    const expectedBuild = (rawBuild * lb.buildTime) / universe.speed;
+    const actualBuild =
+      (body().buildQueue[0]!.completesAt - 304_000_300) / 1000;
+    assert.ok(Math.abs(actualBuild - expectedBuild) < 1e-6);
 
-    body().buildQueue = null;
+    body().buildQueue = [];
     const rawShip = shipBuildSeconds("scout", 10, 5);
     const sq = queueShipBuild(universe, a.player.id, "scout", 10, 304_000_400);
     assert.equal(sq.ok, true);
-    const expectedShip = Math.max(
-      1,
-      Math.ceil((rawShip * lb.shipBuild) / universe.speed),
-    );
-    const actualShip = Math.round(
-      (body().shipQueue!.completesAt - 304_000_400) / 1000,
-    );
-    assert.equal(actualShip, expectedShip);
+    const expectedShip = (rawShip * lb.shipBuild) / universe.speed;
+    const actualShip = (body().shipQueue[0]!.completesAt - 304_000_400) / 1000;
+    assert.ok(Math.abs(actualShip - expectedShip) < 1e-6);
 
-    body().shipQueue = null;
+    body().shipQueue = [];
     const rawResearch = researchUpgradeSeconds("energyTech", 0, 5);
     const rq = queueResearch(universe, a.player.id, "energyTech", 304_000_500);
     assert.equal(rq.ok, true);
+    // Research still uses ceil / 1s floor (Nanite exempt; contract with J).
     const expectedResearch = Math.max(
       1,
       Math.ceil((rawResearch * lb.researchTime) / universe.speed),
     );
     const actualResearch = Math.round(
-      (universe.players[a.player.id].researchQueue!.completesAt - 304_000_500) /
+      (universe.players[a.player.id].researchQueue[0]!.completesAt -
+        304_000_500) /
         1000,
     );
     assert.equal(actualResearch, expectedResearch);

@@ -74,4 +74,14 @@ export const RESEARCH: Record<ResearchId, ResearchDef> = {
     baseResearchSeconds: 22,
     labLevel: 1,
   },
+  queueLogistics: {
+    id: "queueLogistics",
+    name: "Yard Logistics",
+    description:
+      "+1 building/ship/defense queue slot per 2 levels; +1 research slot per 3 levels.",
+    baseCost: { metal: 80, crystal: 120, deuterium: 40 },
+    costGrowth: 2,
+    baseResearchSeconds: 28,
+    labLevel: 2,
+  },
 };

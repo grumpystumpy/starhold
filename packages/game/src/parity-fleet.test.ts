@@ -143,7 +143,7 @@ describe("P0/P1 parity — fleets & galaxy", () => {
     );
     assert.equal(build.ok, true);
     if (!build.ok) return;
-    advanceUniverse(universe, build.planet.shipQueue!.completesAt);
+    advanceUniverse(universe, build.planet.shipQueue[0]!.completesAt);
     assert.equal(universe.planets[planet.id].ships.probe, 3);
   });
 });

@@ -104,9 +104,10 @@ export interface PlanetState {
   buildings: Record<BuildingId, number>;
   ships: Record<ShipId, number>;
   defenses: DefenseStock;
-  buildQueue: BuildQueueItem | null;
-  shipQueue: ShipQueueItem | null;
-  defenseQueue: DefenseQueueItem | null;
+  /** Ordered multi-item building queue (Round 2). */
+  buildQueue: BuildQueueItem[];
+  shipQueue: ShipQueueItem[];
+  defenseQueue: DefenseQueueItem[];
 }
 
 export interface PlayerState {
@@ -116,7 +117,8 @@ export interface PlayerState {
   planetIds: string[];
   activePlanetId: string;
   research: ResearchLevels;
-  researchQueue: ResearchQueueItem | null;
+  /** Ordered multi-item empire research queue (Round 2). */
+  researchQueue: ResearchQueueItem[];
   createdAt: number;
   /** Player level — starts at 1, no max (Round 2). */
   level?: number;

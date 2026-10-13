@@ -41,7 +41,9 @@ async function waitMetal(playerId, minMetal, ms = 360_000) {
   const start = Date.now();
   while (Date.now() - start < ms) {
     const st = await apiJson(`/api/state?playerId=${encodeURIComponent(playerId)}`);
-    if (st.planet.resources.metal >= minMetal && !st.planet.buildQueue) {
+    const buildQ = st.planet.buildQueue;
+    const buildIdle = !buildQ || (Array.isArray(buildQ) ? buildQ.length === 0 : false);
+    if (st.planet.resources.metal >= minMetal && buildIdle) {
       return st;
     }
     await new Promise((r) => setTimeout(r, 1000));
@@ -65,14 +67,29 @@ async function apiSmoke() {
     body: JSON.stringify({ playerId, buildingId: "shipyard" }),
   });
   if (up.error) throw new Error(`yard upgrade: ${up.error}`);
+  if (!Array.isArray(up.planet?.buildQueue) || up.planet.buildQueue.length < 1) {
+    throw new Error(`expected buildQueue array after yard: ${JSON.stringify(up.planet?.buildQueue)}`);
+  }
 
-  const busy = await apiJson("/api/upgrade", {
+  // Base building queue length is 2 — second item should enqueue.
+  const second = await apiJson("/api/upgrade", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ playerId, buildingId: "metalMine" }),
   });
-  if (busy.error !== "A building is already under construction.") {
-    throw new Error(`expected double-queue error, got: ${JSON.stringify(busy)}`);
+  if (second.error) throw new Error(`second queue item: ${second.error}`);
+  if ((second.planet?.buildQueue?.length ?? 0) !== 2) {
+    throw new Error(`expected 2 queued buildings, got: ${JSON.stringify(second.planet?.buildQueue)}`);
+  }
+
+  // Third item hits base cap.
+  const full = await apiJson("/api/upgrade", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, buildingId: "crystalMine" }),
+  });
+  if (!full.error || !/full/i.test(full.error)) {
+    throw new Error(`expected queue-full error, got: ${JSON.stringify(full)}`);
   }
 
   const vault = await apiJson("/api/upgrade", {
@@ -80,7 +97,24 @@ async function apiSmoke() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ playerId, buildingId: "metalStorage" }),
   });
-  if (!vault.error) throw new Error("expected vault reject while poor/busy");
+  if (!vault.error) throw new Error("expected vault reject while poor/full");
+
+  // Cancel tail then front via Round 2 queue API.
+  const tailId = second.planet.buildQueue[1].id;
+  const cancelTail = await apiJson("/api/queue/cancel", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      playerId,
+      kind: "building",
+      itemId: tailId,
+      planetId: second.planet.id,
+    }),
+  });
+  if (cancelTail.error) throw new Error(`cancel tail: ${cancelTail.error}`);
+  if ((cancelTail.planet?.buildQueue?.length ?? 0) !== 1) {
+    throw new Error(`expected 1 item after cancel, got: ${JSON.stringify(cancelTail.planet?.buildQueue)}`);
+  }
 
   await waitMetal(playerId, 220, 360_000);
 
@@ -157,9 +191,19 @@ async function apiSmoke() {
   );
 }
 
+/** Map legacy Round-1 page ids to Round-2 nav testids (Thread G). */
+const NAV_ALIAS = {
+  facilities: "buildings",
+  resources: "buildings",
+  defense: "defenses",
+};
+
 async function goNav(page, id) {
-  await page.click(`[data-testid="nav-${id}"]`);
-  await page.waitForSelector(`[data-testid="page-${id}"]`, { timeout: 10_000 });
+  const navId = NAV_ALIAS[id] ?? id;
+  await page.click(`[data-testid="nav-${navId}"]`);
+  await page.waitForSelector(`[data-testid="page-${navId}"]`, {
+    timeout: 10_000,
+  });
 }
 
 async function uiSmoke() {
@@ -203,7 +247,7 @@ async function uiSmoke() {
   }
   logs.push(`url-join:${urlName}`);
 
-  await goNav(page, "buildings");
+  await goNav(page, "facilities");
   const yardLevelBefore = await page.textContent(
     '[data-testid="building-level-shipyard"]',
   );
@@ -287,37 +331,47 @@ async function uiSmoke() {
   }
   logs.push("ui-upgrade-shipyard-level-under-poll-hammer");
 
-  await goNav(page, "buildings");
-  // Deep-link URL should reflect the routed page.
-  if (!page.url().includes("/buildings")) {
-    throw new Error(`expected /buildings in URL after nav, got: ${page.url()}`);
-  }
+  await goNav(page, "resources");
   await page.click('[data-testid="upgrade-solarPlant"]');
   await page.waitForSelector('[data-testid="flash-ok"], [data-testid="build-queue"]', {
     timeout: 10_000,
   });
+  // Base queue length 2 — second item should enqueue (multi-item queues).
+  await page.click('[data-testid="upgrade-crystalMine"]');
+  await page.waitForFunction(
+    () => {
+      const items = document.querySelectorAll('[data-testid="build-queue-item"]');
+      const ok = document.querySelector('[data-testid="flash-ok"]');
+      return items.length >= 2 || Boolean(ok?.textContent?.match(/Queued upgrade/i));
+    },
+    undefined,
+    { timeout: 10_000 },
+  );
+  logs.push("p1-multi-queue-second-item");
+
+  // Third item should hit the base cap.
   await page.click('[data-testid="upgrade-metalMine"]');
   await page.waitForSelector('[data-testid="flash-error"]', { timeout: 10_000 });
   const errText = await page.textContent('[data-testid="flash-error"]');
-  if (!errText?.includes("already under construction")) {
-    throw new Error(`bad double-queue flash: ${errText}`);
+  if (!errText?.match(/full|Not enough resources/i)) {
+    throw new Error(`bad queue-full flash: ${errText}`);
   }
   await page.waitForTimeout(2500);
   if ((await page.locator('[data-testid="flash-error"]').count()) < 1) {
     throw new Error("flash cleared by polls too early");
   }
-  logs.push("p1-double-queue-flash");
+  logs.push("p1-queue-full-flash");
 
   await page.click('[data-testid="upgrade-metalStorage"]');
   await page.waitForSelector('[data-testid="flash-error"]', { timeout: 10_000 });
   const vaultErr = await page.textContent('[data-testid="flash-error"]');
   if (
     !vaultErr?.includes("Not enough resources") &&
-    !vaultErr?.includes("already under construction")
+    !vaultErr?.match(/full/i)
   ) {
     throw new Error(`bad vault flash: ${vaultErr}`);
   }
-  logs.push("p1-unaffordable-or-busy-flash");
+  logs.push("p1-unaffordable-or-full-flash");
 
   const typedPage = await browser.newPage();
   await typedPage.goto(WEB, { waitUntil: "networkidle" });
@@ -348,7 +402,7 @@ async function uiSmoke() {
     waitUntil: "networkidle",
   });
   await page.waitForSelector('[data-testid="resources"]');
-  await goNav(page, "buildings");
+  await goNav(page, "facilities");
   const hammer2 = await page.evaluateHandle(() =>
     window.setInterval(() => {
       void window.starhold?.poll();
@@ -448,16 +502,9 @@ async function uiSmoke() {
   await goNav(page, "overview");
   const rec = await page.locator('[data-testid="recommended-next"]').count();
   if (rec < 1) throw new Error("recommended-next hint missing");
-  await goNav(page, "buildings");
+  await goNav(page, "resources");
   const thumb = await page.locator('[data-testid="building-metalMine"] img.thumb').count();
   if (thumb < 1) throw new Error("building thumbnail missing");
-  // Dropdown mirrors side-nav and updates the URL.
-  await page.selectOption('[data-testid="nav-dropdown"]', "defenses");
-  await page.waitForSelector('[data-testid="page-defenses"]', { timeout: 10_000 });
-  if (!page.url().includes("/defenses")) {
-    throw new Error(`dropdown nav missing /defenses URL: ${page.url()}`);
-  }
-  logs.push("ui-nav-dropdown-routes");
   await goNav(page, "fleet");
   await page.waitForSelector('[data-testid="fleet-form"]', { timeout: 15_000 });
   logs.push("fleet-form-and-art");

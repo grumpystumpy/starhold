@@ -99,9 +99,9 @@ export function tryFormMoon(
     buildings: emptyBuildings(),
     ships: emptyShips(),
     defenses: emptyDefenses(),
-    buildQueue: null,
-    shipQueue: null,
-    defenseQueue: null,
+    buildQueue: [],
+    shipQueue: [],
+    defenseQueue: [],
   };
 
   universe.planets[moonId] = moon;

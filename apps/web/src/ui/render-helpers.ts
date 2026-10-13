@@ -37,7 +37,7 @@ export function recommendedNext(view: PlayerView): string {
   if (yard < 1) {
     return "Recommended next: raise the Shipyard (then bank a Scout / Probe).";
   }
-  if (scouts < 1 && (planet.ships.probe ?? 0) < 1 && !planet.shipQueue) {
+  if (scouts < 1 && (planet.ships.probe ?? 0) < 1 && !(planet.shipQueue?.length ?? 0)) {
     return "Recommended next: build a Scout or Whisper Probe, then open Fleets.";
   }
   return "Recommended next: browse Galaxy, spy or raid a rival, or colonize an empty slot.";

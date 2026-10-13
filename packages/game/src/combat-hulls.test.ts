@@ -80,9 +80,9 @@ describe("P1 combat hulls", () => {
     assert.equal(cruiser.ok, true);
     if (!cruiser.ok) return;
     const queued = universe.planets[planetId];
-    advanceUniverse(universe, queued.shipQueue!.completesAt);
+    advanceUniverse(universe, queued.shipQueue[0]!.completesAt);
     assert.equal(universe.planets[planetId].ships.cruiser, 1);
-    assert.equal(universe.planets[planetId].shipQueue, null);
+    assert.equal(universe.planets[planetId].shipQueue.length, 0);
 
     prep().buildings.shipyard = 4;
     const stillEarly = queueShipBuild(
@@ -108,7 +108,7 @@ describe("P1 combat hulls", () => {
     if (!bomber.ok) return;
     advanceUniverse(
       universe,
-      universe.planets[planetId].shipQueue!.completesAt,
+      universe.planets[planetId].shipQueue[0]!.completesAt,
     );
     assert.equal(universe.planets[planetId].ships.bomber, 1);
   });

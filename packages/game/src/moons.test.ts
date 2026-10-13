@@ -118,8 +118,8 @@ describe("Thread C moons", () => {
       body.id,
     );
     assert.equal(lunar.ok, true);
-    assert.ok(lunar.ok && lunar.planet.buildQueue);
-    const lunarDoneAt = lunar.planet.buildQueue!.completesAt;
+    assert.ok(lunar.ok && lunar.planet.buildQueue[0]);
+    const lunarDoneAt = lunar.planet.buildQueue[0]!.completesAt;
     advanceUniverse(universe, lunarDoneAt);
     assert.equal(universe.planets[body.id].buildings.lunarBase, 1);
 

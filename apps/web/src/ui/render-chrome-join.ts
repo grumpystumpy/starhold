@@ -122,15 +122,15 @@ export function buildingRow(
   const level = planet.buildings[id] ?? 0;
   const cost = buildingUpgradeCost(id, level);
   const secs = Math.ceil(buildingUpgradeSeconds(id, level) / speed);
-  const queueBusy = Boolean(planet.buildQueue);
+  const queueFull = (planet.buildQueue?.length ?? 0) >= 8;
   const affordable = canAfford(planet.resources, cost);
   // Never disable Upgrade for client busy — disabled buttons swallow clicks
   // (silent no-op). doUpgrade surfaces "Still applying…" instead.
   let label = "Upgrade";
-  if (queueBusy) label = "Queue busy";
+  if (queueFull) label = "Queue full";
   else if (!affordable) label = "Can't afford";
-  const blocked = queueBusy
-    ? "A building is already under construction."
+  const blocked = queueFull
+    ? "Building queue is full."
     : !affordable
       ? "Not enough resources."
       : null;

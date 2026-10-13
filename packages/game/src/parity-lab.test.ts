@@ -34,7 +34,7 @@ describe("P0/P1 parity — lab & research", () => {
     );
     assert.equal(lab.ok, true);
     if (!lab.ok) return;
-    advanceUniverse(universe, lab.planet.buildQueue!.completesAt);
+    advanceUniverse(universe, lab.planet.buildQueue[0]!.completesAt);
 
     const research = queueResearch(
       universe,
@@ -44,10 +44,10 @@ describe("P0/P1 parity — lab & research", () => {
     );
     assert.equal(research.ok, true);
     if (!research.ok) return;
-    assert.ok(universe.players[player.id].researchQueue);
+    assert.ok(universe.players[player.id].researchQueue[0]);
     advanceUniverse(
       universe,
-      universe.players[player.id].researchQueue!.completesAt,
+      universe.players[player.id].researchQueue[0]!.completesAt,
     );
     assert.equal(universe.players[player.id].research.espionageTech, 1);
   });
@@ -77,7 +77,7 @@ describe("P0/P1 parity — lab & research", () => {
     );
     assert.equal(def.ok, true);
     if (!def.ok) return;
-    advanceUniverse(universe, def.planet.defenseQueue!.completesAt);
+    advanceUniverse(universe, def.planet.defenseQueue[0]!.completesAt);
     assert.equal(universe.planets[b.planet.id].defenses.laserBattery, 10);
 
     universe.planets[a.planet.id].ships.scout = 1;

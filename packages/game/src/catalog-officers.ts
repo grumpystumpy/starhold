@@ -17,7 +17,7 @@ export const OFFICERS: Record<OfficerId, OfficerDef> = {
   quartermaster: {
     id: "quartermaster",
     name: "Quartermaster",
-    description: "Boosts mine output while on duty.",
+    description: "Boosts mine output and +1 building/ship/defense queue slot while on duty.",
     cost: 50,
     durationMs: OFFICER_DURATION_MS,
     effects: [{ kind: "mineOutput", value: 1.1 }],
@@ -25,7 +25,7 @@ export const OFFICERS: Record<OfficerId, OfficerDef> = {
   archivist: {
     id: "archivist",
     name: "Archivist",
-    description: "Speeds empire research projects.",
+    description: "Speeds empire research and +1 research queue slot while on duty.",
     cost: 50,
     durationMs: OFFICER_DURATION_MS,
     effects: [{ kind: "researchSpeed", value: 1.15 }],
