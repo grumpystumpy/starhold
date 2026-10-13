@@ -3,8 +3,11 @@ import {
   clampToStorage,
   coordsKey,
   emptyDefenses,
+  grantPlayerXp,
   productionPerHour,
   storageFor,
+  xpForBuilding,
+  xpForResearch,
 } from "./formulas.js";
 import type {
   Coordinates,
@@ -23,6 +26,7 @@ export function advancePlanet(
   now: number,
   energyTechLevel = 0,
   boosts?: { mineOutput?: number; energyOutput?: number },
+  owner?: PlayerState,
 ): PlanetState {
   let state = {
     ...planet,
@@ -36,6 +40,7 @@ export function advancePlanet(
     const { buildingId, targetLevel } = state.buildQueue;
     state.buildings[buildingId] = targetLevel;
     state.buildQueue = null;
+    if (owner) grantPlayerXp(owner, xpForBuilding(targetLevel));
   }
 
   if (state.shipQueue && state.shipQueue.completesAt <= now) {
@@ -83,6 +88,7 @@ export function advanceResearch(
   const { researchId, targetLevel } = player.researchQueue;
   player.research[researchId] = targetLevel;
   player.researchQueue = null;
+  grantPlayerXp(player, xpForResearch(targetLevel));
   universe.players[player.id] = player;
 }
 
