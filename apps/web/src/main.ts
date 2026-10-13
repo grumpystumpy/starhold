@@ -45,6 +45,7 @@ function paint(): void {
       notice: session.notice,
       busy: session.busy,
       joinDraft: session.joinDraft,
+      activePage: session.activePage,
     },
     {
       onJoinDraft: (name) => {
