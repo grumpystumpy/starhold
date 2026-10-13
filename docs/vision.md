@@ -131,3 +131,19 @@ Coordinator owns integration: rebase dependents, keep `main` green, **ignore Ver
 ### Reporting
 
 Milestones only: Round 2 design ready (short summary), each merged area, blockers.
+
+---
+
+## Process (Micah-approved — adopt 2026-10-13)
+
+1. **No status-only wakes/reports.** Do not schedule wakes just to note “waiting on CI” or rebase progress. Use CI completion / merge events. Report only on **merge**, **blocker**, or a **decision needed from Micah**.
+2. **Max 3 concurrent build threads**, fixed lanes — apply after current H/J finish:
+   - **(a) UI / routes**
+   - **(b) Game engine / rules / persistence**
+   - **(c) Content + balance data**
+   Assign each thread to one lane; avoid cross-lane file edits (cuts rebase churn).
+3. **Single tuning source.** All ship/defense/building/research stats, costs, build times, XP awards, queue sizes, and level bonuses live in one module (e.g. `packages/game/src/data/tuning.ts` or JSON). Balance tweaks = edit that file only.
+4. **Fast lane.** Number tweaks, renames, copy/UI text → straight PR to `main` with auto-merge on green CI; **no** design doc. Design-contract-first **only** for new systems.
+5. **Staging + balance report.** Staging env (Vercel preview or second project on a `staging` branch, within Hobby deploy limits). Promote to production `main` about **once a day** in a batch. CI posts a PR comment diffing tuning values (stats/costs/requirements) vs `main`.
+
+Main-only production deploys stay; staging is the exception path for daily batch promote.
