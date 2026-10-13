@@ -1,10 +1,12 @@
 # Deploy Starhold on Vercel Hobby (Micah)
 
 **Live:** https://starhold-two.vercel.app  
-**Team:** Stumpy's Creations · **Project:** starhold · **Branch:** `cursor/core-loop-prototype-1093`  
+**Team:** Stumpy's Creations · **Project:** starhold · **Production branch:** `main`  
 Agents do **not** create accounts. No credit card.
 
 API is serverless (`api/[[...route]].js`). Shared multiplayer needs Redis REST credentials.
+
+**Deploys:** Only `main` deploys to Vercel (`git.deploymentEnabled`: `*` false, `main` true). PR checks run on GitHub Actions (`unit-and-e2e`); preview branches do not consume Hobby deploy quota.
 
 ---
 
