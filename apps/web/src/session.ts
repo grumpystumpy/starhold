@@ -5,6 +5,7 @@ import type {
   ResearchId,
   ShipId,
 } from "@starhold/game";
+import type { AuthAccount } from "./api";
 import type { NavPage } from "./ui/nav";
 
 export const SESSION_KEY = "starhold.playerId";
@@ -29,6 +30,13 @@ export const session = {
   flashUntil: 0,
   busy: false,
   joinDraft: "",
+  emailDraft: "",
+  /** Cookie session account (null = guest / anonymous). */
+  account: null as AuthAccount | null,
+  /** Pending anonymous playerId offer for claim UI. */
+  claimablePlayerId: null as string | null,
+  /** Dev-only magic URL when Resend is not configured. */
+  devMagicUrl: null as string | null,
   pollTimer: undefined as number | undefined,
   flashTimer: undefined as number | undefined,
   /** Defer full paints while a pointer is down so polls cannot swallow clicks. */
