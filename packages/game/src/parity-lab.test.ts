@@ -1,20 +1,26 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { BUILDINGS } from "./catalog.js";
+import { buildingUpgradeCost } from "./formulas.js";
 import {
   advanceUniverse,
   createUniverse,
-  galaxyViewFor,
   joinUniverse,
   launchFleet,
   playerView,
   queueBuildingUpgrade,
   queueDefenseBuild,
   queueResearch,
-  queueShipBuild,
-  setActivePlanet,
 } from "./world.js";
 
 describe("P0/P1 parity — lab & research", () => {
+  it("research lab L0→L1 needs metal+crystal only (no deut)", () => {
+    assert.equal(BUILDINGS.researchLab.baseCost.deuterium, 0);
+    const cost = buildingUpgradeCost("researchLab", 0);
+    assert.equal(cost.deuterium, 0);
+    assert.ok(cost.metal > 0 && cost.crystal > 0);
+  });
+
   it("queues research after lab upgrade", () => {
     const universe = createUniverse("Lab Drift", 8);
     const { player, planet } = joinUniverse(universe, "Scientist", 40_000_000);
