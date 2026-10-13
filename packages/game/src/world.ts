@@ -2,6 +2,7 @@ export {
   createUniverse,
   ensureUniverseShape,
   joinUniverse,
+  planetAtCoords,
 } from "./world-bootstrap.js";
 export { advancePlanet } from "./world-tick.js";
 export { advanceUniverse } from "./world-arrival.js";
@@ -28,3 +29,10 @@ export {
   expeditionRoll,
   resolveExpeditionArrival,
 } from "./world-expedition.js";
+export {
+  moonChancePercent,
+  moonRoll,
+  ownedPlanetCount,
+  tryFormMoon,
+} from "./world-moons.js";
+export { moonAtCoords } from "./world-bootstrap.js";
