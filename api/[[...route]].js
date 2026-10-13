@@ -1937,6 +1937,34 @@ var SHIPS = {
     speed: 9e3,
     fuelPerDistance: 0.5
   },
+  cruiser: {
+    id: "cruiser",
+    name: "Aegis Cruiser",
+    description: "Mid-weight combat hull \u2014 tougher line ship for contested raids.",
+    cost: { metal: 2400, crystal: 1e3, deuterium: 200 },
+    buildSeconds: 70,
+    shipyardLevel: 4,
+    cargo: 400,
+    attack: 90,
+    shield: 50,
+    hull: 180,
+    speed: 5e3,
+    fuelPerDistance: 1.5
+  },
+  bomber: {
+    id: "bomber",
+    name: "Breach Bomber",
+    description: "Heavy gunship \u2014 high attack, slow cruise, deut-hungry.",
+    cost: { metal: 3200, crystal: 1800, deuterium: 400 },
+    buildSeconds: 95,
+    shipyardLevel: 5,
+    cargo: 80,
+    attack: 160,
+    shield: 20,
+    hull: 90,
+    speed: 3500,
+    fuelPerDistance: 2
+  },
   probe: {
     id: "probe",
     name: "Spy Probe",
@@ -2091,6 +2119,8 @@ var SHIP_ORDER = [
   "scout",
   "hauler",
   "interceptor",
+  "cruiser",
+  "bomber",
   "probe",
   "recycler",
   "colonyShip"
