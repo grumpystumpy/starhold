@@ -16,6 +16,9 @@ export const MIN_FLIGHT_SECONDS = 8;
 /** Soft building-field budget (levels sum toward this). */
 export const PLANET_FIELDS = 200;
 
+/** Wall-clock TTL for espionage reports before prune. */
+export const SPY_REPORT_TTL_MS = 20 * 60 * 1000;
+
 export const BUILDING_ORDER: BuildingId[] = [
   "metalMine",
   "crystalMine",

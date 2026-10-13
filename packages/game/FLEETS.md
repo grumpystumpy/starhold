@@ -6,7 +6,7 @@ Invented basics-first rules — **inspired** by the genre, not scraped from OGam
 
 | Mission | Behavior |
 |---------|----------|
-| **deploy** | Ships leave hangar, fly to another commander's planet, then return intact (no combat). |
+| **deploy** | Rival: peaceful visit then return. **Own colony:** park — ships dock at destination (no cargo). |
 | **raid** | On arrival: resolve combat vs defender hangar **+ defenses**; on attacker win, loot resources; debris from destroyed ships; survivors return with cargo. |
 | **espionage** | Requires Spy Probe. Writes an espionage report (detail from Espionage Tech vs target lab). Probes return. |
 | **transport** | Move cargo + ships to another **own** planet (docks there). |
