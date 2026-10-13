@@ -36,7 +36,14 @@ import {
   advancePlanet,
   advanceResearch,
   getDebris,
+  subtractCargo,
 } from "./world-tick.js";
+import {
+  clearOccupationIfFleetGone,
+  occupationForPlanet,
+  occupationMineShares,
+  pruneExpiredOccupations,
+} from "./world-occupation.js";
 
 export function resolveFleetArrival(
   universe: UniverseState,
@@ -45,6 +52,7 @@ export function resolveFleetArrival(
 ): void {
   const origin = universe.planets[fleet.originPlanetId];
   if (!origin) {
+    clearOccupationIfFleetGone(universe, fleet);
     delete universe.fleets[fleet.id];
     return;
   }
@@ -190,6 +198,7 @@ export function resolveFleetArrival(
       drive,
     );
     if (fleetShipCount(fleet.ships) <= 0) {
+      clearOccupationIfFleetGone(universe, fleet);
       delete universe.fleets[fleet.id];
       return;
     }
@@ -199,6 +208,7 @@ export function resolveFleetArrival(
     return;
   }
 
+  clearOccupationIfFleetGone(universe, fleet);
   addShipsToPlanet(origin, fleet.ships);
   addCargoToPlanet(origin, fleet.cargo);
   delete universe.fleets[fleet.id];
@@ -226,6 +236,7 @@ export function advanceFleets(universe: UniverseState, now: number): void {
 
 export function advanceUniverse(universe: UniverseState, now = Date.now()): void {
   ensureUniverseShape(universe);
+  pruneExpiredOccupations(universe, now);
   for (const player of Object.values(universe.players)) {
     advanceResearch(universe, player, now);
   }
@@ -234,13 +245,39 @@ export function advanceUniverse(universe: UniverseState, now = Date.now()): void
     const owner = universe.players[planet.ownerPlayerId];
     const energyTech = owner?.research.energyTech ?? 0;
     const boosts = playerBoosts(owner, now);
-    universe.planets[id] = advancePlanet(
+    const before = { ...planet.resources };
+    const advanced = advancePlanet(
       planet,
       universe.speed,
       now,
       energyTech,
       { mineOutput: boosts.mineOutput, energyOutput: boosts.energyOutput },
     );
+    const occ = occupationForPlanet(universe, id, now);
+    if (occ && occ.occupierPlayerId !== planet.ownerPlayerId) {
+      const gained = {
+        metal: Math.max(0, advanced.resources.metal - before.metal),
+        crystal: Math.max(0, advanced.resources.crystal - before.crystal),
+        deuterium: Math.max(
+          0,
+          advanced.resources.deuterium - before.deuterium,
+        ),
+      };
+      const shares = occupationMineShares(gained);
+      // Owner planet keeps 70%; skim 30% to occupier home.
+      subtractCargo(advanced, {
+        metal: gained.metal - shares.owner.metal,
+        crystal: gained.crystal - shares.owner.crystal,
+        deuterium: gained.deuterium - shares.owner.deuterium,
+      });
+      const occupier = universe.players[occ.occupierPlayerId];
+      const payPlanetId =
+        occupier?.activePlanetId ?? occupier?.homePlanetId ?? null;
+      if (payPlanetId && universe.planets[payPlanetId]) {
+        addCargoToPlanet(universe.planets[payPlanetId], shares.occupier);
+      }
+    }
+    universe.planets[id] = advanced;
   }
   advanceFleets(universe, now);
   tickPirates(universe, now);
