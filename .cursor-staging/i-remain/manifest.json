@@ -1,0 +1,10 @@
+{
+  "path": "packages/game/src/world-pirates.ts",
+  "sha256": "0d9b6e2c2cf2f96e1fcb4d1ca860ecc9f6790bff8e687f9560250491c5c7d341",
+  "size": 16744,
+  "parts": [
+    "part-000.b64",
+    "part-001.b64",
+    "part-002.b64"
+  ]
+}
