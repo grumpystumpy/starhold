@@ -88,6 +88,7 @@ export function dashboardHtml(
     <div class="layout">
       <section class="panel">
         <h2>Buildings</h2>
+        <p class="hint" data-testid="planet-fields">Fields ${economy.fields.used} / ${economy.fields.cap} · ${economy.fields.remaining} free</p>
         ${BUILDING_ORDER.map((id) => buildingRow(id, planet, universe.speed, now, state.busy)).join("")}
         ${
           planet.buildQueue

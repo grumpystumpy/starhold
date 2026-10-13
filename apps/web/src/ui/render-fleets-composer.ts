@@ -33,6 +33,17 @@ export function fleetComposer(
         `<option value="planet:${escapeAttr(p.id)}">${escapeHtml(p.name)} · ${fmtCoords(p.coords)}</option>`,
       );
     }
+  } else if (mission === "deploy") {
+    for (const p of ownOther) {
+      options.push(
+        `<option value="planet:${escapeAttr(p.id)}">Park @ ${escapeHtml(p.name)} · ${fmtCoords(p.coords)}</option>`,
+      );
+    }
+    for (const r of rivals) {
+      options.push(
+        `<option value="planet:${escapeAttr(r.planetId)}">Visit ${escapeHtml(r.name)} · ${fmtCoords(r.coords)}</option>`,
+      );
+    }
   } else if (mission === "colonize") {
     for (const s of emptySlots) {
       options.push(
@@ -88,12 +99,14 @@ export function fleetComposer(
   const needHint =
     options.length === 0
       ? mission === "transport"
-        ? `<p class="hint" data-testid="fleet-need-colony">Colonize an empty slot first to unlock transport.</p>`
-        : mission === "colonize"
-          ? `<p class="hint">Browse the galaxy for an empty slot in this system (or change system).</p>`
-          : mission === "harvest"
-            ? `<p class="hint">No debris in this system yet — win a raid that destroys ships.</p>`
-            : `<p class="hint" data-testid="fleet-need-rival">Join a second commander (another tab) to unlock deploy / raid / spy targets.</p>`
+        ? `<p class="hint" data-testid="fleet-need-colony">Need a second world: research Astrophysics, build a Colony Ship, colonize an empty galaxy slot — then transport cargo there.</p>`
+        : mission === "deploy"
+          ? `<p class="hint" data-testid="fleet-need-deploy-target">Colonize for park targets, or join a second commander to visit rivals.</p>`
+          : mission === "colonize"
+            ? `<p class="hint">Browse the galaxy for an empty slot in this system (or change system).</p>`
+            : mission === "harvest"
+              ? `<p class="hint">No debris in this system yet — win a raid that destroys ships.</p>`
+              : `<p class="hint" data-testid="fleet-need-rival">Join a second commander (another tab) to unlock raid / spy targets.</p>`
       : "";
 
   const sampleShips: FleetShips = {
@@ -120,10 +133,10 @@ export function fleetComposer(
 
   const missionRadios = MISSIONS.map((m) => {
     const labels: Record<MissionType, string> = {
-      deploy: "Deploy (peaceful round-trip)",
+      deploy: "Deploy (park own / visit rival)",
       raid: "Raid / attack",
       espionage: "Espionage (Spy Probe)",
-      transport: "Transport (own worlds)",
+      transport: "Transport cargo (own worlds)",
       colonize: "Colonize empty slot",
       harvest: "Harvest debris",
     };
