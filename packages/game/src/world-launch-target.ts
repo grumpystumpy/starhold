@@ -195,7 +195,6 @@ export function resolveLaunchTarget(
       if (targetPlanet.id === origin.id) {
         return { ok: false, error: "Cannot deploy to the same planet." };
       }
-      // Own worlds: park (dock). Rivals: peaceful visit + return.
     } else if (mission === "raid") {
       if (targetPlanet.id === origin.id) {
         return { ok: false, error: "Cannot send a fleet to your own planet." };
@@ -212,6 +211,25 @@ export function resolveLaunchTarget(
       }
       if ((ships.probe ?? 0) < 1) {
         return { ok: false, error: "Espionage requires a Spy Probe." };
+      }
+    } else if (mission === "jump") {
+      if (origin.kind !== "moon") {
+        return { ok: false, error: "Jump Gate hops must start from a moon." };
+      }
+      if ((origin.buildings.jumpGate ?? 0) < 1) {
+        return { ok: false, error: "Origin moon needs Jump Gate level 1." };
+      }
+      if (targetPlanet.kind !== "moon") {
+        return { ok: false, error: "Jump Gate hops must target a moon." };
+      }
+      if (targetPlanet.ownerPlayerId !== player.id) {
+        return { ok: false, error: "Jump Gate only links your own moons." };
+      }
+      if (targetPlanet.id === origin.id) {
+        return { ok: false, error: "Cannot jump to the same moon." };
+      }
+      if ((targetPlanet.buildings.jumpGate ?? 0) < 1) {
+        return { ok: false, error: "Target moon needs Jump Gate level 1." };
       }
     }
   }
