@@ -57,6 +57,22 @@ export interface EspionageReport {
   summary: string;
 }
 
+export type ExpeditionKind = "resources" | "ships" | "nothing" | "pirates";
+
+export interface ExpeditionReport {
+  id: string;
+  at: number;
+  missionId: string;
+  playerId: string;
+  targetCoords: Coordinates;
+  kind: ExpeditionKind;
+  /** Resources loaded onto the fleet (before return). */
+  cargoGained: Resources;
+  /** Net ship deltas applied at the anomaly (positive = found). */
+  shipsDelta: Partial<FleetShips>;
+  summary: string;
+}
+
 export interface DebrisField {
   coords: Coordinates;
   metal: number;
@@ -105,6 +121,7 @@ export interface UniverseState {
   fleets: Record<string, FleetMission>;
   reports: Record<string, CombatReport>;
   spyReports: Record<string, EspionageReport>;
+  expeditionReports: Record<string, ExpeditionReport>;
   /** Keyed by "g:s:slot" */
   debris: Record<string, DebrisField>;
 }
@@ -155,6 +172,8 @@ export interface PlayerView {
   reports: CombatReport[];
   /** Recent espionage reports for this player */
   spyReports: EspionageReport[];
+  /** Recent deep-space expedition reports */
+  expeditionReports: ExpeditionReport[];
 }
 
 export interface PublicPlayer {

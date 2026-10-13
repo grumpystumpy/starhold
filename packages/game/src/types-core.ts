@@ -42,6 +42,7 @@ export type ResearchId =
  * - espionage — probe report at target
  * - colonize — found colony on empty slot
  * - harvest — collect debris with recyclers
+ * - expedition — deep-space probe (resources / ships / nothing / pirates)
  */
 export type MissionType =
   | "deploy"
@@ -49,7 +50,8 @@ export type MissionType =
   | "transport"
   | "espionage"
   | "colonize"
-  | "harvest";
+  | "harvest"
+  | "expedition";
 
 export type FleetPhase = "outbound" | "returning";
 
