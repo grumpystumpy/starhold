@@ -38,6 +38,11 @@ import {
 } from "./render-chrome";
 import { escapeAttr, escapeHtml } from "./render-escape";
 import { recommendedNext } from "./render-helpers";
+import {
+  officersPanelHtml,
+  skillsPanelHtml,
+  starshardsBarHtml,
+} from "./render-officers-skills";
 
 export function dashboardHtml(
   view: PlayerView,
@@ -93,6 +98,7 @@ export function dashboardHtml(
         <span class="value">${fmt(economy.energy.produced)} / ${fmt(economy.energy.used)}</span>
         <span class="sub">Factor ${(economy.energy.factor * 100).toFixed(0)}%</span>
       </div>
+      ${starshardsBarHtml(view, state.busy)}
     </section>
     <div class="layout">
       <section class="panel">
@@ -159,6 +165,8 @@ export function dashboardHtml(
           ${spyReportsHtml(spyReports)}
           ${expeditionReportsHtml(expeditionReports)}
         </section>
+        ${officersPanelHtml(view, state.busy)}
+        ${skillsPanelHtml(view, state.busy)}
         <section class="panel" data-testid="highscores">
           <h2>Highscores</h2>
           <p class="hint">Empire points — buildings, fleets, defenses, and research (once).</p>
