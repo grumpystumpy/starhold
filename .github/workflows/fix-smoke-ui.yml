@@ -1,0 +1,41 @@
+name: fix-smoke-ui
+on:
+  push:
+    branches: [cursor/ui-ogame-layout-rebased-5ee3]
+    paths:
+      - ".github/agent-staging/smoke-fix-part1.b64"
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cursor/ui-ogame-layout-rebased-5ee3
+      - name: Apply smoke fix
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, json, pathlib, hashlib
+          p0 = pathlib.Path(".github/agent-staging/smoke-fix-part0.b64").read_text().strip()
+          p1 = pathlib.Path(".github/agent-staging/smoke-fix-part1.b64").read_text().strip()
+          files = json.loads(base64.b64decode(p0+p1).decode())
+          for f in files:
+              path = pathlib.Path(f["path"])
+              data = base64.b64decode(f["b64"])
+              path.write_bytes(data)
+              print("wrote", path, len(data), hashlib.sha256(data).hexdigest()[:12])
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/smoke-ui.mjs
+          git commit -m "fix(B): restore smoke-ui.mjs after assemble corruption"
+          git push origin HEAD:cursor/ui-ogame-layout-rebased-5ee3
+          rm -rf .github/agent-staging
+          rm -f .github/workflows/fix-smoke-ui.yml
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: remove smoke-fix staging"
+            git push origin HEAD:cursor/ui-ogame-layout-rebased-5ee3
+          fi
