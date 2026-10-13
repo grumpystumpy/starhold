@@ -29,6 +29,10 @@ import {
 } from "./render-fleets";
 import { recommendedNext } from "./render-helpers";
 import {
+  officersPanelHtml,
+  skillsPanelHtml,
+} from "./render-officers-skills";
+import {
   buildQueueHtml,
   defenseQueueHtml,
   overviewQueuesHtml,
@@ -246,17 +250,9 @@ export function pageHtml(
     case "galaxy":
       return galaxyPanel(view, busy);
     case "officers":
-      return stubPanel(
-        "Officers",
-        "Hire officers with Starshards — coming soon (Thread D).",
-        "officers-stub",
-      );
+      return officersPanelHtml(view, busy);
     case "skills":
-      return stubPanel(
-        "Skills",
-        "Permanent skill tree unlocked with Starshards — coming soon (Thread D).",
-        "skills-stub",
-      );
+      return skillsPanelHtml(view, busy);
     case "highscore":
       return highscorePage(view);
     case "messages":
