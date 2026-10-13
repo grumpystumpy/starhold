@@ -2,8 +2,13 @@ import {
   computeRaidLoot,
   debrisFromDestroyed,
   destroyedShipResources,
+  effectiveCombatResearch,
   emptyDefenses,
+  grantPlayerXp,
   resolveCombat,
+  resourcesCostTotal,
+  xpForCombatLose,
+  xpForCombatWin,
 } from "./formulas.js";
 import type {
   CombatReport,
@@ -33,8 +38,8 @@ export function resolveRaidArrival(
     fleet.ships,
     defenderBefore,
     defensesBefore,
-    owner?.research,
-    defenderOwner?.research,
+    effectiveCombatResearch(owner),
+    effectiveCombatResearch(defenderOwner),
     { defensePower },
   );
   target.ships = combat.defenderAfter;
@@ -57,6 +62,32 @@ export function resolveRaidArrival(
   if (combat.outcome === "attacker_win") {
     loot = computeRaidLoot(target.resources, combat.attackerAfter);
     subtractCargo(target, loot);
+  }
+
+  // XP: winner gets combat-win formula vs destroyed enemy ships; loser +8.
+  const atkDestroyed = resourcesCostTotal(
+    destroyedShipResources(defenderBefore, combat.defenderAfter),
+  );
+  const defDestroyed = resourcesCostTotal(
+    destroyedShipResources(fleet.ships, combat.attackerAfter),
+  );
+  if (owner) {
+    if (combat.outcome === "attacker_win") {
+      grantPlayerXp(owner, xpForCombatWin(atkDestroyed));
+    } else {
+      grantPlayerXp(owner, xpForCombatLose());
+    }
+    universe.players[owner.id] = owner;
+  }
+  if (defenderOwner && defenderOwner.id !== owner?.id) {
+    if (combat.outcome === "defender_win") {
+      grantPlayerXp(defenderOwner, xpForCombatWin(defDestroyed));
+    } else if (combat.outcome === "attacker_win") {
+      grantPlayerXp(defenderOwner, xpForCombatLose());
+    } else {
+      grantPlayerXp(defenderOwner, xpForCombatLose());
+    }
+    universe.players[defenderOwner.id] = defenderOwner;
   }
 
   const reportId = `rpt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
