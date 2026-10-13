@@ -14,6 +14,7 @@ export const BUILDING_ART: Record<BuildingId, string> = {
   lunarBase: "/assets/buildings/lunar-base.svg",
   sensorArray: "/assets/buildings/sensor-array.svg",
   jumpGate: "/assets/buildings/jump-gate.svg",
+  chronoLathe: "/assets/buildings/chrono-lathe.svg",
 };
 
 export const SHIP_ART: Record<ShipId, string> = {
