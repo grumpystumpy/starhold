@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { cors } from "hono/cors";
+import type { Context, Next } from "hono";
 import {
   type BuildingId,
   type Coordinates,
@@ -21,7 +21,7 @@ import {
 } from "@starhold/game";
 import { storageMode, withUniverse } from "./store.js";
 
-function corsOrigins(): string[] | string {
+function allowedOrigins(): Set<string> {
   const fromEnv = (process.env.ALLOWED_ORIGINS ?? "")
     .split(",")
     .map((s) => s.trim())
@@ -36,21 +36,48 @@ function corsOrigins(): string[] | string {
   const vercel = process.env.VERCEL_URL
     ? [`https://${process.env.VERCEL_URL}`]
     : [];
-  const all = [...new Set([...defaults, ...fromEnv, ...vercel])];
-  // Same-origin browser calls don't need CORS; keep explicit list for local Vite / previews.
-  return all;
+  return new Set([...defaults, ...fromEnv, ...vercel]);
+}
+
+/** Lightweight CORS — avoids hono/cors Headers quirks on some Node adapters. */
+async function simpleCors(c: Context, next: Next): Promise<Response | void> {
+  const origin = c.req.header("Origin");
+  const allow =
+    origin && (allowedOrigins().has(origin) || process.env.VERCEL === "1");
+  if (c.req.method === "OPTIONS") {
+    const res = new Response(null, { status: 204 });
+    if (origin && allow) {
+      res.headers.set("Access-Control-Allow-Origin", origin);
+      res.headers.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+      res.headers.set("Access-Control-Allow-Headers", "Content-Type");
+      res.headers.set("Vary", "Origin");
+    }
+    return res;
+  }
+  await next();
+  if (origin && allow) {
+    c.res.headers.set("Access-Control-Allow-Origin", origin);
+    c.res.headers.set("Vary", "Origin");
+  }
 }
 
 /** Shared Hono app — used by local Node server and Vercel serverless. */
 export function createApp(): Hono {
   const app = new Hono();
 
-  app.use(
-    "*",
-    cors({
-      origin: corsOrigins(),
-    }),
+  app.use("*", simpleCors);
+
+  app.notFound((c) =>
+    c.json({ error: "Not found", path: c.req.path }, 404),
   );
+
+  app.onError((err, c) => {
+    console.error("[starhold-api]", err);
+    return c.json(
+      { error: err instanceof Error ? err.message : "Server error" },
+      500,
+    );
+  });
 
   app.get("/api/health", async (c) => {
     try {
