@@ -1,0 +1,39 @@
+argetPirateBaseId;
+  const base = baseId ? universe.pirateBases?.[baseId] : null;
+  if (!base || base.destroyedAt != null) {
+    return;
+  }
+
+  const owner = universe.players[fleet.ownerPlayerId];
+  const defenderBefore = { ...base.ships };
+  const tierAtFight = base.tier;
+  const combat = resolveCombat(
+    fleet.ships,
+    defenderBefore,
+    emptyDefenses(),
+    effectiveCombatResearch(owner),
+  );
+  base.ships = combat.defenderAfter;
+
+  const killed = resourcesCostTotal(
+    destroyedShipResources(defenderBefore, combat.defenderAfter),
+  );
+
+  let loot = emptyCargo();
+  if (combat.outcome === "attacker_win") {
+    loot = computeRaidLoot(base.resources, combat.attackerAfter);
+    base.resources = {
+      metal: Math.max(0, base.resources.metal - loot.metal),
+      crystal: Math.max(0, base.resources.crystal - loot.crystal),
+      deuterium: Math.max(0, base.resources.deuterium - loot.deuterium),
+    };
+    markPirateDestroyed(base, now);
+    if (owner) {
+      grantPirateDestroyStarshards(owner, tierAtFight);
+      grantPlayerXp(
+        owner,
+        xpForCombatWin(killed) +
+          xpForPirateBaseDestroy(tierAtFight) +
+          xpForPirateShipKills(killed),
+      );
+      
