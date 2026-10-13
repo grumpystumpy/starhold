@@ -144,20 +144,18 @@ export function createApp(): Hono {
     }
   });
 
-  app.get("/api/state/:playerId", async (c) => {
+  // Single-segment path: Vercel catch-all only matches one segment under /api.
+  // Use ?playerId= (rewrite maps legacy /api/state/:id → this).
+  app.get("/api/state", async (c) => {
+    const playerId = c.req.query("playerId")?.trim();
+    if (!playerId) {
+      return c.json({ error: "playerId query required." }, 400);
+    }
     try {
       const galaxy = Number(c.req.query("galaxy") || 0) || undefined;
       const system = Number(c.req.query("system") || 0) || undefined;
       return await withUniverse((universe) =>
-        c.json(
-          playerView(
-            universe,
-            c.req.param("playerId"),
-            Date.now(),
-            galaxy,
-            system,
-          ),
-        ),
+        c.json(playerView(universe, playerId, Date.now(), galaxy, system)),
       );
     } catch (err) {
       return c.json(

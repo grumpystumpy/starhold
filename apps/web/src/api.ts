@@ -33,12 +33,10 @@ export async function fetchState(
   system?: number,
 ): Promise<PlayerView> {
   const params = new URLSearchParams();
+  params.set("playerId", playerId);
   if (galaxy) params.set("galaxy", String(galaxy));
   if (system) params.set("system", String(system));
-  const q = params.toString();
-  const res = await fetch(
-    `/api/state/${encodeURIComponent(playerId)}${q ? `?${q}` : ""}`,
-  );
+  const res = await fetch(`/api/state?${params.toString()}`);
   return parse<PlayerView>(res);
 }
 
