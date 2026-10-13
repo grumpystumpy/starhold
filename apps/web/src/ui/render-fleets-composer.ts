@@ -159,12 +159,12 @@ export function fleetComposer(
     .length;
   const needHint =
     mission === "expedition" && expeditionActive >= expeditionCap
-      ? `<p class="hint" data-testid="fleet-need-expedition-slot">Expedition slots full (${expeditionActive}/${expeditionCap}). Research Astrophysics for more.</p>`
+      ? `<p class="hint" data-testid="fleet-need-expedition-slot">Expedition slots full (${expeditionActive}/${expeditionCap}). Research Stellar Cartography for more.</p>`
       : options.length === 0
         ? mission === "transport"
-          ? `<p class="hint" data-testid="fleet-need-colony">Need a second world: research Astrophysics, build a Colony Ship, colonize an empty galaxy slot — then transport cargo there.</p>`
+          ? `<p class="hint" data-testid="fleet-need-colony">Need a second world: research Stellar Cartography, build an Outpost Cradle, colonize an empty galaxy slot — then transport cargo there.</p>`
           : mission === "jump"
-            ? `<p class="hint" data-testid="fleet-need-jump-moon">Need another of your moons with a Jump Gate (form moons from large debris, then build Lunar Base + Jump Gate on both).</p>`
+            ? `<p class="hint" data-testid="fleet-need-jump-moon">Need another of your moons with a Fold Bridge (form moons from large debris, then build Crater Hab + Fold Bridge on both).</p>`
             : mission === "deploy"
               ? `<p class="hint" data-testid="fleet-need-deploy-target">Colonize for park targets, or join a second commander to visit rivals.</p>`
               : mission === "colonize"
@@ -210,14 +210,14 @@ export function fleetComposer(
     const labels: Record<MissionType, string> = {
       deploy: "Deploy (park own / visit rival)",
       raid: "Raid / attack",
-      espionage: "Espionage (Spy Probe)",
+      espionage: "Espionage (Whisper Probe)",
       transport: "Transport cargo (own worlds)",
       colonize: "Colonize empty slot",
       harvest: "Harvest debris",
-      harvestAsteroid: "Harvest asteroid (Recycler)",
+      harvestAsteroid: "Harvest asteroid (Salvage Trawler)",
       expedition: "Expedition (deep space)",
       pirateRaid: "Raid pirate base",
-      jump: "Jump Gate (moon → moon)",
+      jump: "Fold Bridge (moon → moon)",
     };
     return `<label><input type="radio" name="fleet-mission" value="${m}" data-testid="mission-${m}" ${mission === m ? "checked" : ""} ${busy ? "disabled" : ""} /> ${labels[m]}</label>`;
   }).join("");
