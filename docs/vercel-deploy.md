@@ -8,6 +8,8 @@ API is serverless (`api/[[...route]].js`). Shared multiplayer needs Redis REST c
 
 **Deploys:** Only `main` deploys to Vercel (`git.deploymentEnabled`: `*` false, `main` true). PR checks run on GitHub Actions (`unit-and-e2e`); preview branches do not consume Hobby deploy quota.
 
+**Planned (not yet):** staging branch or second Vercel project + ~daily promote to production `main`. Until that lands, keep main-only production as above — do not enable preview deploys for every PR.
+
 ---
 
 ## Env vars the code accepts
