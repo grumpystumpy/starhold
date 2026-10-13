@@ -170,6 +170,57 @@ button.ghost {
   align-items: center;
 }
 
+.topbar-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 11rem;
+  flex: 1 1 12rem;
+  max-width: 18rem;
+}
+
+.topbar-progress .level-label {
+  font-family: var(--font-display, "Segoe UI", sans-serif);
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  color: var(--accent, #c9a227);
+}
+
+.xp-bar {
+  position: relative;
+  flex: 1;
+  height: 1.15rem;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg0) 70%, #1a2430);
+  overflow: hidden;
+}
+
+.xp-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent, #c9a227) 55%, #3a4a2a),
+    var(--accent, #c9a227)
+  );
+  transition: width 0.35s ease-out;
+}
+
+.xp-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+  z-index: 1;
+}
+
 .join-hero {
   margin-bottom: 0.5rem;
   animation: fade-up 0.55s ease-out both;
