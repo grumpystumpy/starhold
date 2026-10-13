@@ -1,0 +1,35 @@
+eRow(id, planet, busy)).join("")}
+      ${
+        defenseQueueHtml(planet, now) ||
+        `<p class="hint">Static guns fight with your hangar on raids.</p>`
+      }
+    </section>`;
+}
+
+function fleetPage(
+  view: PlayerView,
+  busy: boolean,
+  fleetDraft: FleetDraft | null,
+): string {
+  const fleets = view.fleets ?? [];
+  const reports = view.reports ?? [];
+  const spyReports = view.spyReports ?? [];
+  const expeditionReports = view.expeditionReports ?? [];
+  return `
+    <section class="panel" data-testid="fleets-panel">
+      <h2>Fleets &amp; missions</h2>
+      ${fleetComposer(view, busy, fleetDraft)}
+      ${fleetsInFlight(fleets, view.roster, view.now)}
+      ${sensorContactsHtml(view.sensorContacts ?? [], view.roster, view.now)}
+      ${reportsHtml(reports, view.player.id)}
+      ${spyReportsHtml(spyReports)}
+      ${expeditionReportsHtml(expeditionReports)}
+    </section>`;
+}
+
+function highscorePage(view: PlayerView): string {
+  return `
+    <section class="panel" data-testid="highscores">
+      <h2>Highscores</h2>
+      <p class="hint">Empire points — buildings, fleets, defenses, and research (once). Level and lifetime XP shown.</p>
+      <ol class="highscores" data-test
