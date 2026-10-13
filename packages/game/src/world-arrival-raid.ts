@@ -12,6 +12,7 @@ import type {
   Resources,
   UniverseState,
 } from "./types.js";
+import { playerBoosts } from "./world-boosts.js";
 import { emptyCargo } from "./world-bootstrap.js";
 import { tryFormMoon } from "./world-moons.js";
 import { addDebris, subtractCargo } from "./world-tick.js";
@@ -27,12 +28,14 @@ export function resolveRaidArrival(
   const defenderOwner = universe.players[target.ownerPlayerId];
   const defenderBefore = { ...target.ships };
   const defensesBefore = { ...(target.defenses ?? emptyDefenses()) };
+  const defensePower = playerBoosts(defenderOwner, now).defensePower;
   const combat = resolveCombat(
     fleet.ships,
     defenderBefore,
     defensesBefore,
     owner?.research,
     defenderOwner?.research,
+    { defensePower },
   );
   target.ships = combat.defenderAfter;
   target.defenses = combat.defensesAfter;
