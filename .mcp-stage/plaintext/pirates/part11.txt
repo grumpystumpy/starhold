@@ -1,0 +1,39 @@
+hipCount(base.ships) <= 0) {
+    markPirateDestroyed(base, now);
+  }
+}
+
+function runDuePirateRaids(universe: UniverseState, now: number): void {
+  for (const base of activePirateBases(universe)) {
+    const dueAt = base.lastRaidAt + nextRaidIntervalMs(base.id, base.lastRaidAt);
+    if (now < dueAt) continue;
+    const target = pickRaidTarget(universe, base, now);
+    base.lastRaidAt = now;
+    if (!target) continue;
+    if (target.kind === "planet") {
+      applyPirateRaidOnPlanet(universe, base, target.planet, now);
+    } else {
+      applyPirateRaidOnPirate(universe, base, target.other, now);
+    }
+  }
+}
+
+/** Growth, NPC raids, and respawns (tick-on-read). */
+export function tickPirates(universe: UniverseState, now: number): void {
+  if (!universe.pirateBases) universe.pirateBases = {};
+  for (const base of Object.values(universe.pirateBases)) {
+    growPirateBase(base, now);
+  }
+  runDuePirateRaids(universe, now);
+  respawnDestroyedPirates(universe, now);
+}
+
+/**
+ * Player pirateRaid arrival: combat vs base; destroy + Starshards on win.
+ */
+export function resolvePirateRaidArrival(
+  universe: UniverseState,
+  fleet: FleetMission,
+  now: number,
+): void {
+  const baseId = fleet.t
