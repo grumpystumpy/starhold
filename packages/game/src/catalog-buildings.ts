@@ -89,7 +89,7 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   },
   lunarBase: {
     id: "lunarBase",
-    name: "Lunar Base",
+    name: "Crater Hab",
     description: "Expands moon fields so more lunar structures can be built.",
     baseCost: { metal: 2000, crystal: 4000, deuterium: 0 },
     costGrowth: 2,
@@ -97,7 +97,7 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   },
   sensorArray: {
     id: "sensorArray",
-    name: "Sensor Phalanx",
+    name: "Horizon Scanner",
     description:
       "Scans nearby systems for outbound fleets headed this way (moon only). Range grows with level.",
     baseCost: { metal: 4000, crystal: 8000, deuterium: 2000 },
@@ -106,9 +106,9 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   },
   jumpGate: {
     id: "jumpGate",
-    name: "Jump Gate",
+    name: "Fold Bridge",
     description:
-      "Links your moons for near-instant fleet hops. Both moons need a Jump Gate (moon only).",
+      "Links your moons for near-instant fleet hops. Both moons need a Fold Bridge (moon only).",
     baseCost: { metal: 8000, crystal: 16_000, deuterium: 8000 },
     costGrowth: 2,
     baseBuildSeconds: 60,

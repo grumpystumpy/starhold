@@ -73,7 +73,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
   },
   probe: {
     id: "probe",
-    name: "Spy Probe",
+    name: "Whisper Probe",
     description: "Disposable sensor drone for espionage missions.",
     cost: { metal: 0, crystal: 100, deuterium: 0 },
     buildSeconds: 8,
@@ -87,7 +87,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
   },
   recycler: {
     id: "recycler",
-    name: "Recycler",
+    name: "Salvage Trawler",
     description: "Harvests metal and crystal from debris fields.",
     cost: { metal: 400, crystal: 200, deuterium: 100 },
     buildSeconds: 30,
@@ -101,7 +101,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
   },
   colonyShip: {
     id: "colonyShip",
-    name: "Colony Ship",
+    name: "Outpost Cradle",
     description: "Found a new outpost on an empty planet slot. Consumed on landing.",
     cost: { metal: 800, crystal: 800, deuterium: 200 },
     buildSeconds: 50,
@@ -118,7 +118,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
 export const DEFENSES: Record<DefenseId, DefenseDef> = {
   laserBattery: {
     id: "laserBattery",
-    name: "Laser Battery",
+    name: "Beam Emplacement",
     description: "Static guns that fight with the hangar on raids.",
     cost: { metal: 150, crystal: 50, deuterium: 0 },
     buildSeconds: 10,
@@ -129,7 +129,7 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   shieldDome: {
     id: "shieldDome",
-    name: "Shield Dome",
+    name: "Aegis Cupola",
     description: "Planetary shield — soaks fire, low attack.",
     cost: { metal: 500, crystal: 300, deuterium: 0 },
     buildSeconds: 25,
