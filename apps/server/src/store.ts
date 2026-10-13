@@ -16,11 +16,12 @@ import { Redis } from "@upstash/redis";
  *     OR KV_REST_API_URL + KV_REST_API_TOKEN (Vercel Upstash integration)
  *
  * Schema: one JSON document at STARHOLD_UNIVERSE_KEY
- * (default `starhold:universe:v2` for contract map).
+ * (default `starhold:universe:v3` for Round 2).
  * Lock key: `${key}:lock` (NX + short TTL) for critical sections.
  *
- * Incompatible schema (missing / < UNIVERSE_SCHEMA_VERSION): archive old blob,
- * write a fresh universe — never remap 1×9×8 coords in place.
+ * Schema 2→3 migrates additively (levels/queues backfill). Older / missing
+ * schema archives the blob and writes a fresh universe — never remap
+ * 1×9×8 coords in place.
  */
 
 const UNIVERSE_NAME = process.env.STARHOLD_UNIVERSE_NAME ?? "Alpha Drift";
