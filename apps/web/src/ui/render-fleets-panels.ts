@@ -60,7 +60,33 @@ export function reportsHtml(
             (r.debrisCreated?.metal ?? 0) + (r.debrisCreated?.crystal ?? 0) > 0
               ? ` · debris ${fmt(r.debrisCreated.metal)}/${fmt(r.debrisCreated.crystal)}`
               : "";
-          return `<li data-testid="report-${r.id}"><strong>${role}: ${escapeHtml(r.outcome)}</strong>${typeof r.rounds === "number" ? ` · ${r.rounds}r` : ""} vs ${escapeHtml(r.attackerPlayerId === selfId ? r.defenderName : r.attackerName)} @ ${fmtCoords(r.targetCoords)}${loot}${debris}<br/><span class="meta">${escapeHtml(r.summary)}</span></li>`;
+          const moon = r.moonFormed ? " · moon formed" : "";
+          return `<li data-testid="report-${r.id}"><strong>${role}: ${escapeHtml(r.outcome)}</strong>${typeof r.rounds === "number" ? ` · ${r.rounds}r` : ""} vs ${escapeHtml(r.attackerPlayerId === selfId ? r.defenderName : r.attackerName)} @ ${fmtCoords(r.targetCoords)}${loot}${debris}${moon}<br/><span class="meta">${escapeHtml(r.summary)}</span></li>`;
+        })
+        .join("")}
+    </ul>
+  `;
+}
+
+export function sensorContactsHtml(
+  contacts: PlayerView["sensorContacts"],
+  roster: PlayerView["roster"],
+  now: number,
+): string {
+  if (!contacts?.length) {
+    return "";
+  }
+  const nameFor = (playerId: string) =>
+    roster.find((r) => r.id === playerId)?.name ?? "commander";
+  return `
+    <h3 class="subhead">Sensor contacts</h3>
+    <ul class="roster" data-testid="sensor-contacts">
+      ${contacts
+        .map((f) => {
+          const ships = SHIP_ORDER.filter((id) => (f.ships[id] ?? 0) > 0)
+            .map((id) => `${f.ships[id]}× ${SHIPS[id].name}`)
+            .join(", ");
+          return `<li data-testid="sensor-${f.id}"><span>${escapeHtml(nameFor(f.ownerPlayerId))} ${escapeHtml(f.mission)} → ${fmtCoords(f.targetCoords)}<br/><span class="meta">${escapeHtml(ships)}</span></span><span>${fmtEta(remainingSeconds(f.arrivesAt, now))}</span></li>`;
         })
         .join("")}
     </ul>
@@ -130,8 +156,9 @@ export function galaxyPanel(
       const debris = s.debris
         ? ` · debris ${fmt(s.debris.metal)}/${fmt(s.debris.crystal)}`
         : "";
+      const moon = s.hasMoon ? " · Moon" : "";
       const who = s.playerName
-        ? `${escapeHtml(s.playerName)}${s.isOwn ? " (you)" : ""} · ~${s.pointsHint} pts`
+        ? `${escapeHtml(s.playerName)}${s.isOwn ? " (you)" : ""} · ~${s.pointsHint} pts${moon}`
         : "Empty";
       return `<li data-testid="galaxy-slot-${s.coords.slot}"><span>${s.coords.slot}. ${who}${debris}</span><span>${fmtCoords(s.coords)}</span></li>`;
     })
