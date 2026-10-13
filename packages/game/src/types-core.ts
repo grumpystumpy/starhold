@@ -14,7 +14,8 @@ export type BuildingId =
   | "researchLab"
   | "lunarBase"
   | "sensorArray"
-  | "jumpGate";
+  | "jumpGate"
+  | "chronoLathe";
 
 export type BodyKind = "planet" | "moon";
 
@@ -26,7 +27,12 @@ export type ShipId =
   | "bomber"
   | "probe"
   | "recycler"
-  | "colonyShip";
+  | "colonyShip"
+  | "voidforgeTitan"
+  | "worldEater"
+  | "swarmDrone"
+  | "swarmHarvester"
+  | "swarmMothership";
 
 export type DefenseId = "laserBattery" | "shieldDome";
 
@@ -39,7 +45,8 @@ export type ResearchId =
   | "espionageTech"
   | "astrophysics"
   | "computerTech"
-  | "queueLogistics";
+  | "queueLogistics"
+  | "swarmHold";
 
 export type QueueKind = "building" | "ship" | "defense" | "research";
 
@@ -110,6 +117,13 @@ export interface ShipDef {
   speed: number;
   /** Deuterium burned per distance unit (one-way) */
   fuelPerDistance: number;
+  /** Minimum research levels to queue at shipyard (v1 Round 2). */
+  researchReq?: Partial<Record<ResearchId, number>>;
+  /**
+   * When true, hull must ride with a Swarm Mothership (not free-flying alone).
+   * Count toward mothership swarm capacity.
+   */
+  swarmCarried?: boolean;
 }
 
 export interface DefenseDef {
@@ -216,6 +230,12 @@ export interface FleetMission {
   phase: FleetPhase;
   /** Combat or espionage report id when relevant */
   reportId: string | null;
+  /** In-flight / parked Swarm Mothership drone production job. */
+  swarmProduce?: {
+    remaining: number;
+    unitSeconds: number;
+    progressAt: number;
+  } | null;
 }
 
 /** Mineable asteroid field (not a PlanetState). */
@@ -241,6 +261,18 @@ export interface PirateBase {
   lastRaidAt: number;
   destroyedAt: number | null;
 }
+
+/** Swarm Mothership occupation of an enemy body (Round 2). */
+export interface OccupationState {
+  planetId: string;
+  occupierPlayerId: string;
+  mothershipFleetId: string;
+  startedAt: number;
+  endsAt: number;
+}
+
+/** Post-battle choice when ≥5 World Eaters win on a mini planet (K wires full flow). */
+export type MiniPlanetResolveChoice = "capture" | "destroy";
 
 export interface SlotProductionMult {
   metal: number;

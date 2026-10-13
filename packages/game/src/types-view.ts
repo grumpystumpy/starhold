@@ -8,6 +8,7 @@ import type {
   DefenseStock,
   FleetMission,
   FleetShips,
+  OccupationState,
   OfficerDef,
   OfficerState,
   PirateBase,
@@ -44,6 +45,9 @@ export interface CombatReport {
   rounds: number;
   summary: string;
   moonFormed?: boolean;
+  /** Voidforge Titan moon-kill success. */
+  moonDestroyed?: boolean;
+  moonKillChancePct?: number;
 }
 
 export interface EspionageReport {
@@ -108,6 +112,8 @@ export interface PlanetState {
   buildQueue: BuildQueueItem[];
   shipQueue: ShipQueueItem[];
   defenseQueue: DefenseQueueItem[];
+  /** Round 2 mini-planet flag (thread K fills discovery). */
+  flags?: { mini?: boolean };
 }
 
 export interface PlayerState {
@@ -155,6 +161,10 @@ export interface UniverseState {
   debris: Record<string, DebrisField>;
   asteroids?: Record<string, AsteroidField>;
   pirateBases?: Record<string, PirateBase>;
+  /** Active Swarm Mothership occupations keyed by planetId. */
+  occupations?: Record<string, OccupationState>;
+  /** Mini planet ids (thread K fills discovery). */
+  miniPlanetIds?: string[];
 }
 
 export interface PirateBasePublic {
@@ -235,6 +245,8 @@ export interface PlayerView {
     xpToNext: number;
     xpTotal: number;
   };
+  /** Occupation on the active planet, if any. */
+  occupation: OccupationState | null;
 }
 
 export interface PublicPlayer {
