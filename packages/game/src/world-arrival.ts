@@ -4,6 +4,7 @@ import {
   emptyDefenses,
   fleetShipCount,
   flightSecondsOneWay,
+  levelBonuses,
   maxColonies,
   normalizeFleetShips,
   rollPlanetFields,
@@ -33,6 +34,7 @@ import { pruneSpyReports } from "./world-spy-prune.js";
 import {
   addCargoToPlanet,
   addShipsToPlanet,
+  advanceFleetSwarmProduce,
   advancePlanet,
   advanceResearch,
   getDebris,
@@ -44,6 +46,22 @@ import {
   occupationMineShares,
   pruneExpiredOccupations,
 } from "./world-occupation.js";
+
+/** Effective fleet speed: universe × officers/skills ÷ level time factor. */
+function effectiveFleetSpeed(
+  universe: UniverseState,
+  ownerPlayerId: string,
+  now: number,
+): number {
+  const owner = universe.players[ownerPlayerId];
+  const boosts = playerBoosts(owner, now);
+  const lb = levelBonuses(owner?.level ?? 1);
+  return (
+    universe.fleetSpeed *
+    Math.max(0.01, boosts.fleetSpeed) /
+    Math.max(0.01, lb.fleetTime)
+  );
+}
 
 export function resolveFleetArrival(
   universe: UniverseState,
@@ -194,7 +212,7 @@ export function resolveFleetArrival(
       fleet.targetCoords,
       origin.coords,
       fleet.ships,
-      universe.fleetSpeed,
+      effectiveFleetSpeed(universe, fleet.ownerPlayerId, now),
       drive,
     );
     if (fleetShipCount(fleet.ships) <= 0) {
@@ -224,6 +242,9 @@ export function fleetCargoCapacityForHarvest(ships: FleetShips): number {
 
 export function advanceFleets(universe: UniverseState, now: number): void {
   ensureUniverseShape(universe);
+  for (const fleet of Object.values(universe.fleets)) {
+    if (fleet.swarmProduce) advanceFleetSwarmProduce(fleet, now);
+  }
   const due = Object.values(universe.fleets)
     .filter((f) => f.arrivesAt <= now)
     .sort((a, b) => a.arrivesAt - b.arrivesAt);
@@ -245,14 +266,21 @@ export function advanceUniverse(universe: UniverseState, now = Date.now()): void
     const owner = universe.players[planet.ownerPlayerId];
     const energyTech = owner?.research.energyTech ?? 0;
     const boosts = playerBoosts(owner, now);
+    const lb = levelBonuses(owner?.level ?? 1);
     const before = { ...planet.resources };
+    // Stack: base → research (energyTech) → level → officers → skills.
     const advanced = advancePlanet(
       planet,
       universe.speed,
       now,
       energyTech,
-      { mineOutput: boosts.mineOutput, energyOutput: boosts.energyOutput },
+      {
+        mineOutput: lb.production * boosts.mineOutput,
+        energyOutput: boosts.energyOutput,
+      },
+      owner,
     );
+    if (owner) universe.players[owner.id] = owner;
     const occ = occupationForPlanet(universe, id, now);
     if (occ && occ.occupierPlayerId !== planet.ownerPlayerId) {
       const gained = {

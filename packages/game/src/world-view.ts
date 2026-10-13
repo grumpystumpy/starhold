@@ -11,7 +11,9 @@ import {
 } from "./catalog.js";
 import {
   economySnapshot,
+  levelBonuses,
   planetPoints,
+  playerProgressView,
   researchPoints,
   shipStockPoints,
 } from "./formulas.js";
@@ -69,10 +71,16 @@ export function highscoresBoard(universe: UniverseState): HighscoreEntry[] {
       points: empirePoints(universe, p),
       coords: home?.coords ?? { galaxy: 0, system: 0, slot: 0 },
       planetCount: ownedPlanetCount(universe, p.id),
+      level: p.level ?? 1,
+      xpTotal: p.xpTotal ?? 0,
     };
   });
   rows.sort(
-    (a, b) => b.points - a.points || a.playerId.localeCompare(b.playerId),
+    (a, b) =>
+      b.points - a.points ||
+      b.level - a.level ||
+      b.xpTotal - a.xpTotal ||
+      a.playerId.localeCompare(b.playerId),
   );
   return rows.map((r, i) => ({ ...r, rank: i + 1 }));
 }
@@ -257,7 +265,11 @@ export function playerView(
       planet,
       universe.speed,
       player.research.energyTech ?? 0,
-      { mineOutput: boosts.mineOutput, energyOutput: boosts.energyOutput },
+      {
+        mineOutput:
+          levelBonuses(player.level ?? 1).production * boosts.mineOutput,
+        energyOutput: boosts.energyOutput,
+      },
     ),
     roster: publicRoster(universe),
     highscores: highscoresBoard(universe),
@@ -273,6 +285,7 @@ export function playerView(
     officerCatalog: OFFICER_ORDER.map((id) => OFFICERS[id]),
     skillCatalog: SKILL_ORDER.map((id) => SKILLS[id]),
     dailyLoginAvailable: canClaimDailyLogin(player, now),
+    progress: playerProgressView(player),
     occupation: occupationForPlanet(universe, planet.id, now),
   };
 }

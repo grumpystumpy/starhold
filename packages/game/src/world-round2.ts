@@ -6,6 +6,7 @@ import {
   destroyedShipResources,
   fieldsCap,
   shipCost,
+  shipUnitBuildSeconds,
   spend,
   swarmCarriedCount,
   swarmFleetCapacity,
@@ -35,6 +36,7 @@ export function swarmProduce(
   playerId: string,
   fleetId: string,
   count: number,
+  now = Date.now(),
 ): ActionResult {
   const qty = Math.floor(count);
   if (qty < 1 || qty > 200) {
@@ -59,15 +61,25 @@ export function swarmProduce(
       error: `Not enough swarm capacity (${used + qty}/${cap}).`,
     };
   }
+  if (fleet.swarmProduce && fleet.swarmProduce.remaining > 0) {
+    return { ok: false, error: "Mothership is already producing drones." };
+  }
   const cost = shipCost("swarmDrone", qty);
   if (!canAfford(fleet.cargo, cost)) {
     return { ok: false, error: "Not enough cargo resources on the mothership." };
   }
-  fleet.cargo = spend(fleet.cargo, cost);
-  fleet.ships.swarmDrone = (fleet.ships.swarmDrone ?? 0) + qty;
-  universe.fleets[fleet.id] = fleet;
   const origin = universe.planets[fleet.originPlanetId];
   if (!origin) return { ok: false, error: "Origin planet missing." };
+  const chrono = origin.buildings.chronoLathe ?? 0;
+  const yard = Math.max(origin.buildings.shipyard ?? 0, 4);
+  const unitSeconds = shipUnitBuildSeconds("swarmDrone", yard, chrono);
+  fleet.cargo = spend(fleet.cargo, cost);
+  fleet.swarmProduce = {
+    remaining: qty,
+    unitSeconds,
+    progressAt: now,
+  };
+  universe.fleets[fleet.id] = fleet;
   return { ok: true, planet: origin };
 }
 

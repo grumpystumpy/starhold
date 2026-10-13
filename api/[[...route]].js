@@ -1914,6 +1914,14 @@ var BUILDINGS = {
     baseCost: { metal: 8e3, crystal: 16e3, deuterium: 8e3 },
     costGrowth: 2,
     baseBuildSeconds: 60
+  },
+  chronoLathe: {
+    id: "chronoLathe",
+    name: "Chrono Lathe",
+    description: "Late-game assembler. Each level multiplies building, ship, and defense build times by 0.1^level. Does not affect research.",
+    baseCost: { metal: 1e6, crystal: 5e5, deuterium: 2e5 },
+    costGrowth: 2.5,
+    baseBuildSeconds: 3600
   }
 };
 
@@ -2033,11 +2041,11 @@ var SHIPS = {
   },
   voidforgeTitan: {
     id: "voidforgeTitan",
-    name: "Voidforge Titan",
-    description: "Moon-killer flagship. Deathstar-class balance reference \u2014 original Starhold hull.",
-    cost: { metal: 5e6, crystal: 4e6, deuterium: 1e6 },
-    buildSeconds: 12e4,
-    shipyardLevel: 12,
+    name: "Void Titan",
+    description: "Moon-killer flagship (3rd-largest hull). Deathstar-class balance reference \u2014 original Starhold name.",
+    cost: { metal: 15e5, crystal: 12e5, deuterium: 4e5 },
+    buildSeconds: 9e4,
+    shipyardLevel: 11,
     cargo: 1e6,
     attack: 2e5,
     shield: 5e4,
@@ -2045,31 +2053,36 @@ var SHIPS = {
     speed: 100,
     fuelPerDistance: 5,
     researchReq: {
-      weaponsTech: 12,
-      shieldingTech: 12,
-      armourTech: 12
+      weaponsTech: 10,
+      shieldingTech: 10,
+      armourTech: 10
     }
   },
   worldEater: {
     id: "worldEater",
     name: "World Eater",
-    description: "Siege hull for mini-planet capture/destroy. Cannot collect debris \u2014 bring Salvage Trawlers.",
-    cost: { metal: 8e4, crystal: 6e4, deuterium: 25e3 },
-    buildSeconds: 8e3,
-    shipyardLevel: 9,
+    description: "Largest siege hull \u2014 mini-planet capture/destroy. No cargo; cannot collect debris.",
+    cost: { metal: 8e6, crystal: 65e5, deuterium: 25e5 },
+    buildSeconds: 2e5,
+    shipyardLevel: 15,
     cargo: 0,
-    attack: 12e3,
-    shield: 2e3,
-    hull: 4e4,
-    speed: 800,
-    fuelPerDistance: 3
+    attack: 8e4,
+    shield: 8e5,
+    hull: 2e6,
+    speed: 600,
+    fuelPerDistance: 4,
+    researchReq: {
+      weaponsTech: 14,
+      shieldingTech: 14,
+      armourTech: 14
+    }
   },
   swarmDrone: {
     id: "swarmDrone",
     name: "Swarm Drone",
     description: "Carried strike mite. Must ride a Swarm Mothership; intercepts fire aimed at the carrier.",
-    cost: { metal: 200, crystal: 80, deuterium: 0 },
-    buildSeconds: 8,
+    cost: { metal: 50, crystal: 20, deuterium: 0 },
+    buildSeconds: 2,
     shipyardLevel: 4,
     cargo: 0,
     attack: 6,
@@ -2083,8 +2096,8 @@ var SHIPS = {
     id: "swarmHarvester",
     name: "Swarm Harvester",
     description: "Carried salvage mite. Loot feeds the mothership; kamikazes when the carrier is critical.",
-    cost: { metal: 400, crystal: 300, deuterium: 100 },
-    buildSeconds: 20,
+    cost: { metal: 100, crystal: 75, deuterium: 25 },
+    buildSeconds: 5,
     shipyardLevel: 5,
     cargo: 0,
     attack: 0,
@@ -2097,16 +2110,21 @@ var SHIPS = {
   swarmMothership: {
     id: "swarmMothership",
     name: "Swarm Mothership",
-    description: "Swarm carrier and occupation platform. Holds drones/harvesters; can produce drones in flight.",
-    cost: { metal: 4e4, crystal: 3e4, deuterium: 1e4 },
-    buildSeconds: 4e3,
-    shipyardLevel: 8,
-    cargo: 5e4,
-    attack: 500,
-    shield: 2e3,
-    hull: 2e4,
+    description: "2nd-largest hull \u2014 swarm carrier and occupation platform. Massive cargo; produces drones in flight.",
+    cost: { metal: 25e5, crystal: 2e6, deuterium: 75e4 },
+    buildSeconds: 8e4,
+    shipyardLevel: 13,
+    cargo: 15005e4,
+    attack: 3e3,
+    shield: 202e3,
+    hull: 12e4,
     speed: 2500,
-    fuelPerDistance: 2
+    fuelPerDistance: 2,
+    researchReq: {
+      weaponsTech: 11,
+      shieldingTech: 11,
+      armourTech: 11
+    }
   }
 };
 var DEFENSES = {
@@ -2211,7 +2229,7 @@ var RESEARCH = {
   swarmHold: {
     id: "swarmHold",
     name: "Swarm Hold",
-    description: "+15% of base (300) Swarm Mothership capacity per level (hard cap 2000).",
+    description: "+15% of base (2000) Swarm Mothership capacity per level.",
     baseCost: { metal: 200, crystal: 400, deuterium: 200 },
     costGrowth: 2,
     baseResearchSeconds: 40,
@@ -2478,7 +2496,8 @@ var PLANET_BUILDING_ORDER = [
   "crystalStorage",
   "deutTank",
   "shipyard",
-  "researchLab"
+  "researchLab",
+  "chronoLathe"
 ];
 var MOON_BUILDING_ORDER = [
   "lunarBase",
@@ -2506,9 +2525,11 @@ var SHIP_ORDER = [
   "swarmMothership"
 ];
 var DEFENSE_ORDER = ["laserBattery", "shieldDome"];
-var SWARM_CAPACITY_BASE = 300;
+var SWARM_CAPACITY_BASE = 2e3;
 var SWARM_HOLD_BONUS_PER_LEVEL = 0.15;
-var SWARM_CAPACITY_HARD_CAP = 2e3;
+var SWARM_CAPACITY_HARD_CAP = 1e5;
+var CHRONO_LATHE_TIME_BASE = 0.1;
+var CHRONO_LATHE_SHIPYARD_REQ = 10;
 var SWARM_NUMBERS_THRESHOLD = 50;
 var SWARM_NUMBERS_BONUS_PER = 2e-3;
 var SWARM_NUMBERS_BONUS_CAP_COUNT = 2e3;
@@ -2650,12 +2671,15 @@ function buildingUpgradeCost(buildingId, currentLevel) {
     deuterium: Math.floor(def.baseCost.deuterium * factor)
   };
 }
-function buildingUpgradeSeconds(buildingId, currentLevel) {
+function chronoLatheTimeFactor(chronoLatheLevel) {
+  const level = Math.max(0, Math.floor(chronoLatheLevel));
+  if (level <= 0) return 1;
+  return Math.pow(CHRONO_LATHE_TIME_BASE, level);
+}
+function buildingUpgradeSeconds(buildingId, currentLevel, chronoLatheLevel = 0) {
   const def = BUILDINGS[buildingId];
-  return Math.max(
-    1,
-    Math.floor(def.baseBuildSeconds * Math.pow(def.costGrowth, currentLevel))
-  );
+  const raw2 = def.baseBuildSeconds * Math.pow(def.costGrowth, currentLevel) * chronoLatheTimeFactor(chronoLatheLevel);
+  return Math.max(1e-9, raw2);
 }
 function shipCost(shipId, count) {
   const def = SHIPS[shipId];
@@ -2665,10 +2689,13 @@ function shipCost(shipId, count) {
     deuterium: def.cost.deuterium * count
   };
 }
-function shipBuildSeconds(shipId, count, shipyardLevel) {
+function shipUnitBuildSeconds(shipId, shipyardLevel, chronoLatheLevel = 0) {
   const def = SHIPS[shipId];
   const speedFactor = 1 + Math.max(0, shipyardLevel - 1) * 0.1;
-  return Math.max(1, Math.ceil(def.buildSeconds * count / speedFactor));
+  return Math.max(
+    1e-9,
+    def.buildSeconds / speedFactor * chronoLatheTimeFactor(chronoLatheLevel)
+  );
 }
 function defenseCost(defenseId, count) {
   const def = DEFENSES[defenseId];
@@ -2678,10 +2705,17 @@ function defenseCost(defenseId, count) {
     deuterium: def.cost.deuterium * count
   };
 }
-function defenseBuildSeconds(defenseId, count, shipyardLevel) {
+function defenseUnitBuildSeconds(defenseId, shipyardLevel, chronoLatheLevel = 0) {
   const def = DEFENSES[defenseId];
   const speedFactor = 1 + Math.max(0, shipyardLevel - 1) * 0.1;
-  return Math.max(1, Math.ceil(def.buildSeconds * count / speedFactor));
+  return Math.max(
+    1e-9,
+    def.buildSeconds / speedFactor * chronoLatheTimeFactor(chronoLatheLevel)
+  );
+}
+function batchUnitsProduced(elapsedSeconds, unitSeconds, remaining) {
+  if (unitSeconds >= 1 || remaining <= 0 || elapsedSeconds <= 0) return 0;
+  return Math.min(remaining, Math.floor(elapsedSeconds / unitSeconds));
 }
 function researchUpgradeCost(researchId, currentLevel) {
   const def = RESEARCH[researchId];
@@ -2930,7 +2964,7 @@ function swarmCapacityForLevel(swarmHoldLevel) {
   const raw2 = Math.floor(
     SWARM_CAPACITY_BASE * (1 + SWARM_HOLD_BONUS_PER_LEVEL * level)
   );
-  return Math.min(SWARM_CAPACITY_HARD_CAP, raw2);
+  return Math.min(SWARM_CAPACITY_HARD_CAP, Math.max(SWARM_CAPACITY_BASE, raw2));
 }
 function swarmFleetCapacity(ships, swarmHoldLevel) {
   const motherships = ships.swarmMothership ?? 0;
@@ -3323,6 +3357,67 @@ function maxExpeditions(astrophysics) {
   return 1 + Math.max(0, astrophysics);
 }
 
+// packages/game/src/formulas-progress.ts
+function xpToNext(level) {
+  const L = Math.max(1, Math.floor(level));
+  return Math.floor(100 * Math.pow(L, 1.45));
+}
+function levelBonuses(level) {
+  const n = Math.max(0, Math.floor(level) - 1);
+  return {
+    production: 1 + 5e-3 * n,
+    buildTime: Math.max(0.7, 1 - 4e-3 * n),
+    researchTime: Math.max(0.7, 1 - 4e-3 * n),
+    fleetTime: Math.max(0.75, 1 - 3e-3 * n),
+    shipBuild: Math.max(0.65, 1 - 5e-3 * n),
+    weaponsBonus: Math.floor(n / 5),
+    shieldingBonus: Math.floor(n / 5)
+  };
+}
+function ensurePlayerProgress(player) {
+  if (player.level == null || player.level < 1) player.level = 1;
+  if (player.xp == null || player.xp < 0) player.xp = 0;
+  if (player.xpTotal == null || player.xpTotal < 0) player.xpTotal = 0;
+}
+function grantPlayerXp(player, amount) {
+  const add = Math.max(0, Math.floor(amount));
+  if (add <= 0) return 0;
+  ensurePlayerProgress(player);
+  let level = player.level ?? 1;
+  let xp = player.xp ?? 0;
+  let xpTotal = player.xpTotal ?? 0;
+  xpTotal += add;
+  xp += add;
+  let gained = 0;
+  while (xp >= xpToNext(level)) {
+    xp -= xpToNext(level);
+    level += 1;
+    gained += 1;
+  }
+  player.level = level;
+  player.xp = xp;
+  player.xpTotal = xpTotal;
+  return gained;
+}
+function xpForBuilding(targetLevel) {
+  return 8 + 2 * Math.max(1, Math.floor(targetLevel));
+}
+function xpForResearch(targetLevel) {
+  return 12 + 3 * Math.max(1, Math.floor(targetLevel));
+}
+function playerProgressView(player) {
+  ensurePlayerProgress(player);
+  const level = player.level ?? 1;
+  const xp = player.xp ?? 0;
+  const xpTotal = player.xpTotal ?? 0;
+  return {
+    level,
+    xp,
+    xpToNext: xpToNext(level),
+    xpTotal
+  };
+}
+
 // packages/game/src/world-asteroids.ts
 function asteroidId(galaxy, system, index) {
   return `ast:${galaxy}:${system}:a${index}`;
@@ -3488,7 +3583,32 @@ function expeditionStarshardsAmount(roll) {
 }
 
 // packages/game/src/world-tick.ts
-function advancePlanet(planet, universeSpeed, now, energyTechLevel = 0, boosts) {
+function advanceUnitQueue(queue, now, onBatch) {
+  const unitSec = Math.max(1e-9, queue.unitSeconds);
+  if (unitSec >= 1) {
+    if (queue.completesAt > now) return queue;
+    onBatch(queue.count);
+    return null;
+  }
+  const progressAt = queue.progressAt ?? queue.completesAt - queue.count * unitSec * 1e3;
+  const elapsedSec = Math.max(0, (now - progressAt) / 1e3);
+  const batch = batchUnitsProduced(elapsedSec, unitSec, queue.count);
+  if (batch <= 0) {
+    return { ...queue, progressAt };
+  }
+  onBatch(batch);
+  const remaining = queue.count - batch;
+  if (remaining <= 0) return null;
+  const leftoverSec = elapsedSec - batch * unitSec;
+  const nextProgress = now - leftoverSec * 1e3;
+  return {
+    ...queue,
+    count: remaining,
+    progressAt: nextProgress,
+    completesAt: nextProgress + remaining * unitSec * 1e3
+  };
+}
+function advancePlanet(planet, universeSpeed, now, energyTechLevel = 0, boosts, owner) {
   let state = {
     ...planet,
     resources: { ...planet.resources },
@@ -3500,16 +3620,21 @@ function advancePlanet(planet, universeSpeed, now, energyTechLevel = 0, boosts) 
     const { buildingId, targetLevel } = state.buildQueue;
     state.buildings[buildingId] = targetLevel;
     state.buildQueue = null;
+    if (owner) grantPlayerXp(owner, xpForBuilding(targetLevel));
   }
-  if (state.shipQueue && state.shipQueue.completesAt <= now) {
-    const { shipId, count } = state.shipQueue;
-    state.ships[shipId] = (state.ships[shipId] ?? 0) + count;
-    state.shipQueue = null;
+  if (state.shipQueue) {
+    const next = advanceUnitQueue(state.shipQueue, now, (n) => {
+      const id = state.shipQueue.shipId;
+      state.ships[id] = (state.ships[id] ?? 0) + n;
+    });
+    state.shipQueue = next;
   }
-  if (state.defenseQueue && state.defenseQueue.completesAt <= now) {
-    const { defenseId, count } = state.defenseQueue;
-    state.defenses[defenseId] = (state.defenses[defenseId] ?? 0) + count;
-    state.defenseQueue = null;
+  if (state.defenseQueue) {
+    const next = advanceUnitQueue(state.defenseQueue, now, (n) => {
+      const id = state.defenseQueue.defenseId;
+      state.defenses[id] = (state.defenses[id] ?? 0) + n;
+    });
+    state.defenseQueue = next;
   }
   const elapsedMs = Math.max(0, now - state.lastTickAt);
   if (elapsedMs > 0) {
@@ -3533,11 +3658,42 @@ function advancePlanet(planet, universeSpeed, now, energyTechLevel = 0, boosts) 
   }
   return state;
 }
+function advanceFleetSwarmProduce(fleet, now) {
+  const job = fleet.swarmProduce;
+  if (!job || job.remaining <= 0) {
+    fleet.swarmProduce = null;
+    return;
+  }
+  const unitSec = Math.max(1e-9, job.unitSeconds);
+  const elapsedSec = Math.max(0, (now - job.progressAt) / 1e3);
+  let batch;
+  if (unitSec < 1) {
+    batch = batchUnitsProduced(elapsedSec, unitSec, job.remaining);
+  } else if (elapsedSec >= unitSec * job.remaining) {
+    batch = job.remaining;
+  } else {
+    batch = Math.floor(elapsedSec / unitSec);
+  }
+  if (batch <= 0) return;
+  fleet.ships.swarmDrone = (fleet.ships.swarmDrone ?? 0) + batch;
+  const remaining = job.remaining - batch;
+  if (remaining <= 0) {
+    fleet.swarmProduce = null;
+    return;
+  }
+  const leftoverSec = unitSec < 1 ? elapsedSec - batch * unitSec : elapsedSec - batch * unitSec;
+  fleet.swarmProduce = {
+    remaining,
+    unitSeconds: unitSec,
+    progressAt: now - leftoverSec * 1e3
+  };
+}
 function advanceResearch(universe, player, now) {
   if (!player.researchQueue || player.researchQueue.completesAt > now) return;
   const { researchId, targetLevel } = player.researchQueue;
   player.research[researchId] = targetLevel;
   player.researchQueue = null;
+  grantPlayerXp(player, xpForResearch(targetLevel));
   universe.players[player.id] = player;
 }
 function addShipsToPlanet(planet, ships) {
@@ -3977,7 +4133,8 @@ function emptyBuildings() {
     researchLab: 0,
     lunarBase: 0,
     sensorArray: 0,
-    jumpGate: 0
+    jumpGate: 0,
+    chronoLathe: 0
   };
 }
 function emptyShips() {
@@ -4008,7 +4165,9 @@ function createUniverse(name = "Alpha Drift", speed = 1, fleetSpeed = speed) {
     expeditionReports: {},
     debris: {},
     asteroids: {},
-    pirateBases: {}
+    pirateBases: {},
+    occupations: {},
+    miniPlanetIds: []
   };
   seedUniverseAsteroids(universe);
   seedUniversePirates(universe, now);
@@ -4071,6 +4230,9 @@ function ensureUniverseShape(universe) {
     if (player.highscoreStarshardsClaimed === void 0) {
       player.highscoreStarshardsClaimed = false;
     }
+    if (player.level == null || player.level < 1) player.level = 1;
+    if (player.xp == null || player.xp < 0) player.xp = 0;
+    if (player.xpTotal == null || player.xpTotal < 0) player.xpTotal = 0;
   }
   const seed = universe.seed ?? universe.id;
   for (const planet of Object.values(universe.planets)) {
@@ -4083,6 +4245,7 @@ function ensureUniverseShape(universe) {
     if (!planet.buildings.lunarBase) planet.buildings.lunarBase = 0;
     if (!planet.buildings.sensorArray) planet.buildings.sensorArray = 0;
     if (!planet.buildings.jumpGate) planet.buildings.jumpGate = 0;
+    if (!planet.buildings.chronoLathe) planet.buildings.chronoLathe = 0;
     if (planet.kind !== "moon" && (typeof planet.fieldsCap !== "number" || planet.fieldsCap <= 0)) {
       planet.fieldsCap = rollPlanetFields(
         planet.coords.slot,
@@ -4152,6 +4315,9 @@ function joinUniverse(universe, playerName, now = Date.now()) {
     research: emptyResearch(),
     researchQueue: null,
     createdAt: now,
+    level: 1,
+    xp: 0,
+    xpTotal: 0,
     starshards: 0,
     officers: [],
     skillsUnlocked: [],
@@ -4349,7 +4515,7 @@ function clearOccupationIfFleetGone(universe, fleet) {
 }
 
 // packages/game/src/world-round2.ts
-function swarmProduce(universe, playerId, fleetId, count) {
+function swarmProduce(universe, playerId, fleetId, count, now = Date.now()) {
   const qty = Math.floor(count);
   if (qty < 1 || qty > 200) {
     return { ok: false, error: "Produce between 1 and 200 drones." };
@@ -4373,15 +4539,25 @@ function swarmProduce(universe, playerId, fleetId, count) {
       error: `Not enough swarm capacity (${used + qty}/${cap}).`
     };
   }
+  if (fleet.swarmProduce && fleet.swarmProduce.remaining > 0) {
+    return { ok: false, error: "Mothership is already producing drones." };
+  }
   const cost = shipCost("swarmDrone", qty);
   if (!canAfford(fleet.cargo, cost)) {
     return { ok: false, error: "Not enough cargo resources on the mothership." };
   }
-  fleet.cargo = spend(fleet.cargo, cost);
-  fleet.ships.swarmDrone = (fleet.ships.swarmDrone ?? 0) + qty;
-  universe.fleets[fleet.id] = fleet;
   const origin = universe.planets[fleet.originPlanetId];
   if (!origin) return { ok: false, error: "Origin planet missing." };
+  const chrono = origin.buildings.chronoLathe ?? 0;
+  const yard = Math.max(origin.buildings.shipyard ?? 0, 4);
+  const unitSeconds = shipUnitBuildSeconds("swarmDrone", yard, chrono);
+  fleet.cargo = spend(fleet.cargo, cost);
+  fleet.swarmProduce = {
+    remaining: qty,
+    unitSeconds,
+    progressAt: now
+  };
+  universe.fleets[fleet.id] = fleet;
   return { ok: true, planet: origin };
 }
 function resolveMiniPlanetChoice(universe, playerId, fleetId, choice) {
@@ -4713,6 +4889,12 @@ function pruneSpyReports(universe, now = Date.now(), ttlMs = SPY_REPORT_TTL_MS) 
 }
 
 // packages/game/src/world-arrival.ts
+function effectiveFleetSpeed(universe, ownerPlayerId, now) {
+  const owner = universe.players[ownerPlayerId];
+  const boosts = playerBoosts(owner, now);
+  const lb = levelBonuses(owner?.level ?? 1);
+  return universe.fleetSpeed * Math.max(0.01, boosts.fleetSpeed) / Math.max(0.01, lb.fleetTime);
+}
 function resolveFleetArrival(universe, fleet, now) {
   const origin = universe.planets[fleet.originPlanetId];
   if (!origin) {
@@ -4839,7 +5021,7 @@ function resolveFleetArrival(universe, fleet, now) {
       fleet.targetCoords,
       origin.coords,
       fleet.ships,
-      universe.fleetSpeed,
+      effectiveFleetSpeed(universe, fleet.ownerPlayerId, now),
       drive
     );
     if (fleetShipCount(fleet.ships) <= 0) {
@@ -4866,6 +5048,9 @@ function fleetCargoCapacityForHarvest(ships) {
 }
 function advanceFleets(universe, now) {
   ensureUniverseShape(universe);
+  for (const fleet of Object.values(universe.fleets)) {
+    if (fleet.swarmProduce) advanceFleetSwarmProduce(fleet, now);
+  }
   const due = Object.values(universe.fleets).filter((f) => f.arrivesAt <= now).sort((a, b) => a.arrivesAt - b.arrivesAt);
   for (const fleet of due) {
     const live = universe.fleets[fleet.id];
@@ -4884,14 +5069,20 @@ function advanceUniverse(universe, now = Date.now()) {
     const owner = universe.players[planet.ownerPlayerId];
     const energyTech = owner?.research.energyTech ?? 0;
     const boosts = playerBoosts(owner, now);
+    const lb = levelBonuses(owner?.level ?? 1);
     const before = { ...planet.resources };
     const advanced = advancePlanet(
       planet,
       universe.speed,
       now,
       energyTech,
-      { mineOutput: boosts.mineOutput, energyOutput: boosts.energyOutput }
+      {
+        mineOutput: lb.production * boosts.mineOutput,
+        energyOutput: boosts.energyOutput
+      },
+      owner
     );
+    if (owner) universe.players[owner.id] = owner;
     const occ = occupationForPlanet(universe, id, now);
     if (occ && occ.occupierPlayerId !== planet.ownerPlayerId) {
       const gained = {
@@ -4965,6 +5156,15 @@ function queueBuildingUpgrade(universe, playerId, buildingId, now = Date.now(), 
   if (buildingId === "jumpGate" && (planet.buildings.lunarBase ?? 0) < 1) {
     return { ok: false, error: "Fold Bridge needs Crater Hab level 1." };
   }
+  if (buildingId === "chronoLathe") {
+    const yard = planet.buildings.shipyard ?? 0;
+    if (yard < CHRONO_LATHE_SHIPYARD_REQ) {
+      return {
+        ok: false,
+        error: `Chrono Lathe needs Shipyard level ${CHRONO_LATHE_SHIPYARD_REQ} (you have ${yard}).`
+      };
+    }
+  }
   if (planet.buildQueue) {
     return { ok: false, error: "A building is already under construction." };
   }
@@ -4981,16 +5181,16 @@ function queueBuildingUpgrade(universe, playerId, buildingId, now = Date.now(), 
   if (!canAfford(planet.resources, cost)) {
     return { ok: false, error: "Not enough resources." };
   }
-  const seconds = Math.max(
-    1,
-    Math.ceil(buildingUpgradeSeconds(buildingId, current) / universe.speed)
-  );
+  const chrono = planet.buildings.chronoLathe ?? 0;
+  const chronoForThis = buildingId === "chronoLathe" ? 0 : chrono;
+  const lb = levelBonuses(player.level ?? 1);
+  const seconds = buildingUpgradeSeconds(buildingId, current, chronoForThis) * lb.buildTime / universe.speed;
   planet.resources = spend(planet.resources, cost);
   planet.buildQueue = {
     kind: "building",
     buildingId,
     targetLevel: current + 1,
-    completesAt: now + seconds * 1e3
+    completesAt: now + Math.max(1, Math.ceil(seconds)) * 1e3
   };
   universe.planets[planet.id] = planet;
   return { ok: true, planet };
@@ -5026,17 +5226,19 @@ function queueShipBuild(universe, playerId, shipId, count, now = Date.now(), pla
   if (!canAfford(planet.resources, cost)) {
     return { ok: false, error: "Not enough resources." };
   }
-  const seconds = Math.max(
-    1,
-    Math.ceil(shipBuildSeconds(shipId, qty, yard) / universe.speed)
-  );
+  const chrono = planet.buildings.chronoLathe ?? 0;
+  const lb = levelBonuses(player.level ?? 1);
+  const unitSeconds = shipUnitBuildSeconds(shipId, yard, chrono) * lb.shipBuild / universe.speed;
+  const totalSeconds = unitSeconds * qty;
+  const completesAt = unitSeconds >= 1 ? now + Math.max(1, Math.ceil(totalSeconds)) * 1e3 : now + Math.max(1, totalSeconds * 1e3);
   planet.resources = spend(planet.resources, cost);
   planet.shipQueue = {
     kind: "ship",
     shipId,
     count: qty,
-    completesAt: now + seconds * 1e3,
-    unitSeconds: Math.ceil(seconds / qty)
+    completesAt,
+    unitSeconds,
+    progressAt: now
   };
   universe.planets[planet.id] = planet;
   return { ok: true, planet };
@@ -5070,17 +5272,17 @@ function queueDefenseBuild(universe, playerId, defenseId, count, now = Date.now(
   if (!canAfford(planet.resources, cost)) {
     return { ok: false, error: "Not enough resources." };
   }
-  const seconds = Math.max(
-    1,
-    Math.ceil(defenseBuildSeconds(defenseId, qty, yard) / universe.speed)
-  );
+  const chrono = planet.buildings.chronoLathe ?? 0;
+  const unitSeconds = defenseUnitBuildSeconds(defenseId, yard, chrono) / universe.speed;
+  const totalSeconds = unitSeconds * qty;
   planet.resources = spend(planet.resources, cost);
   planet.defenseQueue = {
     kind: "defense",
     defenseId,
     count: qty,
-    completesAt: now + seconds * 1e3,
-    unitSeconds: Math.ceil(seconds / qty)
+    completesAt: now + Math.max(1, totalSeconds * 1e3),
+    unitSeconds,
+    progressAt: now
   };
   universe.planets[planet.id] = planet;
   return { ok: true, planet };
@@ -5492,11 +5694,13 @@ function highscoresBoard(universe) {
       name: p.name,
       points: empirePoints(universe, p),
       coords: home?.coords ?? { galaxy: 0, system: 0, slot: 0 },
-      planetCount: ownedPlanetCount(universe, p.id)
+      planetCount: ownedPlanetCount(universe, p.id),
+      level: p.level ?? 1,
+      xpTotal: p.xpTotal ?? 0
     };
   });
   rows.sort(
-    (a, b) => b.points - a.points || a.playerId.localeCompare(b.playerId)
+    (a, b) => b.points - a.points || b.level - a.level || b.xpTotal - a.xpTotal || a.playerId.localeCompare(b.playerId)
   );
   return rows.map((r, i) => ({ ...r, rank: i + 1 }));
 }
@@ -5621,7 +5825,10 @@ function playerView(universe, playerId, now = Date.now(), galaxy, system) {
       planet,
       universe.speed,
       player.research.energyTech ?? 0,
-      { mineOutput: boosts.mineOutput, energyOutput: boosts.energyOutput }
+      {
+        mineOutput: levelBonuses(player.level ?? 1).production * boosts.mineOutput,
+        energyOutput: boosts.energyOutput
+      }
     ),
     roster: publicRoster(universe),
     highscores: highscoresBoard(universe),
@@ -5637,6 +5844,7 @@ function playerView(universe, playerId, now = Date.now(), galaxy, system) {
     officerCatalog: OFFICER_ORDER.map((id) => OFFICERS[id]),
     skillCatalog: SKILL_ORDER.map((id) => SKILLS[id]),
     dailyLoginAvailable: canClaimDailyLogin(player, now),
+    progress: playerProgressView(player),
     occupation: occupationForPlanet(universe, planet.id, now)
   };
 }
@@ -11957,11 +12165,13 @@ function createApp() {
     }
     return withUniverse((universe) => {
       advanceUniverse(universe);
+      const now = Date.now();
       const result = swarmProduce(
         universe,
         body.playerId,
         body.fleetId,
-        body.count ?? 1
+        body.count ?? 1,
+        now
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId));

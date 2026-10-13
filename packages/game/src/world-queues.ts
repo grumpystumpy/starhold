@@ -1,5 +1,6 @@
 import { BUILDINGS, DEFENSES, SHIPS } from "./catalog.js";
 import {
+  CHRONO_LATHE_SHIPYARD_REQ,
   MOON_FIELDS_BASE,
   MOON_FIELDS_PER_LUNAR_BASE,
 } from "./catalog.js";
@@ -8,13 +9,14 @@ import {
   buildingUpgradeCost,
   buildingUpgradeSeconds,
   canAfford,
-  defenseBuildSeconds,
   defenseCost,
+  defenseUnitBuildSeconds,
   fieldsRemaining,
   fieldsUsed,
-  shipBuildSeconds,
+  levelBonuses,
   shipCost,
   shipResearchReqMet,
+  shipUnitBuildSeconds,
   spend,
 } from "./formulas.js";
 import type {
@@ -107,6 +109,15 @@ export function queueBuildingUpgrade(
   if (buildingId === "jumpGate" && (planet.buildings.lunarBase ?? 0) < 1) {
     return { ok: false, error: "Fold Bridge needs Crater Hab level 1." };
   }
+  if (buildingId === "chronoLathe") {
+    const yard = planet.buildings.shipyard ?? 0;
+    if (yard < CHRONO_LATHE_SHIPYARD_REQ) {
+      return {
+        ok: false,
+        error: `Chrono Lathe needs Shipyard level ${CHRONO_LATHE_SHIPYARD_REQ} (you have ${yard}).`,
+      };
+    }
+  }
   if (planet.buildQueue) {
     return { ok: false, error: "A building is already under construction." };
   }
@@ -127,17 +138,20 @@ export function queueBuildingUpgrade(
     return { ok: false, error: "Not enough resources." };
   }
 
-  const seconds = Math.max(
-    1,
-    Math.ceil(buildingUpgradeSeconds(buildingId, current) / universe.speed),
-  );
+  const chrono = planet.buildings.chronoLathe ?? 0;
+  // Chrono Lathe does not accelerate itself (avoid recursive free builds).
+  const chronoForThis = buildingId === "chronoLathe" ? 0 : chrono;
+  const lb = levelBonuses(player.level ?? 1);
+  const seconds =
+    (buildingUpgradeSeconds(buildingId, current, chronoForThis) * lb.buildTime) /
+    universe.speed;
 
   planet.resources = spend(planet.resources, cost);
   planet.buildQueue = {
     kind: "building",
     buildingId,
     targetLevel: current + 1,
-    completesAt: now + seconds * 1000,
+    completesAt: now + Math.max(1, Math.ceil(seconds)) * 1000,
   };
   universe.planets[planet.id] = planet;
   return { ok: true, planet };
@@ -187,18 +201,25 @@ export function queueShipBuild(
     return { ok: false, error: "Not enough resources." };
   }
 
-  const seconds = Math.max(
-    1,
-    Math.ceil(shipBuildSeconds(shipId, qty, yard) / universe.speed),
-  );
+  const chrono = planet.buildings.chronoLathe ?? 0;
+  const lb = levelBonuses(player.level ?? 1);
+  const unitSeconds =
+    (shipUnitBuildSeconds(shipId, yard, chrono) * lb.shipBuild) / universe.speed;
+  const totalSeconds = unitSeconds * qty;
+  // ≥1s units keep Thread I ceil semantics; sub-second keeps precise ms for batch ticks.
+  const completesAt =
+    unitSeconds >= 1
+      ? now + Math.max(1, Math.ceil(totalSeconds)) * 1000
+      : now + Math.max(1, totalSeconds * 1000);
 
   planet.resources = spend(planet.resources, cost);
   planet.shipQueue = {
     kind: "ship",
     shipId,
     count: qty,
-    completesAt: now + seconds * 1000,
-    unitSeconds: Math.ceil(seconds / qty),
+    completesAt,
+    unitSeconds,
+    progressAt: now,
   };
   universe.planets[planet.id] = planet;
   return { ok: true, planet };
@@ -244,18 +265,19 @@ export function queueDefenseBuild(
     return { ok: false, error: "Not enough resources." };
   }
 
-  const seconds = Math.max(
-    1,
-    Math.ceil(defenseBuildSeconds(defenseId, qty, yard) / universe.speed),
-  );
+  const chrono = planet.buildings.chronoLathe ?? 0;
+  const unitSeconds =
+    defenseUnitBuildSeconds(defenseId, yard, chrono) / universe.speed;
+  const totalSeconds = unitSeconds * qty;
 
   planet.resources = spend(planet.resources, cost);
   planet.defenseQueue = {
     kind: "defense",
     defenseId,
     count: qty,
-    completesAt: now + seconds * 1000,
-    unitSeconds: Math.ceil(seconds / qty),
+    completesAt: now + Math.max(1, totalSeconds * 1000),
+    unitSeconds,
+    progressAt: now,
   };
   universe.planets[planet.id] = planet;
   return { ok: true, planet };

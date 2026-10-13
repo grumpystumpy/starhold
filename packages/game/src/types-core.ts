@@ -14,7 +14,8 @@ export type BuildingId =
   | "researchLab"
   | "lunarBase"
   | "sensorArray"
-  | "jumpGate";
+  | "jumpGate"
+  | "chronoLathe";
 
 export type BodyKind = "planet" | "moon";
 
@@ -158,8 +159,10 @@ export interface ShipQueueItem {
   shipId: ShipId;
   count: number;
   completesAt: number;
-  /** Seconds per unit (for UI remaining estimate) */
+  /** Seconds per unit (may be < 1; batch ticks when sub-second). */
   unitSeconds: number;
+  /** Last progress timestamp for sub-second batch production. */
+  progressAt?: number;
 }
 
 export interface DefenseQueueItem {
@@ -168,6 +171,7 @@ export interface DefenseQueueItem {
   count: number;
   completesAt: number;
   unitSeconds: number;
+  progressAt?: number;
 }
 
 export interface ResearchQueueItem {
@@ -214,6 +218,12 @@ export interface FleetMission {
   phase: FleetPhase;
   /** Combat or espionage report id when relevant */
   reportId: string | null;
+  /** In-flight / parked Swarm Mothership drone production job. */
+  swarmProduce?: {
+    remaining: number;
+    unitSeconds: number;
+    progressAt: number;
+  } | null;
 }
 
 /** Mineable asteroid field (not a PlanetState). */

@@ -124,6 +124,12 @@ export interface PlayerState {
   research: ResearchLevels;
   researchQueue: ResearchQueueItem | null;
   createdAt: number;
+  /** Player level — starts at 1, no max (Round 2). */
+  level?: number;
+  /** XP into the current level (0 .. xpToNext-1). */
+  xp?: number;
+  /** Lifetime XP. */
+  xpTotal?: number;
   /** Premium currency — Starshards (earned in-game only). */
   starshards?: number;
   /** Active officers. */
@@ -230,6 +236,13 @@ export interface PlayerView {
   skillCatalog: SkillNodeDef[];
   /** True when daily login Starshards can be claimed (UTC day). */
   dailyLoginAvailable: boolean;
+  /** Player level / XP progress (Round 2). */
+  progress: {
+    level: number;
+    xp: number;
+    xpToNext: number;
+    xpTotal: number;
+  };
   /** Occupation on the active planet, if any. */
   occupation: OccupationState | null;
 }
@@ -249,6 +262,8 @@ export interface HighscoreEntry {
   points: number;
   coords: Coordinates;
   planetCount: number;
+  level: number;
+  xpTotal: number;
 }
 
 export interface EconomySnapshot {

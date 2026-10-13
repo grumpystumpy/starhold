@@ -412,11 +412,13 @@ export function createApp(): Hono {
     }
     return withUniverse((universe) => {
       advanceUniverse(universe);
+      const now = Date.now();
       const result = swarmProduce(
         universe,
         body.playerId!,
         body.fleetId!,
         body.count ?? 1,
+        now,
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
