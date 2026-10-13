@@ -1901,11 +1901,19 @@ var BUILDINGS = {
   },
   sensorArray: {
     id: "sensorArray",
-    name: "Sensor Array",
-    description: "Scans the local system for outbound fleets headed this way (moon only).",
+    name: "Sensor Phalanx",
+    description: "Scans nearby systems for outbound fleets headed this way (moon only). Range grows with level.",
     baseCost: { metal: 4e3, crystal: 8e3, deuterium: 2e3 },
     costGrowth: 2,
     baseBuildSeconds: 40
+  },
+  jumpGate: {
+    id: "jumpGate",
+    name: "Jump Gate",
+    description: "Links your moons for near-instant fleet hops. Both moons need a Jump Gate (moon only).",
+    baseCost: { metal: 8e3, crystal: 16e3, deuterium: 8e3 },
+    costGrowth: 2,
+    baseBuildSeconds: 60
   }
 };
 
@@ -2180,6 +2188,7 @@ var PLANET_BUILDING_ORDER = [
 var MOON_BUILDING_ORDER = [
   "lunarBase",
   "sensorArray",
+  "jumpGate",
   "solarPlant",
   "metalStorage",
   "crystalStorage",
@@ -3410,7 +3419,8 @@ function emptyBuildings() {
     shipyard: 0,
     researchLab: 0,
     lunarBase: 0,
-    sensorArray: 0
+    sensorArray: 0,
+    jumpGate: 0
   };
 }
 function emptyShips() {
@@ -3486,8 +3496,6 @@ function ensureUniverseShape(universe) {
   if (!universe.pirateBases) universe.pirateBases = {};
   if (!universe.fleetSpeed) universe.fleetSpeed = universe.speed || 1;
   if (!universe.seed) universe.seed = `seed_${universe.id}`;
-  if (universe.schemaVersion === void 0) {
-  }
   for (const player of Object.values(universe.players)) {
     if (!player.planetIds?.length) {
       player.planetIds = [player.homePlanetId];
@@ -3511,6 +3519,7 @@ function ensureUniverseShape(universe) {
     if (!planet.buildings.researchLab) planet.buildings.researchLab = 0;
     if (!planet.buildings.lunarBase) planet.buildings.lunarBase = 0;
     if (!planet.buildings.sensorArray) planet.buildings.sensorArray = 0;
+    if (!planet.buildings.jumpGate) planet.buildings.jumpGate = 0;
     if (planet.kind !== "moon" && (typeof planet.fieldsCap !== "number" || planet.fieldsCap <= 0)) {
       planet.fieldsCap = rollPlanetFields(
         planet.coords.slot,
@@ -3615,6 +3624,15 @@ function moonChancePercent(debris) {
   if (total < MOON_DEBRIS_MIN) return 0;
   return Math.min(MOON_CHANCE_CAP, Math.floor(total / 1e3));
 }
+function sensorPhalanxRange(level) {
+  return Math.max(0, Math.floor(level));
+}
+function inSensorPhalanxRange(moonCoords, targetCoords, sensorLevel) {
+  const range = sensorPhalanxRange(sensorLevel);
+  if (range < 1) return false;
+  if (moonCoords.galaxy !== targetCoords.galaxy) return false;
+  return Math.abs(moonCoords.system - targetCoords.system) <= range;
+}
 function ownedPlanetCount(universe, playerId) {
   const player = universe.players[playerId];
   if (!player) return 0;
@@ -3643,6 +3661,7 @@ function tryFormMoon(universe, parent, debrisCreated, reportId, now) {
     kind: "moon",
     parentPlanetId: parent.id,
     moonId: null,
+    fieldsCap: MOON_FIELDS_BASE,
     resources: { metal: 0, crystal: 0, deuterium: 0 },
     lastTickAt: now,
     buildings: emptyBuildings(),
@@ -3922,6 +3941,15 @@ function resolveFleetArrival(universe, fleet, now) {
         delete universe.fleets[fleet.id];
         return;
       }
+    } else if (fleet.mission === "jump") {
+      const target = fleet.targetPlanetId ? universe.planets[fleet.targetPlanetId] : null;
+      if (!target || target.kind !== "moon" || target.ownerPlayerId !== fleet.ownerPlayerId) {
+        delete universe.fleets[fleet.id];
+        return;
+      }
+      addShipsToPlanet(target, fleet.ships);
+      delete universe.fleets[fleet.id];
+      return;
     } else if (fleet.mission === "colonize") {
       const occupied = planetAtCoords(universe, fleet.targetCoords);
       if (occupied) {
@@ -4083,7 +4111,10 @@ function queueBuildingUpgrade(universe, playerId, buildingId, now = Date.now(), 
     };
   }
   if (buildingId === "sensorArray" && (planet.buildings.lunarBase ?? 0) < 1) {
-    return { ok: false, error: "Sensor Array needs Lunar Base level 1." };
+    return { ok: false, error: "Sensor Phalanx needs Lunar Base level 1." };
+  }
+  if (buildingId === "jumpGate" && (planet.buildings.lunarBase ?? 0) < 1) {
+    return { ok: false, error: "Jump Gate needs Lunar Base level 1." };
   }
   if (planet.buildQueue) {
     return { ok: false, error: "A building is already under construction." };
@@ -4399,6 +4430,25 @@ function resolveLaunchTarget(universe, player, origin, mission, ships, targetPla
       if ((ships.probe ?? 0) < 1) {
         return { ok: false, error: "Espionage requires a Spy Probe." };
       }
+    } else if (mission === "jump") {
+      if (origin.kind !== "moon") {
+        return { ok: false, error: "Jump Gate hops must start from a moon." };
+      }
+      if ((origin.buildings.jumpGate ?? 0) < 1) {
+        return { ok: false, error: "Origin moon needs Jump Gate level 1." };
+      }
+      if (targetPlanet.kind !== "moon") {
+        return { ok: false, error: "Jump Gate hops must target a moon." };
+      }
+      if (targetPlanet.ownerPlayerId !== player.id) {
+        return { ok: false, error: "Jump Gate only links your own moons." };
+      }
+      if (targetPlanet.id === origin.id) {
+        return { ok: false, error: "Cannot jump to the same moon." };
+      }
+      if ((targetPlanet.buildings.jumpGate ?? 0) < 1) {
+        return { ok: false, error: "Target moon needs Jump Gate level 1." };
+      }
     }
   }
   return {
@@ -4421,7 +4471,8 @@ var MISSIONS = [
   "harvest",
   "harvestAsteroid",
   "expedition",
-  "pirateRaid"
+  "pirateRaid",
+  "jump"
 ];
 function launchFleet(universe, playerIdOrOpts, targetPlanetId, mission, shipsInput, nowArg) {
   const opts = typeof playerIdOrOpts === "string" ? {
@@ -4521,7 +4572,7 @@ function launchFleet(universe, playerIdOrOpts, targetPlanetId, mission, shipsInp
     crystal: 0,
     deuterium: fuel
   });
-  const oneWay = flightSecondsOneWay(
+  const oneWay = opts.mission === "jump" ? 1 : flightSecondsOneWay(
     origin.coords,
     targetCoords,
     ships,
@@ -4657,8 +4708,9 @@ function playerView(universe, playerId, now = Date.now(), galaxy, system) {
   const expeditionReports = Object.values(universe.expeditionReports ?? {}).filter((r) => r.playerId === playerId).sort((a, b) => b.at - a.at).slice(0, 12);
   const g = galaxy ?? planet.coords.galaxy;
   const s = system ?? planet.coords.system;
-  const sensorContacts = planet.kind === "moon" && (planet.buildings.sensorArray ?? 0) >= 1 ? Object.values(universe.fleets).filter(
-    (f) => f.phase === "outbound" && f.targetCoords.galaxy === planet.coords.galaxy && f.targetCoords.system === planet.coords.system
+  const sensorLevel = planet.buildings.sensorArray ?? 0;
+  const sensorContacts = planet.kind === "moon" && sensorLevel >= 1 ? Object.values(universe.fleets).filter(
+    (f) => f.phase === "outbound" && inSensorPhalanxRange(planet.coords, f.targetCoords, sensorLevel)
   ).sort((a, b) => a.arrivesAt - b.arrivesAt).slice(0, 20) : [];
   return {
     now,
@@ -4679,7 +4731,8 @@ function playerView(universe, playerId, now = Date.now(), galaxy, system) {
         coords: p.coords,
         isHome: p.id === player.homePlanetId,
         isActive: p.id === player.activePlanetId,
-        isMoon: p.kind === "moon"
+        isMoon: p.kind === "moon",
+        jumpGateLevel: p.buildings.jumpGate ?? 0
       };
     }).filter((x) => x !== null),
     economy: economySnapshot(

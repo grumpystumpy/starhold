@@ -97,11 +97,20 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   },
   sensorArray: {
     id: "sensorArray",
-    name: "Sensor Array",
+    name: "Sensor Phalanx",
     description:
-      "Scans the local system for outbound fleets headed this way (moon only).",
+      "Scans nearby systems for outbound fleets headed this way (moon only). Range grows with level.",
     baseCost: { metal: 4000, crystal: 8000, deuterium: 2000 },
     costGrowth: 2,
     baseBuildSeconds: 40,
+  },
+  jumpGate: {
+    id: "jumpGate",
+    name: "Jump Gate",
+    description:
+      "Links your moons for near-instant fleet hops. Both moons need a Jump Gate (moon only).",
+    baseCost: { metal: 8000, crystal: 16_000, deuterium: 8000 },
+    costGrowth: 2,
+    baseBuildSeconds: 60,
   },
 };

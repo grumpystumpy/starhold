@@ -13,6 +13,7 @@ export const BUILDING_ART: Record<BuildingId, string> = {
   researchLab: "/assets/buildings/research-lab.svg",
   lunarBase: "/assets/buildings/lunar-base.svg",
   sensorArray: "/assets/buildings/sensor-array.svg",
+  jumpGate: "/assets/buildings/jump-gate.svg",
 };
 
 export const SHIP_ART: Record<ShipId, string> = {

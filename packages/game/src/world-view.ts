@@ -27,7 +27,7 @@ import {
   moonAtCoords,
   planetAtCoords,
 } from "./world-bootstrap.js";
-import { ownedPlanetCount } from "./world-moons.js";
+import { inSensorPhalanxRange, ownedPlanetCount } from "./world-moons.js";
 import { getDebris } from "./world-tick.js";
 
 /** Empire total: all planets + in-flight ships + research once. */
@@ -184,14 +184,14 @@ export function playerView(
   const g = galaxy ?? planet.coords.galaxy;
   const s = system ?? planet.coords.system;
 
+  const sensorLevel = planet.buildings.sensorArray ?? 0;
   const sensorContacts =
-    planet.kind === "moon" && (planet.buildings.sensorArray ?? 0) >= 1
+    planet.kind === "moon" && sensorLevel >= 1
       ? Object.values(universe.fleets)
           .filter(
             (f) =>
               f.phase === "outbound" &&
-              f.targetCoords.galaxy === planet.coords.galaxy &&
-              f.targetCoords.system === planet.coords.system,
+              inSensorPhalanxRange(planet.coords, f.targetCoords, sensorLevel),
           )
           .sort((a, b) => a.arrivesAt - b.arrivesAt)
           .slice(0, 20)
@@ -218,6 +218,7 @@ export function playerView(
           isHome: p.id === player.homePlanetId,
           isActive: p.id === player.activePlanetId,
           isMoon: p.kind === "moon",
+          jumpGateLevel: p.buildings.jumpGate ?? 0,
         };
       })
       .filter((x): x is NonNullable<typeof x> => x !== null),

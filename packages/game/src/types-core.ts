@@ -13,7 +13,8 @@ export type BuildingId =
   | "shipyard"
   | "researchLab"
   | "lunarBase"
-  | "sensorArray";
+  | "sensorArray"
+  | "jumpGate";
 
 export type BodyKind = "planet" | "moon";
 
@@ -49,6 +50,7 @@ export type ResearchId =
  * - harvestAsteroid — mine asteroid field with recyclers
  * - expedition — deep-space probe (resources / ships / nothing / pirates)
  * - pirateRaid — attack an NPC pirate base
+ * - jump — instant moon→moon hop via Jump Gate (own moons)
  */
 export type MissionType =
   | "deploy"
@@ -59,7 +61,8 @@ export type MissionType =
   | "harvest"
   | "harvestAsteroid"
   | "expedition"
-  | "pirateRaid";
+  | "pirateRaid"
+  | "jump";
 
 export type FleetPhase = "outbound" | "returning";
 

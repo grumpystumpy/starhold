@@ -16,13 +16,17 @@ export function recommendedNext(view: PlayerView): string {
   if (planet.kind === "moon") {
     const lunar = planet.buildings.lunarBase ?? 0;
     const sensor = planet.buildings.sensorArray ?? 0;
+    const gate = planet.buildings.jumpGate ?? 0;
     if (lunar < 1) {
       return "Recommended next: raise the Lunar Base to expand moon fields.";
     }
     if (sensor < 1) {
-      return "Recommended next: build a Sensor Array to scan inbound fleets.";
+      return "Recommended next: build a Sensor Phalanx to scan inbound fleets.";
     }
-    return "Recommended next: park fleets here or watch Sensor contacts.";
+    if (gate < 1) {
+      return "Recommended next: raise a Jump Gate to hop fleets between moons.";
+    }
+    return "Recommended next: park fleets here, jump to another moon, or watch Sensor contacts.";
   }
   const yard = planet.buildings.shipyard ?? 0;
   const lab = planet.buildings.researchLab ?? 0;
