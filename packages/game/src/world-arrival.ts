@@ -85,13 +85,26 @@ export function resolveFleetArrival(
       const target = fleet.targetPlanetId
         ? universe.planets[fleet.targetPlanetId]
         : null;
-      // Park on own colonies — dock ships, no return leg.
       if (target && target.ownerPlayerId === fleet.ownerPlayerId) {
         addShipsToPlanet(target, fleet.ships);
         delete universe.fleets[fleet.id];
         return;
       }
-      // Rival visit: fall through to return-leg scheduling below.
+    } else if (fleet.mission === "jump") {
+      const target = fleet.targetPlanetId
+        ? universe.planets[fleet.targetPlanetId]
+        : null;
+      if (
+        !target ||
+        target.kind !== "moon" ||
+        target.ownerPlayerId !== fleet.ownerPlayerId
+      ) {
+        delete universe.fleets[fleet.id];
+        return;
+      }
+      addShipsToPlanet(target, fleet.ships);
+      delete universe.fleets[fleet.id];
+      return;
     } else if (fleet.mission === "colonize") {
       const occupied = planetAtCoords(universe, fleet.targetCoords);
       if (occupied) {
