@@ -20,7 +20,7 @@ import {
   setPaintImpl,
   stripJoinParams,
 } from "./session";
-import { fetchState } from "./api";
+import { fetchState, selectPlanet } from "./api";
 import {
   doBuild,
   doBuildDefense,
@@ -35,6 +35,11 @@ import {
   startPolling,
 } from "./main-actions";
 import { ensureDelegatedHandlers } from "./main-handlers";
+import {
+  ensurePopstateHandler,
+  pageFromLocation,
+  syncSessionUrl,
+} from "./ui/router";
 
 function paint(): void {
   renderApp(
@@ -71,13 +76,26 @@ function paint(): void {
 
 setPaintImpl(paint);
 
-async function resumePlayer(playerId: string): Promise<boolean> {
+async function resumePlayer(
+  playerId: string,
+  planetParam?: string | null,
+): Promise<boolean> {
   session.busy = true;
   schedulePaint();
   try {
     session.view = await fetchState(playerId);
     session.galaxySystem = session.view.planet.coords.system;
     localStorage.setItem(SESSION_KEY, playerId);
+    const wantPlanet = planetParam?.trim();
+    if (
+      wantPlanet &&
+      wantPlanet !== session.view.planet.id &&
+      session.view.ownedPlanets.some((p) => p.id === wantPlanet)
+    ) {
+      session.view = await selectPlanet(playerId, wantPlanet);
+      session.galaxySystem = session.view.planet.coords.system;
+    }
+    syncSessionUrl({ replace: true });
     startPolling(playerId);
     setFlash("notice", `Resumed ${session.view.player.name}.`);
     return true;
@@ -93,16 +111,20 @@ async function resumePlayer(playerId: string): Promise<boolean> {
 
 async function boot(): Promise<void> {
   ensureDelegatedHandlers();
+  ensurePopstateHandler();
+  session.activePage = pageFromLocation();
   paint();
 
   const params = new URLSearchParams(window.location.search);
   const playerIdParam = params.get("playerId")?.trim();
+  const planetParam = params.get("planet")?.trim();
   const commanderParam = params.get("commander")?.trim();
 
   if (playerIdParam) {
-    const ok = await resumePlayer(playerIdParam);
+    const ok = await resumePlayer(playerIdParam, planetParam);
     if (ok) {
       stripJoinParams();
+      syncSessionUrl({ replace: true });
       return;
     }
     setFlash("error", "Saved session expired — join again.");
@@ -118,7 +140,7 @@ async function boot(): Promise<void> {
 
   const saved = localStorage.getItem(SESSION_KEY);
   if (!saved) return;
-  const ok = await resumePlayer(saved);
+  const ok = await resumePlayer(saved, planetParam);
   if (!ok) {
     // Stay on join; session was stale.
   }

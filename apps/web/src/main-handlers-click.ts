@@ -30,7 +30,8 @@ import {
   doUpgrade,
 } from "./main-actions";
 import { readFleetForm } from "./main-fleet-form";
-import { isNavPage } from "./ui/nav";
+import { resolveNavPage } from "./ui/nav";
+import { navigateTo } from "./ui/router";
 
 export function bindClickHandlers(): void {
   root.addEventListener(
@@ -54,11 +55,8 @@ export function bindClickHandlers(): void {
       const navBtn = closestActionEl(target, "[data-nav]");
       if (navBtn) {
         ev.preventDefault();
-        const page = navBtn.getAttribute("data-nav");
-        if (isNavPage(page) && session.activePage !== page) {
-          session.activePage = page;
-          schedulePaint();
-        }
+        const page = resolveNavPage(navBtn.getAttribute("data-nav"));
+        if (page) navigateTo(page);
         return;
       }
 
@@ -176,6 +174,11 @@ export function bindClickHandlers(): void {
 
   root.addEventListener("change", (ev) => {
     const el = ev.target;
+    if (el instanceof HTMLSelectElement && el.matches("[data-nav-select]")) {
+      const page = resolveNavPage(el.value);
+      if (page) navigateTo(page);
+      return;
+    }
     if (
       el instanceof HTMLInputElement &&
       el.name === "fleet-mission" &&
