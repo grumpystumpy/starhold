@@ -6,6 +6,11 @@ import {
   RAID_LOOT_SHARE,
   SHIPS,
   SHIP_ORDER,
+  SWARM_INTERCEPT_FRACTION,
+  SWARM_INTERCEPT_SPLIT,
+  SWARM_KAMIKAZE_HULL_DMG,
+  SWARM_KAMIKAZE_HULL_FRAC,
+  SWARM_KAMIKAZE_SHIELD_DMG,
   rapidFireFactor,
   type CombatUnitId,
 } from "./catalog.js";
@@ -18,6 +23,7 @@ import type {
   Resources,
   ShipId,
 } from "./types.js";
+import { swarmDroneAttackMult } from "./formulas-round2.js";
 import {
   emptyDefenses,
   emptyFleetShips,
@@ -212,6 +218,94 @@ function applyDamageToTarget(
   }
 }
 
+/**
+ * Redirect mothership-targeted damage to escorts.
+ * Drones alone take SWARM_INTERCEPT_FRACTION; with harvesters, intercepted
+ * portion splits 50/50 (drones priority for odd remainder).
+ */
+export function redistributeSwarmIntercept(
+  target: CombatUnitId,
+  damage: number,
+  side: SidePools,
+): Array<{ target: CombatUnitId; damage: number }> {
+  if (target !== "swarmMothership" || damage <= 0) {
+    return [{ target, damage }];
+  }
+  const drones = side.ships.swarmDrone ?? 0;
+  const harvesters = side.ships.swarmHarvester ?? 0;
+  if (drones <= 0 && harvesters <= 0) {
+    return [{ target, damage }];
+  }
+  const intercepted = damage * SWARM_INTERCEPT_FRACTION;
+  const toMother = damage - intercepted;
+  const out: Array<{ target: CombatUnitId; damage: number }> = [];
+  if (toMother > 0) out.push({ target: "swarmMothership", damage: toMother });
+
+  if (drones > 0 && harvesters > 0) {
+    const toDrones = intercepted * SWARM_INTERCEPT_SPLIT;
+    const toHarv = intercepted - toDrones;
+    if (toDrones > 0) out.push({ target: "swarmDrone", damage: toDrones });
+    if (toHarv > 0) out.push({ target: "swarmHarvester", damage: toHarv });
+  } else if (drones > 0) {
+    out.push({ target: "swarmDrone", damage: intercepted });
+  } else {
+    out.push({ target: "swarmHarvester", damage: intercepted });
+  }
+  return out;
+}
+
+function mothershipHullFraction(
+  side: SidePools,
+  research: ResearchLevels | undefined,
+): number {
+  const count = side.ships.swarmMothership ?? 0;
+  if (count <= 0) return 0;
+  const hp = targetHp("swarmMothership", research);
+  const residual = side.residual.swarmMothership ?? 0;
+  return Math.max(0, Math.min(1, 1 - residual / hp));
+}
+
+/**
+ * When mothership hull fraction < 30%, each harvester suicides:
+ * shieldDmg + hullDmg to a focus enemy combatant.
+ */
+export function applyHarvesterKamikaze(
+  own: SidePools,
+  enemy: SidePools,
+  ownResearch: ResearchLevels | undefined,
+  enemyResearch: ResearchLevels | undefined,
+): number {
+  const harvesters = own.ships.swarmHarvester ?? 0;
+  if (harvesters <= 0) return 0;
+  if ((own.ships.swarmMothership ?? 0) <= 0) return 0;
+  if (mothershipHullFraction(own, ownResearch) >= SWARM_KAMIKAZE_HULL_FRAC) {
+    return 0;
+  }
+  const focus = pickFocusTarget(enemy.ships, enemy.defenses);
+  if (!focus) {
+    own.ships.swarmHarvester = 0;
+    own.residual.swarmHarvester = 0;
+    return harvesters;
+  }
+  const dmgPer =
+    SWARM_KAMIKAZE_SHIELD_DMG + SWARM_KAMIKAZE_HULL_DMG;
+  applyDamageToTarget(enemy, focus, harvesters * dmgPer, enemyResearch);
+  own.ships.swarmHarvester = 0;
+  own.residual.swarmHarvester = 0;
+  return harvesters;
+}
+
+function applyShotWithIntercept(
+  side: SidePools,
+  target: CombatUnitId,
+  damage: number,
+  research: ResearchLevels | undefined,
+): void {
+  for (const part of redistributeSwarmIntercept(target, damage, side)) {
+    applyDamageToTarget(side, part.target, part.damage, research);
+  }
+}
+
 /** Snapshot damage intents from start-of-round counts (simultaneous fire). */
 function collectFire(
   firerShips: FleetShips,
@@ -226,7 +320,10 @@ function collectFire(
 
   for (const id of livingShipIds(firerShips)) {
     const def = SHIPS[id];
-    const atk = unitAtk(def.attack, firerResearch);
+    let atk = unitAtk(def.attack, firerResearch);
+    if (id === "swarmDrone") {
+      atk *= swarmDroneAttackMult(firerShips.swarmDrone ?? 0);
+    }
     if (atk <= 0) continue;
     const n = firerShips[id] ?? 0;
     const rf = rapidFireFactor(id, focus);
@@ -315,7 +412,7 @@ export function resolveCombat(
 
     for (const shot of atkShots) {
       // Higher defensePower → harder to kill (incoming damage reduced).
-      applyDamageToTarget(
+      applyShotWithIntercept(
         defSide,
         shot.target,
         shot.damage / defensePowerMult,
@@ -323,13 +420,26 @@ export function resolveCombat(
       );
     }
     for (const shot of defShots) {
-      applyDamageToTarget(
+      applyShotWithIntercept(
         atkSide,
         shot.target,
         shot.damage * defensePowerMult,
         attackerResearch,
       );
     }
+
+    applyHarvesterKamikaze(
+      atkSide,
+      defSide,
+      attackerResearch,
+      defenderResearch,
+    );
+    applyHarvesterKamikaze(
+      defSide,
+      atkSide,
+      defenderResearch,
+      attackerResearch,
+    );
 
     const atkAlive = shipCount(atkSide.ships) > 0;
     const defAlive =
