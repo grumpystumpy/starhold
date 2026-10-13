@@ -1,0 +1,111 @@
+[
+  {
+    "path": "packages/game/src/types-core.ts",
+    "sha256": "587e71c8608f8fbcbeea6643234858fe84bc94a8de08c3b263e05c142383b2f1",
+    "bytes": 7727,
+    "parts": [
+      ".cursor-staging/j2/packages__game__src__types-core.ts.part000.b64"
+    ]
+  },
+  {
+    "path": "packages/game/src/formulas-build.ts",
+    "sha256": "c9f4cbc61cd73627375b5b6aee6270caf43d9ad64b249645a81673a7e9010adc",
+    "bytes": 9016,
+    "parts": [
+      ".cursor-staging/j2/packages__game__src__formulas-build.ts.part000.b64"
+    ]
+  },
+  {
+    "path": "packages/game/src/world-tick.ts",
+    "sha256": "f229117183beaf5cd22ae6dbc5dbf01552acc418fcea9e6eaf27cc1b3ca46564",
+    "bytes": 6236,
+    "parts": [
+      ".cursor-staging/j2/packages__game__src__world-tick.ts.part000.b64"
+    ]
+  },
+  {
+    "path": "packages/game/src/world-queues.ts",
+    "sha256": "bdcb825acf77fd330b577a7bb1c98e7706738be17461118ad9a9b2320b584ec3",
+    "bytes": 8833,
+    "parts": [
+      ".cursor-staging/j2/packages__game__src__world-queues.ts.part000.b64"
+    ]
+  },
+  {
+    "path": "packages/game/src/world-bootstrap.ts",
+    "sha256": "49c34ddd5199cfedb7cbf10c26be6944ae5fcfd0f8be49d46ded444cee3cfc4c",
+    "bytes": 8630,
+    "parts": [
+      ".cursor-staging/j2/packages__game__src__world-bootstrap.ts.part000.b64"
+    ]
+  },
+  {
+    "path": "packages/game/src/world-round2.ts",
+    "sha256": "2ea8bae7b75a12056d43e91c2262478380b0208c06f5df74a74247c1b0cc640d",
+    "bytes": 5486,
+    "parts": [
+      ".cursor-staging/j2/packages__game__src__world-round2.ts.part000.b64"
+    ]
+  },
+  {
+    "path": "packages/game/src/world-arrival.ts",
+    "sha256": "1ebc7a0a1849cb26bed35116ff093aa91e9bd34db954fc025c43db764b829e07",
+    "bytes": 10355,
+    "parts": [
+      ".cursor-staging/j2/packages__game__src__world-arrival.ts.part000.b64"
+    ]
+  },
+  {
+    "path": "packages/game/src/world-view.ts",
+    "sha256": "0a918bd035c51a94f179c2e98e3dd31c31aa9ae9834ee4418954f82e4674ba50",
+    "bytes": 8513,
+    "parts": [
+      ".cursor-staging/j2/packages__game__src__world-view.ts.part000.b64"
+    ]
+  },
+  {
+    "path": "packages/game/src/round2-ships.test.ts",
+    "sha256": "1c8f494bcb84eb68286cd3c738c528f067fcdb372fbcf258f7f74a66a1eb7e04",
+    "bytes": 12076,
+    "parts": [
+      ".cursor-staging/j2/packages__game__src__round2-ships.test.ts.part000.b64",
+      ".cursor-staging/j2/packages__game__src__round2-ships.test.ts.part001.b64"
+    ]
+  },
+  {
+    "path": "apps/server/src/app.ts",
+    "sha256": "5381f4020bb7eabc694ccb6113d25cf69c33032a63221a8ead37954ad004f5f9",
+    "bytes": 13733,
+    "parts": [
+      ".cursor-staging/j2/apps__server__src__app.ts.part000.b64",
+      ".cursor-staging/j2/apps__server__src__app.ts.part001.b64"
+    ]
+  },
+  {
+    "path": "docs/design/round2-contract.md",
+    "sha256": "02c8bdee4c10f533b8b4aaef350d4b7e4ec131fd51a262c18b88f5e2b8397454",
+    "bytes": 23017,
+    "parts": [
+      ".cursor-staging/j2/docs__design__round2-contract.md.part000.b64",
+      ".cursor-staging/j2/docs__design__round2-contract.md.part001.b64",
+      ".cursor-staging/j2/docs__design__round2-contract.md.part002.b64",
+      ".cursor-staging/j2/docs__design__round2-contract.md.part003.b64"
+    ]
+  },
+  {
+    "path": "packages/game/src/formulas-progress.ts",
+    "sha256": "e5a75d4342571c5bd94b7b5da328cad9980d0ae72b6aa60b58528402f25e2356",
+    "bytes": 4554,
+    "parts": [
+      ".cursor-staging/j2/packages__game__src__formulas-progress.ts.part000.b64"
+    ]
+  },
+  {
+    "path": "packages/game/src/types-view.ts",
+    "sha256": "949de8b76c7d235fa961b7c23abbaf50c4a5ba265bc001abb8f6d769dba46b56",
+    "bytes": 6716,
+    "parts": [
+      ".cursor-staging/j2/packages__game__src__types-view.ts.part000.b64"
+    ]
+  }
+]
