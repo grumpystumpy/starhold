@@ -1,4 +1,8 @@
-export { createUniverse, joinUniverse } from "./world-bootstrap.js";
+export {
+  createUniverse,
+  ensureUniverseShape,
+  joinUniverse,
+} from "./world-bootstrap.js";
 export { advancePlanet } from "./world-tick.js";
 export { advanceUniverse } from "./world-arrival.js";
 export type { ActionResult, FleetActionResult } from "./world-queues.js";
