@@ -64,7 +64,7 @@ export const FIELD_CENTER_BY_SLOT: Readonly<Record<number, number>> = {
   15: 265,
 };
 
-/** Moon field budget: base free field + per Lunar Base level. */
+/** Moon field budget: base free field + per Crater Hab (`lunarBase`) level. */
 export const MOON_FIELDS_BASE = 1;
 export const MOON_FIELDS_PER_LUNAR_BASE = 3;
 

@@ -2,7 +2,7 @@
 
 ## Goal
 
-Move cargo (and ships) between **own** planets. Full value requires colonies (Astrophysics + Colony Ship) — also landed as vertical slice.
+Move cargo (and ships) between **own** planets. Full value requires colonies (Stellar Cartography + Outpost Cradle) — also landed as vertical slice.
 
 ## Rules
 
@@ -18,7 +18,7 @@ If the player has only a home world, UI still exposes transport but API rejects 
 
 - **Colonize** creates the second planet; planet switcher selects origin.
 - Hauler is the natural cargo hull; any ships with cargo capacity work.
-- Computer Tech still limits concurrent missions.
+- Fleet OS still limits concurrent missions.
 
 ## Completeness
 

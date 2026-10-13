@@ -8,8 +8,8 @@ Static planetary guns that queue like ships, sit on the planet, and add defender
 
 | Unit | Yard | Cost (each) | Role |
 |------|------|-------------|------|
-| Laser Battery | L1 | 150m / 50c | Primary static DPS |
-| Shield Dome | L2 | 500m / 300c | Soak; low attack |
+| Beam Emplacement | L1 | 150m / 50c | Primary static DPS |
+| Aegis Cupola | L2 | 500m / 300c | Soak; low attack |
 
 - One `defenseQueue` per planet (count batch). Completes → add to `planet.defenses`.
 - UI: Defenses panel + `POST /api/build-defense`.
@@ -18,14 +18,14 @@ Static planetary guns that queue like ships, sit on the planet, and add defender
 
 Defenses use the same unit power formula as ships (`formulas-combat`):
 
-`attack×(1+0.08×Weapons) + 0.5×shield×(1+0.08×Shielding) + 0.3×hull×(1+0.08×Armour)`
+`attack×(1+0.08×Ordnance) + 0.5×shield×(1+0.08×Aegis Lattice) + 0.3×hull×(1+0.08×Hull Weave)`
 
 Raid resolution includes Σ defenses with hangar ships. Losses apply to defense counts on defender outcomes (same keep-% bands as ships). Debris is **ships only** (genre-like); defenses do not create debris.
 
 ## Balance
 
-- 10× Laser should crush 1 Scout (unit test).
-- Domes are expensive soak — optional early; Laser is the P0 must-have.
+- 10× Beam Emplacement should crush 1 Scout (unit test).
+- Cupolas are expensive soak — optional early; Beam Emplacement is the P0 must-have.
 
 ## Completeness
 

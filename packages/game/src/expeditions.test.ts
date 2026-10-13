@@ -75,12 +75,12 @@ describe("P2 expeditions", () => {
     }
   });
 
-  it("rejects wrong slot and enforces expedition cap at Astrophysics 0", () => {
+  it("rejects wrong slot and enforces expedition cap at Stellar Cartography 0", () => {
     const universe = createUniverse("Cap Drift", 8);
     const a = joinUniverse(universe, "Capped", 141_000_000);
     universe.planets[a.planet.id].ships.scout = 4;
     universe.planets[a.planet.id].resources.deuterium = 5_000;
-    // Extra fleet slots so Computer Tech does not mask the expedition cap.
+    // Extra fleet slots so Fleet OS does not mask the expedition cap.
     universe.players[a.player.id].research.computerTech = 2;
     assert.equal(universe.players[a.player.id].research.astrophysics, 0);
 

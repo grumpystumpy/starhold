@@ -1893,7 +1893,7 @@ var BUILDINGS = {
   },
   lunarBase: {
     id: "lunarBase",
-    name: "Lunar Base",
+    name: "Crater Hab",
     description: "Expands moon fields so more lunar structures can be built.",
     baseCost: { metal: 2e3, crystal: 4e3, deuterium: 0 },
     costGrowth: 2,
@@ -1901,7 +1901,7 @@ var BUILDINGS = {
   },
   sensorArray: {
     id: "sensorArray",
-    name: "Sensor Phalanx",
+    name: "Horizon Scanner",
     description: "Scans nearby systems for outbound fleets headed this way (moon only). Range grows with level.",
     baseCost: { metal: 4e3, crystal: 8e3, deuterium: 2e3 },
     costGrowth: 2,
@@ -1909,8 +1909,8 @@ var BUILDINGS = {
   },
   jumpGate: {
     id: "jumpGate",
-    name: "Jump Gate",
-    description: "Links your moons for near-instant fleet hops. Both moons need a Jump Gate (moon only).",
+    name: "Fold Bridge",
+    description: "Links your moons for near-instant fleet hops. Both moons need a Fold Bridge (moon only).",
     baseCost: { metal: 8e3, crystal: 16e3, deuterium: 8e3 },
     costGrowth: 2,
     baseBuildSeconds: 60
@@ -1991,7 +1991,7 @@ var SHIPS = {
   },
   probe: {
     id: "probe",
-    name: "Spy Probe",
+    name: "Whisper Probe",
     description: "Disposable sensor drone for espionage missions.",
     cost: { metal: 0, crystal: 100, deuterium: 0 },
     buildSeconds: 8,
@@ -2005,7 +2005,7 @@ var SHIPS = {
   },
   recycler: {
     id: "recycler",
-    name: "Recycler",
+    name: "Salvage Trawler",
     description: "Harvests metal and crystal from debris fields.",
     cost: { metal: 400, crystal: 200, deuterium: 100 },
     buildSeconds: 30,
@@ -2019,7 +2019,7 @@ var SHIPS = {
   },
   colonyShip: {
     id: "colonyShip",
-    name: "Colony Ship",
+    name: "Outpost Cradle",
     description: "Found a new outpost on an empty planet slot. Consumed on landing.",
     cost: { metal: 800, crystal: 800, deuterium: 200 },
     buildSeconds: 50,
@@ -2035,7 +2035,7 @@ var SHIPS = {
 var DEFENSES = {
   laserBattery: {
     id: "laserBattery",
-    name: "Laser Battery",
+    name: "Beam Emplacement",
     description: "Static guns that fight with the hangar on raids.",
     cost: { metal: 150, crystal: 50, deuterium: 0 },
     buildSeconds: 10,
@@ -2046,7 +2046,7 @@ var DEFENSES = {
   },
   shieldDome: {
     id: "shieldDome",
-    name: "Shield Dome",
+    name: "Aegis Cupola",
     description: "Planetary shield \u2014 soaks fire, low attack.",
     cost: { metal: 500, crystal: 300, deuterium: 0 },
     buildSeconds: 25,
@@ -2061,7 +2061,7 @@ var DEFENSES = {
 var RESEARCH = {
   energyTech: {
     id: "energyTech",
-    name: "Energy Tech",
+    name: "Power Discipline",
     description: "+2% mine output per level (energy discipline).",
     baseCost: { metal: 0, crystal: 80, deuterium: 40 },
     costGrowth: 2,
@@ -2070,7 +2070,7 @@ var RESEARCH = {
   },
   combustionDrive: {
     id: "combustionDrive",
-    name: "Combustion Drive",
+    name: "Pulse Drive",
     description: "+10% fleet cruise speed per level.",
     baseCost: { metal: 40, crystal: 0, deuterium: 60 },
     costGrowth: 2,
@@ -2079,7 +2079,7 @@ var RESEARCH = {
   },
   weaponsTech: {
     id: "weaponsTech",
-    name: "Weapons Tech",
+    name: "Ordnance Doctrine",
     description: "+8% ship/defense attack per level.",
     baseCost: { metal: 80, crystal: 20, deuterium: 0 },
     costGrowth: 2,
@@ -2088,7 +2088,7 @@ var RESEARCH = {
   },
   armourTech: {
     id: "armourTech",
-    name: "Armour Tech",
+    name: "Hull Weave",
     description: "+8% hull integrity per level.",
     baseCost: { metal: 100, crystal: 0, deuterium: 0 },
     costGrowth: 2,
@@ -2097,7 +2097,7 @@ var RESEARCH = {
   },
   shieldingTech: {
     id: "shieldingTech",
-    name: "Shielding Tech",
+    name: "Aegis Lattice",
     description: "+8% shields per level.",
     baseCost: { metal: 20, crystal: 60, deuterium: 0 },
     costGrowth: 2,
@@ -2106,7 +2106,7 @@ var RESEARCH = {
   },
   espionageTech: {
     id: "espionageTech",
-    name: "Espionage Tech",
+    name: "Shadow Optics",
     description: "Deeper spy reports vs rival counter-intel.",
     baseCost: { metal: 20, crystal: 100, deuterium: 20 },
     costGrowth: 2,
@@ -2115,7 +2115,7 @@ var RESEARCH = {
   },
   astrophysics: {
     id: "astrophysics",
-    name: "Astrophysics",
+    name: "Stellar Cartography",
     description: "Each level allows +1 colony (beyond home) and +1 concurrent expedition.",
     baseCost: { metal: 40, crystal: 80, deuterium: 40 },
     costGrowth: 1.8,
@@ -2124,7 +2124,7 @@ var RESEARCH = {
   },
   computerTech: {
     id: "computerTech",
-    name: "Computer Tech",
+    name: "Fleet OS",
     description: "Each level allows +1 simultaneous fleet mission (base 1).",
     baseCost: { metal: 0, crystal: 40, deuterium: 80 },
     costGrowth: 2,
@@ -4429,10 +4429,10 @@ function queueBuildingUpgrade(universe, playerId, buildingId, now = Date.now(), 
     };
   }
   if (buildingId === "sensorArray" && (planet.buildings.lunarBase ?? 0) < 1) {
-    return { ok: false, error: "Sensor Phalanx needs Lunar Base level 1." };
+    return { ok: false, error: "Horizon Scanner needs Crater Hab level 1." };
   }
   if (buildingId === "jumpGate" && (planet.buildings.lunarBase ?? 0) < 1) {
-    return { ok: false, error: "Jump Gate needs Lunar Base level 1." };
+    return { ok: false, error: "Fold Bridge needs Crater Hab level 1." };
   }
   if (planet.buildQueue) {
     return { ok: false, error: "A building is already under construction." };
@@ -4621,7 +4621,7 @@ function resolveLaunchTarget(universe, player, origin, mission, ships, targetPla
     if (activeExpeditions >= cap) {
       return {
         ok: false,
-        error: `Expedition limit reached (Astrophysics \u2192 ${cap} concurrent).`
+        error: `Expedition limit reached (Stellar Cartography \u2192 ${cap} concurrent).`
       };
     }
     return {
@@ -4663,7 +4663,7 @@ function resolveLaunchTarget(universe, player, origin, mission, ships, targetPla
       return { ok: false, error: "Asteroid field not found." };
     }
     if ((ships.recycler ?? 0) < 1) {
-      return { ok: false, error: "Asteroid harvest requires a Recycler." };
+      return { ok: false, error: "Asteroid harvest requires a Salvage Trawler." };
     }
     targetAsteroidId = asteroidId2;
     targetCoords = { ...field.coords };
@@ -4696,12 +4696,12 @@ function resolveLaunchTarget(universe, player, origin, mission, ships, targetPla
         return { ok: false, error: "Pirate base occupies that slot." };
       }
       if ((ships.colonyShip ?? 0) < 1) {
-        return { ok: false, error: "Colonize requires a Colony Ship." };
+        return { ok: false, error: "Colonize requires an Outpost Cradle." };
       }
       if (ownedPlanetCount(universe, player.id) >= maxColonies(player.research.astrophysics)) {
         return {
           ok: false,
-          error: `Colony limit reached (Astrophysics \u2192 ${maxColonies(player.research.astrophysics)} worlds).`
+          error: `Colony limit reached (Stellar Cartography \u2192 ${maxColonies(player.research.astrophysics)} worlds).`
         };
       }
     } else {
@@ -4710,7 +4710,7 @@ function resolveLaunchTarget(universe, player, origin, mission, ships, targetPla
         return { ok: false, error: "No debris at those coordinates." };
       }
       if ((ships.recycler ?? 0) < 1) {
-        return { ok: false, error: "Harvest requires a Recycler." };
+        return { ok: false, error: "Harvest requires a Salvage Trawler." };
       }
     }
   } else {
@@ -4747,26 +4747,26 @@ function resolveLaunchTarget(universe, player, origin, mission, ships, targetPla
         return { ok: false, error: "Cannot spy on yourself." };
       }
       if ((ships.probe ?? 0) < 1) {
-        return { ok: false, error: "Espionage requires a Spy Probe." };
+        return { ok: false, error: "Espionage requires a Whisper Probe." };
       }
     } else if (mission === "jump") {
       if (origin.kind !== "moon") {
-        return { ok: false, error: "Jump Gate hops must start from a moon." };
+        return { ok: false, error: "Fold Bridge hops must start from a moon." };
       }
       if ((origin.buildings.jumpGate ?? 0) < 1) {
-        return { ok: false, error: "Origin moon needs Jump Gate level 1." };
+        return { ok: false, error: "Origin moon needs Fold Bridge level 1." };
       }
       if (targetPlanet.kind !== "moon") {
-        return { ok: false, error: "Jump Gate hops must target a moon." };
+        return { ok: false, error: "Fold Bridge hops must target a moon." };
       }
       if (targetPlanet.ownerPlayerId !== player.id) {
-        return { ok: false, error: "Jump Gate only links your own moons." };
+        return { ok: false, error: "Fold Bridge only links your own moons." };
       }
       if (targetPlanet.id === origin.id) {
         return { ok: false, error: "Cannot jump to the same moon." };
       }
       if ((targetPlanet.buildings.jumpGate ?? 0) < 1) {
-        return { ok: false, error: "Target moon needs Jump Gate level 1." };
+        return { ok: false, error: "Target moon needs Fold Bridge level 1." };
       }
     }
   }
@@ -4823,7 +4823,7 @@ function launchFleet(universe, playerIdOrOpts, targetPlanetId, mission, shipsInp
   if (activeFleets >= slotCap) {
     return {
       ok: false,
-      error: `Fleet slot limit reached (Computer Tech \u2192 ${slotCap} slots).`
+      error: `Fleet slot limit reached (Fleet OS \u2192 ${slotCap} slots).`
     };
   }
   const target = resolveLaunchTarget(

@@ -46,11 +46,11 @@ export type ResearchId =
  * - transport — move cargo between own planets
  * - espionage — probe report at target
  * - colonize — found colony on empty slot
- * - harvest — collect debris with recyclers
- * - harvestAsteroid — mine asteroid field with recyclers
+ * - harvest — collect debris with Salvage Trawlers
+ * - harvestAsteroid — mine asteroid field with Salvage Trawlers
  * - expedition — deep-space probe (resources / ships / nothing / pirates / starshards)
  * - pirateRaid — attack an NPC pirate base
- * - jump — instant moon→moon hop via Jump Gate (own moons)
+ * - jump — instant moon→moon hop via Fold Bridge (own moons)
  */
 export type MissionType =
   | "deploy"

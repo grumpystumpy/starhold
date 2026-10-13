@@ -175,7 +175,7 @@ describe("Thread C moons", () => {
   });
 
   it("jump gate hops fleets between own moons", () => {
-    const universe = createUniverse("Jump Gate", 8);
+    const universe = createUniverse("Fold Bridge", 8);
     const a = joinUniverse(universe, "Jumper", 164_000_000);
     const home = universe.planets[a.planet.id];
     const colonyId = "plnt_jump_colony";

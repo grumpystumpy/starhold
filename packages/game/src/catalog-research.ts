@@ -3,7 +3,7 @@ import type { ResearchDef, ResearchId } from "./types.js";
 export const RESEARCH: Record<ResearchId, ResearchDef> = {
   energyTech: {
     id: "energyTech",
-    name: "Energy Tech",
+    name: "Power Discipline",
     description: "+2% mine output per level (energy discipline).",
     baseCost: { metal: 0, crystal: 80, deuterium: 40 },
     costGrowth: 2,
@@ -12,7 +12,7 @@ export const RESEARCH: Record<ResearchId, ResearchDef> = {
   },
   combustionDrive: {
     id: "combustionDrive",
-    name: "Combustion Drive",
+    name: "Pulse Drive",
     description: "+10% fleet cruise speed per level.",
     baseCost: { metal: 40, crystal: 0, deuterium: 60 },
     costGrowth: 2,
@@ -21,7 +21,7 @@ export const RESEARCH: Record<ResearchId, ResearchDef> = {
   },
   weaponsTech: {
     id: "weaponsTech",
-    name: "Weapons Tech",
+    name: "Ordnance Doctrine",
     description: "+8% ship/defense attack per level.",
     baseCost: { metal: 80, crystal: 20, deuterium: 0 },
     costGrowth: 2,
@@ -30,7 +30,7 @@ export const RESEARCH: Record<ResearchId, ResearchDef> = {
   },
   armourTech: {
     id: "armourTech",
-    name: "Armour Tech",
+    name: "Hull Weave",
     description: "+8% hull integrity per level.",
     baseCost: { metal: 100, crystal: 0, deuterium: 0 },
     costGrowth: 2,
@@ -39,7 +39,7 @@ export const RESEARCH: Record<ResearchId, ResearchDef> = {
   },
   shieldingTech: {
     id: "shieldingTech",
-    name: "Shielding Tech",
+    name: "Aegis Lattice",
     description: "+8% shields per level.",
     baseCost: { metal: 20, crystal: 60, deuterium: 0 },
     costGrowth: 2,
@@ -48,7 +48,7 @@ export const RESEARCH: Record<ResearchId, ResearchDef> = {
   },
   espionageTech: {
     id: "espionageTech",
-    name: "Espionage Tech",
+    name: "Shadow Optics",
     description: "Deeper spy reports vs rival counter-intel.",
     baseCost: { metal: 20, crystal: 100, deuterium: 20 },
     costGrowth: 2,
@@ -57,7 +57,7 @@ export const RESEARCH: Record<ResearchId, ResearchDef> = {
   },
   astrophysics: {
     id: "astrophysics",
-    name: "Astrophysics",
+    name: "Stellar Cartography",
     description:
       "Each level allows +1 colony (beyond home) and +1 concurrent expedition.",
     baseCost: { metal: 40, crystal: 80, deuterium: 40 },
@@ -67,7 +67,7 @@ export const RESEARCH: Record<ResearchId, ResearchDef> = {
   },
   computerTech: {
     id: "computerTech",
-    name: "Computer Tech",
+    name: "Fleet OS",
     description: "Each level allows +1 simultaneous fleet mission (base 1).",
     baseCost: { metal: 0, crystal: 40, deuterium: 80 },
     costGrowth: 2,

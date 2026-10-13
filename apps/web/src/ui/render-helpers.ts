@@ -18,27 +18,27 @@ export function recommendedNext(view: PlayerView): string {
     const sensor = planet.buildings.sensorArray ?? 0;
     const gate = planet.buildings.jumpGate ?? 0;
     if (lunar < 1) {
-      return "Recommended next: raise the Lunar Base to expand moon fields.";
+      return "Recommended next: raise the Crater Hab to expand moon fields.";
     }
     if (sensor < 1) {
-      return "Recommended next: build a Sensor Phalanx to scan inbound fleets.";
+      return "Recommended next: build a Horizon Scanner to scan inbound fleets.";
     }
     if (gate < 1) {
-      return "Recommended next: raise a Jump Gate to hop fleets between moons.";
+      return "Recommended next: raise a Fold Bridge to hop fleets between moons.";
     }
-    return "Recommended next: park fleets here, jump to another moon, or watch Sensor contacts.";
+    return "Recommended next: park fleets here, jump to another moon, or watch Horizon Scanner contacts.";
   }
   const yard = planet.buildings.shipyard ?? 0;
   const lab = planet.buildings.researchLab ?? 0;
   const scouts = planet.ships.scout ?? 0;
   if (lab < 1) {
-    return "Recommended next: raise the Research Lab, then unlock Espionage Tech.";
+    return "Recommended next: raise the Research Lab, then unlock Shadow Optics.";
   }
   if (yard < 1) {
     return "Recommended next: raise the Shipyard (then bank a Scout / Probe).";
   }
   if (scouts < 1 && (planet.ships.probe ?? 0) < 1 && !planet.shipQueue) {
-    return "Recommended next: build a Scout or Spy Probe, then open Fleets.";
+    return "Recommended next: build a Scout or Whisper Probe, then open Fleets.";
   }
   return "Recommended next: browse Galaxy, spy or raid a rival, or colonize an empty slot.";
 }

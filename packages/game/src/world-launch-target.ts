@@ -70,7 +70,7 @@ export function resolveLaunchTarget(
     if (activeExpeditions >= cap) {
       return {
         ok: false,
-        error: `Expedition limit reached (Astrophysics → ${cap} concurrent).`,
+        error: `Expedition limit reached (Stellar Cartography → ${cap} concurrent).`,
       };
     }
     return {
@@ -114,7 +114,7 @@ export function resolveLaunchTarget(
       return { ok: false, error: "Asteroid field not found." };
     }
     if ((ships.recycler ?? 0) < 1) {
-      return { ok: false, error: "Asteroid harvest requires a Recycler." };
+      return { ok: false, error: "Asteroid harvest requires a Salvage Trawler." };
     }
     targetAsteroidId = asteroidId;
     targetCoords = { ...field.coords };
@@ -155,7 +155,7 @@ export function resolveLaunchTarget(
         return { ok: false, error: "Pirate base occupies that slot." };
       }
       if ((ships.colonyShip ?? 0) < 1) {
-        return { ok: false, error: "Colonize requires a Colony Ship." };
+        return { ok: false, error: "Colonize requires an Outpost Cradle." };
       }
       if (
         ownedPlanetCount(universe, player.id) >=
@@ -163,7 +163,7 @@ export function resolveLaunchTarget(
       ) {
         return {
           ok: false,
-          error: `Colony limit reached (Astrophysics → ${maxColonies(player.research.astrophysics)} worlds).`,
+          error: `Colony limit reached (Stellar Cartography → ${maxColonies(player.research.astrophysics)} worlds).`,
         };
       }
     } else {
@@ -172,7 +172,7 @@ export function resolveLaunchTarget(
         return { ok: false, error: "No debris at those coordinates." };
       }
       if ((ships.recycler ?? 0) < 1) {
-        return { ok: false, error: "Harvest requires a Recycler." };
+        return { ok: false, error: "Harvest requires a Salvage Trawler." };
       }
     }
   } else {
@@ -210,26 +210,26 @@ export function resolveLaunchTarget(
         return { ok: false, error: "Cannot spy on yourself." };
       }
       if ((ships.probe ?? 0) < 1) {
-        return { ok: false, error: "Espionage requires a Spy Probe." };
+        return { ok: false, error: "Espionage requires a Whisper Probe." };
       }
     } else if (mission === "jump") {
       if (origin.kind !== "moon") {
-        return { ok: false, error: "Jump Gate hops must start from a moon." };
+        return { ok: false, error: "Fold Bridge hops must start from a moon." };
       }
       if ((origin.buildings.jumpGate ?? 0) < 1) {
-        return { ok: false, error: "Origin moon needs Jump Gate level 1." };
+        return { ok: false, error: "Origin moon needs Fold Bridge level 1." };
       }
       if (targetPlanet.kind !== "moon") {
-        return { ok: false, error: "Jump Gate hops must target a moon." };
+        return { ok: false, error: "Fold Bridge hops must target a moon." };
       }
       if (targetPlanet.ownerPlayerId !== player.id) {
-        return { ok: false, error: "Jump Gate only links your own moons." };
+        return { ok: false, error: "Fold Bridge only links your own moons." };
       }
       if (targetPlanet.id === origin.id) {
         return { ok: false, error: "Cannot jump to the same moon." };
       }
       if ((targetPlanet.buildings.jumpGate ?? 0) < 1) {
-        return { ok: false, error: "Target moon needs Jump Gate level 1." };
+        return { ok: false, error: "Target moon needs Fold Bridge level 1." };
       }
     }
   }

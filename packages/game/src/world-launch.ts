@@ -106,7 +106,7 @@ export function launchFleet(
   if (activeFleets >= slotCap) {
     return {
       ok: false,
-      error: `Fleet slot limit reached (Computer Tech → ${slotCap} slots).`,
+      error: `Fleet slot limit reached (Fleet OS → ${slotCap} slots).`,
     };
   }
 
