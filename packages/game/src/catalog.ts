@@ -176,8 +176,10 @@ export const EXPEDITION_SLOT = DEEP_SPACE_SLOT;
  * KV / UniverseState schema version.
  * Prototype blobs without this field are treated as `1`.
  * Contract map resize (1×9×8 → 10×399×15) requires reset at `2`.
+ * Round 2 (queues / levels / ships / mini / pirates) bumps to `3` via
+ * additive migrator — no map reset.
  */
-export const UNIVERSE_SCHEMA_VERSION = 2;
+export const UNIVERSE_SCHEMA_VERSION = 3;
 
 /** Homeworld join: prefer mid slots, then fall outward. */
 export const HOME_SLOT_PREFERENCE: readonly number[] = [
