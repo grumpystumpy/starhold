@@ -22,6 +22,7 @@ import {
   planetAtCoords,
 } from "./world-bootstrap.js";
 import { resolveEspionage } from "./world-espionage.js";
+import { resolveExpeditionArrival } from "./world-expedition.js";
 import { pruneSpyReports } from "./world-spy-prune.js";
 import {
   addCargoToPlanet,
@@ -139,6 +140,8 @@ export function resolveFleetArrival(
           delete universe.debris[coordsKey(fleet.targetCoords)];
         }
       }
+    } else if (fleet.mission === "expedition") {
+      resolveExpeditionArrival(universe, fleet, now);
     }
 
     const returnSecs = flightSecondsOneWay(
