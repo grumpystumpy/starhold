@@ -3,7 +3,9 @@ import {
   emptyFleetShips,
   fleetCargoCapacity,
   fleetCombatPower,
+  grantPlayerXp,
   normalizeFleetShips,
+  xpForExpedition,
 } from "./formulas.js";
 import type {
   ExpeditionKind,
@@ -142,6 +144,15 @@ export function resolveExpeditionArrival(
     default: {
       const _exhaustive: never = kind;
       throw new Error(`Unhandled expedition kind: ${_exhaustive}`);
+    }
+  }
+
+  // Non-empty expedition outcomes grant XP (contract v1).
+  if (kind !== "nothing") {
+    const owner = universe.players[fleet.ownerPlayerId];
+    if (owner) {
+      grantPlayerXp(owner, xpForExpedition());
+      universe.players[owner.id] = owner;
     }
   }
 
