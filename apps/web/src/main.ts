@@ -31,6 +31,7 @@ import {
   doResearch,
   doSelectPlanet,
   doUpgrade,
+  resumeFromCookie,
   silentRefresh,
   startPolling,
 } from "./main-actions";
@@ -50,6 +51,10 @@ function paint(): void {
       notice: session.notice,
       busy: session.busy,
       joinDraft: session.joinDraft,
+      emailDraft: session.emailDraft,
+      accountEmail: session.account?.email ?? null,
+      claimablePlayerId: session.claimablePlayerId,
+      devMagicUrl: session.devMagicUrl,
       activePage: session.activePage,
     },
     {
@@ -119,6 +124,49 @@ async function boot(): Promise<void> {
   const playerIdParam = params.get("playerId")?.trim();
   const planetParam = params.get("planet")?.trim();
   const commanderParam = params.get("commander")?.trim();
+  const authParam = params.get("auth")?.trim();
+  const claimParam = params.get("claim")?.trim();
+
+  if (authParam === "ok") {
+    const fromCookie = await resumeFromCookie();
+    stripAuthParams();
+    if (fromCookie) {
+      if (claimParam === "claimed") {
+        setFlash("notice", "Guest save linked to your email.");
+        schedulePaint();
+      }
+      return;
+    }
+    if (claimParam === "account_has_player") {
+      setFlash(
+        "error",
+        "That email already owns a commander — guest save was not claimed.",
+      );
+    } else {
+      setFlash(
+        "notice",
+        "Signed in — enter a commander name or claim your guest save.",
+      );
+    }
+    schedulePaint();
+    return;
+  }
+  if (authParam === "invalid_or_expired" || authParam === "missing_token") {
+    setFlash("error", "Sign-in link invalid or expired — request a new one.");
+    stripAuthParams();
+    schedulePaint();
+  }
+
+  // Cookie session wins over localStorage when present.
+  if (!commanderParam && !playerIdParam) {
+    const fromCookie = await resumeFromCookie();
+    if (fromCookie) return;
+    if (session.account) {
+      schedulePaint();
+      // Stay on join for name / claim.
+      return;
+    }
+  }
 
   if (playerIdParam) {
     const ok = await resumePlayer(playerIdParam, planetParam);
@@ -140,10 +188,25 @@ async function boot(): Promise<void> {
 
   const saved = localStorage.getItem(SESSION_KEY);
   if (!saved) return;
+  session.claimablePlayerId = saved;
   const ok = await resumePlayer(saved, planetParam);
   if (!ok) {
     // Stay on join; session was stale.
   }
+}
+
+function stripAuthParams(): void {
+  const url = new URL(window.location.href);
+  let changed = false;
+  for (const key of ["auth", "claim"]) {
+    if (url.searchParams.has(key)) {
+      url.searchParams.delete(key);
+      changed = true;
+    }
+  }
+  if (!changed) return;
+  const next = `${url.pathname}${url.search}${url.hash}`;
+  window.history.replaceState({}, "", next || "/");
 }
 
 
