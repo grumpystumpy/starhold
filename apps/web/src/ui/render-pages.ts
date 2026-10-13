@@ -86,41 +86,31 @@ function overviewPage(view: PlayerView): string {
     </section>`;
 }
 
-function resourcesPage(view: PlayerView, busy: boolean): string {
+function buildingsPage(view: PlayerView, busy: boolean): string {
   const { planet, universe, now } = view;
-  const ids =
+  const resourceIds =
     planet.kind === "moon"
       ? RESOURCE_BUILDINGS.filter((id) =>
           MOON_BUILDING_ORDER.includes(id),
         )
       : RESOURCE_BUILDINGS;
-  return `
-    <section class="panel" data-testid="resources-panel">
-      <h2>Resources</h2>
-      <p class="hint" data-testid="planet-fields">Fields ${view.economy.fields.used} / ${view.economy.fields.cap} · ${view.economy.fields.remaining} free</p>
-      ${ids.map((id) => buildingRow(id, planet, universe.speed, now, busy)).join("")}
-      ${
-        buildQueueHtml(planet, now) ||
-        (planet.kind === "moon"
-          ? `<p class="hint">Moons have no mines — expand facilities on the moon.</p>`
-          : `<p class="hint">One construction at a time. Upgrade the Solar Array if mines stall.</p>`)
-      }
-    </section>`;
-}
-
-function facilitiesPage(view: PlayerView, busy: boolean): string {
-  const { planet, universe, now } = view;
-  const ids =
+  const facilityIds =
     planet.kind === "moon"
       ? FACILITY_BUILDINGS_MOON
       : FACILITY_BUILDINGS_PLANET;
   return `
-    <section class="panel" data-testid="facilities-panel">
-      <h2>Facilities</h2>
-      ${ids.map((id) => buildingRow(id, planet, universe.speed, now, busy)).join("")}
+    <section class="panel" data-testid="buildings-panel">
+      <h2>Buildings</h2>
+      <p class="hint" data-testid="planet-fields">Fields ${view.economy.fields.used} / ${view.economy.fields.cap} · ${view.economy.fields.remaining} free</p>
+      <h3 class="subhead">Extraction &amp; storage</h3>
+      ${resourceIds.map((id) => buildingRow(id, planet, universe.speed, now, busy)).join("")}
+      <h3 class="subhead">Structures</h3>
+      ${facilityIds.map((id) => buildingRow(id, planet, universe.speed, now, busy)).join("")}
       ${
         buildQueueHtml(planet, now) ||
-        `<p class="hint">Shipyard and Research Lab unlock production and techs.</p>`
+        (planet.kind === "moon"
+          ? `<p class="hint">Moons have no mines — expand crater structures on the moon.</p>`
+          : `<p class="hint">One construction at a time. Upgrade the Solar Array if mines stall.</p>`)
       }
     </section>`;
 }
@@ -165,11 +155,11 @@ function shipyardPage(view: PlayerView, busy: boolean): string {
     </section>`;
 }
 
-function defensePage(view: PlayerView, busy: boolean): string {
+function defensesPage(view: PlayerView, busy: boolean): string {
   const { planet, now } = view;
   return `
     <section class="panel" data-testid="defenses-panel">
-      <h2>Defense</h2>
+      <h2>Defenses</h2>
       ${DEFENSE_ORDER.map((id) => defenseRow(id, planet, busy)).join("")}
       ${
         defenseQueueHtml(planet, now) ||
@@ -235,16 +225,14 @@ export function pageHtml(
   switch (page) {
     case "overview":
       return overviewPage(view);
-    case "resources":
-      return resourcesPage(view, busy);
-    case "facilities":
-      return facilitiesPage(view, busy);
+    case "buildings":
+      return buildingsPage(view, busy);
     case "research":
       return researchPage(view, busy);
     case "shipyard":
       return shipyardPage(view, busy);
-    case "defense":
-      return defensePage(view, busy);
+    case "defenses":
+      return defensesPage(view, busy);
     case "fleet":
       return fleetPage(view, busy, fleetDraft);
     case "galaxy":
