@@ -4,6 +4,7 @@ import {
   fleetShipCount,
   flightSecondsOneWay,
   fuelCostOneWay,
+  levelBonuses,
   maxFleetSlots,
   normalizeFleetShips,
   spend,
@@ -182,6 +183,7 @@ export function launchFleet(
     deuterium: fuel,
   });
 
+  const lb = levelBonuses(player.level ?? 1);
   const oneWay =
     opts.mission === "jump"
       ? 1
@@ -189,7 +191,9 @@ export function launchFleet(
           origin.coords,
           targetCoords,
           ships,
-          universe.fleetSpeed * Math.max(0.01, boosts.fleetSpeed),
+          // Stack: base → combustion → level time → officers/skills fleetSpeed.
+          (universe.fleetSpeed * Math.max(0.01, boosts.fleetSpeed)) /
+            Math.max(0.01, lb.fleetTime),
           player.research.combustionDrive ?? 0,
         );
   const fleetId = `flt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
