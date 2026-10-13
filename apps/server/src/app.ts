@@ -5,12 +5,15 @@ import {
   type Coordinates,
   type DefenseId,
   type FleetShips,
+  type MiniPlanetResolveChoice,
   type MissionType,
   type OfficerId,
   type ResearchId,
   type Resources,
   type ShipId,
+  abandonOccupation,
   activateOfficer,
+  advanceUniverse,
   claimDailyLogin,
   ensureUniverseShape,
   joinUniverse,
@@ -20,7 +23,10 @@ import {
   queueDefenseBuild,
   queueResearch,
   queueShipBuild,
+  resolveMiniPlanetChoice,
   setActivePlanet,
+  startOccupation,
+  swarmProduce,
   unlockSkill,
 } from "@starhold/game";
 import { storageMode, withUniverse } from "./store.js";
@@ -349,6 +355,91 @@ export function createApp(): Hono {
     }
     return withUniverse((universe) => {
       const result = unlockSkill(universe, body.playerId!, body.skillId!);
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  // Round 2 fleet hooks (single-segment paths for Vercel catch-all).
+  app.post("/api/occupy", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      fleetId?: string;
+    };
+    if (!body.playerId || !body.fleetId) {
+      return c.json({ error: "playerId and fleetId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      advanceUniverse(universe);
+      const result = startOccupation(
+        universe,
+        body.playerId!,
+        body.fleetId!,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  app.post("/api/abandon-occupation", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      planetId?: string;
+    };
+    if (!body.playerId || !body.planetId) {
+      return c.json({ error: "playerId and planetId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      advanceUniverse(universe);
+      const result = abandonOccupation(
+        universe,
+        body.playerId!,
+        body.planetId!,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  app.post("/api/swarm-produce", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      fleetId?: string;
+      count?: number;
+    };
+    if (!body.playerId || !body.fleetId) {
+      return c.json({ error: "playerId and fleetId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      advanceUniverse(universe);
+      const result = swarmProduce(
+        universe,
+        body.playerId!,
+        body.fleetId!,
+        body.count ?? 1,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  app.post("/api/mini-resolve", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      fleetId?: string;
+      choice?: MiniPlanetResolveChoice;
+    };
+    if (!body.playerId || !body.fleetId) {
+      return c.json({ error: "playerId and fleetId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      advanceUniverse(universe);
+      const result = resolveMiniPlanetChoice(
+        universe,
+        body.playerId!,
+        body.fleetId!,
+        body.choice ?? "capture",
+      );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
     });
