@@ -12,8 +12,9 @@ Invented basics-first rules — **inspired** by the genre, not scraped from OGam
 | **transport** | Move cargo + ships to another **own** planet (docks there). |
 | **colonize** | Requires Colony Ship + Astrophysics colony slot. Found colony on empty coords; colony ship consumed. |
 | **harvest** | Requires Recycler + debris at coords. Scoop metal/crystal into cargo and return. |
+| **expedition** | Deep space (`slot = EXPEDITION_SLOT`). Resolve find/pirates on arrival; return with cargo. Cap = `1 + Astrophysics`. |
 
-Fuel is paid up-front for the **outbound** leg only (return is free in v1). Computer Tech limits simultaneous fleet missions (base 1).
+Fuel is paid up-front for the **outbound** leg only (return is free in v1). Computer Tech limits simultaneous fleet missions (base 1). Astrophysics also gates concurrent expeditions. See [docs/design/expeditions.md](../../docs/design/expeditions.md).
 
 ## Distance
 

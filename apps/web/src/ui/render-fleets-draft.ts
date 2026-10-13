@@ -13,6 +13,7 @@ export const MISSIONS: MissionType[] = [
   "transport",
   "colonize",
   "harvest",
+  "expedition",
 ];
 
 export type FleetDraft = {

@@ -5,5 +5,6 @@ export {
   fleetsInFlight,
   reportsHtml,
   spyReportsHtml,
+  expeditionReportsHtml,
   galaxyPanel,
 } from "./render-fleets-panels.js";
