@@ -44,6 +44,7 @@ import { inSensorPhalanxRange, ownedPlanetCount } from "./world-moons.js";
 import { occupationForPlanet } from "./world-occupation.js";
 import { getDebris } from "./world-tick.js";
 
+/** Empire total: all planets + in-flight ships + research once. */
 export function empirePoints(
   universe: UniverseState,
   player: PlayerState,
@@ -131,6 +132,7 @@ export function galaxyViewFor(
       activity: planet ? "planet" : "empty",
     });
   }
+
   const pirate = Object.values(universe.pirateBases ?? {}).find(
     (b) =>
       b.destroyedAt == null &&
@@ -143,6 +145,7 @@ export function galaxyViewFor(
       slot.activity = "pirate";
     }
   }
+
   return {
     galaxy: g,
     system: s,
@@ -162,6 +165,7 @@ export function galaxyViewFor(
   };
 }
 
+/** Once-only +50 Starshards the first time a player reaches top 3 (needs rivals). */
 function maybeGrantHighscoreStarshards(
   universe: UniverseState,
   playerId: string,
@@ -193,9 +197,11 @@ export function playerView(
   const planet = activePlanet(universe, player);
   if (!planet) throw new Error("Planet missing.");
   const boosts = playerBoosts(player, now);
+
   const fleets = Object.values(universe.fleets)
     .filter((f) => f.ownerPlayerId === playerId)
     .sort((a, b) => a.arrivesAt - b.arrivesAt);
+
   const reports = Object.values(universe.reports)
     .filter(
       (r) =>
@@ -203,16 +209,20 @@ export function playerView(
     )
     .sort((a, b) => b.at - a.at)
     .slice(0, 12);
+
   const spyReports = Object.values(universe.spyReports)
     .filter((r) => r.spyPlayerId === playerId)
     .sort((a, b) => b.at - a.at)
     .slice(0, 12);
+
   const expeditionReports = Object.values(universe.expeditionReports ?? {})
     .filter((r) => r.playerId === playerId)
     .sort((a, b) => b.at - a.at)
     .slice(0, 12);
+
   const g = galaxy ?? planet.coords.galaxy;
   const s = system ?? planet.coords.system;
+
   const sensorLevel = planet.buildings.sensorArray ?? 0;
   const sensorContacts =
     planet.kind === "moon" && sensorLevel >= 1
@@ -225,6 +235,7 @@ export function playerView(
           .sort((a, b) => a.arrivesAt - b.arrivesAt)
           .slice(0, 20)
       : [];
+
   return {
     now,
     universe: {
