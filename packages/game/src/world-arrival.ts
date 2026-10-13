@@ -23,6 +23,7 @@ import {
 } from "./world-bootstrap.js";
 import { resolveEspionage } from "./world-espionage.js";
 import { resolveExpeditionArrival } from "./world-expedition.js";
+import { ownedPlanetCount } from "./world-moons.js";
 import { pruneSpyReports } from "./world-spy-prune.js";
 import {
   addCargoToPlanet,
@@ -95,7 +96,10 @@ export function resolveFleetArrival(
       } else if (!owner) {
         delete universe.fleets[fleet.id];
         return;
-      } else if (owner.planetIds.length >= maxColonies(owner.research.astrophysics)) {
+      } else if (
+        ownedPlanetCount(universe, owner.id) >=
+        maxColonies(owner.research.astrophysics)
+      ) {
       } else {
         const planetId = `plnt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
         const colony: PlanetState = {
@@ -103,6 +107,9 @@ export function resolveFleetArrival(
           ownerPlayerId: owner.id,
           name: `${owner.name}'s Colony`,
           coords: { ...fleet.targetCoords },
+          kind: "planet",
+          parentPlanetId: null,
+          moonId: null,
           resources: { metal: 500, crystal: 500, deuterium: 0 },
           lastTickAt: now,
           buildings: emptyBuildings(),
