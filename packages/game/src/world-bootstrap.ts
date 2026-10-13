@@ -58,6 +58,7 @@ export function createUniverse(
     fleets: {},
     reports: {},
     spyReports: {},
+    expeditionReports: {},
     debris: {},
   };
 }
@@ -95,6 +96,7 @@ export function ensureUniverseShape(universe: UniverseState): void {
   if (!universe.fleets) universe.fleets = {};
   if (!universe.reports) universe.reports = {};
   if (!universe.spyReports) universe.spyReports = {};
+  if (!universe.expeditionReports) universe.expeditionReports = {};
   if (!universe.debris) universe.debris = {};
   if (!universe.fleetSpeed) universe.fleetSpeed = universe.speed || 1;
   for (const player of Object.values(universe.players)) {

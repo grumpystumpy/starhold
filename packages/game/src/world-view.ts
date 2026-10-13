@@ -91,6 +91,11 @@ export function playerView(
     .sort((a, b) => b.at - a.at)
     .slice(0, 12);
 
+  const expeditionReports = Object.values(universe.expeditionReports ?? {})
+    .filter((r) => r.playerId === playerId)
+    .sort((a, b) => b.at - a.at)
+    .slice(0, 12);
+
   const g = galaxy ?? planet.coords.galaxy;
   const s = system ?? planet.coords.system;
 
@@ -127,5 +132,6 @@ export function playerView(
     fleets,
     reports,
     spyReports,
+    expeditionReports,
   };
 }
