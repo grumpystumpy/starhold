@@ -97,7 +97,7 @@ No Death Star id exists on `main` yet. Round 2 introduces:
 
 | Id | Display | Role |
 |----|---------|------|
-| `voidforgeTitan` | **Void Titan** | Moon-killer flagship (3rd largest; Deathstar-class balance **reference only**) |
+| `voidforgeTitan` | **Void Titan** | 3rd largest — a bit faster than World Eater; very high attack+armor; low shields; large cargo |
 
 ### UI / docs copy
 
@@ -383,9 +383,9 @@ POST /api/fleet/mini-resolve { playerId, fleetId, choice: "capture" | "destroy" 
 
 > **Micah amendments (Round 2):** Swarm costs/times ×0.25; Mothership cargo/combat/capacity raised (2nd largest); Voidforge Titan renamed **Void Titan** (3rd); World Eater = largest; Chrono Lathe build-speed building; sub-second batch production.
 
-### 7.1 Void Titan (`voidforgeTitan`) — moon-killer flagship (3rd largest)
+### 7.1 Void Titan (`voidforgeTitan`) — 3rd largest
 
-Deathstar-class **balance reference** (not a clone). Display name **Void Titan**.
+**Role:** a bit faster than World Eater; very high attack + armor; low shields; large cargo. Display name **Void Titan**.
 
 | Stat | v1 (amended) |
 |------|---:|
@@ -400,7 +400,7 @@ Deathstar-class **balance reference** (not a clone). Display name **Void Titan**
 | Speed | `100` |
 | Fuel / distance | `5` |
 
-**Moon destruction chance** (attacker won, target is moon, ≥1 Void Titan survived):
+**Moon destruction chance** (attacker won, target is moon, ≥1 Void Titan **or World Eater** survived):
 
 ```
 chancePct = min(100,
@@ -414,6 +414,8 @@ On success: moon deleted; parent `moonId` cleared; fleets on moon → debris 50%
 
 ### 7.2 World Eater (`worldEater`) — LARGEST hull
 
+**Role:** slowest; strongest across the board (attack/shield/hull); no cargo. Destroys mini planets **and moons**. Cannot collect debris.
+
 | Stat | v1 (amended) |
 |------|---:|
 | Cost | metal `8_000_000`, crystal `6_500_000`, deuterium `2_500_000` |
@@ -421,13 +423,13 @@ On success: moon deleted; parent `moonId` cleared; fleets on moon → debris 50%
 | Shipyard | **15** |
 | Research req | Ordnance Doctrine 14, Aegis Lattice 14, Hull Weave 14 |
 | Cargo | `0` (**cannot collect debris**) |
-| Attack | `80_000` (≫ Mothership) |
+| Attack | `300_000` (strongest) |
 | Shield | `800_000` |
 | Hull | `2_000_000` |
 | Speed | `600` |
 | Fuel / distance | `4` |
 
-Role: required (≥5) to capture/destroy mini planets; strong vs structures; no recycler behavior.
+Also required (≥5) to capture/destroy mini planets; counts toward moon-kill chance with Void Titans.
 
 ### 7.3 Swarm Drone (`swarmDrone`)
 
@@ -467,6 +469,8 @@ Role: required (≥5) to capture/destroy mini planets; strong vs structures; no 
 
 ### 7.5 Swarm Mothership (`swarmMothership`) — 2nd largest
 
+**Role:** very high shields; very low attack; okay armor. Carries **2,000** swarms (base). Can occupy **mini planets** (same occupation rules) and **harvest debris** (Salvage Trawler–equivalent for debris fields; asteroid harvest still requires a Trawler).
+
 | Stat | v1 (amended) |
 |------|---:|
 | Cost | metal `2_500_000`, crystal `2_000_000`, deuterium `750_000` |
@@ -475,8 +479,8 @@ Role: required (≥5) to capture/destroy mini planets; strong vs structures; no 
 | Research req | Ordnance Doctrine 11, Aegis Lattice 11, Hull Weave 11 |
 | Cargo | `150_050_000` (= 50_000 × 3001) |
 | Attack | `3_000` (= 500 × 6) |
-| Shield | `202_000` (= 2_000 × 101) |
-| Hull | `120_000` (= 20_000 × 6) |
+| Shield | `450_000` |
+| Hull / armor | `100_000` |
 | Speed | `2_500` |
 | Fuel / distance | `2` |
 | Base swarm capacity | **2000** |
