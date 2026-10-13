@@ -1,5 +1,6 @@
 import { BUILDINGS, DEFENSES, SHIPS } from "./catalog.js";
 import {
+  CHRONO_LATHE_SHIPYARD_REQ,
   MOON_FIELDS_BASE,
   MOON_FIELDS_PER_LUNAR_BASE,
 } from "./catalog.js";
@@ -8,13 +9,14 @@ import {
   buildingUpgradeCost,
   buildingUpgradeSeconds,
   canAfford,
-  defenseBuildSeconds,
   defenseCost,
+  defenseUnitBuildSeconds,
   fieldsRemaining,
   fieldsUsed,
   levelBonuses,
-  shipBuildSeconds,
   shipCost,
+  shipResearchReqMet,
+  shipUnitBuildSeconds,
   spend,
 } from "./formulas.js";
 import type {
@@ -27,6 +29,17 @@ import type {
   UniverseState,
 } from "./types.js";
 import { advanceUniverse } from "./world-arrival.js";
+import { isPlanetOccupied } from "./world-occupation.js";
+
+function isPlanetOccupiedByOther(
+  universe: UniverseState,
+  planetId: string,
+  _playerId: string,
+  now: number,
+): boolean {
+  // Owner build/ship/defense queues blocked while occupied.
+  return isPlanetOccupied(universe, planetId, now);
+}
 
 export type ActionResult =
   | { ok: true; planet: PlanetState }
@@ -79,6 +92,9 @@ export function queueBuildingUpgrade(
   advanceUniverse(universe, now);
   const planet = resolveActionPlanet(universe, player, planetId);
   if (!planet) return { ok: false, error: "Planet missing." };
+  if (isPlanetOccupiedByOther(universe, planet.id, playerId, now)) {
+    return { ok: false, error: "Construction blocked while planet is occupied." };
+  }
   if (!buildingAllowedOn(planet, buildingId)) {
     return {
       ok: false,
@@ -92,6 +108,15 @@ export function queueBuildingUpgrade(
   }
   if (buildingId === "jumpGate" && (planet.buildings.lunarBase ?? 0) < 1) {
     return { ok: false, error: "Fold Bridge needs Crater Hab level 1." };
+  }
+  if (buildingId === "chronoLathe") {
+    const yard = planet.buildings.shipyard ?? 0;
+    if (yard < CHRONO_LATHE_SHIPYARD_REQ) {
+      return {
+        ok: false,
+        error: `Chrono Lathe needs Shipyard level ${CHRONO_LATHE_SHIPYARD_REQ} (you have ${yard}).`,
+      };
+    }
   }
   if (planet.buildQueue) {
     return { ok: false, error: "A building is already under construction." };
@@ -113,21 +138,20 @@ export function queueBuildingUpgrade(
     return { ok: false, error: "Not enough resources." };
   }
 
+  const chrono = planet.buildings.chronoLathe ?? 0;
+  // Chrono Lathe does not accelerate itself (avoid recursive free builds).
+  const chronoForThis = buildingId === "chronoLathe" ? 0 : chrono;
   const lb = levelBonuses(player.level ?? 1);
-  const seconds = Math.max(
-    1,
-    Math.ceil(
-      (buildingUpgradeSeconds(buildingId, current) * lb.buildTime) /
-        universe.speed,
-    ),
-  );
+  const seconds =
+    (buildingUpgradeSeconds(buildingId, current, chronoForThis) * lb.buildTime) /
+    universe.speed;
 
   planet.resources = spend(planet.resources, cost);
   planet.buildQueue = {
     kind: "building",
     buildingId,
     targetLevel: current + 1,
-    completesAt: now + seconds * 1000,
+    completesAt: now + Math.max(1, Math.ceil(seconds)) * 1000,
   };
   universe.planets[planet.id] = planet;
   return { ok: true, planet };
@@ -157,6 +181,10 @@ export function queueShipBuild(
     return { ok: false, error: "Shipyard is already busy." };
   }
 
+  if (isPlanetOccupiedByOther(universe, planet.id, playerId, now)) {
+    return { ok: false, error: "Shipyard blocked while planet is occupied." };
+  }
+
   const yard = planet.buildings.shipyard ?? 0;
   if (yard < def.shipyardLevel) {
     return {
@@ -165,26 +193,33 @@ export function queueShipBuild(
     };
   }
 
+  const researchOk = shipResearchReqMet(shipId, player.research);
+  if (!researchOk.ok) return researchOk;
+
   const cost = shipCost(shipId, qty);
   if (!canAfford(planet.resources, cost)) {
     return { ok: false, error: "Not enough resources." };
   }
 
+  const chrono = planet.buildings.chronoLathe ?? 0;
   const lb = levelBonuses(player.level ?? 1);
-  const seconds = Math.max(
-    1,
-    Math.ceil(
-      (shipBuildSeconds(shipId, qty, yard) * lb.shipBuild) / universe.speed,
-    ),
-  );
+  const unitSeconds =
+    (shipUnitBuildSeconds(shipId, yard, chrono) * lb.shipBuild) / universe.speed;
+  const totalSeconds = unitSeconds * qty;
+  // ≥1s units keep Thread I ceil semantics; sub-second keeps precise ms for batch ticks.
+  const completesAt =
+    unitSeconds >= 1
+      ? now + Math.max(1, Math.ceil(totalSeconds)) * 1000
+      : now + Math.max(1, totalSeconds * 1000);
 
   planet.resources = spend(planet.resources, cost);
   planet.shipQueue = {
     kind: "ship",
     shipId,
     count: qty,
-    completesAt: now + seconds * 1000,
-    unitSeconds: Math.ceil(seconds / qty),
+    completesAt,
+    unitSeconds,
+    progressAt: now,
   };
   universe.planets[planet.id] = planet;
   return { ok: true, planet };
@@ -210,6 +245,9 @@ export function queueDefenseBuild(
   advanceUniverse(universe, now);
   const planet = resolveActionPlanet(universe, player, planetId);
   if (!planet) return { ok: false, error: "Planet missing." };
+  if (isPlanetOccupiedByOther(universe, planet.id, playerId, now)) {
+    return { ok: false, error: "Defense yard blocked while planet is occupied." };
+  }
   if (planet.defenseQueue) {
     return { ok: false, error: "Defense yard is already busy." };
   }
@@ -227,18 +265,19 @@ export function queueDefenseBuild(
     return { ok: false, error: "Not enough resources." };
   }
 
-  const seconds = Math.max(
-    1,
-    Math.ceil(defenseBuildSeconds(defenseId, qty, yard) / universe.speed),
-  );
+  const chrono = planet.buildings.chronoLathe ?? 0;
+  const unitSeconds =
+    defenseUnitBuildSeconds(defenseId, yard, chrono) / universe.speed;
+  const totalSeconds = unitSeconds * qty;
 
   planet.resources = spend(planet.resources, cost);
   planet.defenseQueue = {
     kind: "defense",
     defenseId,
     count: qty,
-    completesAt: now + seconds * 1000,
-    unitSeconds: Math.ceil(seconds / qty),
+    completesAt: now + Math.max(1, totalSeconds * 1000),
+    unitSeconds,
+    progressAt: now,
   };
   universe.planets[planet.id] = planet;
   return { ok: true, planet };
