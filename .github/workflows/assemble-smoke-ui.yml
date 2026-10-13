@@ -1,0 +1,27 @@
+name: assemble-smoke-ui
+on:
+  push:
+    paths:
+      - ".cursor-stage/smoke-ui.mjs.gz.b64"
+      - ".github/workflows/assemble-smoke-ui.yml"
+  workflow_dispatch:
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cursor/round2-nav-routes-e27b
+      - name: Inflate smoke-ui.mjs
+        run: |
+          set -euo pipefail
+          base64 -d .cursor-stage/smoke-ui.mjs.gz.b64 | gzip -d > scripts/smoke-ui.mjs
+          rm -rf .cursor-stage
+          rm -f .github/workflows/assemble-smoke-ui.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "test(G): smoke-ui nav dropdown and /buildings routes"
+          git push
