@@ -32,19 +32,26 @@ export function fleetComposer(
   if (mission === "transport") {
     for (const p of ownOther) {
       options.push(
-        `<option value="planet:${escapeAttr(p.id)}">${escapeHtml(p.name)} · ${fmtCoords(p.coords)}</option>`,
+        `<option value="planet:${escapeAttr(p.id)}">${escapeHtml(p.name)}${p.isMoon ? " · Moon" : ""} · ${fmtCoords(p.coords)}</option>`,
       );
     }
   } else if (mission === "deploy") {
     for (const p of ownOther) {
       options.push(
-        `<option value="planet:${escapeAttr(p.id)}">Park @ ${escapeHtml(p.name)} · ${fmtCoords(p.coords)}</option>`,
+        `<option value="planet:${escapeAttr(p.id)}">Park @ ${escapeHtml(p.name)}${p.isMoon ? " Moon" : ""} · ${fmtCoords(p.coords)}</option>`,
       );
     }
     for (const r of rivals) {
       options.push(
         `<option value="planet:${escapeAttr(r.planetId)}">Visit ${escapeHtml(r.name)} · ${fmtCoords(r.coords)}</option>`,
       );
+    }
+    for (const s of view.galaxy.slots) {
+      if (s.moonId && s.playerId && s.playerId !== view.player.id) {
+        options.push(
+          `<option value="planet:${escapeAttr(s.moonId)}">Visit moon @ ${fmtCoords(s.coords)}</option>`,
+        );
+      }
     }
   } else if (mission === "colonize") {
     for (const s of emptySlots) {
@@ -78,6 +85,13 @@ export function fleetComposer(
       options.push(
         `<option value="planet:${escapeAttr(r.planetId)}">${escapeHtml(r.name)} · ${fmtCoords(r.coords)}</option>`,
       );
+    }
+    for (const s of view.galaxy.slots) {
+      if (s.moonId && s.playerId && s.playerId !== view.player.id) {
+        options.push(
+          `<option value="planet:${escapeAttr(s.moonId)}">Moon @ ${fmtCoords(s.coords)}</option>`,
+        );
+      }
     }
   }
 
