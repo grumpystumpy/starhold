@@ -1,5 +1,6 @@
 import {
   BUILDINGS,
+  CHRONO_LATHE_TIME_BASE,
   DEFENSES,
   MINE_BASE_PER_HOUR,
   MINE_GROWTH,
@@ -65,16 +66,26 @@ export function buildingUpgradeCost(
   };
 }
 
+/** Chrono Lathe multiplier: 0.1^level (level 0 → 1). Does not affect research. */
+export function chronoLatheTimeFactor(chronoLatheLevel: number): number {
+  const level = Math.max(0, Math.floor(chronoLatheLevel));
+  if (level <= 0) return 1;
+  return Math.pow(CHRONO_LATHE_TIME_BASE, level);
+}
+
 /** Build duration in seconds for the next level (before universe speed). */
 export function buildingUpgradeSeconds(
   buildingId: BuildingId,
   currentLevel: number,
+  chronoLatheLevel = 0,
 ): number {
   const def = BUILDINGS[buildingId];
-  return Math.max(
-    1,
-    Math.floor(def.baseBuildSeconds * Math.pow(def.costGrowth, currentLevel)),
-  );
+  const raw =
+    def.baseBuildSeconds *
+    Math.pow(def.costGrowth, currentLevel) *
+    chronoLatheTimeFactor(chronoLatheLevel);
+  // Never floor at 1s — sub-second allowed for batch ticks.
+  return Math.max(1e-9, raw);
 }
 
 export function shipCost(shipId: ShipId, count: number): Resources {
@@ -86,14 +97,27 @@ export function shipCost(shipId: ShipId, count: number): Resources {
   };
 }
 
+/** Per-unit ship build seconds (may be < 1). */
+export function shipUnitBuildSeconds(
+  shipId: ShipId,
+  shipyardLevel: number,
+  chronoLatheLevel = 0,
+): number {
+  const def = SHIPS[shipId];
+  const speedFactor = 1 + Math.max(0, shipyardLevel - 1) * 0.1;
+  return Math.max(
+    1e-9,
+    (def.buildSeconds / speedFactor) * chronoLatheTimeFactor(chronoLatheLevel),
+  );
+}
+
 export function shipBuildSeconds(
   shipId: ShipId,
   count: number,
   shipyardLevel: number,
+  chronoLatheLevel = 0,
 ): number {
-  const def = SHIPS[shipId];
-  const speedFactor = 1 + Math.max(0, shipyardLevel - 1) * 0.1;
-  return Math.max(1, Math.ceil((def.buildSeconds * count) / speedFactor));
+  return shipUnitBuildSeconds(shipId, shipyardLevel, chronoLatheLevel) * count;
 }
 
 export function defenseCost(defenseId: DefenseId, count: number): Resources {
@@ -105,14 +129,42 @@ export function defenseCost(defenseId: DefenseId, count: number): Resources {
   };
 }
 
+/** Per-unit defense build seconds (may be < 1). */
+export function defenseUnitBuildSeconds(
+  defenseId: DefenseId,
+  shipyardLevel: number,
+  chronoLatheLevel = 0,
+): number {
+  const def = DEFENSES[defenseId];
+  const speedFactor = 1 + Math.max(0, shipyardLevel - 1) * 0.1;
+  return Math.max(
+    1e-9,
+    (def.buildSeconds / speedFactor) * chronoLatheTimeFactor(chronoLatheLevel),
+  );
+}
+
 export function defenseBuildSeconds(
   defenseId: DefenseId,
   count: number,
   shipyardLevel: number,
+  chronoLatheLevel = 0,
 ): number {
-  const def = DEFENSES[defenseId];
-  const speedFactor = 1 + Math.max(0, shipyardLevel - 1) * 0.1;
-  return Math.max(1, Math.ceil((def.buildSeconds * count) / speedFactor));
+  return (
+    defenseUnitBuildSeconds(defenseId, shipyardLevel, chronoLatheLevel) * count
+  );
+}
+
+/**
+ * Sub-second batch size: floor(elapsedSeconds / unitSeconds).
+ * When unitSeconds ≥ 1, returns 0 here (caller uses completesAt).
+ */
+export function batchUnitsProduced(
+  elapsedSeconds: number,
+  unitSeconds: number,
+  remaining: number,
+): number {
+  if (unitSeconds >= 1 || remaining <= 0 || elapsedSeconds <= 0) return 0;
+  return Math.min(remaining, Math.floor(elapsedSeconds / unitSeconds));
 }
 
 export function researchUpgradeCost(
