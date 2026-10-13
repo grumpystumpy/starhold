@@ -55,6 +55,7 @@ export function emptyResearch(): ResearchLevels {
     espionageTech: 0,
     astrophysics: 0,
     computerTech: 0,
+    swarmHold: 0,
   };
 }
 
