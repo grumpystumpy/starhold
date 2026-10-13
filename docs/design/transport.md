@@ -23,4 +23,4 @@ If the player has only a home world, UI still exposes transport but API rejects 
 ## Completeness
 
 **Have:** API validation, dock-on-arrival, UI cargo fields, colonize + transport unit test.  
-**Polish:** clearer empty-state copy when `ownedPlanets.length < 2`; deploy retarget to own colonies (gap note).
+**Related:** Deploy can **park** ships on own colonies without cargo — see [empire-logistics.md](./empire-logistics.md).

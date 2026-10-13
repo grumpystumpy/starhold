@@ -27,7 +27,11 @@ Spy Probe mission → text intel report. Depth scales with Espionage Tech vs tar
 - Reports UI: spy report list (separate from combat reports).
 - Galaxy/roster: pick target planet.
 
+## Intel decay
+
+Reports older than `SPY_REPORT_TTL_MS` (20 min wall clock) are pruned on advance/view. See [empire-logistics.md](./empire-logistics.md).
+
 ## Completeness
 
-**Have:** probe, mission, report layers, UI, unit test.  
-**Optional later:** intel decay (gap-analysis idea); probe destruction chance.
+**Have:** probe, mission, report layers, UI, unit test, intel decay.  
+**Optional later:** probe destruction chance.
