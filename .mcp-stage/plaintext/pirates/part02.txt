@@ -1,0 +1,41 @@
+st t = Math.max(0, Math.min(PIRATE_TIER_CAP, Math.floor(tier)));
+  const ships = emptyFleetShips();
+  ships.scout = 2 + t * 2;
+  ships.interceptor = t >= 1 ? t : 0;
+  ships.hauler = t >= 2 ? Math.ceil(t / 2) : 0;
+  ships.cruiser = t >= 3 ? Math.floor((t - 2) / 2) : 0;
+  ships.bomber = t >= 6 ? t - 5 : 0;
+  return ships;
+}
+
+function pirateResourcesForTier(tier: number): Resources {
+  const t = Math.max(0, Math.floor(tier));
+  return {
+    metal: 800 + t * 400,
+    crystal: 400 + t * 250,
+    deuterium: 100 + t * 80,
+  };
+}
+
+function pirateName(seed: string, galaxy: number, system: number): string {
+  const idx = hashSeed(`${seed}:pname:${galaxy}:${system}`) % PIRATE_NAMES.length;
+  return PIRATE_NAMES[idx]!;
+}
+
+export function activePirateBases(universe: UniverseState): PirateBase[] {
+  return Object.values(universe.pirateBases ?? {}).filter(
+    (b) => b.destroyedAt == null,
+  );
+}
+
+export function pirateBaseAtCoords(
+  universe: UniverseState,
+  coords: Coordinates,
+): PirateBase | null {
+  return (
+    activePirateBases(universe).find(
+      (b) =>
+        b.coords.galaxy === coords.galaxy &&
+        b.coords.system === coords.system &&
+        b.coords.slot === coords.slot,
+    
