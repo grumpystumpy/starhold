@@ -34,3 +34,4 @@ jobs:
           git rm -f .github/workflows/rebuild-api-bundle-once.yml
           git commit -m "chore: remove one-shot api rebuild workflow" || true
           git push || true
+# worker retrigger
