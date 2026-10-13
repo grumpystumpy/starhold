@@ -142,6 +142,8 @@ export interface PlayerState {
   lastDailyLoginUtc?: string;
   /** Once-only top-3 highscore Starshard grant. */
   highscoreStarshardsClaimed?: boolean;
+  /** Linked email account (set after magic-link claim / authenticated join). */
+  accountId?: string | null;
 }
 
 export interface UniverseState {
