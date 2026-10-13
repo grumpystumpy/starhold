@@ -63,3 +63,19 @@ export {
   seedUniversePirates,
   tickPirates,
 } from "./world-pirates.js";
+export {
+  activateOfficer,
+  canClaimDailyLogin,
+  claimDailyLogin,
+  emptyBoosts,
+  expeditionStarshardsAmount,
+  grantPirateDestroyStarshards,
+  grantPirateFleetKillStarshards,
+  grantStarshards,
+  playerBoosts,
+  pruneExpiredOfficers,
+  unlockSkill,
+  utcDayKey,
+  type PlayerBoosts,
+  type StarshardActionResult,
+} from "./world-starshards.js";
