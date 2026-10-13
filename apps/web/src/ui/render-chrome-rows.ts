@@ -16,7 +16,8 @@ import {
   SHIP_ART,
 } from "./assets";
 import { fmt, fmtCost, fmtEta } from "./format";
-import { escapeAttr, escapeHtml } from "./render-escape";
+import { escapeHtml } from "./render-escape";
+import { costTooltip } from "./render-tooltips";
 
 export function shipRow(
   id: ShipId,
@@ -33,20 +34,26 @@ export function shipRow(
   else if (queueBusy) label = "Yard busy";
   else if (!affordable) label = "Can't afford";
   const lockMsg = `Needs Shipyard level ${def.shipyardLevel} (you have ${yard}).`;
-  const title = locked
+  const blocked = locked
     ? lockMsg
     : queueBusy
       ? "Shipyard is already busy."
       : !affordable
         ? "Not enough resources."
-        : `Build ${def.name}`;
+        : null;
+  const tip = costTooltip({
+    action: `Build ${def.name}`,
+    cost: def.cost,
+    requires: [`Shipyard L${def.shipyardLevel}+`],
+    blocked,
+  });
   // Locked hulls are disabled so mis-clicks cannot set busy and silence Upgrade.
   // Unlocked Build stays enabled during client busy (same reason as Upgrade).
   return `
     <article class="item item-thumb" data-testid="ship-${id}">
       <img class="thumb" src="${SHIP_ART[id]}" alt="" width="48" height="48" />
       <div>
-        <h3>${escapeHtml(def.name)}</h3>
+        <h3>${escapeHtml(def.name)} ${tip.html}</h3>
         <p>${escapeHtml(def.description)}</p>
         <div class="meta">${fmtCost(def.cost)} each · yard L${def.shipyardLevel}+ · cargo ${def.cargo} · atk ${def.attack}${
           locked ? ` · ${escapeHtml(lockMsg)}` : ""
@@ -54,7 +61,7 @@ export function shipRow(
       </div>
       <div class="actions">
         <input type="number" min="1" max="50" value="1" data-ship-count="${id}" data-testid="ship-count-${id}" ${locked ? "disabled" : ""} style="min-width:4rem;width:4.5rem" />
-        <button type="button" data-ship="${id}" data-locked="${locked ? "1" : "0"}" data-testid="build-${id}" ${locked ? "disabled" : ""} title="${escapeAttr(title)}">${label}</button>
+        <button type="button" data-ship="${id}" data-locked="${locked ? "1" : "0"}" data-testid="build-${id}" ${locked ? "disabled" : ""} title="${tip.title}">${label}</button>
       </div>
     </article>
   `;
@@ -76,24 +83,30 @@ export function defenseRow(
   if (locked) label = "Locked";
   else if (queueBusy) label = "Busy";
   else if (!affordable) label = "Can't afford";
-  const title = locked
+  const blocked = locked
     ? `Needs Shipyard level ${def.shipyardLevel}`
     : queueBusy
       ? "Defense yard busy."
       : !affordable
         ? "Not enough resources."
-        : `Build ${def.name}`;
+        : null;
+  const tip = costTooltip({
+    action: `Build ${def.name}`,
+    cost,
+    requires: [`Shipyard L${def.shipyardLevel}+`],
+    blocked,
+  });
   return `
     <article class="item item-thumb" data-testid="defense-${id}">
       <img class="thumb" src="${DEFENSE_ART[id]}" alt="" width="48" height="48" />
       <div>
-        <h3>${escapeHtml(def.name)} <span class="meta">×${have}</span></h3>
+        <h3>${escapeHtml(def.name)} <span class="meta">×${have}</span> ${tip.html}</h3>
         <p>${escapeHtml(def.description)}</p>
         <div class="meta">${fmtCost(cost)} each · yard L${def.shipyardLevel}+ · atk ${def.attack}</div>
       </div>
       <div class="actions">
         <input type="number" min="1" max="50" value="1" data-defense-count="${id}" data-testid="defense-count-${id}" ${locked ? "disabled" : ""} style="min-width:4rem;width:4.5rem" />
-        <button type="button" data-defense="${id}" data-locked="${locked ? "1" : "0"}" data-testid="build-defense-${id}" ${locked ? "disabled" : ""} title="${escapeAttr(title)}">${label}</button>
+        <button type="button" data-defense="${id}" data-locked="${locked ? "1" : "0"}" data-testid="build-defense-${id}" ${locked ? "disabled" : ""} title="${tip.title}">${label}</button>
       </div>
     </article>
   `;
@@ -128,7 +141,7 @@ export function researchRow(
   else if (level >= lab) label = "Lab cap";
   else if (queueBusy) label = "Busy";
   else if (!affordable) label = "Can't afford";
-  const title =
+  const blocked =
     lab < def.labLevel
       ? `Needs Research Lab ${def.labLevel}`
       : level >= lab
@@ -137,16 +150,23 @@ export function researchRow(
           ? "Research already in progress."
           : !affordable
             ? "Not enough resources on active planet."
-            : `Research ${def.name} → L${level + 1}`;
+            : null;
+  const tip = costTooltip({
+    action: `Research ${def.name} → L${level + 1}`,
+    cost,
+    timeSecs: secs,
+    requires: [`Research Lab L${def.labLevel}+`],
+    blocked,
+  });
   return `
     <article class="item" data-testid="research-${id}">
       <div>
-        <h3>${escapeHtml(def.name)} <span class="meta" data-testid="research-level-${id}">L${level}</span></h3>
+        <h3>${escapeHtml(def.name)} <span class="meta" data-testid="research-level-${id}">L${level}</span> ${tip.html}</h3>
         <p>${escapeHtml(def.description)}</p>
         <div class="meta">Next: ${fmtCost(cost)} · ${fmtEta(secs)}</div>
       </div>
       <div class="actions">
-        <button type="button" data-research="${id}" data-locked="${locked ? "1" : "0"}" data-testid="research-btn-${id}" title="${escapeAttr(title)}">${label}</button>
+        <button type="button" data-research="${id}" data-locked="${locked ? "1" : "0"}" data-testid="research-btn-${id}" title="${tip.title}">${label}</button>
       </div>
     </article>
   `;

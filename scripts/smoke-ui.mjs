@@ -162,6 +162,11 @@ async function apiSmoke() {
   );
 }
 
+async function goNav(page, id) {
+  await page.click(`[data-testid="nav-${id}"]`);
+  await page.waitForSelector(`[data-testid="page-${id}"]`, { timeout: 10_000 });
+}
+
 async function uiSmoke() {
   const require = createRequire(import.meta.url);
   const playwright = require("playwright");
@@ -175,6 +180,8 @@ async function uiSmoke() {
     waitUntil: "networkidle",
   });
   await page.waitForSelector('[data-testid="resources"]', { timeout: 15_000 });
+  await page.waitForSelector('[data-testid="side-nav"]', { timeout: 10_000 });
+  await goNav(page, "highscore");
   await page.waitForSelector('[data-testid="highscores"]', { timeout: 10_000 });
   const hsRank = await page.locator('[data-testid="highscore-1"]').count();
   if (hsRank < 1) throw new Error("highscores missing rank #1");
@@ -194,6 +201,7 @@ async function uiSmoke() {
 
   // 2) P0: Shipyard Upgrade click must raise L0→L1 under aggressive poll pressure.
   // Catalog id is `shipyard` (data-testid=upgrade-shipyard) — not metalMine/Ore.
+  await goNav(page, "facilities");
   const yardLevelBefore = await page.textContent(
     '[data-testid="building-level-shipyard"]',
   );
@@ -280,6 +288,7 @@ async function uiSmoke() {
   logs.push("ui-upgrade-shipyard-level-under-poll-hammer");
 
   // 3) P1 double-queue flash + persistence across polls (yard already L1 — upgrade solar)
+  await goNav(page, "resources");
   await page.click('[data-testid="upgrade-solarPlant"]');
   await page.waitForSelector('[data-testid="flash-ok"], [data-testid="build-queue"]', {
     timeout: 10_000,
@@ -311,180 +320,192 @@ async function uiSmoke() {
   // 5) Typed join (fresh page — input must accept fill)
   const typedPage = await browser.newPage();
   await typedPage.goto(WEB, { waitUntil: "networkidle" });
-  await typedPage.waitForSelector('[data-testid="commander-input"]');
-  const typed = `Type${Date.now().toString(36).slice(-4)}`;
-  await typedPage.click('[data-testid="commander-input"]');
-  await typedPage.fill('[data-testid="commander-input"]', typed);
-  const val = await typedPage.inputValue('[data-testid="commander-input"]');
-  if (val !== typed) throw new Error(`input value bind failed: ${val}`);
-  await typedPage.waitForTimeout(300);
-  const val2 = await typedPage.inputValue('[data-testid="commander-input"]');
-  if (val2 !== typed) throw new Error(`input wiped after delay: ${val2}`);
-  await typedPage.click('[data-testid="join-btn"]');
-  await typedPage.waitForSelector('[data-testid="resources"]', { timeout: 15_000 });
-  logs.push(`typed-join:${typed}`);
+  await typedPage.waitForSelector('[data-testid="commander-constORDoin (U= `;
 
-  // 6) Helper join
-  const helpPage = await browser.newPage();
-  await helpPage.goto(WEB, { waitUntil: "networkidle" });
-  const helperName = `Help${Date.now().toString(36).slice(-4)}`;
-  await helpPage.evaluate(async (n) => {
-    await window.starhold.join(n);
-  }, helperName);
-  await helpPage.waitForSelector('[data-testid="resources"]', { timeout: 15_000 });
-  logs.push(`helper-join:${helperName}`);
-
-  // 7) Build scout under live 1s polls (yard already L1 on urlName page — fresh commander)
-  const buildName = `Clk${Date.now().toString(36).slice(-4)}`;
-  await page.goto(`${WEB}/?commander=${encodeURIComponent(buildName)}`, {
+ Name = `Url${Date.now().toString(36).slicdle" });
+  awaitawait page.click('[data-testid="commander-codle" });
+  awaitust  page.click('[data-testid="command,});
+  t: 10_000 });lt typedPa);
+  await"commVaite page.click('[data-testid="commander-coror");lt (ya);
+  t)
+  ) {
+    throw h pagewaite bies �URL joinwai}`workidle" });
+  await typedPage.wait300t: 10_000 });l2t typedPa);
+  await"commVaite page.click('[data-testid="commander-coror");l2t (ya);
+  t)
+  ) {
+    throw h pagewin (Uble vaue {
+  inwai2}`workidle" });
+  awaitawait page.click('[da/ 5)-btnander-codle" });
+  awaitawait page.waitForSelector('[data-testid="resources"]', { timeout: 15}`);
+  }
+  );
+  s.push(`);
+  n:${urlName6) H+ typL commander jo + tconst typedPage = await browser.newPage( + tconst typedPage.goto(WEB, { waitUntil: "networkider jo + ter  const H+ tName = `Url${Date.now().toString(36).slicdle" } + tconstawait pag000 })(ntion(
+    (busy");ame / run window.stan{vault,o + ter  coer.newPage( + tconstawait page.waitForSelector('[data-testid="resources"]', { timeout: 15}`);
+  }
+   + ters.push(` + ter  con:${urlName7)etal, cnew Ers("alrlder 1tence across polls (yard syncn
+  conoin (fresyped jta-testid).error}`);
+l,   const ClkName = `Url${Date.now().toString(36).slicdle" });
+  await page.goto(`${WEB}/?commander=${encodeUR;
+l,   coent(urlName)}`, {
     waitUntil: "networkidle",
   });
-  await page.waitForSelector('[data-testid="resources"]');
-  // Prefer UI click path for yard (asserts P0 again on a fresh player + poll hammer)
-  const hammer2 = await page.evaluateHandle(() =>
-    window.setInterval(() => {
-      void window.starhold?.poll();
-    }, 100),
+  await page.waitForSelector('[data-testid="rt: 10_000 });
+  await goNav(page, "facilamePrefclicIard Upgh(`$  tryoss p( } fet fP0 ag}
+
+.syncsyped jrn { nqueuti-cunder-)w } = view;der-2 pollHammer = await page.evaluateHem 0.55nst id = window.setInterval(() => {
+      void window.starhold?.poll100tipyard ??d;
+  });
+ urces");
+  await page.click('[data-testid="upgrade-shipy00 },
   );
-  try {
-    await page.click('[data-testid="upgrade-shipyard"]');
-    await page.waitForFunction(
-      () => {
+  await page.waitForFununction(
+    () => {
         const lvl =
           document.querySelector('[data-testid="building-level-shipyard"]')
-            ?.textContent ?? "";
+            ?.textContent ?? ");
         return (
-          lvl.includes("L1") ||
-          (window.starhold?.getState()?.buildings?.shipyard ?? 0) >= 1
-        );
-      },
-      undefined,
-      { timeout: 30_000 },
-    );
+          lvl.includes("L1") ||(
+    () => window.starhold?.getState()?.buildings?.shipyardomplete/i))
+       ts[0]?.l    },
+    undedefined,
+    { timeout: 3tate})`,;
+    }
   } finally {
-    await page.evaluate((id) => window.clearInterval(id), hammer2);
+    await page.evaluate((id) => window.clearIntw;der-2 pollHammer);
+  );
+  await godAttr !== ;s)}`);
   }
-
-  // Wait until Build Scout is affordable and unlocked
+u{
+  etal, ck BuilA bu  // 4) Un setskill tr000 },
+  );
   await page.waitForFunction(
     () => {
-      const btn = document.querySelector('[data-testid="build-scout"]');
-      const metalText =
-        document.querySelector('[data-testid="res-metal"] .value')?.textContent ?? "0";
-      const metal = Number(String(metalText).replace(/,/g, ""));
-      const label = btn?.textContent ?? "";
+ bconstst queue = document.querySelector('[data-tes, shipuild-queue"]');
+ d="up  consconst lvl =
+        document.querySelector('[daid="d="up"] .waite')           ?.textC0"d-queue"]');
+ d="upnstNumber(te.now(d="up  co)   llaing/,/g go")rTimeout(90);
+  abepnstbco
+          ?.textContent ?? "";
       const queue = document.querySelector('[data-testid="build-queue"]');
-      return Boolean(btn) && !queue && !label.includes("Locked") && metal >= 220;
+  {
+  const queue = document.querySelector('[da {
+ stid="build-queue");
+        return||
+     bco resourceurces     cesourceurces {
+  cesourceurces abep        lvl.ll tr" resourceurce.resource220omplete/i))
+      );
     },
     undefined,
-    { timeout: 180_000 },
+    {8 timeout: 30_0 new click)
+  await page.click('[data-tes, shipuild-qu },
   );
-
-  await page.click('[data-testid="build-scout"]');
   await page.waitForFunction(
     () => {
-      const hangar = document.querySelector(
-        '[data-testid="hangar-scout"] span:last-child',
-      );
-      const q = document.querySelector('[data-testid="ship-queue"]');
+   // Emonst queue = document.queourceurcege.locator('[data-test, shipu Hint:e-o}
+
+  ld'sages-stub",
+  ?? "";
+  const queue = document.querySelector('[da {
+ stid="build-queue"]');
       const ok = document.querySelector('[data-testid="flash-ok"]');
-      const n = Number(hangar?.textContent ?? 0);
-      return n >= 1 || Boolean(q) || Boolean(ok?.textContent?.match(/scout|Hangar|Queued/i));
+ nnstNumber(ta-tes
+          ?.text0ld-queue");
+    npyard ?? ||
+      ) ?? ||
+        Boolean(ok?.textConte, shi|I_ART.|nt?.made ci))
+      );
     },
     undefined,
-    { timeout: 15_000 },
+    { timeout: 15_0-qu },
   );
-
   await page.waitForFunction(
     () => {
-      const hangar = document.querySelector(
-        '[data-testid="hangar-scout"] span:last-child',
-      );
-      return Number(hangar?.textContent ?? 0) >= 1;
+   // Emonst queue = document.queourceurcege.locator('[data-test, shipu Hint:e-o}
+
+  ld'sages-stub",
+  ??);
+    Number(ta-tes
+          ?.text0lpyard) && !queue;
     },
     undefined,
-    { timeout: 30_000 },
+    { timeout: 30_000  );
+  }
+  logta-tes, ship5_0-qu },
   );
-  logs.push("ui-build-scout");
+  await page.wait1500t: 10_000 }notrinOrH // EmoorFunc0);
+  if ((await page.locator('[data-testid="fh-error"]'yard ?? 0) >Number(vaultErr = await page.textContent('[data-test, shipu Hint:e-o}
 
-  await page.waitForTimeout(1500);
-  const noticeOrHangar =
-    (await page.locator('[data-testid="flash-ok"]').count()) >= 1 ||
-    Number(await page.textContent('[data-testid="hangar-scout"] span:last-child')) >= 1;
-  if (!noticeOrHangar) throw new Error("lost build feedback after poll");
-  logs.push("build-feedback-ok");
-
-  // 8) Fleet panel + second commander → UI launch attack mission → report/loot
-  const rivalName = `Riv${Date.now().toString(36).slice(-4)}`;
-  const rivalPage = await browser.newPage();
-  await rivalPage.goto(`${WEB}/?commander=${encodeURIComponent(rivalName)}`, {
+  ld')lpyard) &&ror"]notrinOrH // ElaxyHasMoon) throw lo}`);
+l,  feed0.65Uble va.staing hasMoon");
+  ta-tesfeed0.65stid${urlName8)here. Cion cque// Fleets: secondgar cIanew Errt missi    `flegar portSe/eporuiSmoke() (man  const RivName = `Url${Date.now().toString(36).slice(-4)} (manconst typedPage = await browser.newPage( (mancons await page.goto(`${WEB}/?commander=${encodeUR (man  coent(urlName)}`, {
     waitUntil: "networkidle",
-  });
-  await rivalPage.waitForSelector('[data-testid="resources"]', { timeout: 15_000 });
-  logs.push(`rival-join:${rivalName}`);
-
-  await page.reload({ waitUntil: "networkidle" });
-  const hasResources = await page.locator('[data-testid="resources"]').count();
-  if (!hasResources) {
-    await page.goto(`${WEB}/?commander=${encodeURIComponent(buildName)}`, {
-      waitUntil: "networkidle",
-    });
-    await page.waitForSelector('[data-testid="resources"]');
+  } (mancons await page.waitForSelector('[data-testid="resources"]', { timeout: 15}`);
   }
-  await page.waitForSelector('[data-testid="fleet-form"]', { timeout: 15_000 });
-  const thumb = await page.locator('[data-testid="building-metalMine"] img.thumb').count();
-  if (thumb < 1) throw new Error("building thumbnail missing");
-  const rec = await page.locator('[data-testid="recommended-next"]').count();
-  if (rec < 1) throw new Error("recommended-next hint missing");
-  logs.push("fleet-form-and-art");
-
-  // UI launch preferred: pick attack mission, set 1 scout, submit form
-  await page.click('[data-testid="mission-raid"]');
-  await page.fill('[data-testid="fleet-count-scout"]', "1");
-  await page.click('[data-testid="launch-fleet"]');
-  await page.waitForSelector('[data-testid="fleets-live"], [data-testid="flash-ok"]', {
-    timeout: 10_000,
+   (mans.push(` (man  con:${urlNvaultErr = reload(.goto(WEB, { waitUntil: "networkider jo as
+      <honst hsRank = await page.locator('[data-testid="rtscore-1"]').coun! as
+      <h)  } finally {
+    await page.goto(`${WEB}/?commander=${encodeUR;
+l,   coent(urlNameme)}`, {
+    waitUntil: "netwo    );
+   ",
   });
-  logs.push("ui-fleet-mission-launch");
+  await page.waitForSelector('[data-testid="rt: 10}mmer);
+  );
+  await go
+    case)leets ?? [];const hsRank = await page.locator('[data-testid="recomm"rtscore-1"]').coun];coif (hsRank < 1) throw ta-testid="recom  <p alaxy sl"t: 10_000 });
+  await goNav(page, "resonstORDomg clnst hsRank = await page.locator('[data-testidd="upgrade- imglanet-rtscore-1"]').counomg clif (hsRank < 1) throw ror !== "omg cnnd elaxy sl"t: 10_000 });
+  await goapi/lalStorage"]');
+  await page.waitForSelector('[dataande } f="resources"]', { timeout: 15}`);
+  }
+ ataande } f-{WE-artd${urlNamecIanew ErrprefclrL jope bus missi    `fl,esh(rd anet.s subm }
 
-  // Wait for combat report (mission resolve + return may still be in flight)
+  m new click)
+  await page.click('[da    `fl- missuild-qu },
+  );
+  ust  page.click('[dataandecore-s, shipui go1 "resources");
+  await page.click('[daJson("/api/latalStorage"]');
+  await page.waitForSelector('[data-testlderd="flash-ok"], [data-testid="ld-queue"]', {
+    timeout: 10_00  );
+  }
+  logmmander as fl-Json("d${urlName
+  }
+
+  /ttack) → com(    `fle/ Wait for resolr win], lln; lror(${fle)-qu },
+  );
   await page.waitForFunction(
     () => {
-      const reports = document.querySelector('[data-testid="combat-reports"]');
+ ];
+  constconst ok = document.querySelector('[dattack)-];
+  cod="flash-ok"]');
       const st = window.starhold?.getState();
-      return (
-        Boolean(reports) ||
-        (st?.reports?.length ?? 0) >= 1
+      return  lootOk expeditludes("L1") ||
+     if ((st.reports?.lengthomplete/i))
       );
     },
     undefined,
-    { timeout: 120_000 },
-  );
-  const missionState = await page.evaluate(() => {
-    const st = window.starhold.getState();
-    const r = st.reports?.[0];
-    const loot =
-      (r?.loot?.metal ?? 0) + (r?.loot?.crystal ?? 0) + (r?.loot?.deuterium ?? 0);
-    return {
-      reports: st.reports?.length ?? 0,
-      outcome: r?.outcome ?? null,
-      loot,
-      fleets: st.fleets?.length ?? 0,
-    };
-  });
-  if ((missionState.reports ?? 0) < 1 || !missionState.outcome) {
-    throw new Error(`UI fleet mission missing report: ${JSON.stringify(missionState)}`);
+    {2 timeout: 30_000 },
+      `fl const yardState = await page.evaluate(() => {
+    const st = windw.starhold?.getState();     const r =?. st.repor[0];
+     nsconst l(r?
+        (r.loot?.metal? ?? 0) + (r.loot?.crystal? ?? 0) + (r.loot?.deuterium  });
+   
+s.scout,
+        reports:(st.reports?.sages-st Boolea: l?  Boolearts?eetDra.length,
+ ra.lengtf");
+
+  /ootOk && (st.fleets?.etwo    "boolean");
+ (    `fl consorts = view.0]').c.play    `fl conso Boolean(= urlName) {
+    throw nIP1 flashes, flehighscorets = join failed: ${JSON    `fl consgify(joined)}`);
   }
-  logs.push(
-    `ui-fleet-mission-report:${missionState.outcome}:loot${missionState.loot}`,
-  );
+  new Elogmmander as fl-ets = jaiti  `fl conso Boolea}:h,
+ aiti  `fl consoh,
+ }`t: 15_0-qu },
+  ge = awaclo}ld?.get0) {
+      coUole.log("API }`);ath}`, init){});
+  }: 10_0usy");
 
-  await browser.close();
-  console.log("UI smoke OK", logs);
-  return { logs };
-}
-
-await waitHealthy();
-const api = await apiSmoke();
-const ui = await uiSmoke();
-console.log(JSON.stringify({ ok: true, api, ui }, null, 2));
+ nction w)0.0.1:51web   const st functio0.0.1:51ub   const u functio0.0.1:
+      c
+    body: JSON.sok({ hea (web,1ub },?eetDr 2 ci)           
