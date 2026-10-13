@@ -87,10 +87,10 @@ export function queueBuildingUpgrade(
     };
   }
   if (buildingId === "sensorArray" && (planet.buildings.lunarBase ?? 0) < 1) {
-    return { ok: false, error: "Sensor Phalanx needs Lunar Base level 1." };
+    return { ok: false, error: "Horizon Scanner needs Crater Hab level 1." };
   }
   if (buildingId === "jumpGate" && (planet.buildings.lunarBase ?? 0) < 1) {
-    return { ok: false, error: "Jump Gate needs Lunar Base level 1." };
+    return { ok: false, error: "Fold Bridge needs Crater Hab level 1." };
   }
   if (planet.buildQueue) {
     return { ok: false, error: "A building is already under construction." };
