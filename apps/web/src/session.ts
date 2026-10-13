@@ -5,6 +5,7 @@ import type {
   ResearchId,
   ShipId,
 } from "@starhold/game";
+import type { NavPage } from "./ui/nav";
 
 export const SESSION_KEY = "starhold.playerId";
 /** Keep reject/success flashes readable across 1s polls. */
@@ -43,6 +44,8 @@ export const session = {
   armedResearch: null as ResearchId | null,
   /** Galaxy browser system override (null = follow active planet). */
   galaxySystem: null as number | null,
+  /** Classic left-nav page. */
+  activePage: "overview" as NavPage,
   /** Ignore duplicate click after pointerup already dispatched the armed action. */
   suppressClickUntil: 0,
 };

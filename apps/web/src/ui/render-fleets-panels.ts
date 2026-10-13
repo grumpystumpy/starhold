@@ -157,12 +157,28 @@ export function galaxyPanel(
         ? ` · debris ${fmt(s.debris.metal)}/${fmt(s.debris.crystal)}`
         : "";
       const moon = s.hasMoon ? " · Moon" : "";
+      const tag = s.allianceTag ? ` [${escapeHtml(s.allianceTag)}]` : "";
       const who = s.playerName
-        ? `${escapeHtml(s.playerName)}${s.isOwn ? " (you)" : ""} · ~${s.pointsHint} pts${moon}`
+        ? `${escapeHtml(s.playerName)}${tag}${s.isOwn ? " (you)" : ""} · ~${s.pointsHint} pts${moon}`
         : "Empty";
       return `<li data-testid="galaxy-slot-${s.coords.slot}"><span>${s.coords.slot}. ${who}${debris}</span><span>${fmtCoords(s.coords)}</span></li>`;
     })
     .join("");
+  const asteroids =
+    galaxy.asteroids?.length > 0
+      ? `<ul class="roster" data-testid="galaxy-asteroids">${galaxy.asteroids
+          .map(
+            (a) =>
+              `<li data-testid="asteroid-${escapeAttr(a.id)}"><span>Asteroid ${escapeHtml(a.id)} · richness ${a.richness}</span><span>${fmt(a.metal)}/${fmt(a.crystal)}/${fmt(a.deuterium)}</span></li>`,
+          )
+          .join("")}</ul>`
+      : `<p class="hint" data-testid="galaxy-asteroids-empty">No asteroid fields in this system.</p>`;
+  const pirate = galaxy.pirateBase
+    ? `<p class="hint pirate-row" data-testid="galaxy-pirate">${escapeHtml(galaxy.pirateBase.name)} · tier ${galaxy.pirateBase.tier} · threat ${escapeHtml(galaxy.pirateBase.threatHint)} · ${fmtCoords(galaxy.pirateBase.coords)}</p>`
+    : `<p class="hint" data-testid="galaxy-pirate-empty">No pirate base reported.</p>`;
+  const deep = galaxy.deepSpace
+    ? `<p class="hint" data-testid="galaxy-deep-space">Deep space ${fmtCoords(galaxy.deepSpace.coords)} — expedition target.</p>`
+    : "";
   return `
     <section class="panel" data-testid="galaxy-panel">
       <h2>Galaxy</h2>
@@ -172,7 +188,13 @@ export function galaxyPanel(
         <button type="button" data-galaxy-nav="next" data-testid="galaxy-next" ${busy ? "disabled" : ""}>System ▶</button>
       </div>
       <ul class="roster" data-testid="galaxy-slots">${rows}</ul>
-      <p class="hint">Use Fleets → Colonize / Harvest with coords from this system view.</p>
+      <h3 class="subhead">Deep space</h3>
+      ${deep}
+      <h3 class="subhead">Asteroids</h3>
+      ${asteroids}
+      <h3 class="subhead">Pirates</h3>
+      ${pirate}
+      <p class="hint">Use Fleet → Colonize / Harvest / Expedition with coords from this view.</p>
     </section>
   `;
 }

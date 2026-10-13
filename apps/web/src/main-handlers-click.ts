@@ -26,6 +26,7 @@ import {
   doUpgrade,
 } from "./main-actions";
 import { readFleetForm } from "./main-fleet-form";
+import { isNavPage } from "./ui/nav";
 
 export function bindClickHandlers(): void {
   root.addEventListener(
@@ -43,6 +44,17 @@ export function bindClickHandlers(): void {
       if (closestActionEl(target, "[data-dismiss-flash]")) {
         clearFlash();
         schedulePaint();
+        return;
+      }
+
+      const navBtn = closestActionEl(target, "[data-nav]");
+      if (navBtn) {
+        ev.preventDefault();
+        const page = navBtn.getAttribute("data-nav");
+        if (isNavPage(page) && session.activePage !== page) {
+          session.activePage = page;
+          schedulePaint();
+        }
         return;
       }
 
