@@ -35,6 +35,8 @@ export const SHIP_ORDER: ShipId[] = [
   "scout",
   "hauler",
   "interceptor",
+  "cruiser",
+  "bomber",
   "probe",
   "recycler",
   "colonyShip",

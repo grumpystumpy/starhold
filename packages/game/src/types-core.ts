@@ -17,6 +17,8 @@ export type ShipId =
   | "scout"
   | "hauler"
   | "interceptor"
+  | "cruiser"
+  | "bomber"
   | "probe"
   | "recycler"
   | "colonyShip";
