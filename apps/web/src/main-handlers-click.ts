@@ -22,9 +22,11 @@ import {
   doCancelQueue,
   doClaimDaily,
   doGalaxyNav,
+  doClaimAnonymous,
   doJoin,
   doLaunchFleet,
   doRefresh,
+  doRequestMagicLink,
   doResearch,
   doSelectPlanet,
   doUnlockSkill,
@@ -50,6 +52,12 @@ export function bindClickHandlers(): void {
       if (closestActionEl(target, "[data-dismiss-flash]")) {
         clearFlash();
         schedulePaint();
+        return;
+      }
+
+      if (closestActionEl(target, "[data-claim-anonymous]")) {
+        ev.preventDefault();
+        void doClaimAnonymous();
         return;
       }
 
@@ -217,6 +225,15 @@ export function bindClickHandlers(): void {
       return;
     }
 
+    if (form.id === "magic-form") {
+      ev.preventDefault();
+      const input = form.querySelector<HTMLInputElement>("#auth-email");
+      const value = input?.value ?? session.emailDraft;
+      session.emailDraft = value;
+      void doRequestMagicLink(value);
+      return;
+    }
+
     if (form.id === "fleet-form") {
       ev.preventDefault();
       const draft = readFleetForm();
@@ -233,6 +250,9 @@ export function bindClickHandlers(): void {
     const el = ev.target;
     if (el instanceof HTMLInputElement && el.id === "commander") {
       session.joinDraft = el.value;
+    }
+    if (el instanceof HTMLInputElement && el.id === "auth-email") {
+      session.emailDraft = el.value;
     }
   });
 }
