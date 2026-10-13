@@ -3,6 +3,10 @@ import {
   DEFENSES,
   MINE_BASE_PER_HOUR,
   MINE_GROWTH,
+  MOON_BUILDING_ORDER,
+  MOON_FIELDS_BASE,
+  MOON_FIELDS_PER_LUNAR_BASE,
+  PLANET_BUILDING_ORDER,
   PLANET_FIELDS,
   PRODUCTION_MULT,
   RESEARCH,
@@ -16,6 +20,26 @@ import type {
   Resources,
   ShipId,
 } from "./types.js";
+
+export function isMoon(planet: PlanetState): boolean {
+  return planet.kind === "moon";
+}
+
+export function buildingAllowedOn(
+  planet: PlanetState,
+  buildingId: BuildingId,
+): boolean {
+  const order = isMoon(planet) ? MOON_BUILDING_ORDER : PLANET_BUILDING_ORDER;
+  return order.includes(buildingId);
+}
+
+export function fieldsCap(planet: PlanetState): number {
+  if (isMoon(planet)) {
+    const lunar = planet.buildings.lunarBase ?? 0;
+    return MOON_FIELDS_BASE + lunar * MOON_FIELDS_PER_LUNAR_BASE;
+  }
+  return PLANET_FIELDS;
+}
 
 /** Cost to go from `currentLevel` → `currentLevel + 1`. */
 export function buildingUpgradeCost(
@@ -169,7 +193,7 @@ export function fieldsUsed(planet: PlanetState): number {
 }
 
 export function fieldsRemaining(planet: PlanetState): number {
-  return Math.max(0, PLANET_FIELDS - fieldsUsed(planet));
+  return Math.max(0, fieldsCap(planet) - fieldsUsed(planet));
 }
 
 export function productionPerHour(
