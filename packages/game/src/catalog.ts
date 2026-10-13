@@ -77,6 +77,7 @@ export const BUILDING_ORDER: BuildingId[] = [
   "researchLab",
   "lunarBase",
   "sensorArray",
+  "jumpGate",
 ];
 
 /** Buildings shown / allowed on normal planets. */
@@ -96,6 +97,7 @@ export const PLANET_BUILDING_ORDER: BuildingId[] = [
 export const MOON_BUILDING_ORDER: BuildingId[] = [
   "lunarBase",
   "sensorArray",
+  "jumpGate",
   "solarPlant",
   "metalStorage",
   "crystalStorage",
