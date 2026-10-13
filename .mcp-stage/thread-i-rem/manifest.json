@@ -14,7 +14,7 @@
   {
     "key": "pages",
     "path": "apps/web/src/ui/render-pages.ts",
-    "parts": 1,
+    "parts": 2,
     "sha256": "1e84ed7097178b501bcbc8d7bd16944df073e5f47b7ffc11ed74cd55273f7055"
   },
   {
@@ -26,7 +26,7 @@
   {
     "key": "pirates",
     "path": "packages/game/src/world-pirates.ts",
-    "parts": 2,
+    "parts": 3,
     "sha256": "0d9b6e2c2cf2f96e1fcb4d1ca860ecc9f6790bff8e687f9560250491c5c7d341"
   },
   {
