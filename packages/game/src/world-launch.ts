@@ -17,6 +17,7 @@ import type {
   UniverseState,
 } from "./types.js";
 import { fleetCargoCapacityForHarvest, advanceUniverse } from "./world-arrival.js";
+import { playerBoosts } from "./world-boosts.js";
 import { emptyCargo, ensureUniverseShape } from "./world-bootstrap.js";
 import type { FleetActionResult } from "./world-queues.js";
 import { resolveActionPlanet } from "./world-queues.js";
@@ -101,13 +102,16 @@ export function launchFleet(
   const origin = resolveActionPlanet(universe, player, opts.originPlanetId);
   if (!origin) return { ok: false, error: "Planet missing." };
 
+  const boosts = playerBoosts(player, now);
+  const slotCap =
+    maxFleetSlots(player.research.computerTech) + boosts.fleetSlots;
   const activeFleets = Object.values(universe.fleets).filter(
     (f) => f.ownerPlayerId === player.id,
   ).length;
-  if (activeFleets >= maxFleetSlots(player.research.computerTech)) {
+  if (activeFleets >= slotCap) {
     return {
       ok: false,
-      error: `Fleet slot limit reached (Computer Tech → ${maxFleetSlots(player.research.computerTech)} slots).`,
+      error: `Fleet slot limit reached (Computer Tech → ${slotCap} slots).`,
     };
   }
 
@@ -190,7 +194,7 @@ export function launchFleet(
           origin.coords,
           targetCoords,
           ships,
-          universe.fleetSpeed,
+          universe.fleetSpeed * Math.max(0.01, boosts.fleetSpeed),
           player.research.combustionDrive ?? 0,
         );
   const fleetId = `flt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
