@@ -149,36 +149,26 @@ export const RESEARCH_ORDER: ResearchId[] = [
   "swarmHold",
 ];
 
-/** Swarm Mothership base carry capacity (drones + harvesters). */
-export const SWARM_CAPACITY_BASE = 2000;
-/** +15% of base capacity per Swarm Hold level. */
-export const SWARM_HOLD_BONUS_PER_LEVEL = 0.15;
-/** Soft safety ceiling (base is already 2000; research grows past it). */
-export const SWARM_CAPACITY_HARD_CAP = 100_000;
-/** Chrono Lathe: build-time multiplier = 0.1^level (buildings/ships/defenses). */
-export const CHRONO_LATHE_TIME_BASE = 0.1;
-/** Shipyard level required to start Chrono Lathe. */
-export const CHRONO_LATHE_SHIPYARD_REQ = 10;
-/** Drones needed before swarm numbers attack bonus applies. */
-export const SWARM_NUMBERS_THRESHOLD = 50;
-/** Attack bonus per drone above threshold (capped). */
-export const SWARM_NUMBERS_BONUS_PER = 0.002;
-export const SWARM_NUMBERS_BONUS_CAP_COUNT = 2000;
-/** Fraction of mothership-targeted damage intercepted by escorts. */
-export const SWARM_INTERCEPT_FRACTION = 0.7;
-/** When drones + harvesters both present, split intercepted damage 50/50. */
-export const SWARM_INTERCEPT_SPLIT = 0.5;
-/** Harvester kamikaze when mothership hull fraction falls below this. */
-export const SWARM_KAMIKAZE_HULL_FRAC = 0.3;
-export const SWARM_KAMIKAZE_SHIELD_DMG = 80;
-export const SWARM_KAMIKAZE_HULL_DMG = 40;
-/** Occupation duration (wall-clock). */
-export const OCCUPATION_DURATION_MS = 2 * 24 * 60 * 60 * 1000;
-/** Occupier / owner mine output split while occupied. */
-export const OCCUPATION_OCCUPIER_SHARE = 0.3;
-export const OCCUPATION_OWNER_SHARE = 0.7;
-/** World Eaters required to capture/destroy a mini planet. */
-export const MINI_WORLD_EATER_MIN = 5;
+/** Round 2 combat/economy constants — defined in `data/tuning.ts` (lane c). */
+export {
+  SWARM_CAPACITY_BASE,
+  SWARM_HOLD_BONUS_PER_LEVEL,
+  SWARM_CAPACITY_HARD_CAP,
+  CHRONO_LATHE_TIME_BASE,
+  CHRONO_LATHE_SHIPYARD_REQ,
+  SWARM_NUMBERS_THRESHOLD,
+  SWARM_NUMBERS_BONUS_PER,
+  SWARM_NUMBERS_BONUS_CAP_COUNT,
+  SWARM_INTERCEPT_FRACTION,
+  SWARM_INTERCEPT_SPLIT,
+  SWARM_KAMIKAZE_HULL_FRAC,
+  SWARM_KAMIKAZE_SHIELD_DMG,
+  SWARM_KAMIKAZE_HULL_DMG,
+  OCCUPATION_DURATION_MS,
+  OCCUPATION_OCCUPIER_SHARE,
+  OCCUPATION_OWNER_SHARE,
+  MINI_WORLD_EATER_MIN,
+} from "./data/tuning.js";
 
 export const STARTING_RESOURCES = {
   metal: 500,
