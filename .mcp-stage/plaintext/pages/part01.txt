@@ -1,0 +1,28 @@
+lter(
+  (id) => !RESOURCE_BUILDINGS.includes(id),
+);
+
+function stubPanel(title: string, body: string, testId: string): string {
+  return `
+    <section class="panel" data-testid="${testId}">
+      <h2>${escapeHtml(title)}</h2>
+      <p class="hint">${escapeHtml(body)}</p>
+    </section>`;
+}
+
+function overviewPage(view: PlayerView): string {
+  const { planet, economy } = view;
+  const pm = economy.positionMult;
+  return `
+    <section class="panel" data-testid="overview-panel">
+      <h2>Overview</h2>
+      <div class="overview-hero">
+        <img class="thumb thumb-lg" src="${planet.kind === "moon" ? PLANET_ART.moon : PLANET_ART.outpost}" alt="" width="72" height="72" />
+        <div>
+          <p class="overview-name">${escapeHtml(planet.name)}${planet.kind === "moon" ? " · Moon" : ""}</p>
+          <p class="coords">${fmtCoords(planet.coords)}</p>
+          <p class="hint" data-testid="planet-fields">Fields ${economy.fields.used} / ${economy.fields.cap} · ${economy.fields.remaining} free</p>
+        </div>
+      </div>
+      <p class="hint" data-testid="position-mult" title="Position production multipliers for this slot">
+        Position × metal ${pm.metal.toFixed(2)} · crystal 
