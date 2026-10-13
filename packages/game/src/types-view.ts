@@ -8,6 +8,7 @@ import type {
   DefenseStock,
   FleetMission,
   FleetShips,
+  OccupationState,
   OfficerDef,
   OfficerState,
   PirateBase,
@@ -44,6 +45,9 @@ export interface CombatReport {
   rounds: number;
   summary: string;
   moonFormed?: boolean;
+  /** Voidforge Titan moon-kill success. */
+  moonDestroyed?: boolean;
+  moonKillChancePct?: number;
 }
 
 export interface EspionageReport {
@@ -107,6 +111,8 @@ export interface PlanetState {
   buildQueue: BuildQueueItem | null;
   shipQueue: ShipQueueItem | null;
   defenseQueue: DefenseQueueItem | null;
+  /** Round 2 mini-planet flag (thread K fills discovery). */
+  flags?: { mini?: boolean };
 }
 
 export interface PlayerState {
@@ -122,7 +128,7 @@ export interface PlayerState {
   level?: number;
   /** XP into the current level (0 .. xpToNext-1). */
   xp?: number;
-  /** Lifetime XP earned. */
+  /** Lifetime XP. */
   xpTotal?: number;
   /** Premium currency — Starshards (earned in-game only). */
   starshards?: number;
@@ -153,6 +159,10 @@ export interface UniverseState {
   debris: Record<string, DebrisField>;
   asteroids?: Record<string, AsteroidField>;
   pirateBases?: Record<string, PirateBase>;
+  /** Active Swarm Mothership occupations keyed by planetId. */
+  occupations?: Record<string, OccupationState>;
+  /** Mini planet ids (thread K fills discovery/spawn). */
+  miniPlanetIds?: string[];
 }
 
 export interface PirateBasePublic {
@@ -233,6 +243,8 @@ export interface PlayerView {
     xpToNext: number;
     xpTotal: number;
   };
+  /** Occupation on the active planet, if any. */
+  occupation: OccupationState | null;
 }
 
 export interface PublicPlayer {
@@ -250,9 +262,7 @@ export interface HighscoreEntry {
   points: number;
   coords: Coordinates;
   planetCount: number;
-  /** Player level (Round 2). */
   level: number;
-  /** Lifetime XP (Round 2). */
   xpTotal: number;
 }
 
