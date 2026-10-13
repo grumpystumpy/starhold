@@ -30,6 +30,8 @@ export function emptyBuildings(): PlanetState["buildings"] {
     deutTank: 0,
     shipyard: 0,
     researchLab: 0,
+    lunarBase: 0,
+    sensorArray: 0,
   };
 }
 
@@ -65,7 +67,9 @@ export function createUniverse(
 
 export function nextCoords(universe: UniverseState): Coordinates {
   const used = new Set(
-    Object.values(universe.planets).map((p) => coordsKey(p.coords)),
+    Object.values(universe.planets)
+      .filter((p) => p.kind !== "moon")
+      .map((p) => coordsKey(p.coords)),
   );
   for (let galaxy = 1; galaxy <= MAP_GALAXIES; galaxy++) {
     for (let system = 1; system <= MAP_SYSTEMS; system++) {
@@ -86,8 +90,21 @@ export function planetAtCoords(
 ): PlanetState | null {
   const key = coordsKey(coords);
   return (
-    Object.values(universe.planets).find((p) => coordsKey(p.coords) === key) ??
-    null
+    Object.values(universe.planets).find(
+      (p) => p.kind !== "moon" && coordsKey(p.coords) === key,
+    ) ?? null
+  );
+}
+
+export function moonAtCoords(
+  universe: UniverseState,
+  coords: Coordinates,
+): PlanetState | null {
+  const key = coordsKey(coords);
+  return (
+    Object.values(universe.planets).find(
+      (p) => p.kind === "moon" && coordsKey(p.coords) === key,
+    ) ?? null
   );
 }
 
@@ -110,9 +127,14 @@ export function ensureUniverseShape(universe: UniverseState): void {
     if (player.researchQueue === undefined) player.researchQueue = null;
   }
   for (const planet of Object.values(universe.planets)) {
+    if (!planet.kind) planet.kind = "planet";
+    if (planet.parentPlanetId === undefined) planet.parentPlanetId = null;
+    if (planet.moonId === undefined) planet.moonId = null;
     if (!planet.defenses) planet.defenses = emptyDefenses();
     if (planet.defenseQueue === undefined) planet.defenseQueue = null;
     if (!planet.buildings.researchLab) planet.buildings.researchLab = 0;
+    if (!planet.buildings.lunarBase) planet.buildings.lunarBase = 0;
+    if (!planet.buildings.sensorArray) planet.buildings.sensorArray = 0;
     for (const id of SHIP_ORDER) {
       if (planet.ships[id] === undefined) planet.ships[id] = 0;
     }
@@ -156,6 +178,9 @@ export function joinUniverse(
     ownerPlayerId: playerId,
     name: `${trimmed}'s Outpost`,
     coords,
+    kind: "planet",
+    parentPlanetId: null,
+    moonId: null,
     resources: { ...STARTING_RESOURCES },
     lastTickAt: now,
     buildings: emptyBuildings(),
