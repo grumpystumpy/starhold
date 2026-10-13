@@ -31,12 +31,13 @@ function corsOrigins(): string[] | string {
     "http://127.0.0.1:5173",
     "http://localhost:3001",
     "http://127.0.0.1:3001",
+    "https://starhold-two.vercel.app",
   ];
   const vercel = process.env.VERCEL_URL
     ? [`https://${process.env.VERCEL_URL}`]
     : [];
   const all = [...new Set([...defaults, ...fromEnv, ...vercel])];
-  // Same-origin browser calls don't need CORS; keep explicit list for local Vite.
+  // Same-origin browser calls don't need CORS; keep explicit list for local Vite / previews.
   return all;
 }
 
