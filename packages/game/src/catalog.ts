@@ -3,6 +3,14 @@ import type { BuildingId, DefenseId, ResearchId, ShipId } from "./types.js";
 export { BUILDINGS } from "./catalog-buildings.js";
 export { SHIPS, DEFENSES } from "./catalog-units.js";
 export { RESEARCH } from "./catalog-research.js";
+export {
+  RAPID_FIRE,
+  rapidFireFactor,
+  type CombatUnitId,
+} from "./catalog-rapid-fire.js";
+
+/** Max simultaneous fire exchanges in a raid. */
+export const MAX_COMBAT_ROUNDS = 6;
 
 /** Share of defender stockpile eligible for loot on an attacker win. */
 export const RAID_LOOT_SHARE = 0.5;
