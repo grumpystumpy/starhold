@@ -2086,6 +2086,7 @@ var RAID_LOOT_SHARE = 0.5;
 var DEBRIS_FROM_SHIPS = 0.3;
 var MIN_FLIGHT_SECONDS = 8;
 var PLANET_FIELDS = 200;
+var SPY_REPORT_TTL_MS = 20 * 60 * 1e3;
 var SHIP_ORDER = [
   "scout",
   "hauler",
@@ -2295,6 +2296,7 @@ function roughPoints(planet, research) {
   return Math.floor(points);
 }
 function economySnapshot(planet, universeSpeed = 1, energyTechLevel = 0) {
+  const used = fieldsUsed(planet);
   return {
     productionPerHour: productionPerHour(
       planet,
@@ -2306,7 +2308,12 @@ function economySnapshot(planet, universeSpeed = 1, energyTechLevel = 0) {
       used: energyUsed(planet),
       factor: energyFactor(planet)
     },
-    storage: storageFor(planet)
+    storage: storageFor(planet),
+    fields: {
+      used,
+      cap: PLANET_FIELDS,
+      remaining: fieldsRemaining(planet)
+    }
   };
 }
 function emptyFleetShips() {
@@ -9254,14 +9261,14 @@ var LOCK_KEY = `${REDIS_KEY}:lock`;
 var memoryUniverse = null;
 var redis;
 var resolvedMode;
-function redisCredentials() {
-  const upstashUrl = process.env.UPSTASH_REDIS_REST_URL?.trim();
-  const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
+function redisCredentials(env = process.env) {
+  const upstashUrl = env.UPSTASH_REDIS_REST_URL?.trim();
+  const upstashToken = env.UPSTASH_REDIS_REST_TOKEN?.trim();
   if (upstashUrl && upstashToken) {
     return { url: upstashUrl, token: upstashToken, mode: "upstash" };
   }
-  const kvUrl = process.env.KV_REST_API_URL?.trim();
-  const kvToken = process.env.KV_REST_API_TOKEN?.trim();
+  const kvUrl = env.KV_REST_API_URL?.trim();
+  const kvToken = env.KV_REST_API_TOKEN?.trim();
   if (kvUrl && kvToken) {
     return { url: kvUrl, token: kvToken, mode: "kv" };
   }
@@ -9269,7 +9276,7 @@ function redisCredentials() {
 }
 function getRedis() {
   if (redis !== void 0) return redis;
-  const creds = redisCredentials();
+  const creds = redisCredentials(process.env);
   if (!creds) {
     redis = null;
     resolvedMode = "memory";
@@ -9281,7 +9288,7 @@ function getRedis() {
 }
 function storageMode() {
   if (resolvedMode) return resolvedMode;
-  const creds = redisCredentials();
+  const creds = redisCredentials(process.env);
   return creds?.mode ?? "memory";
 }
 function freshUniverse() {
