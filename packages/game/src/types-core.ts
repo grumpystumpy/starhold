@@ -47,7 +47,7 @@ export type ResearchId =
  * - colonize — found colony on empty slot
  * - harvest — collect debris with recyclers
  * - harvestAsteroid — mine asteroid field with recyclers
- * - expedition — deep-space probe (resources / ships / nothing / pirates)
+ * - expedition — deep-space probe (resources / ships / nothing / pirates / starshards)
  */
 export type MissionType =
   | "deploy"
@@ -227,9 +227,56 @@ export interface SlotProductionMult {
   energy: number;
 }
 
-/** Officer runtime stub (thread D). */
+export type OfficerId =
+  | "quartermaster"
+  | "archivist"
+  | "navigator"
+  | "warden"
+  | "engineer"
+  | "spymaster";
+
+export type OfficerEffectKind =
+  | "mineOutput"
+  | "researchSpeed"
+  | "fleetSpeed"
+  | "fleetSlots"
+  | "defensePower"
+  | "energyOutput"
+  | "espionageLevel";
+
+export interface OfficerEffect {
+  kind: OfficerEffectKind;
+  /** Multiplier (e.g. 1.10) or flat add (fleetSlots / espionageLevel). */
+  value: number;
+}
+
+export interface OfficerDef {
+  id: OfficerId;
+  name: string;
+  description: string;
+  /** Starshard cost to activate / renew. */
+  cost: number;
+  /** Duration ms; v1 officers are timed. */
+  durationMs: number;
+  effects: OfficerEffect[];
+}
+
+/** Active officer hire on a player. */
 export interface OfficerState {
-  officerId: string;
+  officerId: OfficerId;
   activatedAt: number;
   expiresAt: number;
+}
+
+export type SkillBranch = "economy" | "military" | "exploration";
+
+export interface SkillNodeDef {
+  id: string;
+  branch: SkillBranch;
+  name: string;
+  description: string;
+  /** Starshard unlock cost. */
+  cost: number;
+  requires: string[];
+  effects: OfficerEffect[];
 }
