@@ -1,0 +1,46 @@
+name: Assemble API route (one-shot)
+
+on:
+  push:
+    branches: [cursor/round2-rename-audit-f555]
+    paths:
+      - ".github/workflows/assemble-api-route.yml"
+      - "packages/game/**"
+      - "apps/server/**"
+      - "apps/web/**"
+      - "scripts/bundle-api.mjs"
+
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cursor/round2-rename-audit-f555
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install + rebuild API bundle
+        run: |
+          npm ci
+          npm run build -w @starhold/game
+          node scripts/bundle-api.mjs
+
+      - name: Commit bundle and remove this workflow
+        run: |
+          rm -f .github/workflows/assemble-api-route.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A 'api/[[...route]].js' .github/workflows/assemble-api-route.yml
+          if git diff --cached --quiet; then
+            echo "nothing to commit"
+            exit 0
+          fi
+          git commit -m "chore(F): regenerate api route bundle with renamed catalogs"
+          git push origin HEAD:cursor/round2-rename-audit-f555
