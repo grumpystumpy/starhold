@@ -1,0 +1,53 @@
+name: assemble-starshards-sources
+on:
+  push:
+    paths:
+      - ".cursor-stage/starshards-manifest.json"
+permissions:
+  contents: write
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Decode staged sources
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import base64, gzip, json, pathlib, hashlib
+          root = pathlib.Path(".")
+          stage = root / ".cursor-stage"
+          man = json.loads((stage / "starshards-manifest.json").read_text())
+          parts = []
+          for i in range(man["parts"]):
+              parts.append((stage / f"starshards-part-{i:02d}.b64").read_text().strip())
+          raw = base64.b64decode("".join(parts))
+          assert hashlib.sha256(raw).hexdigest() == man["gzip_sha256"], "gzip hash mismatch"
+          blob = gzip.decompress(raw)
+          assert hashlib.sha256(blob).hexdigest() == man["sha256"], "json hash mismatch"
+          files = json.loads(blob.decode())
+          for path, content in files.items():
+              p = root / path
+              p.parent.mkdir(parents=True, exist_ok=True)
+              p.write_text(content)
+              print("wrote", path, len(content))
+          # clean staging + this workflow
+          import shutil
+          shutil.rmtree(stage, ignore_errors=True)
+          wf = root / ".github/workflows/assemble-starshards-sources.yml"
+          if wf.exists():
+              wf.unlink()
+              print("removed workflow")
+          PY
+      - name: Commit assembled sources
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git status
+          git commit -m "feat(D): assemble remaining Starshards sources from staging" || exit 0
+          git push
