@@ -1,8 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96" role="img">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96" role="img" aria-label="Research Lab">
   <rect width="96" height="96" rx="8" fill="#0c141c"/>
-  <path d="M16 72 L48 24 L80 72 Z" fill="none" stroke="#e0a45a" stroke-width="4"/>
-  <rect x="28" y="58" width="40" height="18" fill="#2d4a63"/>
-  <rect x="40" y="40" width="16" height="20" fill="#8fa6ba"/>
-  <circle cx="48" cy="66" r="4" fill="#f0c96a"/>
+  <!-- observatory dome -->
+  <path d="M22 58 A26 26 0 0 1 74 58" fill="#1e3348" stroke="#7ec8e3" stroke-width="3"/>
+  <rect x="22" y="56" width="52" height="18" fill="#2d4a63"/>
+  <!-- telescope -->
+  <line x1="48" y1="52" x2="66" y2="28" stroke="#e0a45a" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="68" cy="26" r="6" fill="none" stroke="#f0c96a" stroke-width="3"/>
+  <!-- base lights -->
+  <circle cx="34" cy="66" r="3" fill="#7ec8e3"/>
+  <circle cx="48" cy="66" r="3" fill="#f0c96a"/>
+  <circle cx="62" cy="66" r="3" fill="#7ec8e3"/>
 </svg>

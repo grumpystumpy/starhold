@@ -183,9 +183,10 @@
 
 .planet-chip-name {
   font-size: 0.82rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow: visible;
+  line-height: 1.25;
+  word-break: break-word;
 }
 
 .planet-chip-coords {
@@ -313,7 +314,7 @@
 
   .planet-chip {
     width: auto;
-    max-width: 12rem;
+    max-width: min(100%, 16rem);
   }
 }
 
@@ -336,9 +337,15 @@
   .side-nav .nav-link {
     border-left: none;
     border-bottom: 2px solid transparent;
-    padding: 0.35rem 0.55rem;
+    padding: 0.45rem 0.65rem;
     width: auto;
-    font-size: 0.8rem;
+    font-size: 0.82rem;
+    min-height: 2.25rem;
+  }
+
+  .planet-chip {
+    max-width: none;
+    width: 100%;
   }
 
   .side-nav .nav-link.active {
