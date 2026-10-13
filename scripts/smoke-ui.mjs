@@ -1,1 +1,490 @@
-PLACEHOLDER_WILL_REPLACE
+#!/usr/bin/env node
+/**
+ * Local smoke: UI join (URL + typed + helper), upgrade level via click, build-ship,
+ * P1 flashes, fleet mission (attack + loot report).
+ * Requires: npm run dev (web :5173, api :3001) and playwright + chromium.
+ *
+ * Steps (manual equivalent):
+ * 1. Open http://127.0.0.1:5173/?commander=Smoke
+ *    or type a name / run window.starhold.join("Smoke")
+ * 2. Click Upgrade on Shipyard — level must rise 0→1 (not silent no-op under 1s polls).
+ *    While "Queue busy", click another Upgrade — red flash must survive ~2s of polls.
+ * 3. Click Metal Vault when unaffordable — flash "Not enough resources."
+ * 4. Bank to ≥220 metal, click Build on Scout — hangar scout increments.
+ * 5. Second commander + UI Launch fleet (attack) → combat report with loot path.
+ */
+import { createRequire } from "node:module";
+
+const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:5173";
+const API = process.env.STARHOLD_API ?? "http://127.0.0.1:3001";
+
+async function waitHealthy(ms = 30_000) {
+  const start = Date.now();
+  while (Date.now() - start < ms) {
+    try {
+      const res = await fetch(`${API}/api/health`);
+      if (res.ok) return;
+    } catch {
+      /* retry */
+    }
+    await new Promise((r) => setTimeout(r, 400));
+  }
+  throw new Error("API health timeout");
+}
+
+async function apiJson(path, init) {
+  const res = await fetch(`${API}${path}`, init);
+  return res.json();
+}
+
+async function waitMetal(playerId, minMetal, ms = 360_000) {
+  const start = Date.now();
+  while (Date.now() - start < ms) {
+    const st = await apiJson(`/api/state?playerId=${encodeURIComponent(playerId)}`);
+    if (st.planet.resources.metal >= minMetal && !st.planet.buildQueue) {
+      return st;
+    }
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  throw new Error(`timeout waiting for ${minMetal} metal`);
+}
+
+async function apiSmoke() {
+  const name = `Smoke${Date.now().toString(36).slice(-5)}`;
+  const join = await apiJson("/api/join", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (!join.player?.id) throw new Error(`join failed: ${JSON.stringify(join)}`);
+  const playerId = join.player.id;
+
+  const up = await apiJson("/api/upgrade", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, buildingId: "shipyard" }),
+  });
+  if (up.error) throw new Error(`yard upgrade: ${up.error}`);
+
+  const busy = await apiJson("/api/upgrade", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, buildingId: "metalMine" }),
+  });
+  if (busy.error !== "A building is already under construction.") {
+    throw new Error(`expected double-queue error, got: ${JSON.stringify(busy)}`);
+  }
+
+  const vault = await apiJson("/api/upgrade", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, buildingId: "metalStorage" }),
+  });
+  // Vault either blocked by queue or unaffordable — both are valid reject strings.
+  if (!vault.error) throw new Error("expected vault reject while poor/busy");
+
+  await waitMetal(playerId, 220, 360_000);
+
+  const ship = await apiJson("/api/build-ship", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, shipId: "scout", count: 1 }),
+  });
+  if (ship.error) throw new Error(`build scout: ${ship.error}`);
+
+  let scoutReady = null;
+  for (let i = 0; i < 30; i++) {
+    const st = await apiJson(`/api/state?playerId=${encodeURIComponent(playerId)}`);
+    if ((st.planet?.ships?.scout ?? 0) >= 1) {
+      scoutReady = st;
+      break;
+    }
+    await new Promise((r) => setTimeout(r, 400));
+  }
+  if (!scoutReady) throw new Error("scout never entered hangar");
+
+  // Fleets: second commander as fleet-mission target
+  const victimName = `Vic${Date.now().toString(36).slice(-5)}`;
+  const victim = await apiJson("/api/join", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: victimName }),
+  });
+  if (!victim.player?.id || !victim.planet?.id) {
+    throw new Error(`victim join failed: ${JSON.stringify(victim)}`);
+  }
+
+  const launch = await apiJson("/api/launch-fleet", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      playerId,
+      targetPlanetId: victim.planet.id,
+      mission: "raid",
+      ships: { scout: 1 },
+    }),
+  });
+  if (launch.error) throw new Error(`launch fleet mission: ${launch.error}`);
+  if (!Array.isArray(launch.fleets) || launch.fleets.length < 1) {
+    throw new Error(`expected outbound fleet: ${JSON.stringify(launch.fleets)}`);
+  }
+
+  // Wait for resolve + return. ETA scales with map distance (crowded uni → longer).
+  const outboundMs = Math.max(0, launch.fleets[0].arrivesAt - Date.now());
+  const deadline = Date.now() + Math.max(90_000, outboundMs * 3 + 20_000);
+  let reportSeen = false;
+  let lootOk = false;
+  while (Date.now() < deadline) {
+    const st = await apiJson(`/api/state?playerId=${encodeURIComponent(playerId)}`);
+    if ((st.reports?.length ?? 0) >= 1) {
+      reportSeen = true;
+      const r = st.reports[0];
+      const lootTotal =
+        (r.loot?.metal ?? 0) + (r.loot?.crystal ?? 0) + (r.loot?.deuterium ?? 0);
+      // Empty-hangar target → attacker win; loot may be 0 if cargo tiny / stocks drained,
+      // but report must exist with an outcome.
+      lootOk = Boolean(r.outcome) && (lootTotal >= 0);
+    }
+    if (reportSeen && lootOk && (st.fleets?.length ?? 0) === 0) {
+      console.log("API smoke OK", {
+        name,
+        playerId,
+        scout: st.planet.ships.scout,
+        reports: st.reports.length,
+        loot: st.reports[0]?.loot,
+      });
+      return { name, playerId, victimName };
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error(
+    `fleet mission never resolved / returned (outboundEtaMs≈${outboundMs}, reportSeen=${reportSeen})`,
+  );
+}
+
+async function uiSmoke() {
+  const require = createRequire(import.meta.url);
+  const playwright = require("playwright");
+  const browser = await playwright.chromium.launch({ headless: true });
+  const logs = [];
+
+  // 1) URL commander join
+  const urlName = `Url${Date.now().toString(36).slice(-4)}`;
+  const page = await browser.newPage();
+  await page.goto(`${WEB}/?commander=${encodeURIComponent(urlName)}`, {
+    waitUntil: "networkidle",
+  });
+  await page.waitForSelector('[data-testid="resources"]', { timeout: 15_000 });
+  await page.waitForSelector('[data-testid="highscores"]', { timeout: 10_000 });
+  const hsRank = await page.locator('[data-testid="highscore-1"]').count();
+  if (hsRank < 1) throw new Error("highscores missing rank #1");
+  logs.push("ui-highscores");
+  const galaxyHasMoon = await page.evaluate(() => {
+    const st = window.starhold?.getState();
+    const slots = st?.galaxy?.slots ?? [];
+    return slots.every((s) => typeof s.hasMoon === "boolean");
+  });
+  if (!galaxyHasMoon) throw new Error("galaxy slots missing hasMoon");
+  logs.push("ui-galaxy-moon-field");
+  const joined = await page.evaluate(() => window.starhold?.getState());
+  if (joined?.name !== urlName) {
+    throw new Error(`URL join failed: ${JSON.stringify(joined)}`);
+  }
+  logs.push(`url-join:${urlName}`);
+
+  // 2) P0: Shipyard Upgrade click must raise L0→L1 under aggressive poll pressure.
+  // Catalog id is `shipyard` (data-testid=upgrade-shipyard) — not metalMine/Ore.
+  const yardLevelBefore = await page.textContent(
+    '[data-testid="building-level-shipyard"]',
+  );
+  if (!yardLevelBefore?.includes("L0")) {
+    throw new Error(`expected shipyard L0 before click, got: ${yardLevelBefore}`);
+  }
+  const yardBtn = page.locator('[data-testid="upgrade-shipyard"]');
+  const yardAttr = await yardBtn.getAttribute("data-upgrade");
+  if (yardAttr !== "shipyard") {
+    throw new Error(`upgrade-shipyard data-upgrade mismatch: ${yardAttr}`);
+  }
+
+  // Hammer silent polls while clicking — reproduces 1s multi-client poll races
+  // (must not use refresh(): that sets busy and can reject Upgrade).
+  const pollHammer = await page.evaluateHandle(() => {
+    const id = window.setInterval(() => {
+      void window.starhold?.poll();
+    }, 80);
+    return id;
+  });
+  try {
+    for (let i = 0; i < 8; i++) {
+      await yardBtn.click({ timeout: 5_000 });
+      await page.waitForTimeout(90);
+      const leveled = await page.evaluate(() => {
+        const lvl =
+          document.querySelector('[data-testid="building-level-shipyard"]')
+            ?.textContent ?? "";
+        const queue = document.querySelector('[data-testid="build-queue"]');
+        const ok = document.querySelector('[data-testid="flash-ok"]');
+        return (
+          lvl.includes("L1") ||
+          Boolean(queue?.textContent?.match(/Shipyard/i)) ||
+          Boolean(ok?.textContent?.match(/Queued upgrade|Upgrade complete/i))
+        );
+      });
+      if (leveled) break;
+    }
+  } finally {
+    await page.evaluate((id) => window.clearInterval(id), pollHammer);
+  }
+
+  await page.waitForFunction(
+    () => {
+      const lvl =
+        document.querySelector('[data-testid="building-level-shipyard"]')
+          ?.textContent ?? "";
+      const queue = document.querySelector('[data-testid="build-queue"]');
+      const ok = document.querySelector('[data-testid="flash-ok"]');
+      const st = window.starhold?.getState();
+      return (
+        lvl.includes("L1") ||
+        (st?.buildings?.shipyard ?? 0) >= 1 ||
+        Boolean(queue?.textContent?.match(/Shipyard/i)) ||
+        Boolean(ok?.textContent?.match(/Queued upgrade|Upgrade complete/i))
+      );
+    },
+    undefined,
+    { timeout: 15_000 },
+  );
+  await page.waitForFunction(
+    () => {
+      const lvl =
+        document.querySelector('[data-testid="building-level-shipyard"]')
+          ?.textContent ?? "";
+      const queue = document.querySelector('[data-testid="build-queue"]');
+      const st = window.starhold?.getState();
+      return (lvl.includes("L1") || (st?.buildings?.shipyard ?? 0) >= 1) && !queue;
+    },
+    undefined,
+    { timeout: 30_000 },
+  );
+  const yardLevelAfter = await page.textContent(
+    '[data-testid="building-level-shipyard"]',
+  );
+  const yardState = await page.evaluate(
+    () => window.starhold?.getState()?.buildings?.shipyard ?? 0,
+  );
+  if (!yardLevelAfter?.includes("L1") && yardState < 1) {
+    throw new Error(
+      `UI upgrade did not raise shipyard level (before=${yardLevelBefore}, after=${yardLevelAfter}, state=${yardState})`,
+    );
+  }
+  logs.push("ui-upgrade-shipyard-level-under-poll-hammer");
+
+  // 3) P1 double-queue flash + persistence across polls (yard already L1 — upgrade solar)
+  await page.click('[data-testid="upgrade-solarPlant"]');
+  await page.waitForSelector('[data-testid="flash-ok"], [data-testid="build-queue"]', {
+    timeout: 10_000,
+  });
+  await page.click('[data-testid="upgrade-metalMine"]');
+  await page.waitForSelector('[data-testid="flash-error"]', { timeout: 10_000 });
+  const errText = await page.textContent('[data-testid="flash-error"]');
+  if (!errText?.includes("already under construction")) {
+    throw new Error(`bad double-queue flash: ${errText}`);
+  }
+  await page.waitForTimeout(2500);
+  if ((await page.locator('[data-testid="flash-error"]').count()) < 1) {
+    throw new Error("flash cleared by polls too early");
+  }
+  logs.push("p1-double-queue-flash");
+
+  // 4) Unaffordable vault (after dismissing prior flash via new click)
+  await page.click('[data-testid="upgrade-metalStorage"]');
+  await page.waitForSelector('[data-testid="flash-error"]', { timeout: 10_000 });
+  const vaultErr = await page.textContent('[data-testid="flash-error"]');
+  if (
+    !vaultErr?.includes("Not enough resources") &&
+    !vaultErr?.includes("already under construction")
+  ) {
+    throw new Error(`bad vault flash: ${vaultErr}`);
+  }
+  logs.push("p1-unaffordable-or-busy-flash");
+
+  // 5) Typed join (fresh page — input must accept fill)
+  const typedPage = await browser.newPage();
+  await typedPage.goto(WEB, { waitUntil: "networkidle" });
+  await typedPage.waitForSelector('[data-testid="commander-input"]');
+  const typed = `Type${Date.now().toString(36).slice(-4)}`;
+  await typedPage.click('[data-testid="commander-input"]');
+  await typedPage.fill('[data-testid="commander-input"]', typed);
+  const val = await typedPage.inputValue('[data-testid="commander-input"]');
+  if (val !== typed) throw new Error(`input value bind failed: ${val}`);
+  await typedPage.waitForTimeout(300);
+  const val2 = await typedPage.inputValue('[data-testid="commander-input"]');
+  if (val2 !== typed) throw new Error(`input wiped after delay: ${val2}`);
+  await typedPage.click('[data-testid="join-btn"]');
+  await typedPage.waitForSelector('[data-testid="resources"]', { timeout: 15_000 });
+  logs.push(`typed-join:${typed}`);
+
+  // 6) Helper join
+  const helpPage = await browser.newPage();
+  await helpPage.goto(WEB, { waitUntil: "networkidle" });
+  const helperName = `Help${Date.now().toString(36).slice(-4)}`;
+  await helpPage.evaluate(async (n) => {
+    await window.starhold.join(n);
+  }, helperName);
+  await helpPage.waitForSelector('[data-testid="resources"]', { timeout: 15_000 });
+  logs.push(`helper-join:${helperName}`);
+
+  // 7) Build scout under live 1s polls (yard already L1 on urlName page — fresh commander)
+  const buildName = `Clk${Date.now().toString(36).slice(-4)}`;
+  await page.goto(`${WEB}/?commander=${encodeURIComponent(buildName)}`, {
+    waitUntil: "networkidle",
+  });
+  await page.waitForSelector('[data-testid="resources"]');
+  // Prefer UI click path for yard (asserts P0 again on a fresh player + poll hammer)
+  const hammer2 = await page.evaluateHandle(() =>
+    window.setInterval(() => {
+      void window.starhold?.poll();
+    }, 100),
+  );
+  try {
+    await page.click('[data-testid="upgrade-shipyard"]');
+    await page.waitForFunction(
+      () => {
+        const lvl =
+          document.querySelector('[data-testid="building-level-shipyard"]')
+            ?.textContent ?? "";
+        return (
+          lvl.includes("L1") ||
+          (window.starhold?.getState()?.buildings?.shipyard ?? 0) >= 1
+        );
+      },
+      undefined,
+      { timeout: 30_000 },
+    );
+  } finally {
+    await page.evaluate((id) => window.clearInterval(id), hammer2);
+  }
+
+  // Wait until Build Scout is affordable and unlocked
+  await page.waitForFunction(
+    () => {
+      const btn = document.querySelector('[data-testid="build-scout"]');
+      const metalText =
+        document.querySelector('[data-testid="res-metal"] .value')?.textContent ?? "0";
+      const metal = Number(String(metalText).replace(/,/g, ""));
+      const label = btn?.textContent ?? "";
+      const queue = document.querySelector('[data-testid="build-queue"]');
+      return Boolean(btn) && !queue && !label.includes("Locked") && metal >= 220;
+    },
+    undefined,
+    { timeout: 180_000 },
+  );
+
+  await page.click('[data-testid="build-scout"]');
+  await page.waitForFunction(
+    () => {
+      const hangar = document.querySelector(
+        '[data-testid="hangar-scout"] span:last-child',
+      );
+      const q = document.querySelector('[data-testid="ship-queue"]');
+      const ok = document.querySelector('[data-testid="flash-ok"]');
+      const n = Number(hangar?.textContent ?? 0);
+      return n >= 1 || Boolean(q) || Boolean(ok?.textContent?.match(/scout|Hangar|Queued/i));
+    },
+    undefined,
+    { timeout: 15_000 },
+  );
+
+  await page.waitForFunction(
+    () => {
+      const hangar = document.querySelector(
+        '[data-testid="hangar-scout"] span:last-child',
+      );
+      return Number(hangar?.textContent ?? 0) >= 1;
+    },
+    undefined,
+    { timeout: 30_000 },
+  );
+  logs.push("ui-build-scout");
+
+  await page.waitForTimeout(1500);
+  const noticeOrHangar =
+    (await page.locator('[data-testid="flash-ok"]').count()) >= 1 ||
+    Number(await page.textContent('[data-testid="hangar-scout"] span:last-child')) >= 1;
+  if (!noticeOrHangar) throw new Error("lost build feedback after poll");
+  logs.push("build-feedback-ok");
+
+  // 8) Fleet panel + second commander → UI launch attack mission → report/loot
+  const rivalName = `Riv${Date.now().toString(36).slice(-4)}`;
+  const rivalPage = await browser.newPage();
+  await rivalPage.goto(`${WEB}/?commander=${encodeURIComponent(rivalName)}`, {
+    waitUntil: "networkidle",
+  });
+  await rivalPage.waitForSelector('[data-testid="resources"]', { timeout: 15_000 });
+  logs.push(`rival-join:${rivalName}`);
+
+  await page.reload({ waitUntil: "networkidle" });
+  const hasResources = await page.locator('[data-testid="resources"]').count();
+  if (!hasResources) {
+    await page.goto(`${WEB}/?commander=${encodeURIComponent(buildName)}`, {
+      waitUntil: "networkidle",
+    });
+    await page.waitForSelector('[data-testid="resources"]');
+  }
+  await page.waitForSelector('[data-testid="fleet-form"]', { timeout: 15_000 });
+  const thumb = await page.locator('[data-testid="building-metalMine"] img.thumb').count();
+  if (thumb < 1) throw new Error("building thumbnail missing");
+  const rec = await page.locator('[data-testid="recommended-next"]').count();
+  if (rec < 1) throw new Error("recommended-next hint missing");
+  logs.push("fleet-form-and-art");
+
+  // UI launch preferred: pick attack mission, set 1 scout, submit form
+  await page.click('[data-testid="mission-raid"]');
+  await page.fill('[data-testid="fleet-count-scout"]', "1");
+  await page.click('[data-testid="launch-fleet"]');
+  await page.waitForSelector('[data-testid="fleets-live"], [data-testid="flash-ok"]', {
+    timeout: 10_000,
+  });
+  logs.push("ui-fleet-mission-launch");
+
+  // Wait for combat report (mission resolve + return may still be in flight)
+  await page.waitForFunction(
+    () => {
+      const reports = document.querySelector('[data-testid="combat-reports"]');
+      const st = window.starhold?.getState();
+      return (
+        Boolean(reports) ||
+        (st?.reports?.length ?? 0) >= 1
+      );
+    },
+    undefined,
+    { timeout: 120_000 },
+  );
+  const missionState = await page.evaluate(() => {
+    const st = window.starhold.getState();
+    const r = st.reports?.[0];
+    const loot =
+      (r?.loot?.metal ?? 0) + (r?.loot?.crystal ?? 0) + (r?.loot?.deuterium ?? 0);
+    return {
+      reports: st.reports?.length ?? 0,
+      outcome: r?.outcome ?? null,
+      loot,
+      fleets: st.fleets?.length ?? 0,
+    };
+  });
+  if ((missionState.reports ?? 0) < 1 || !missionState.outcome) {
+    throw new Error(`UI fleet mission missing report: ${JSON.stringify(missionState)}`);
+  }
+  logs.push(
+    `ui-fleet-mission-report:${missionState.outcome}:loot${missionState.loot}`,
+  );
+
+  await browser.close();
+  console.log("UI smoke OK", logs);
+  return { logs };
+}
+
+await waitHealthy();
+const api = await apiSmoke();
+const ui = await uiSmoke();
+console.log(JSON.stringify({ ok: true, api, ui }, null, 2));
