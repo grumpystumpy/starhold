@@ -12,22 +12,10 @@
     "sha256": "74b28da21279d10a5d2e563779817a78d0c6967a593cf581c57da4873b8642bd"
   },
   {
-    "key": "pages",
-    "path": "apps/web/src/ui/render-pages.ts",
-    "parts": 2,
-    "sha256": "1e84ed7097178b501bcbc8d7bd16944df073e5f47b7ffc11ed74cd55273f7055"
-  },
-  {
     "key": "uecon",
     "path": "packages/game/src/universe-economy.test.ts",
     "parts": 1,
     "sha256": "f3048a8cdae16088fe38d8b1c31cd60ccd5d5652dcfca6fcb4433d3304612219"
-  },
-  {
-    "key": "pirates",
-    "path": "packages/game/src/world-pirates.ts",
-    "parts": 3,
-    "sha256": "0d9b6e2c2cf2f96e1fcb4d1ca860ecc9f6790bff8e687f9560250491c5c7d341"
   },
   {
     "key": "plevels",
