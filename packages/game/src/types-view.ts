@@ -8,6 +8,7 @@ import type {
   DefenseStock,
   FleetMission,
   FleetShips,
+  OfficerDef,
   OfficerState,
   PirateBase,
   ResearchLevels,
@@ -15,6 +16,7 @@ import type {
   Resources,
   ShipId,
   ShipQueueItem,
+  SkillNodeDef,
   SlotProductionMult,
 } from "./types-core.js";
 
@@ -61,7 +63,12 @@ export interface EspionageReport {
   summary: string;
 }
 
-export type ExpeditionKind = "resources" | "ships" | "nothing" | "pirates";
+export type ExpeditionKind =
+  | "resources"
+  | "ships"
+  | "nothing"
+  | "pirates"
+  | "starshards";
 
 export interface ExpeditionReport {
   id: string;
@@ -72,6 +79,8 @@ export interface ExpeditionReport {
   kind: ExpeditionKind;
   cargoGained: Resources;
   shipsDelta: Partial<FleetShips>;
+  /** Starshards granted to the player (expedition find). */
+  starshardsGained?: number;
   summary: string;
 }
 
@@ -109,9 +118,16 @@ export interface PlayerState {
   research: ResearchLevels;
   researchQueue: ResearchQueueItem | null;
   createdAt: number;
+  /** Premium currency — Starshards (earned in-game only). */
   starshards?: number;
+  /** Active officers. */
   officers?: OfficerState[];
+  /** Unlocked skill node ids. */
   skillsUnlocked?: string[];
+  /** UTC day key `YYYY-MM-DD` of last daily Starshard claim. */
+  lastDailyLoginUtc?: string;
+  /** Once-only top-3 highscore Starshard grant. */
+  highscoreStarshardsClaimed?: boolean;
 }
 
 export interface UniverseState {
@@ -192,9 +208,18 @@ export interface PlayerView {
   spyReports: EspionageReport[];
   expeditionReports: ExpeditionReport[];
   sensorContacts: FleetMission[];
+  /** Premium currency echo. */
   starshards: number;
+  /** Active (non-expired) officers. */
   officers: OfficerState[];
+  /** Unlocked skills. */
   skillsUnlocked: string[];
+  /** Officer catalog for UI. */
+  officerCatalog: OfficerDef[];
+  /** Skill tree catalog for UI. */
+  skillCatalog: SkillNodeDef[];
+  /** True when daily login Starshards can be claimed (UTC day). */
+  dailyLoginAvailable: boolean;
 }
 
 export interface PublicPlayer {
