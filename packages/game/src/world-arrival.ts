@@ -27,6 +27,7 @@ import {
 import { resolveEspionage } from "./world-espionage.js";
 import { resolveExpeditionArrival } from "./world-expedition.js";
 import { ownedPlanetCount } from "./world-moons.js";
+import { playerBoosts } from "./world-boosts.js";
 import { resolvePirateRaidArrival, tickPirates } from "./world-pirates.js";
 import { pruneSpyReports } from "./world-spy-prune.js";
 import {
@@ -219,11 +220,13 @@ export function advanceUniverse(universe: UniverseState, now = Date.now()): void
     const planet = universe.planets[id];
     const owner = universe.players[planet.ownerPlayerId];
     const energyTech = owner?.research.energyTech ?? 0;
+    const boosts = playerBoosts(owner, now);
     universe.planets[id] = advancePlanet(
       planet,
       universe.speed,
       now,
       energyTech,
+      { mineOutput: boosts.mineOutput, energyOutput: boosts.energyOutput },
     );
   }
   advanceFleets(universe, now);

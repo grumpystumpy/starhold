@@ -174,17 +174,23 @@ export function energyUsed(planet: PlanetState): number {
   return used;
 }
 
-export function energyProduced(planet: PlanetState): number {
+export function energyProduced(
+  planet: PlanetState,
+  energyOutputMult = 1,
+): number {
   const base = solarEnergy(planet.buildings.solarPlant ?? 0);
   const mult = productionMultForSlot(planet.coords.slot).energy;
-  return Math.floor(base * mult);
+  return Math.floor(base * mult * Math.max(0, energyOutputMult));
 }
 
 /** 0..1 production multiplier from energy surplus/shortfall. */
-export function energyFactor(planet: PlanetState): number {
+export function energyFactor(
+  planet: PlanetState,
+  energyOutputMult = 1,
+): number {
   const used = energyUsed(planet);
   if (used <= 0) return 1;
-  const produced = energyProduced(planet);
+  const produced = energyProduced(planet, energyOutputMult);
   return Math.min(1, produced / used);
 }
 
@@ -208,15 +214,23 @@ export function fieldsRemaining(planet: PlanetState): number {
   return Math.max(0, fieldsCap(planet) - fieldsUsed(planet));
 }
 
+export interface ProductionBoosts {
+  mineOutput?: number;
+  energyOutput?: number;
+}
+
 export function productionPerHour(
   planet: PlanetState,
   universeSpeed = 1,
   energyTechLevel = 0,
+  boosts?: ProductionBoosts,
 ): Resources {
-  const factor = energyFactor(planet);
+  const energyMult = boosts?.energyOutput ?? 1;
+  const mineMult = boosts?.mineOutput ?? 1;
+  const factor = energyFactor(planet, energyMult);
   const techBonus = 1 + energyTechLevel * 0.02;
   // universe.speed scales timers + income; PRODUCTION_MULT is income-only test tuning.
-  const incomeScale = universeSpeed * PRODUCTION_MULT * techBonus;
+  const incomeScale = universeSpeed * PRODUCTION_MULT * techBonus * mineMult;
   const pos = productionMultForSlot(planet.coords.slot);
   return {
     metal:

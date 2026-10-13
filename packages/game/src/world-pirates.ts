@@ -2,7 +2,6 @@ import {
   MAP_GALAXIES,
   MAP_SLOTS,
   MAP_SYSTEMS,
-  PIRATE_DEFENSE_WIN_STARSHARDS,
   PIRATE_DESTROY_STARSHARDS_BASE,
   PIRATE_DESTROY_STARSHARDS_PER_TIER,
   PIRATE_GROWTH_INTERVAL_MS,
@@ -36,6 +35,10 @@ import type {
   Resources,
   UniverseState,
 } from "./types.js";
+import {
+  grantPirateDestroyStarshards,
+  grantPirateFleetKillStarshards,
+} from "./world-boosts.js";
 import { emptyCargo, planetAtCoords } from "./world-bootstrap.js";
 import { subtractCargo } from "./world-tick.js";
 
@@ -402,7 +405,7 @@ function applyPirateRaidOnPlanet(
       deuterium: base.resources.deuterium + loot.deuterium,
     };
   } else if (combat.outcome === "defender_win") {
-    owner.starshards = (owner.starshards ?? 0) + PIRATE_DEFENSE_WIN_STARSHARDS;
+    grantPirateFleetKillStarshards(owner);
     universe.players[owner.id] = owner;
   }
 
@@ -515,8 +518,7 @@ export function resolvePirateRaidArrival(
     };
     markPirateDestroyed(base, now);
     if (owner) {
-      owner.starshards =
-        (owner.starshards ?? 0) + pirateDestroyStarshards(tierAtFight);
+      grantPirateDestroyStarshards(owner, tierAtFight);
       universe.players[owner.id] = owner;
     }
   }

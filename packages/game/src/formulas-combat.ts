@@ -245,6 +245,11 @@ function collectFire(
   return shots;
 }
 
+export interface CombatMods {
+  /** Multiplies defender ship/defense firepower and effective HP (officer/skill). */
+  defensePower?: number;
+}
+
 /**
  * Deterministic multi-round raid resolution with rapid-fire multipliers.
  */
@@ -254,7 +259,9 @@ export function resolveCombat(
   defenses: DefenseStock = emptyDefenses(),
   attackerResearch?: ResearchLevels,
   defenderResearch?: ResearchLevels,
+  mods?: CombatMods,
 ): CombatResolution {
+  const defensePowerMult = Math.max(0.01, mods?.defensePower ?? 1);
   const atkSide: SidePools = {
     ships: normalizeFleetShips(attacker),
     defenses: emptyDefenses(),
@@ -307,10 +314,21 @@ export function resolveCombat(
     );
 
     for (const shot of atkShots) {
-      applyDamageToTarget(defSide, shot.target, shot.damage, defenderResearch);
+      // Higher defensePower → harder to kill (incoming damage reduced).
+      applyDamageToTarget(
+        defSide,
+        shot.target,
+        shot.damage / defensePowerMult,
+        defenderResearch,
+      );
     }
     for (const shot of defShots) {
-      applyDamageToTarget(atkSide, shot.target, shot.damage, attackerResearch);
+      applyDamageToTarget(
+        atkSide,
+        shot.target,
+        shot.damage * defensePowerMult,
+        attackerResearch,
+      );
     }
 
     const atkAlive = shipCount(atkSide.ships) > 0;
