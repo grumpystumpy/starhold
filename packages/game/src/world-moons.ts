@@ -29,14 +29,14 @@ export function moonChancePercent(debris: Resources): number {
 }
 
 /**
- * Sensor Phalanx range in systems (same galaxy).
+ * Horizon Scanner (`sensorArray`) range in systems (same galaxy).
  * Level 0 → none; level N → ±N systems inclusive of own system.
  */
 export function sensorPhalanxRange(level: number): number {
   return Math.max(0, Math.floor(level));
 }
 
-/** True when target coords are inside a Sensor Phalanx of the given moon. */
+/** True when target coords are inside a Horizon Scanner of the given moon. */
 export function inSensorPhalanxRange(
   moonCoords: Coordinates,
   targetCoords: Coordinates,
@@ -48,7 +48,7 @@ export function inSensorPhalanxRange(
   return Math.abs(moonCoords.system - targetCoords.system) <= range;
 }
 
-/** Count planets (not moons) toward Astrophysics colony cap. */
+/** Count planets (not moons) toward Stellar Cartography colony cap. */
 export function ownedPlanetCount(
   universe: UniverseState,
   playerId: string,
