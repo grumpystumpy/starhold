@@ -56,7 +56,7 @@ export type QueueKind = "building" | "ship" | "defense" | "research";
  * - transport — move cargo between own planets
  * - espionage — probe report at target
  * - colonize — found colony on empty slot
- * - harvest — collect debris with Salvage Trawlers
+ * - harvest — collect debris with Salvage Trawlers or Swarm Mothership
  * - harvestAsteroid — mine asteroid field with Salvage Trawlers
  * - expedition — deep-space probe (resources / ships / nothing / pirates / starshards)
  * - pirateRaid — attack an NPC pirate base

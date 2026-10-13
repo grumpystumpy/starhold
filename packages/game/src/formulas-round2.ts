@@ -60,9 +60,12 @@ export function swarmDroneAttackMult(droneCount: number): number {
   return 1 + bonus;
 }
 
-/** True when fleet has a Salvage Trawler (World Eater cargo is always 0). */
+/**
+ * True when fleet can scoop debris fields.
+ * Salvage Trawler or Swarm Mothership (World Eater cargo is always 0).
+ */
 export function canCollectDebris(ships: FleetShips): boolean {
-  return (ships.recycler ?? 0) >= 1;
+  return (ships.recycler ?? 0) >= 1 || (ships.swarmMothership ?? 0) >= 1;
 }
 
 /** Mini-planet capture/destroy gate (≥5 World Eaters). */

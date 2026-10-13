@@ -1808,116 +1808,7 @@ var Hono3 = class extends Hono {
   }
 };
 
-// packages/game/src/catalog-buildings.ts
-var BUILDINGS = {
-  metalMine: {
-    id: "metalMine",
-    name: "Ore Extractor",
-    description: "Pulls metal from the crust. Needs energy.",
-    baseCost: { metal: 60, crystal: 15, deuterium: 0 },
-    costGrowth: 1.5,
-    baseBuildSeconds: 8,
-    energyUsePerLevel: 10,
-    produces: "metal"
-  },
-  crystalMine: {
-    id: "crystalMine",
-    name: "Crystal Lattice",
-    description: "Grows crystal veins. Needs energy.",
-    baseCost: { metal: 48, crystal: 24, deuterium: 0 },
-    costGrowth: 1.6,
-    baseBuildSeconds: 10,
-    energyUsePerLevel: 12,
-    produces: "crystal"
-  },
-  deutSynth: {
-    id: "deutSynth",
-    name: "Deut Still",
-    description: "Condenses deuterium from the atmosphere. Needs energy.",
-    baseCost: { metal: 225, crystal: 75, deuterium: 0 },
-    costGrowth: 1.5,
-    baseBuildSeconds: 12,
-    energyUsePerLevel: 20,
-    produces: "deuterium"
-  },
-  solarPlant: {
-    id: "solarPlant",
-    name: "Solar Array",
-    description: "Produces energy for mines and industry.",
-    baseCost: { metal: 75, crystal: 30, deuterium: 0 },
-    costGrowth: 1.5,
-    baseBuildSeconds: 8,
-    energyProdFormula: "solar"
-  },
-  metalStorage: {
-    id: "metalStorage",
-    name: "Metal Vault",
-    description: "Raises metal storage cap.",
-    baseCost: { metal: 1e3, crystal: 0, deuterium: 0 },
-    costGrowth: 2,
-    baseBuildSeconds: 6
-  },
-  crystalStorage: {
-    id: "crystalStorage",
-    name: "Crystal Vault",
-    description: "Raises crystal storage cap.",
-    baseCost: { metal: 1e3, crystal: 500, deuterium: 0 },
-    costGrowth: 2,
-    baseBuildSeconds: 6
-  },
-  deutTank: {
-    id: "deutTank",
-    name: "Deut Tank",
-    description: "Raises deuterium storage cap.",
-    baseCost: { metal: 1e3, crystal: 1e3, deuterium: 0 },
-    costGrowth: 2,
-    baseBuildSeconds: 6
-  },
-  shipyard: {
-    id: "shipyard",
-    name: "Shipyard",
-    description: "Unlocks and speeds hull construction.",
-    // Metal/crystal only at L1 so the ships path is reachable before Deut Still.
-    baseCost: { metal: 300, crystal: 150, deuterium: 0 },
-    costGrowth: 2,
-    baseBuildSeconds: 20
-  },
-  researchLab: {
-    id: "researchLab",
-    name: "Research Lab",
-    description: "Unlocks empire-wide research. Queue length grows with Yard Logistics.",
-    // Metal/crystal only so mines-first sessions unlock research before Deut Still.
-    baseCost: { metal: 180, crystal: 120, deuterium: 0 },
-    costGrowth: 2,
-    baseBuildSeconds: 18
-  },
-  lunarBase: {
-    id: "lunarBase",
-    name: "Crater Hab",
-    description: "Expands moon fields so more lunar structures can be built.",
-    baseCost: { metal: 2e3, crystal: 4e3, deuterium: 0 },
-    costGrowth: 2,
-    baseBuildSeconds: 30
-  },
-  sensorArray: {
-    id: "sensorArray",
-    name: "Horizon Scanner",
-    description: "Scans nearby systems for outbound fleets headed this way (moon only). Range grows with level.",
-    baseCost: { metal: 4e3, crystal: 8e3, deuterium: 2e3 },
-    costGrowth: 2,
-    baseBuildSeconds: 40
-  },
-  jumpGate: {
-    id: "jumpGate",
-    name: "Fold Bridge",
-    description: "Links your moons for near-instant fleet hops. Both moons need a Fold Bridge (moon only).",
-    baseCost: { metal: 8e3, crystal: 16e3, deuterium: 8e3 },
-    costGrowth: 2,
-    baseBuildSeconds: 60
-  }
-};
-
-// packages/game/src/catalog-units.ts
+// packages/game/src/data/tuning.ts
 var SHIPS = {
   scout: {
     id: "scout",
@@ -2030,6 +1921,93 @@ var SHIPS = {
     hull: 100,
     speed: 3e3,
     fuelPerDistance: 1.2
+  },
+  voidforgeTitan: {
+    id: "voidforgeTitan",
+    name: "Void Titan",
+    description: "3rd-largest hull \u2014 a bit faster than World Eater; very high attack and armor, low shields, large cargo.",
+    cost: { metal: 15e5, crystal: 12e5, deuterium: 4e5 },
+    buildSeconds: 9e4,
+    shipyardLevel: 11,
+    cargo: 1e6,
+    attack: 2e5,
+    shield: 5e4,
+    hull: 1e6,
+    speed: 100,
+    fuelPerDistance: 5,
+    researchReq: {
+      weaponsTech: 10,
+      shieldingTech: 10,
+      armourTech: 10
+    }
+  },
+  worldEater: {
+    id: "worldEater",
+    name: "World Eater",
+    description: "Slowest siege hull \u2014 strongest across the board. Destroys mini planets and moons. No cargo; cannot collect debris.",
+    cost: { metal: 8e6, crystal: 65e5, deuterium: 25e5 },
+    buildSeconds: 2e5,
+    shipyardLevel: 15,
+    cargo: 0,
+    attack: 3e5,
+    shield: 8e5,
+    hull: 2e6,
+    speed: 600,
+    fuelPerDistance: 4,
+    researchReq: {
+      weaponsTech: 14,
+      shieldingTech: 14,
+      armourTech: 14
+    }
+  },
+  swarmDrone: {
+    id: "swarmDrone",
+    name: "Swarm Drone",
+    description: "Carried strike mite. Must ride a Swarm Mothership; intercepts fire aimed at the carrier.",
+    cost: { metal: 50, crystal: 20, deuterium: 0 },
+    buildSeconds: 2,
+    shipyardLevel: 4,
+    cargo: 0,
+    attack: 6,
+    shield: 40,
+    hull: 8,
+    speed: 2e4,
+    fuelPerDistance: 0,
+    swarmCarried: true
+  },
+  swarmHarvester: {
+    id: "swarmHarvester",
+    name: "Swarm Harvester",
+    description: "Carried salvage mite. Loot feeds the mothership; kamikazes when the carrier is critical.",
+    cost: { metal: 100, crystal: 75, deuterium: 25 },
+    buildSeconds: 5,
+    shipyardLevel: 5,
+    cargo: 0,
+    attack: 0,
+    shield: 60,
+    hull: 30,
+    speed: 15e3,
+    fuelPerDistance: 0,
+    swarmCarried: true
+  },
+  swarmMothership: {
+    id: "swarmMothership",
+    name: "Swarm Mothership",
+    description: "2nd-largest hull \u2014 very high shields, low attack. Carries 2000 swarms; occupies mini planets; harvests debris.",
+    cost: { metal: 25e5, crystal: 2e6, deuterium: 75e4 },
+    buildSeconds: 8e4,
+    shipyardLevel: 13,
+    cargo: 15005e4,
+    attack: 3e3,
+    shield: 45e4,
+    hull: 1e5,
+    speed: 2500,
+    fuelPerDistance: 2,
+    researchReq: {
+      weaponsTech: 11,
+      shieldingTech: 11,
+      armourTech: 11
+    }
   }
 };
 var DEFENSES = {
@@ -2056,8 +2034,121 @@ var DEFENSES = {
     hull: 100
   }
 };
-
-// packages/game/src/catalog-research.ts
+var BUILDINGS = {
+  metalMine: {
+    id: "metalMine",
+    name: "Ore Extractor",
+    description: "Pulls metal from the crust. Needs energy.",
+    baseCost: { metal: 60, crystal: 15, deuterium: 0 },
+    costGrowth: 1.5,
+    baseBuildSeconds: 8,
+    energyUsePerLevel: 10,
+    produces: "metal"
+  },
+  crystalMine: {
+    id: "crystalMine",
+    name: "Crystal Lattice",
+    description: "Grows crystal veins. Needs energy.",
+    baseCost: { metal: 48, crystal: 24, deuterium: 0 },
+    costGrowth: 1.6,
+    baseBuildSeconds: 10,
+    energyUsePerLevel: 12,
+    produces: "crystal"
+  },
+  deutSynth: {
+    id: "deutSynth",
+    name: "Deut Still",
+    description: "Condenses deuterium from the atmosphere. Needs energy.",
+    baseCost: { metal: 225, crystal: 75, deuterium: 0 },
+    costGrowth: 1.5,
+    baseBuildSeconds: 12,
+    energyUsePerLevel: 20,
+    produces: "deuterium"
+  },
+  solarPlant: {
+    id: "solarPlant",
+    name: "Solar Array",
+    description: "Produces energy for mines and industry.",
+    baseCost: { metal: 75, crystal: 30, deuterium: 0 },
+    costGrowth: 1.5,
+    baseBuildSeconds: 8,
+    energyProdFormula: "solar"
+  },
+  metalStorage: {
+    id: "metalStorage",
+    name: "Metal Vault",
+    description: "Raises metal storage cap.",
+    baseCost: { metal: 1e3, crystal: 0, deuterium: 0 },
+    costGrowth: 2,
+    baseBuildSeconds: 6
+  },
+  crystalStorage: {
+    id: "crystalStorage",
+    name: "Crystal Vault",
+    description: "Raises crystal storage cap.",
+    baseCost: { metal: 1e3, crystal: 500, deuterium: 0 },
+    costGrowth: 2,
+    baseBuildSeconds: 6
+  },
+  deutTank: {
+    id: "deutTank",
+    name: "Deut Tank",
+    description: "Raises deuterium storage cap.",
+    baseCost: { metal: 1e3, crystal: 1e3, deuterium: 0 },
+    costGrowth: 2,
+    baseBuildSeconds: 6
+  },
+  shipyard: {
+    id: "shipyard",
+    name: "Shipyard",
+    description: "Unlocks and speeds hull construction.",
+    // Metal/crystal only at L1 so the ships path is reachable before Deut Still.
+    baseCost: { metal: 300, crystal: 150, deuterium: 0 },
+    costGrowth: 2,
+    baseBuildSeconds: 20
+  },
+  researchLab: {
+    id: "researchLab",
+    name: "Research Lab",
+    description: "Unlocks empire-wide research. Queue length grows with Yard Logistics.",
+    // Metal/crystal only so mines-first sessions unlock research before Deut Still.
+    baseCost: { metal: 180, crystal: 120, deuterium: 0 },
+    costGrowth: 2,
+    baseBuildSeconds: 18
+  },
+  lunarBase: {
+    id: "lunarBase",
+    name: "Crater Hab",
+    description: "Expands moon fields so more lunar structures can be built.",
+    baseCost: { metal: 2e3, crystal: 4e3, deuterium: 0 },
+    costGrowth: 2,
+    baseBuildSeconds: 30
+  },
+  sensorArray: {
+    id: "sensorArray",
+    name: "Horizon Scanner",
+    description: "Scans nearby systems for outbound fleets headed this way (moon only). Range grows with level.",
+    baseCost: { metal: 4e3, crystal: 8e3, deuterium: 2e3 },
+    costGrowth: 2,
+    baseBuildSeconds: 40
+  },
+  jumpGate: {
+    id: "jumpGate",
+    name: "Fold Bridge",
+    description: "Links your moons for near-instant fleet hops. Both moons need a Fold Bridge (moon only).",
+    baseCost: { metal: 8e3, crystal: 16e3, deuterium: 8e3 },
+    costGrowth: 2,
+    baseBuildSeconds: 60
+  },
+  chronoLathe: {
+    id: "chronoLathe",
+    name: "Chrono Lathe",
+    description: "Late-game assembler. Each level multiplies building, ship, and defense build times by 0.1^level. Does not affect research.",
+    baseCost: { metal: 1e6, crystal: 5e5, deuterium: 2e5 },
+    costGrowth: 2.5,
+    baseBuildSeconds: 3600
+  }
+};
 var RESEARCH = {
   energyTech: {
     id: "energyTech",
@@ -2139,15 +2230,51 @@ var RESEARCH = {
     costGrowth: 2,
     baseResearchSeconds: 28,
     labLevel: 2
+  },
+  swarmHold: {
+    id: "swarmHold",
+    name: "Swarm Hold",
+    description: "+15% of base (2000) Swarm Mothership capacity per level.",
+    baseCost: { metal: 200, crystal: 400, deuterium: 200 },
+    costGrowth: 2,
+    baseResearchSeconds: 40,
+    labLevel: 4
   }
 };
+var SWARM_CAPACITY_BASE = 2e3;
+var SWARM_HOLD_BONUS_PER_LEVEL = 0.15;
+var SWARM_CAPACITY_HARD_CAP = 1e5;
+var CHRONO_LATHE_SHIPYARD_REQ = 10;
+var SWARM_NUMBERS_THRESHOLD = 50;
+var SWARM_NUMBERS_BONUS_PER = 2e-3;
+var SWARM_NUMBERS_BONUS_CAP_COUNT = 2e3;
+var SWARM_INTERCEPT_FRACTION = 0.7;
+var SWARM_INTERCEPT_SPLIT = 0.5;
+var SWARM_KAMIKAZE_HULL_FRAC = 0.3;
+var SWARM_KAMIKAZE_SHIELD_DMG = 80;
+var SWARM_KAMIKAZE_HULL_DMG = 40;
+var OCCUPATION_DURATION_MS = 2 * 24 * 60 * 60 * 1e3;
+var OCCUPATION_OCCUPIER_SHARE = 0.3;
+var OCCUPATION_OWNER_SHARE = 0.7;
+var MINI_WORLD_EATER_MIN = 5;
 
 // packages/game/src/catalog-rapid-fire.ts
 var RAPID_FIRE = {
-  scout: { probe: 2 },
-  interceptor: { probe: 5, scout: 2 },
-  cruiser: { hauler: 3, probe: 4 },
-  bomber: { laserBattery: 4, scout: 2 }
+  scout: { probe: 2, swarmDrone: 2 },
+  interceptor: { probe: 5, scout: 2, swarmDrone: 5 },
+  cruiser: { hauler: 3, probe: 4, swarmDrone: 8 },
+  bomber: { laserBattery: 4, scout: 2, swarmDrone: 4 },
+  voidforgeTitan: {
+    swarmDrone: 200,
+    probe: 250,
+    scout: 50,
+    laserBattery: 50
+  },
+  worldEater: {
+    laserBattery: 20,
+    shieldDome: 10
+  },
+  swarmDrone: { probe: 3 }
 };
 function rapidFireFactor(firer, target) {
   const n = RAPID_FIRE[firer]?.[target] ?? 1;
@@ -2401,7 +2528,8 @@ var PLANET_BUILDING_ORDER = [
   "crystalStorage",
   "deutTank",
   "shipyard",
-  "researchLab"
+  "researchLab",
+  "chronoLathe"
 ];
 var MOON_BUILDING_ORDER = [
   "lunarBase",
@@ -2421,7 +2549,12 @@ var SHIP_ORDER = [
   "bomber",
   "probe",
   "recycler",
-  "colonyShip"
+  "colonyShip",
+  "voidforgeTitan",
+  "worldEater",
+  "swarmDrone",
+  "swarmHarvester",
+  "swarmMothership"
 ];
 var DEFENSE_ORDER = ["laserBattery", "shieldDome"];
 var QUEUE_HARD_CAP = 8;
@@ -2564,6 +2697,12 @@ function constructionTimeMultiplier(naniteLevel = 0) {
   const level = Math.max(0, Math.floor(naniteLevel));
   if (level <= 0) return 1;
   return Math.pow(0.1, level);
+}
+function batchUnitsProduced(elapsedSec, unitSeconds, remaining) {
+  if (unitSeconds >= 1) return 0;
+  if (elapsedSec <= 0 || remaining <= 0) return 0;
+  const unit = Math.max(1e-9, unitSeconds);
+  return Math.min(remaining, Math.floor(elapsedSec / unit + 1e-12));
 }
 var MIN_UNIT_SECONDS = 1e-9;
 function buildingUpgradeSeconds(buildingId, currentLevel, naniteLevel = 0) {
@@ -2710,7 +2849,8 @@ function emptyResearch() {
     espionageTech: 0,
     astrophysics: 0,
     computerTech: 0,
-    queueLogistics: 0
+    queueLogistics: 0,
+    swarmHold: 0
   };
 }
 function emptyDefenses() {
@@ -2831,6 +2971,58 @@ function fuelCostOneWay(origin, target, ships) {
   return Math.max(1, Math.ceil(fuel));
 }
 
+// packages/game/src/formulas-round2.ts
+function voidforgeMoonKillChancePct(titans, fieldsCap2) {
+  const n = Math.max(0, Math.floor(titans));
+  if (n <= 0) return 0;
+  const diameter = Math.max(1, fieldsCap2);
+  return Math.min(
+    100,
+    Math.floor((100 - Math.sqrt(diameter)) * Math.sqrt(n))
+  );
+}
+function swarmCapacityForLevel(swarmHoldLevel) {
+  const level = Math.max(0, Math.floor(swarmHoldLevel));
+  const raw2 = Math.floor(
+    SWARM_CAPACITY_BASE * (1 + SWARM_HOLD_BONUS_PER_LEVEL * level)
+  );
+  return Math.min(SWARM_CAPACITY_HARD_CAP, Math.max(SWARM_CAPACITY_BASE, raw2));
+}
+function swarmFleetCapacity(ships, swarmHoldLevel) {
+  const motherships = ships.swarmMothership ?? 0;
+  if (motherships <= 0) return 0;
+  return motherships * swarmCapacityForLevel(swarmHoldLevel);
+}
+function swarmCarriedCount(ships) {
+  return (ships.swarmDrone ?? 0) + (ships.swarmHarvester ?? 0);
+}
+function swarmDroneAttackMult(droneCount) {
+  const n = Math.max(0, Math.floor(droneCount));
+  if (n < SWARM_NUMBERS_THRESHOLD) return 1;
+  const bonus = SWARM_NUMBERS_BONUS_PER * Math.min(n, SWARM_NUMBERS_BONUS_CAP_COUNT);
+  return 1 + bonus;
+}
+function canCollectDebris(ships) {
+  return (ships.recycler ?? 0) >= 1 || (ships.swarmMothership ?? 0) >= 1;
+}
+function canResolveMiniPlanet(ships) {
+  return (ships.worldEater ?? 0) >= MINI_WORLD_EATER_MIN;
+}
+function shipResearchReqMet(shipId, research) {
+  const req = SHIPS[shipId].researchReq;
+  if (!req) return { ok: true };
+  for (const [id, need] of Object.entries(req)) {
+    const have = research[id] ?? 0;
+    if (have < (need ?? 0)) {
+      return {
+        ok: false,
+        error: `Needs research ${id} level ${need} (you have ${have}).`
+      };
+    }
+  }
+  return { ok: true };
+}
+
 // packages/game/src/formulas-combat.ts
 function unitCombatPower(attack, shield, hull, research) {
   const w = 1 + (research?.weaponsTech ?? 0) * 0.08;
@@ -2946,13 +3138,72 @@ function applyDamageToTarget(side, id, damage, research) {
     if (side.defenses[did] === 0) side.residual[id] = 0;
   }
 }
+function redistributeSwarmIntercept(target, damage, side) {
+  if (target !== "swarmMothership" || damage <= 0) {
+    return [{ target, damage }];
+  }
+  const drones = side.ships.swarmDrone ?? 0;
+  const harvesters = side.ships.swarmHarvester ?? 0;
+  if (drones <= 0 && harvesters <= 0) {
+    return [{ target, damage }];
+  }
+  const intercepted = damage * SWARM_INTERCEPT_FRACTION;
+  const toMother = damage - intercepted;
+  const out = [];
+  if (toMother > 0) out.push({ target: "swarmMothership", damage: toMother });
+  if (drones > 0 && harvesters > 0) {
+    const toDrones = intercepted * SWARM_INTERCEPT_SPLIT;
+    const toHarv = intercepted - toDrones;
+    if (toDrones > 0) out.push({ target: "swarmDrone", damage: toDrones });
+    if (toHarv > 0) out.push({ target: "swarmHarvester", damage: toHarv });
+  } else if (drones > 0) {
+    out.push({ target: "swarmDrone", damage: intercepted });
+  } else {
+    out.push({ target: "swarmHarvester", damage: intercepted });
+  }
+  return out;
+}
+function mothershipHullFraction(side, research) {
+  const count = side.ships.swarmMothership ?? 0;
+  if (count <= 0) return 0;
+  const hp = targetHp("swarmMothership", research);
+  const residual = side.residual.swarmMothership ?? 0;
+  return Math.max(0, Math.min(1, 1 - residual / hp));
+}
+function applyHarvesterKamikaze(own, enemy, ownResearch, enemyResearch) {
+  const harvesters = own.ships.swarmHarvester ?? 0;
+  if (harvesters <= 0) return 0;
+  if ((own.ships.swarmMothership ?? 0) <= 0) return 0;
+  if (mothershipHullFraction(own, ownResearch) >= SWARM_KAMIKAZE_HULL_FRAC) {
+    return 0;
+  }
+  const focus = pickFocusTarget(enemy.ships, enemy.defenses);
+  if (!focus) {
+    own.ships.swarmHarvester = 0;
+    own.residual.swarmHarvester = 0;
+    return harvesters;
+  }
+  const dmgPer = SWARM_KAMIKAZE_SHIELD_DMG + SWARM_KAMIKAZE_HULL_DMG;
+  applyDamageToTarget(enemy, focus, harvesters * dmgPer, enemyResearch);
+  own.ships.swarmHarvester = 0;
+  own.residual.swarmHarvester = 0;
+  return harvesters;
+}
+function applyShotWithIntercept(side, target, damage, research) {
+  for (const part of redistributeSwarmIntercept(target, damage, side)) {
+    applyDamageToTarget(side, part.target, part.damage, research);
+  }
+}
 function collectFire(firerShips, firerDefenses, targetShips, targetDefenses, firerResearch) {
   const shots = [];
   const focus = pickFocusTarget(targetShips, targetDefenses);
   if (!focus) return shots;
   for (const id of livingShipIds(firerShips)) {
     const def = SHIPS[id];
-    const atk = unitAtk(def.attack, firerResearch);
+    let atk = unitAtk(def.attack, firerResearch);
+    if (id === "swarmDrone") {
+      atk *= swarmDroneAttackMult(firerShips.swarmDrone ?? 0);
+    }
     if (atk <= 0) continue;
     const n = firerShips[id] ?? 0;
     const rf = rapidFireFactor(id, focus);
@@ -3020,7 +3271,7 @@ function resolveCombat(attacker, defender, defenses = emptyDefenses(), attackerR
       defenderResearch
     );
     for (const shot of atkShots) {
-      applyDamageToTarget(
+      applyShotWithIntercept(
         defSide,
         shot.target,
         shot.damage / defensePowerMult,
@@ -3028,13 +3279,25 @@ function resolveCombat(attacker, defender, defenses = emptyDefenses(), attackerR
       );
     }
     for (const shot of defShots) {
-      applyDamageToTarget(
+      applyShotWithIntercept(
         atkSide,
         shot.target,
         shot.damage * defensePowerMult,
         attackerResearch
       );
     }
+    applyHarvesterKamikaze(
+      atkSide,
+      defSide,
+      attackerResearch,
+      defenderResearch
+    );
+    applyHarvesterKamikaze(
+      defSide,
+      atkSide,
+      defenderResearch,
+      attackerResearch
+    );
     const atkAlive2 = shipCount(atkSide.ships) > 0;
     const defAlive2 = shipCount(defSide.ships) + defenseCount(defSide.defenses) > 0;
     if (!atkAlive2 || !defAlive2) break;
@@ -3547,6 +3810,36 @@ function advancePlanet(planet, universeSpeed, now, energyTechLevel = 0, boosts, 
   }
   return state;
 }
+function advanceFleetSwarmProduce(fleet, now) {
+  const job = fleet.swarmProduce;
+  if (!job || job.remaining <= 0) {
+    fleet.swarmProduce = null;
+    return;
+  }
+  const unitSec = Math.max(1e-9, job.unitSeconds);
+  const elapsedSec = Math.max(0, (now - job.progressAt) / 1e3);
+  let batch;
+  if (unitSec < 1) {
+    batch = batchUnitsProduced(elapsedSec, unitSec, job.remaining);
+  } else if (elapsedSec >= unitSec * job.remaining) {
+    batch = job.remaining;
+  } else {
+    batch = Math.floor(elapsedSec / unitSec);
+  }
+  if (batch <= 0) return;
+  fleet.ships.swarmDrone = (fleet.ships.swarmDrone ?? 0) + batch;
+  const remaining = job.remaining - batch;
+  if (remaining <= 0) {
+    fleet.swarmProduce = null;
+    return;
+  }
+  const leftoverSec = elapsedSec - batch * unitSec;
+  fleet.swarmProduce = {
+    remaining,
+    unitSeconds: unitSec,
+    progressAt: now - leftoverSec * 1e3
+  };
+}
 function advanceResearch(universe, player, now) {
   if (!player.researchQueue) player.researchQueue = [];
   ensureQueueFrontStarted(player.researchQueue, now);
@@ -4017,7 +4310,8 @@ function emptyBuildings() {
     researchLab: 0,
     lunarBase: 0,
     sensorArray: 0,
-    jumpGate: 0
+    jumpGate: 0,
+    chronoLathe: 0
   };
 }
 function emptyShips() {
@@ -4048,7 +4342,9 @@ function createUniverse(name = "Alpha Drift", speed = 1, fleetSpeed = speed) {
     expeditionReports: {},
     debris: {},
     asteroids: {},
-    pirateBases: {}
+    pirateBases: {},
+    occupations: {},
+    miniPlanetIds: []
   };
   seedUniverseAsteroids(universe);
   seedUniversePirates(universe, now);
@@ -4091,6 +4387,8 @@ function ensureUniverseShape(universe) {
   if (!universe.debris) universe.debris = {};
   if (!universe.asteroids) universe.asteroids = {};
   if (!universe.pirateBases) universe.pirateBases = {};
+  if (!universe.occupations) universe.occupations = {};
+  if (!universe.miniPlanetIds) universe.miniPlanetIds = [];
   if (!universe.fleetSpeed) universe.fleetSpeed = universe.speed || 1;
   if (!universe.seed) universe.seed = `seed_${universe.id}`;
   for (const player of Object.values(universe.players)) {
@@ -4101,7 +4399,10 @@ function ensureUniverseShape(universe) {
       player.activePlanetId = player.homePlanetId;
     }
     if (!player.research) player.research = emptyResearch();
+    if (player.research.swarmHold === void 0) player.research.swarmHold = 0;
+    if (player.research.queueLogistics === void 0) player.research.queueLogistics = 0;
     if (player.research.queueLogistics == null) player.research.queueLogistics = 0;
+    if (player.research.swarmHold == null) player.research.swarmHold = 0;
     if (!Array.isArray(player.researchQueue)) {
       player.researchQueue = player.researchQueue ? [player.researchQueue] : [];
     }
@@ -4134,6 +4435,7 @@ function ensureUniverseShape(universe) {
     if (!planet.buildings.lunarBase) planet.buildings.lunarBase = 0;
     if (!planet.buildings.sensorArray) planet.buildings.sensorArray = 0;
     if (!planet.buildings.jumpGate) planet.buildings.jumpGate = 0;
+    if (!planet.buildings.chronoLathe) planet.buildings.chronoLathe = 0;
     if (planet.kind !== "moon" && (typeof planet.fieldsCap !== "number" || planet.fieldsCap <= 0)) {
       planet.fieldsCap = rollPlanetFields(
         planet.coords.slot,
@@ -4228,6 +4530,43 @@ function bestLabLevel(universe, player) {
   return best;
 }
 
+// packages/game/src/world-accounts.ts
+function claimPlayerToAccount(universe, playerId, accountId) {
+  ensureUniverseShape(universe);
+  const trimmedAccount = accountId.trim();
+  if (!trimmedAccount) {
+    return { ok: false, error: "accountId required.", code: "not_found" };
+  }
+  const player = universe.players[playerId];
+  if (!player) {
+    return { ok: false, error: "Player not found.", code: "not_found" };
+  }
+  if (player.accountId && player.accountId !== trimmedAccount) {
+    return {
+      ok: false,
+      error: "That commander is already linked to another account.",
+      code: "already_claimed"
+    };
+  }
+  const conflict = Object.values(universe.players).find(
+    (p) => p.id !== player.id && p.accountId === trimmedAccount
+  );
+  if (conflict) {
+    return {
+      ok: false,
+      error: "This account already owns another commander.",
+      code: "conflict"
+    };
+  }
+  player.accountId = trimmedAccount;
+  return { ok: true, player };
+}
+function playerForAccount(universe, accountId) {
+  const trimmed = accountId.trim();
+  if (!trimmed) return null;
+  return Object.values(universe.players).find((p) => p.accountId === trimmed) ?? null;
+}
+
 // packages/game/src/world-moons.ts
 function moonRoll(seed) {
   let h = 2166136261;
@@ -4300,6 +4639,220 @@ function tryFormMoon(universe, parent, debrisCreated, reportId, now) {
   return moon;
 }
 
+// packages/game/src/world-occupation.ts
+function defensesCleared(planet) {
+  const d = planet.defenses ?? emptyDefenses();
+  return (d.laserBattery ?? 0) + (d.shieldDome ?? 0) <= 0;
+}
+function pruneExpiredOccupations(universe, now) {
+  if (!universe.occupations) {
+    universe.occupations = {};
+    return;
+  }
+  for (const [planetId, occ] of Object.entries(universe.occupations)) {
+    if (occ.endsAt <= now) {
+      delete universe.occupations[planetId];
+    }
+  }
+}
+function occupationForPlanet(universe, planetId, now = Date.now()) {
+  pruneExpiredOccupations(universe, now);
+  return universe.occupations?.[planetId] ?? null;
+}
+function isPlanetOccupied(universe, planetId, now = Date.now()) {
+  return occupationForPlanet(universe, planetId, now) !== null;
+}
+function occupationMineShares(rates) {
+  return {
+    owner: {
+      metal: rates.metal * OCCUPATION_OWNER_SHARE,
+      crystal: rates.crystal * OCCUPATION_OWNER_SHARE,
+      deuterium: rates.deuterium * OCCUPATION_OWNER_SHARE
+    },
+    occupier: {
+      metal: rates.metal * OCCUPATION_OCCUPIER_SHARE,
+      crystal: rates.crystal * OCCUPATION_OCCUPIER_SHARE,
+      deuterium: rates.deuterium * OCCUPATION_OCCUPIER_SHARE
+    }
+  };
+}
+function startOccupation(universe, playerId, fleetId, now = Date.now()) {
+  pruneExpiredOccupations(universe, now);
+  const fleet = universe.fleets[fleetId];
+  if (!fleet || fleet.ownerPlayerId !== playerId) {
+    return { ok: false, error: "Fleet not found." };
+  }
+  if ((fleet.ships.swarmMothership ?? 0) < 1) {
+    return { ok: false, error: "Occupation requires a Swarm Mothership." };
+  }
+  const planetId = fleet.targetPlanetId;
+  if (!planetId) {
+    return { ok: false, error: "Fleet has no target planet." };
+  }
+  const planet = universe.planets[planetId];
+  if (!planet) return { ok: false, error: "Planet missing." };
+  if (planet.ownerPlayerId === playerId) {
+    return { ok: false, error: "Cannot occupy your own body." };
+  }
+  if (!defensesCleared(planet)) {
+    return { ok: false, error: "All defenses must be destroyed first." };
+  }
+  if (universe.occupations?.[planetId]) {
+    return { ok: false, error: "Planet is already occupied." };
+  }
+  const occ = {
+    planetId,
+    occupierPlayerId: playerId,
+    mothershipFleetId: fleetId,
+    startedAt: now,
+    endsAt: now + OCCUPATION_DURATION_MS
+  };
+  if (!universe.occupations) universe.occupations = {};
+  universe.occupations[planetId] = occ;
+  return { ok: true, planet };
+}
+function abandonOccupation(universe, playerId, planetId, now = Date.now()) {
+  pruneExpiredOccupations(universe, now);
+  const occ = universe.occupations?.[planetId];
+  if (!occ) return { ok: false, error: "No occupation on that planet." };
+  if (occ.occupierPlayerId !== playerId) {
+    return { ok: false, error: "Only the occupier can abandon." };
+  }
+  if (universe.occupations) delete universe.occupations[planetId];
+  const planet = universe.planets[planetId];
+  if (!planet) return { ok: false, error: "Planet missing." };
+  return { ok: true, planet };
+}
+function clearOccupationIfRecaptured(universe, planetId, winnerPlayerId) {
+  const occ = universe.occupations?.[planetId];
+  if (!occ) return;
+  const planet = universe.planets[planetId];
+  if (!planet) return;
+  if (winnerPlayerId === planet.ownerPlayerId && universe.occupations) {
+    delete universe.occupations[planetId];
+  }
+}
+function clearOccupationIfFleetGone(universe, fleet) {
+  if (!universe.occupations) return;
+  for (const [planetId, occ] of Object.entries(universe.occupations)) {
+    if (occ.mothershipFleetId === fleet.id) {
+      delete universe.occupations[planetId];
+    }
+  }
+}
+
+// packages/game/src/world-round2.ts
+function swarmProduce(universe, playerId, fleetId, count, now = Date.now()) {
+  const qty = Math.floor(count);
+  if (qty < 1 || qty > 200) {
+    return { ok: false, error: "Produce between 1 and 200 drones." };
+  }
+  const fleet = universe.fleets[fleetId];
+  if (!fleet || fleet.ownerPlayerId !== playerId) {
+    return { ok: false, error: "Fleet not found." };
+  }
+  const motherships = fleet.ships.swarmMothership ?? 0;
+  if (motherships < 1) {
+    return { ok: false, error: "Swarm produce requires a Swarm Mothership." };
+  }
+  const player = universe.players[playerId];
+  if (!player) return { ok: false, error: "Unknown player." };
+  const hold = player.research.swarmHold ?? 0;
+  const cap = swarmFleetCapacity(fleet.ships, hold);
+  const used = swarmCarriedCount(fleet.ships);
+  if (used + qty > cap) {
+    return {
+      ok: false,
+      error: `Not enough swarm capacity (${used + qty}/${cap}).`
+    };
+  }
+  if (fleet.swarmProduce && fleet.swarmProduce.remaining > 0) {
+    return { ok: false, error: "Mothership is already producing drones." };
+  }
+  const cost = shipCost("swarmDrone", qty);
+  if (!canAfford(fleet.cargo, cost)) {
+    return { ok: false, error: "Not enough cargo resources on the mothership." };
+  }
+  const origin = universe.planets[fleet.originPlanetId];
+  if (!origin) return { ok: false, error: "Origin planet missing." };
+  const chrono = origin.buildings.chronoLathe ?? 0;
+  const yard = Math.max(origin.buildings.shipyard ?? 0, 4);
+  const unitSeconds = shipUnitBuildSeconds("swarmDrone", yard, chrono);
+  fleet.cargo = spend(fleet.cargo, cost);
+  fleet.swarmProduce = {
+    remaining: qty,
+    unitSeconds,
+    progressAt: now
+  };
+  universe.fleets[fleet.id] = fleet;
+  return { ok: true, planet: origin };
+}
+function resolveMiniPlanetChoice(universe, playerId, fleetId, choice) {
+  const fleet = universe.fleets[fleetId];
+  if (!fleet || fleet.ownerPlayerId !== playerId) {
+    return { ok: false, error: "Fleet not found." };
+  }
+  if (!canResolveMiniPlanet(fleet.ships)) {
+    return {
+      ok: false,
+      error: `Need at least ${MINI_WORLD_EATER_MIN} World Eaters.`
+    };
+  }
+  const planetId = fleet.targetPlanetId;
+  if (!planetId) return { ok: false, error: "Fleet has no target." };
+  const planet = universe.planets[planetId];
+  if (!planet) return { ok: false, error: "Planet missing." };
+  const isMini = Boolean(planet.flags?.mini) || (universe.miniPlanetIds ?? []).includes(planetId);
+  if (!isMini) {
+    return {
+      ok: false,
+      error: "Target is not a mini planet (discovery lands in thread K)."
+    };
+  }
+  void choice;
+  return { ok: true, planet };
+}
+function maybeDestroyMoonWithTitans(universe, moon, survivingAttacker, reportId) {
+  const killers = (survivingAttacker.voidforgeTitan ?? 0) + (survivingAttacker.worldEater ?? 0);
+  const chancePct = voidforgeMoonKillChancePct(killers, fieldsCap(moon));
+  if (chancePct <= 0) return { destroyed: false, chancePct: 0 };
+  const roll = moonRoll(`${reportId}:moonkill`);
+  if (roll >= chancePct) return { destroyed: false, chancePct };
+  const debrisShips = destroyedShipResources(moon.ships, emptyShips());
+  const halfDebris = debrisFromDestroyed({
+    metal: debrisShips.metal,
+    crystal: debrisShips.crystal,
+    deuterium: 0
+  });
+  addDebris(universe, moon.coords, {
+    metal: Math.floor(halfDebris.metal),
+    crystal: Math.floor(halfDebris.crystal),
+    deuterium: 0
+  });
+  const owner = universe.players[moon.ownerPlayerId];
+  if (owner) {
+    owner.planetIds = owner.planetIds.filter((id) => id !== moon.id);
+    if (owner.activePlanetId === moon.id) {
+      owner.activePlanetId = owner.homePlanetId;
+    }
+    universe.players[owner.id] = owner;
+  }
+  const parentId = moon.parentPlanetId;
+  if (parentId && universe.planets[parentId]) {
+    universe.planets[parentId].moonId = null;
+  }
+  for (const [fid, fleet] of Object.entries(universe.fleets)) {
+    if (fleet.originPlanetId === moon.id || fleet.targetPlanetId === moon.id) {
+      delete universe.fleets[fid];
+    }
+  }
+  if (universe.occupations?.[moon.id]) {
+    delete universe.occupations[moon.id];
+  }
+  delete universe.planets[moon.id];
+  return { destroyed: true, chancePct };
+}
+
 // packages/game/src/world-arrival-raid.ts
 function resolveRaidArrival(universe, fleet, target, now) {
   const owner = universe.players[fleet.ownerPlayerId];
@@ -4359,8 +4912,34 @@ function resolveRaidArrival(universe, fleet, target, now) {
     universe.players[defenderOwner.id] = defenderOwner;
   }
   const reportId = `rpt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
-  const moon = tryFormMoon(universe, target, debrisCreated, reportId, now);
-  const summary = moon ? `${combat.summary} A moon coalesced from the debris field.` : combat.summary;
+  let summary = combat.summary;
+  let moonFormed = false;
+  let moonDestroyed = false;
+  let moonKillChancePct;
+  if (target.kind === "moon" && combat.outcome === "attacker_win") {
+    const kill = maybeDestroyMoonWithTitans(
+      universe,
+      target,
+      combat.attackerAfter,
+      reportId
+    );
+    moonKillChancePct = kill.chancePct;
+    if (kill.destroyed) {
+      moonDestroyed = true;
+      summary = `${combat.summary} Siege hulls shattered the moon (${kill.chancePct}% chance).`;
+    }
+  } else {
+    const moon = tryFormMoon(universe, target, debrisCreated, reportId, now);
+    moonFormed = Boolean(moon);
+    if (moon) {
+      summary = `${combat.summary} A moon coalesced from the debris field.`;
+    }
+  }
+  if (combat.outcome === "attacker_win") {
+    clearOccupationIfRecaptured(universe, target.id, fleet.ownerPlayerId);
+  } else if (combat.outcome === "defender_win") {
+    clearOccupationIfRecaptured(universe, target.id, target.ownerPlayerId);
+  }
   const report = {
     id: reportId,
     at: now,
@@ -4381,7 +4960,9 @@ function resolveRaidArrival(universe, fleet, target, now) {
     outcome: combat.outcome,
     rounds: combat.rounds,
     summary,
-    moonFormed: Boolean(moon)
+    moonFormed,
+    moonDestroyed: moonDestroyed || void 0,
+    moonKillChancePct
   };
   universe.reports[reportId] = report;
   fleet.ships = combat.attackerAfter;
@@ -4575,6 +5156,7 @@ function effectiveFleetSpeed(universe, ownerPlayerId, now) {
 function resolveFleetArrival(universe, fleet, now) {
   const origin = universe.planets[fleet.originPlanetId];
   if (!origin) {
+    clearOccupationIfFleetGone(universe, fleet);
     delete universe.fleets[fleet.id];
     return;
   }
@@ -4701,6 +5283,7 @@ function resolveFleetArrival(universe, fleet, now) {
       drive
     );
     if (fleetShipCount(fleet.ships) <= 0) {
+      clearOccupationIfFleetGone(universe, fleet);
       delete universe.fleets[fleet.id];
       return;
     }
@@ -4709,6 +5292,7 @@ function resolveFleetArrival(universe, fleet, now) {
     universe.fleets[fleet.id] = fleet;
     return;
   }
+  clearOccupationIfFleetGone(universe, fleet);
   addShipsToPlanet(origin, fleet.ships);
   addCargoToPlanet(origin, fleet.cargo);
   delete universe.fleets[fleet.id];
@@ -4722,6 +5306,9 @@ function fleetCargoCapacityForHarvest(ships) {
 }
 function advanceFleets(universe, now) {
   ensureUniverseShape(universe);
+  for (const fleet of Object.values(universe.fleets)) {
+    if (fleet.swarmProduce) advanceFleetSwarmProduce(fleet, now);
+  }
   const due = Object.values(universe.fleets).filter((f) => f.arrivesAt <= now).sort((a, b) => a.arrivesAt - b.arrivesAt);
   for (const fleet of due) {
     const live = universe.fleets[fleet.id];
@@ -4731,6 +5318,7 @@ function advanceFleets(universe, now) {
 }
 function advanceUniverse(universe, now = Date.now()) {
   ensureUniverseShape(universe);
+  pruneExpiredOccupations(universe, now);
   for (const player of Object.values(universe.players)) {
     advanceResearch(universe, player, now);
   }
@@ -4740,7 +5328,8 @@ function advanceUniverse(universe, now = Date.now()) {
     const energyTech = owner?.research.energyTech ?? 0;
     const boosts = playerBoosts(owner, now);
     const lb = levelBonuses(owner?.level ?? 1);
-    universe.planets[id] = advancePlanet(
+    const before = { ...planet.resources };
+    const advanced = advancePlanet(
       planet,
       universe.speed,
       now,
@@ -4752,6 +5341,32 @@ function advanceUniverse(universe, now = Date.now()) {
       owner
     );
     if (owner) universe.players[owner.id] = owner;
+    const occ = occupationForPlanet(universe, id, now);
+    if (occ && occ.occupierPlayerId !== planet.ownerPlayerId) {
+      const gained = {
+        metal: Math.max(0, advanced.resources.metal - before.metal),
+        crystal: Math.max(0, advanced.resources.crystal - before.crystal),
+        deuterium: Math.max(
+          0,
+          advanced.resources.deuterium - before.deuterium
+        )
+      };
+      const shares = occupationMineShares(gained);
+      subtractCargo(advanced, {
+        metal: gained.metal - shares.owner.metal,
+        crystal: gained.crystal - shares.owner.crystal,
+        deuterium: gained.deuterium - shares.owner.deuterium
+      });
+      const occupier = universe.players[occ.occupierPlayerId];
+      const payPlanetId = occupier?.activePlanetId ?? occupier?.homePlanetId ?? null;
+      if (payPlanetId && universe.planets[payPlanetId]) {
+        addCargoToPlanet(universe.planets[payPlanetId], shares.occupier);
+      }
+    }
+    universe.planets[id] = advanced;
+  }
+  for (const fleet of Object.values(universe.fleets)) {
+    advanceFleetSwarmProduce(fleet, now);
   }
   advanceFleets(universe, now);
   tickPirates(universe, now);
@@ -4778,8 +5393,7 @@ function researchQueueCap(player, now = Date.now()) {
 
 // packages/game/src/world-queues.ts
 function naniteFactoryLevel(planet) {
-  const buildings = planet.buildings;
-  return Math.max(0, Math.floor(buildings.naniteFactory ?? 0));
+  return Math.max(0, Math.floor(planet.buildings.chronoLathe ?? 0));
 }
 function resolveActionPlanet(universe, player, planetId) {
   const id = planetId || player.activePlanetId || player.homePlanetId;
@@ -4806,6 +5420,9 @@ function queueBuildingUpgrade(universe, playerId, buildingId, now = Date.now(), 
   advanceUniverse(universe, now);
   const planet = resolveActionPlanet(universe, player, planetId);
   if (!planet) return { ok: false, error: "Planet missing." };
+  if (isPlanetOccupied(universe, planet.id, now)) {
+    return { ok: false, error: "Construction blocked while planet is occupied." };
+  }
   if (!buildingAllowedOn(planet, buildingId)) {
     return {
       ok: false,
@@ -4817,6 +5434,15 @@ function queueBuildingUpgrade(universe, playerId, buildingId, now = Date.now(), 
   }
   if (buildingId === "jumpGate" && (planet.buildings.lunarBase ?? 0) < 1) {
     return { ok: false, error: "Fold Bridge needs Crater Hab level 1." };
+  }
+  if (buildingId === "chronoLathe") {
+    const yard = planet.buildings.shipyard ?? 0;
+    if (yard < CHRONO_LATHE_SHIPYARD_REQ) {
+      return {
+        ok: false,
+        error: `Chrono Lathe needs Shipyard level ${CHRONO_LATHE_SHIPYARD_REQ} (you have ${yard}).`
+      };
+    }
   }
   const cap = yardQueueCap(player, now);
   if (planet.buildQueue.length >= cap) {
@@ -4848,7 +5474,7 @@ function queueBuildingUpgrade(universe, playerId, buildingId, now = Date.now(), 
     return { ok: false, error: "Not enough resources." };
   }
   const lb = levelBonuses(player.level ?? 1);
-  const naniteLevel = naniteFactoryLevel(planet);
+  const naniteLevel = buildingId === "chronoLathe" ? 0 : naniteFactoryLevel(planet);
   const seconds = buildingUpgradeSeconds(buildingId, current, naniteLevel) * lb.buildTime / universe.speed;
   planet.resources = spend(planet.resources, cost);
   const startNow = planet.buildQueue.length === 0;
@@ -4879,6 +5505,9 @@ function queueShipBuild(universe, playerId, shipId, count, now = Date.now(), pla
   advanceUniverse(universe, now);
   const planet = resolveActionPlanet(universe, player, planetId);
   if (!planet) return { ok: false, error: "Planet missing." };
+  if (isPlanetOccupied(universe, planet.id, now)) {
+    return { ok: false, error: "Shipyard blocked while planet is occupied." };
+  }
   const cap = yardQueueCap(player, now);
   if (planet.shipQueue.length >= cap) {
     return {
@@ -4893,6 +5522,8 @@ function queueShipBuild(universe, playerId, shipId, count, now = Date.now(), pla
       error: `Needs Shipyard level ${def.shipyardLevel} (you have ${yard}).`
     };
   }
+  const researchOk = shipResearchReqMet(shipId, player.research);
+  if (!researchOk.ok) return researchOk;
   const cost = shipCost(shipId, qty);
   if (!canAfford(planet.resources, cost)) {
     return { ok: false, error: "Not enough resources." };
@@ -4931,6 +5562,9 @@ function queueDefenseBuild(universe, playerId, defenseId, count, now = Date.now(
   advanceUniverse(universe, now);
   const planet = resolveActionPlanet(universe, player, planetId);
   if (!planet) return { ok: false, error: "Planet missing." };
+  if (isPlanetOccupied(universe, planet.id, now)) {
+    return { ok: false, error: "Defense yard blocked while planet is occupied." };
+  }
   const cap = yardQueueCap(player, now);
   if (planet.defenseQueue.length >= cap) {
     return {
@@ -5381,8 +6015,11 @@ function resolveLaunchTarget(universe, player, origin, mission, ships, targetPla
       if (!field || field.metal <= 0 && field.crystal <= 0) {
         return { ok: false, error: "No debris at those coordinates." };
       }
-      if ((ships.recycler ?? 0) < 1) {
-        return { ok: false, error: "Harvest requires a Salvage Trawler." };
+      if (!canCollectDebris(ships)) {
+        return {
+          ok: false,
+          error: "Harvest requires a Salvage Trawler or Swarm Mothership."
+        };
       }
     }
   } else {
@@ -5772,7 +6409,8 @@ function playerView(universe, playerId, now = Date.now(), galaxy, system) {
     officerCatalog: OFFICER_ORDER.map((id) => OFFICERS[id]),
     skillCatalog: SKILL_ORDER.map((id) => SKILLS[id]),
     dailyLoginAvailable: canClaimDailyLogin(player, now),
-    progress: playerProgressView(player)
+    progress: playerProgressView(player),
+    occupation: occupationForPlanet(universe, planet.id, now)
   };
 }
 
@@ -5843,6 +6481,9 @@ function unlockSkill(universe, playerId, skillId, now = Date.now()) {
   universe.players[player.id] = player;
   return { ok: true };
 }
+
+// apps/server/src/accounts.ts
+var import_node_crypto2 = require("node:crypto");
 
 // node_modules/uncrypto/dist/crypto.node.mjs
 var import_node_crypto = __toESM(require("node:crypto"), 1);
@@ -11683,6 +12324,9 @@ function getRedis() {
   redis = new Redis2({ url: creds.url, token: creds.token });
   return redis;
 }
+function getKvClient() {
+  return getRedis();
+}
 function storageMode() {
   if (resolvedMode) return resolvedMode;
   const creds = redisCredentials(process.env);
@@ -11769,6 +12413,540 @@ async function withUniverse(fn) {
   throw new Error("Universe busy \u2014 retry in a moment.");
 }
 
+// apps/server/src/accounts.ts
+var SESSION_COOKIE = "starhold_session";
+var SESSION_TTL_SEC = 30 * 24 * 60 * 60;
+var MAGIC_TTL_SEC = 15 * 60;
+var memAccounts = /* @__PURE__ */ new Map();
+var memEmailIndex = /* @__PURE__ */ new Map();
+var memSessions = /* @__PURE__ */ new Map();
+var memMagic = /* @__PURE__ */ new Map();
+function sessionSecret() {
+  return process.env.SESSION_SECRET?.trim() || "starhold-dev-session-secret-not-for-prod";
+}
+function normalizeEmail(email) {
+  return email.trim().toLowerCase();
+}
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254;
+}
+function hashToken(token) {
+  return (0, import_node_crypto2.createHash)("sha256").update(`${sessionSecret()}:${token}`).digest("hex");
+}
+function newToken(bytes = 32) {
+  return (0, import_node_crypto2.randomBytes)(bytes).toString("base64url");
+}
+function accountKey(id) {
+  return `starhold:account:${id}`;
+}
+function emailKey(email) {
+  return `starhold:email:${email}`;
+}
+function sessionKey(id) {
+  return `starhold:session:${id}`;
+}
+function magicKey(hash) {
+  return `starhold:magic:${hash}`;
+}
+async function kvGet(client, key) {
+  if (!client) return null;
+  const data = await client.get(key);
+  return data ?? null;
+}
+async function kvSet(client, key, value, exSec) {
+  if (!client) return;
+  if (exSec != null) {
+    await client.set(key, value, { ex: exSec });
+  } else {
+    await client.set(key, value);
+  }
+}
+async function kvDel(client, key) {
+  if (!client) return;
+  await client.del(key);
+}
+async function getAccountById(accountId) {
+  const client = getKvClient();
+  if (!client) return memAccounts.get(accountId) ?? null;
+  return kvGet(client, accountKey(accountId));
+}
+async function getAccountByEmail(email) {
+  const normalized = normalizeEmail(email);
+  const client = getKvClient();
+  if (!client) {
+    const id2 = memEmailIndex.get(normalized);
+    return id2 ? memAccounts.get(id2) ?? null : null;
+  }
+  const id = await kvGet(client, emailKey(normalized));
+  if (!id) return null;
+  return kvGet(client, accountKey(id));
+}
+async function upsertAccountForEmail(email, now = Date.now()) {
+  const normalized = normalizeEmail(email);
+  const existing = await getAccountByEmail(normalized);
+  if (existing) {
+    existing.lastLoginAt = now;
+    await saveAccount(existing);
+    return existing;
+  }
+  const account = {
+    id: `acct_${now.toString(36)}_${(0, import_node_crypto2.randomBytes)(4).toString("hex")}`,
+    email: normalized,
+    playerId: null,
+    createdAt: now,
+    lastLoginAt: now
+  };
+  await saveAccount(account);
+  return account;
+}
+async function saveAccount(account) {
+  const client = getKvClient();
+  if (!client) {
+    memAccounts.set(account.id, account);
+    memEmailIndex.set(account.email, account.id);
+    return;
+  }
+  await kvSet(client, accountKey(account.id), account);
+  await kvSet(client, emailKey(account.email), account.id);
+}
+async function setAccountPlayerId(accountId, playerId) {
+  const account = await getAccountById(accountId);
+  if (!account) return null;
+  account.playerId = playerId;
+  account.lastLoginAt = Date.now();
+  await saveAccount(account);
+  return account;
+}
+async function createMagicLink(opts) {
+  const now = opts.now ?? Date.now();
+  const token = newToken(32);
+  const hash = hashToken(token);
+  const expiresAt = now + MAGIC_TTL_SEC * 1e3;
+  const record = {
+    email: normalizeEmail(opts.email),
+    createdAt: now,
+    expiresAt,
+    claimPlayerId: opts.claimPlayerId?.trim() || void 0
+  };
+  const client = getKvClient();
+  if (!client) {
+    memMagic.set(hash, record);
+  } else {
+    await kvSet(client, magicKey(hash), record, MAGIC_TTL_SEC);
+  }
+  return { token, expiresAt };
+}
+async function consumeMagicToken(token, now = Date.now()) {
+  const hash = hashToken(token);
+  const client = getKvClient();
+  let record;
+  if (!client) {
+    record = memMagic.get(hash) ?? null;
+    if (record) memMagic.delete(hash);
+  } else {
+    record = await kvGet(client, magicKey(hash));
+    if (record) await kvDel(client, magicKey(hash));
+  }
+  if (!record) return null;
+  if (record.expiresAt < now) return null;
+  return record;
+}
+async function createSession(accountId, now = Date.now()) {
+  const id = newToken(32);
+  const record = {
+    id,
+    accountId,
+    createdAt: now,
+    expiresAt: now + SESSION_TTL_SEC * 1e3
+  };
+  const client = getKvClient();
+  if (!client) {
+    memSessions.set(id, record);
+  } else {
+    await kvSet(client, sessionKey(id), record, SESSION_TTL_SEC);
+  }
+  return record;
+}
+async function getSession(sessionId, now = Date.now()) {
+  if (!sessionId) return null;
+  const client = getKvClient();
+  let record;
+  if (!client) {
+    record = memSessions.get(sessionId) ?? null;
+  } else {
+    record = await kvGet(client, sessionKey(sessionId));
+  }
+  if (!record) return null;
+  if (record.expiresAt < now) {
+    await deleteSession(sessionId);
+    return null;
+  }
+  return record;
+}
+async function deleteSession(sessionId) {
+  const client = getKvClient();
+  if (!client) {
+    memSessions.delete(sessionId);
+    return;
+  }
+  await kvDel(client, sessionKey(sessionId));
+}
+function appBaseUrl(reqUrl) {
+  const fromEnv = process.env.APP_URL?.trim().replace(/\/$/, "");
+  if (fromEnv) return fromEnv;
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL.replace(/^https?:\/\//, "")}`;
+  }
+  if (reqUrl) {
+    try {
+      const u = new URL(reqUrl);
+      return `${u.protocol}//${u.host}`;
+    } catch {
+    }
+  }
+  return "http://localhost:3001";
+}
+
+// apps/server/src/cookies.ts
+function readCookie(c, name) {
+  const header = c.req.header("Cookie");
+  if (!header) return null;
+  for (const part of header.split(";")) {
+    const idx = part.indexOf("=");
+    if (idx < 0) continue;
+    const k = part.slice(0, idx).trim();
+    if (k !== name) continue;
+    return decodeURIComponent(part.slice(idx + 1).trim());
+  }
+  return null;
+}
+function readSessionId(c) {
+  return readCookie(c, SESSION_COOKIE);
+}
+function isSecureRequest(c) {
+  if (process.env.VERCEL === "1") return true;
+  const proto = c.req.header("x-forwarded-proto") ?? "";
+  if (proto.split(",")[0]?.trim() === "https") return true;
+  try {
+    return new URL(c.req.url).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+function setSessionCookie(c, sessionId) {
+  const secure = isSecureRequest(c) ? "; Secure" : "";
+  c.header(
+    "Set-Cookie",
+    `${SESSION_COOKIE}=${encodeURIComponent(sessionId)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_TTL_SEC}${secure}`,
+    { append: true }
+  );
+}
+function clearSessionCookie(c) {
+  const secure = isSecureRequest(c) ? "; Secure" : "";
+  c.header(
+    "Set-Cookie",
+    `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure}`,
+    { append: true }
+  );
+}
+
+// apps/server/src/email.ts
+function resendConfigured() {
+  return Boolean(process.env.RESEND_API_KEY?.trim());
+}
+function resendFrom() {
+  return process.env.RESEND_FROM?.trim() || "Starhold <onboarding@resend.dev>";
+}
+async function sendMagicLinkEmail(opts) {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  if (!apiKey) {
+    return { emailed: false };
+  }
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        from: resendFrom(),
+        to: [opts.to],
+        subject: "Your Starhold sign-in link",
+        text: [
+          "Sign in to Starhold (link expires in 15 minutes):",
+          "",
+          opts.magicUrl,
+          "",
+          "If you did not request this, ignore this email."
+        ].join("\n"),
+        html: `<p>Sign in to <strong>Starhold</strong> (expires in 15 minutes):</p><p><a href="${opts.magicUrl}">${opts.magicUrl}</a></p><p>If you did not request this, ignore this email.</p>`
+      })
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.error("[starhold-auth] Resend error", res.status, body);
+      return {
+        emailed: false,
+        provider: "resend",
+        error: `Resend ${res.status}`
+      };
+    }
+    return { emailed: true, provider: "resend" };
+  } catch (err) {
+    console.error("[starhold-auth] Resend fetch failed", err);
+    return {
+      emailed: false,
+      provider: "resend",
+      error: err instanceof Error ? err.message : "send failed"
+    };
+  }
+}
+
+// apps/server/src/auth-routes.ts
+async function sessionAccount(c) {
+  const sessionId = readSessionId(c);
+  if (!sessionId) return null;
+  const session = await getSession(sessionId);
+  if (!session) return null;
+  const account = await getAccountById(session.accountId);
+  if (!account) return null;
+  return { session, account };
+}
+function mountAuthRoutes(app2) {
+  app2.post("/api/auth/request-link", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const email = normalizeEmail(body.email ?? "");
+    if (!isValidEmail(email)) {
+      return c.json({ error: "Valid email required." }, 400);
+    }
+    const claimPlayerId = body.claimPlayerId?.trim() || void 0;
+    const { token } = await createMagicLink({ email, claimPlayerId });
+    const base = appBaseUrl(c.req.url);
+    const magicUrl = `${base}/api/auth/verify?token=${encodeURIComponent(token)}`;
+    const send = await sendMagicLinkEmail({ to: email, magicUrl });
+    if (!send.emailed) {
+      console.info("[starhold-auth] magic link (dev / no Resend):", magicUrl);
+    }
+    return c.json({
+      ok: true,
+      emailed: send.emailed,
+      /** Present when Resend is unset or send failed — local/CI only convenience. */
+      devMagicUrl: send.emailed ? void 0 : magicUrl,
+      resendConfigured: resendConfigured(),
+      error: send.error
+    });
+  });
+  app2.get("/api/auth/verify", async (c) => {
+    const token = c.req.query("token")?.trim() ?? "";
+    const base = appBaseUrl(c.req.url);
+    if (!token) {
+      return c.redirect(`${base}/?auth=missing_token`);
+    }
+    const magic = await consumeMagicToken(token);
+    if (!magic) {
+      return c.redirect(`${base}/?auth=invalid_or_expired`);
+    }
+    const account = await upsertAccountForEmail(magic.email);
+    let claimStatus = "none";
+    if (magic.claimPlayerId) {
+      try {
+        await withUniverse((universe) => {
+          ensureUniverseShape(universe);
+          if (account.playerId && account.playerId !== magic.claimPlayerId) {
+            claimStatus = "account_has_player";
+            return;
+          }
+          const result = claimPlayerToAccount(
+            universe,
+            magic.claimPlayerId,
+            account.id
+          );
+          if (result.ok) {
+            claimStatus = "claimed";
+          } else if (result.code === "already_claimed") {
+            claimStatus = "already_claimed";
+          } else {
+            claimStatus = "claim_failed";
+          }
+        });
+        if (claimStatus === "claimed") {
+          await setAccountPlayerId(account.id, magic.claimPlayerId);
+          account.playerId = magic.claimPlayerId;
+        }
+      } catch (err) {
+        console.error("[starhold-auth] claim during verify", err);
+        claimStatus = "claim_failed";
+      }
+    }
+    if (!account.playerId) {
+      try {
+        await withUniverse((universe) => {
+          const linked = playerForAccount(universe, account.id);
+          if (linked) account.playerId = linked.id;
+        });
+        if (account.playerId) {
+          await setAccountPlayerId(account.id, account.playerId);
+        }
+      } catch {
+      }
+    }
+    const session = await createSession(account.id);
+    setSessionCookie(c, session.id);
+    const q = new URLSearchParams({ auth: "ok", claim: claimStatus });
+    return c.redirect(`${base}/?${q.toString()}`);
+  });
+  app2.get("/api/auth/me", async (c) => {
+    const ctx = await sessionAccount(c);
+    if (!ctx) {
+      return c.json({ account: null, view: null }, 200);
+    }
+    const { account } = ctx;
+    let view = null;
+    let playerId = account.playerId;
+    try {
+      await withUniverse((universe) => {
+        ensureUniverseShape(universe);
+        if (!playerId) {
+          const linked = playerForAccount(universe, account.id);
+          if (linked) playerId = linked.id;
+        }
+        if (playerId && universe.players[playerId]) {
+          view = playerView(universe, playerId);
+        }
+      });
+    } catch (err) {
+      return c.json(
+        {
+          error: err instanceof Error ? err.message : "State failed.",
+          account: {
+            id: account.id,
+            email: account.email,
+            playerId: account.playerId
+          },
+          view: null
+        },
+        503
+      );
+    }
+    if (playerId && playerId !== account.playerId) {
+      await setAccountPlayerId(account.id, playerId);
+    }
+    return c.json({
+      account: {
+        id: account.id,
+        email: account.email,
+        playerId: playerId ?? null
+      },
+      view,
+      auth: {
+        resendConfigured: resendConfigured()
+      }
+    });
+  });
+  app2.post("/api/auth/claim", async (c) => {
+    const ctx = await sessionAccount(c);
+    if (!ctx) {
+      return c.json({ error: "Sign in required." }, 401);
+    }
+    const body = await c.req.json().catch(() => ({}));
+    const playerId = body.playerId?.trim();
+    if (!playerId) {
+      return c.json({ error: "playerId required." }, 400);
+    }
+    if (ctx.account.playerId && ctx.account.playerId !== playerId) {
+      return c.json(
+        {
+          error: "This account already owns another commander.",
+          playerId: ctx.account.playerId
+        },
+        409
+      );
+    }
+    try {
+      return await withUniverse(async (universe) => {
+        const result = claimPlayerToAccount(
+          universe,
+          playerId,
+          ctx.account.id
+        );
+        if (!result.ok) {
+          const status = result.code === "already_claimed" || result.code === "conflict" ? 409 : 400;
+          return c.json({ error: result.error }, status);
+        }
+        await setAccountPlayerId(ctx.account.id, playerId);
+        return c.json({
+          ok: true,
+          account: {
+            id: ctx.account.id,
+            email: ctx.account.email,
+            playerId
+          },
+          view: playerView(universe, playerId)
+        });
+      });
+    } catch (err) {
+      return c.json(
+        { error: err instanceof Error ? err.message : "Claim failed." },
+        500
+      );
+    }
+  });
+  app2.post("/api/auth/logout", async (c) => {
+    const sessionId = readSessionId(c);
+    if (sessionId) await deleteSession(sessionId);
+    clearSessionCookie(c);
+    return c.json({ ok: true });
+  });
+  app2.post("/api/auth/join", async (c) => {
+    const ctx = await sessionAccount(c);
+    if (!ctx) {
+      return c.json({ error: "Sign in required." }, 401);
+    }
+    const body = await c.req.json().catch(() => ({}));
+    try {
+      return await withUniverse(async (universe) => {
+        ensureUniverseShape(universe);
+        if (ctx.account.playerId) {
+          const existing = universe.players[ctx.account.playerId];
+          if (existing) {
+            return c.json(playerView(universe, existing.id));
+          }
+        }
+        const linked = playerForAccount(universe, ctx.account.id);
+        if (linked) {
+          await setAccountPlayerId(ctx.account.id, linked.id);
+          return c.json(playerView(universe, linked.id));
+        }
+        const trimmed = (body.name ?? "").trim().slice(0, 24);
+        if (!trimmed) {
+          return c.json({ error: "Commander name is required." }, 400);
+        }
+        const nameTaken = Object.values(universe.players).find(
+          (p) => p.name.toLowerCase() === trimmed.toLowerCase()
+        );
+        if (nameTaken) {
+          return c.json(
+            {
+              error: "That commander name is already taken \u2014 choose another or claim your guest save."
+            },
+            409
+          );
+        }
+        const { player } = joinUniverse(universe, trimmed);
+        player.accountId = ctx.account.id;
+        await setAccountPlayerId(ctx.account.id, player.id);
+        return c.json(playerView(universe, player.id));
+      });
+    } catch (err) {
+      return c.json(
+        { error: err instanceof Error ? err.message : "Join failed." },
+        400
+      );
+    }
+  });
+}
+
 // apps/server/src/app.ts
 function allowedOrigins() {
   const fromEnv = (process.env.ALLOWED_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -11790,7 +12968,11 @@ async function simpleCors(c, next) {
     if (origin && allow) {
       res.headers.set("Access-Control-Allow-Origin", origin);
       res.headers.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-      res.headers.set("Access-Control-Allow-Headers", "Content-Type");
+      res.headers.set(
+        "Access-Control-Allow-Headers",
+        "Content-Type, Cookie"
+      );
+      res.headers.set("Access-Control-Allow-Credentials", "true");
       res.headers.set("Vary", "Origin");
     }
     return res;
@@ -11798,12 +12980,14 @@ async function simpleCors(c, next) {
   await next();
   if (origin && allow) {
     c.res.headers.set("Access-Control-Allow-Origin", origin);
+    c.res.headers.set("Access-Control-Allow-Credentials", "true");
     c.res.headers.set("Vary", "Origin");
   }
 }
 function createApp() {
   const app2 = new Hono3();
   app2.use("*", simpleCors);
+  mountAuthRoutes(app2);
   app2.notFound(
     (c) => c.json({ error: "Not found", path: c.req.path }, 404)
   );
@@ -11826,7 +13010,10 @@ function createApp() {
           speed: universe.speed,
           fleetSpeed: universe.fleetSpeed,
           fleets: Object.keys(universe.fleets ?? {}).length,
-          debris: Object.keys(universe.debris ?? {}).length
+          debris: Object.keys(universe.debris ?? {}).length,
+          auth: {
+            resendConfigured: resendConfigured()
+          }
         });
       });
     } catch (err) {
@@ -12124,6 +13311,74 @@ function createApp() {
     }
     return withUniverse((universe) => {
       const result = unlockSkill(universe, body.playerId, body.skillId);
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId));
+    });
+  });
+  app2.post("/api/occupy", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    if (!body.playerId || !body.fleetId) {
+      return c.json({ error: "playerId and fleetId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      advanceUniverse(universe);
+      const result = startOccupation(
+        universe,
+        body.playerId,
+        body.fleetId
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId));
+    });
+  });
+  app2.post("/api/abandon-occupation", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    if (!body.playerId || !body.planetId) {
+      return c.json({ error: "playerId and planetId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      advanceUniverse(universe);
+      const result = abandonOccupation(
+        universe,
+        body.playerId,
+        body.planetId
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId));
+    });
+  });
+  app2.post("/api/swarm-produce", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    if (!body.playerId || !body.fleetId) {
+      return c.json({ error: "playerId and fleetId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      advanceUniverse(universe);
+      const now = Date.now();
+      const result = swarmProduce(
+        universe,
+        body.playerId,
+        body.fleetId,
+        body.count ?? 1,
+        now
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId));
+    });
+  });
+  app2.post("/api/mini-resolve", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    if (!body.playerId || !body.fleetId) {
+      return c.json({ error: "playerId and fleetId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      advanceUniverse(universe);
+      const result = resolveMiniPlanetChoice(
+        universe,
+        body.playerId,
+        body.fleetId,
+        body.choice ?? "capture"
+      );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId));
     });

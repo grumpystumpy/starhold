@@ -5,6 +5,7 @@ import {
   MAP_SYSTEMS,
 } from "./catalog.js";
 import { maxColonies, maxExpeditions } from "./formulas.js";
+import { canCollectDebris } from "./formulas-round2.js";
 import { ownedPlanetCount } from "./world-moons.js";
 import type {
   Coordinates,
@@ -171,8 +172,11 @@ export function resolveLaunchTarget(
       if (!field || (field.metal <= 0 && field.crystal <= 0)) {
         return { ok: false, error: "No debris at those coordinates." };
       }
-      if ((ships.recycler ?? 0) < 1) {
-        return { ok: false, error: "Harvest requires a Salvage Trawler." };
+      if (!canCollectDebris(ships)) {
+        return {
+          ok: false,
+          error: "Harvest requires a Salvage Trawler or Swarm Mothership.",
+        };
       }
     }
   } else {

@@ -11,7 +11,7 @@ Invented basics-first rules — **inspired** by the genre, not scraped from OGam
 | **espionage** | Requires Whisper Probe. Writes an espionage report (detail from Shadow Optics vs target lab). Probes return. |
 | **transport** | Move cargo + ships to another **own** planet (docks there). |
 | **colonize** | Requires Outpost Cradle + Stellar Cartography colony slot. Found colony on empty coords; Outpost Cradle consumed. |
-| **harvest** | Requires Salvage Trawler + debris at coords. Scoop metal/crystal into cargo and return. |
+| **harvest** | Requires Salvage Trawler **or Swarm Mothership** + debris at coords. Scoop metal/crystal into cargo and return. |
 | **expedition** | Deep space (`slot = EXPEDITION_SLOT`). Resolve find/pirates on arrival; return with cargo. Cap = `1 + Stellar Cartography`. |
 
 Fuel is paid up-front for the **outbound** leg only (return is free in v1). Fleet OS limits simultaneous fleet missions (base 1). Stellar Cartography also gates concurrent expeditions. See [docs/design/expeditions.md](../../docs/design/expeditions.md).
@@ -75,3 +75,4 @@ Fill cargo (surviving fleet capacity) in order **metal → crystal → deuterium
 ## Ship / defense / research catalogs
 
 Combat ladder (P1): Scout → Interceptor → **Aegis Cruiser** (yard 4) → **Breach Bomber** (yard 5), plus utility Whisper Probe / Salvage Trawler / Outpost Cradle / Hauler. See `catalog-units.ts` and [docs/design/combat-hulls.md](../../docs/design/combat-hulls.md).
+
