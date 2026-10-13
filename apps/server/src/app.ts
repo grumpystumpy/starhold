@@ -32,6 +32,8 @@ import {
   swarmProduce,
   unlockSkill,
 } from "@starhold/game";
+import { mountAuthRoutes } from "./auth-routes.js";
+import { resendConfigured } from "./email.js";
 import { storageMode, withUniverse } from "./store.js";
 
 function allowedOrigins(): Set<string> {
@@ -62,7 +64,11 @@ async function simpleCors(c: Context, next: Next): Promise<Response | void> {
     if (origin && allow) {
       res.headers.set("Access-Control-Allow-Origin", origin);
       res.headers.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-      res.headers.set("Access-Control-Allow-Headers", "Content-Type");
+      res.headers.set(
+        "Access-Control-Allow-Headers",
+        "Content-Type, Cookie",
+      );
+      res.headers.set("Access-Control-Allow-Credentials", "true");
       res.headers.set("Vary", "Origin");
     }
     return res;
@@ -70,6 +76,7 @@ async function simpleCors(c: Context, next: Next): Promise<Response | void> {
   await next();
   if (origin && allow) {
     c.res.headers.set("Access-Control-Allow-Origin", origin);
+    c.res.headers.set("Access-Control-Allow-Credentials", "true");
     c.res.headers.set("Vary", "Origin");
   }
 }
@@ -79,6 +86,7 @@ export function createApp(): Hono {
   const app = new Hono();
 
   app.use("*", simpleCors);
+  mountAuthRoutes(app);
 
   app.notFound((c) =>
     c.json({ error: "Not found", path: c.req.path }, 404),
@@ -105,6 +113,9 @@ export function createApp(): Hono {
           fleetSpeed: universe.fleetSpeed,
           fleets: Object.keys(universe.fleets ?? {}).length,
           debris: Object.keys(universe.debris ?? {}).length,
+          auth: {
+            resendConfigured: resendConfigured(),
+          },
         });
       });
     } catch (err) {
