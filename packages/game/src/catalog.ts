@@ -89,3 +89,6 @@ export const MINE_GROWTH = 1.1;
 export const MAP_GALAXIES = 1;
 export const MAP_SYSTEMS = 9;
 export const MAP_SLOTS = 8;
+
+/** Deep-space slot beyond planet slots (expedition destination). */
+export const EXPEDITION_SLOT = MAP_SLOTS + 1;

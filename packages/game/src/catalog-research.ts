@@ -58,7 +58,8 @@ export const RESEARCH: Record<ResearchId, ResearchDef> = {
   astrophysics: {
     id: "astrophysics",
     name: "Astrophysics",
-    description: "Each level allows +1 colony (beyond home).",
+    description:
+      "Each level allows +1 colony (beyond home) and +1 concurrent expedition.",
     baseCost: { metal: 40, crystal: 80, deuterium: 40 },
     costGrowth: 1.8,
     baseResearchSeconds: 30,
