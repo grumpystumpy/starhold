@@ -17,15 +17,21 @@ jobs:
         with:
           node-version: "22"
           cache: npm
+      - name: Unpack staged Thread J sources
+        run: |
+          if [ -f scripts/.j-staging/unpack-all.mjs ]; then
+            node scripts/.j-staging/unpack-all.mjs
+            rm -rf scripts/.j-staging
+          fi
       - run: npm ci && node scripts/bundle-api.mjs
-      - name: Commit api bundle
+      - name: Commit sources + api bundle
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "api/[[...route]].js"
+          git add -A
           if git diff --cached --quiet; then
             echo "nothing to commit"
             exit 0
           fi
-          git commit -m "chore(J): assemble api/[[...route]].js"
+          git commit -m "chore(J): unpack staged sources + assemble api route"
           git push
