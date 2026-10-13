@@ -54,6 +54,7 @@ export type UiHandlers = {
     targetPlanetId?: string;
     targetCoords?: Coordinates;
     asteroidId?: string;
+    pirateBaseId?: string;
     cargo?: Partial<Resources>;
   }) => void;
   onRefresh: () => void;
