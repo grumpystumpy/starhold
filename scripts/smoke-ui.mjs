@@ -175,6 +175,9 @@ async function uiSmoke() {
   });
   await page.waitForSelector('[data-testid="resources"]', { timeout: 15_000 });
   await page.waitForSelector('[data-testid="side-nav"]', { timeout: 10_000 });
+  await page.waitForSelector('[data-testid="player-level"]', { timeout: 10_000 });
+  await page.waitForSelector('[data-testid="xp-bar"]', { timeout: 5_000 });
+  logs.push("ui-player-level");
   await goNav(page, "highscore");
   await page.waitForSelector('[data-testid="highscores"]', { timeout: 10_000 });
   const hsRank = await page.locator('[data-testid="highscore-1"]').count();
@@ -200,7 +203,7 @@ async function uiSmoke() {
   }
   logs.push(`url-join:${urlName}`);
 
-  await goNav(page, "facilities");
+  await goNav(page, "buildings");
   const yardLevelBefore = await page.textContent(
     '[data-testid="building-level-shipyard"]',
   );
@@ -284,7 +287,11 @@ async function uiSmoke() {
   }
   logs.push("ui-upgrade-shipyard-level-under-poll-hammer");
 
-  await goNav(page, "resources");
+  await goNav(page, "buildings");
+  // Deep-link URL should reflect the routed page.
+  if (!page.url().includes("/buildings")) {
+    throw new Error(`expected /buildings in URL after nav, got: ${page.url()}`);
+  }
   await page.click('[data-testid="upgrade-solarPlant"]');
   await page.waitForSelector('[data-testid="flash-ok"], [data-testid="build-queue"]', {
     timeout: 10_000,
@@ -341,7 +348,7 @@ async function uiSmoke() {
     waitUntil: "networkidle",
   });
   await page.waitForSelector('[data-testid="resources"]');
-  await goNav(page, "facilities");
+  await goNav(page, "buildings");
   const hammer2 = await page.evaluateHandle(() =>
     window.setInterval(() => {
       void window.starhold?.poll();
@@ -441,9 +448,16 @@ async function uiSmoke() {
   await goNav(page, "overview");
   const rec = await page.locator('[data-testid="recommended-next"]').count();
   if (rec < 1) throw new Error("recommended-next hint missing");
-  await goNav(page, "resources");
+  await goNav(page, "buildings");
   const thumb = await page.locator('[data-testid="building-metalMine"] img.thumb').count();
   if (thumb < 1) throw new Error("building thumbnail missing");
+  // Dropdown mirrors side-nav and updates the URL.
+  await page.selectOption('[data-testid="nav-dropdown"]', "defenses");
+  await page.waitForSelector('[data-testid="page-defenses"]', { timeout: 10_000 });
+  if (!page.url().includes("/defenses")) {
+    throw new Error(`dropdown nav missing /defenses URL: ${page.url()}`);
+  }
+  logs.push("ui-nav-dropdown-routes");
   await goNav(page, "fleet");
   await page.waitForSelector('[data-testid="fleet-form"]', { timeout: 15_000 });
   logs.push("fleet-form-and-art");
