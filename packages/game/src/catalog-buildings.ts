@@ -82,7 +82,8 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
     id: "researchLab",
     name: "Research Lab",
     description: "Unlocks empire-wide research. One project at a time.",
-    baseCost: { metal: 200, crystal: 400, deuterium: 200 },
+    // Metal/crystal only so mines-first sessions unlock research before Deut Still.
+    baseCost: { metal: 180, crystal: 120, deuterium: 0 },
     costGrowth: 2,
     baseBuildSeconds: 18,
   },
