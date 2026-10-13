@@ -175,6 +175,10 @@ async function uiSmoke() {
     waitUntil: "networkidle",
   });
   await page.waitForSelector('[data-testid="resources"]', { timeout: 15_000 });
+  await page.waitForSelector('[data-testid="highscores"]', { timeout: 10_000 });
+  const hsRank = await page.locator('[data-testid="highscore-1"]').count();
+  if (hsRank < 1) throw new Error("highscores missing rank #1");
+  logs.push("ui-highscores");
   const joined = await page.evaluate(() => window.starhold?.getState());
   if (joined?.name !== urlName) {
     throw new Error(`URL join failed: ${JSON.stringify(joined)}`);
