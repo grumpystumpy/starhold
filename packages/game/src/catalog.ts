@@ -126,6 +126,11 @@ export const SHIP_ORDER: ShipId[] = [
   "probe",
   "recycler",
   "colonyShip",
+  "voidforgeTitan",
+  "worldEater",
+  "swarmDrone",
+  "swarmHarvester",
+  "swarmMothership",
 ];
 
 export const DEFENSE_ORDER: DefenseId[] = ["laserBattery", "shieldDome"];
@@ -139,7 +144,35 @@ export const RESEARCH_ORDER: ResearchId[] = [
   "espionageTech",
   "astrophysics",
   "computerTech",
+  "swarmHold",
 ];
+
+/** Swarm Mothership base carry capacity (drones + harvesters). */
+export const SWARM_CAPACITY_BASE = 300;
+/** +15% of base capacity per Swarm Hold level. */
+export const SWARM_HOLD_BONUS_PER_LEVEL = 0.15;
+/** Hard cap on carried swarm hulls per mothership stack capacity calc. */
+export const SWARM_CAPACITY_HARD_CAP = 2000;
+/** Drones needed before swarm numbers attack bonus applies. */
+export const SWARM_NUMBERS_THRESHOLD = 50;
+/** Attack bonus per drone above threshold (capped). */
+export const SWARM_NUMBERS_BONUS_PER = 0.002;
+export const SWARM_NUMBERS_BONUS_CAP_COUNT = 2000;
+/** Fraction of mothership-targeted damage intercepted by escorts. */
+export const SWARM_INTERCEPT_FRACTION = 0.7;
+/** When drones + harvesters both present, split intercepted damage 50/50. */
+export const SWARM_INTERCEPT_SPLIT = 0.5;
+/** Harvester kamikaze when mothership hull fraction falls below this. */
+export const SWARM_KAMIKAZE_HULL_FRAC = 0.3;
+export const SWARM_KAMIKAZE_SHIELD_DMG = 80;
+export const SWARM_KAMIKAZE_HULL_DMG = 40;
+/** Occupation duration (wall-clock). */
+export const OCCUPATION_DURATION_MS = 2 * 24 * 60 * 60 * 1000;
+/** Occupier / owner mine output split while occupied. */
+export const OCCUPATION_OCCUPIER_SHARE = 0.3;
+export const OCCUPATION_OWNER_SHARE = 0.7;
+/** World Eaters required to capture/destroy a mini planet. */
+export const MINI_WORLD_EATER_MIN = 5;
 
 export const STARTING_RESOURCES = {
   metal: 500,
