@@ -4,7 +4,8 @@
   --bg2: #1e3348;
   --line: #2d4a63;
   --text: #e7eef5;
-  --muted: #8fa6ba;
+  /* Slightly lifted for readable secondary text on dark panels (UI review). */
+  --muted: #a8bdd0;
   --accent: #e0a45a;
   --accent-dim: #b8792e;
   --ok: #5cb88a;
@@ -37,7 +38,9 @@ body {
     radial-gradient(1200px 600px at 10% -10%, #2a4a5f 0%, transparent 55%),
     radial-gradient(900px 500px at 90% 0%, #3a2f1f 0%, transparent 50%),
     linear-gradient(165deg, var(--bg0), #122032 45%, #0c141c);
-  background-attachment: fixed;
+  /* scroll — fixed attachment leaves white gutters in full-page screenshots / some mobile browsers */
+  background-attachment: scroll;
+  background-color: var(--bg0);
 }
 
 #app {
