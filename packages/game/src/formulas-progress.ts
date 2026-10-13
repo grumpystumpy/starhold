@@ -74,47 +74,69 @@ export function grantPlayerXp(player: PlayerState, amount: number): number {
   return gained;
 }
 
-export function xpForBuilding(targetLevel: number): number {
-  return 8 + 2 * Math.max(1, Math.floor(targetLevel));
+/**
+ * Buildings grant no XP (Micah amendment). Kept as a stub so call sites
+ * cannot accidentally reintroduce awards.
+ */
+export function xpForBuilding(_targetLevel: number): number {
+  return 0;
 }
 
+/**
+ * Research level complete. Tuned so ~1 mid research (targetLevel 2) ≈ 4% of
+ * a 100 XP typical earn pack.
+ */
 export function xpForResearch(targetLevel: number): number {
-  return 12 + 3 * Math.max(1, Math.floor(targetLevel));
+  return 2 + Math.max(1, Math.floor(targetLevel));
 }
 
-/** Win combat: 25 + floor(cost/500), bonus capped +200. */
+/**
+ * Win combat (raid / pirate fight / defense): base 19 + floor(cost/500),
+ * bonus capped +56 (max 75). Typical pack: 4 wins @ ~19 → combat share.
+ */
 export function xpForCombatWin(destroyedEnemyCost: number): number {
-  const bonus = Math.min(200, Math.floor(Math.max(0, destroyedEnemyCost) / 500));
-  return 25 + bonus;
+  const bonus = Math.min(56, Math.floor(Math.max(0, destroyedEnemyCost) / 500));
+  return 19 + bonus;
 }
 
 export function xpForCombatLose(): number {
-  return 8;
+  return 4;
 }
 
 /** Expedition resolve with any non-empty outcome. */
 export function xpForExpedition(): number {
-  return 15;
+  return 4;
 }
 
-/** Mini-planet discovery (Thread L) — stub amount. */
+/** Mini-planet discovery (Thread L) — rare; outside typical earn pack. */
 export function xpForMiniPlanetDiscovery(): number {
-  return 40;
+  return 10;
 }
 
 export function xpForPirateBaseDestroy(baseLevel: number): number {
-  return 50 + 10 * Math.max(0, Math.floor(baseLevel));
+  return 4 + Math.max(0, Math.floor(baseLevel));
 }
 
 /**
- * Pirate ship kills: 5 XP per 1000 ship cost destroyed, cap 100 / battle.
+ * Pirate ship kills: 1 XP per 1000 ship cost destroyed, cap 10 / battle.
  */
 export function xpForPirateShipKills(destroyedEnemyCost: number): number {
-  return Math.min(
-    100,
-    Math.floor(Math.max(0, destroyedEnemyCost) / 1000) * 5,
-  );
+  return Math.min(10, Math.floor(Math.max(0, destroyedEnemyCost) / 1000));
 }
+
+/**
+ * Reference earn pack ≈100 XP (v1 mix target):
+ * combat 80 · pirates 8 · expeditions 8 · research 4 · buildings 0.
+ * Events: 3× PvP win @19 + 1× lose @4 + 1× pirateRaid win (combat 19 +
+ * destroy tier2 @6 + kills ~2) + 2× expedition @4 + 1× research L2 @4.
+ */
+export const XP_MIX_TARGET = {
+  combat: 80,
+  pirates: 8,
+  expeditions: 8,
+  research: 4,
+  buildings: 0,
+} as const;
 
 /** Sum metal+crystal+deuterium as a single cost figure for XP formulas. */
 export function resourcesCostTotal(res: Resources): number {
