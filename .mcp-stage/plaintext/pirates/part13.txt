@@ -1,0 +1,38 @@
+universe.players[owner.id] = owner;
+    }
+  } else if (owner) {
+    grantPlayerXp(owner, xpForCombatLose());
+    universe.players[owner.id] = owner;
+  }
+
+  const reportId = `rpt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  universe.reports[reportId] = {
+    id: reportId,
+    at: now,
+    missionId: fleet.id,
+    attackerPlayerId: fleet.ownerPlayerId,
+    defenderPlayerId: "npc_pirates",
+    attackerName: owner?.name ?? "Unknown",
+    defenderName: base.name,
+    targetCoords: { ...base.coords },
+    attackerBefore: { ...fleet.ships },
+    attackerAfter: combat.attackerAfter,
+    defenderBefore,
+    defenderAfter: combat.defenderAfter,
+    defensesBefore: emptyDefenses(),
+    defensesAfter: emptyDefenses(),
+    loot,
+    debrisCreated: emptyCargo(),
+    outcome: combat.outcome,
+    rounds: combat.rounds,
+    summary:
+      combat.outcome === "attacker_win"
+        ? `${combat.summary} Pirate base destroyed (+${pirateDestroyStarshards(tierAtFight)} Starshards).`
+        : combat.summary,
+    moonFormed: false,
+  };
+
+  fleet.ships = combat.attackerAfter;
+  fleet.cargo = loot;
+  fleet.reportId = reportId;
+}
