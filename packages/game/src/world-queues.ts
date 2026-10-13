@@ -1,11 +1,17 @@
 import { BUILDINGS, DEFENSES, SHIPS } from "./catalog.js";
 import {
+  MOON_FIELDS_BASE,
+  MOON_FIELDS_PER_LUNAR_BASE,
+} from "./catalog.js";
+import {
+  buildingAllowedOn,
   buildingUpgradeCost,
   buildingUpgradeSeconds,
   canAfford,
   defenseBuildSeconds,
   defenseCost,
   fieldsRemaining,
+  fieldsUsed,
   shipBuildSeconds,
   shipCost,
   spend,
@@ -72,14 +78,32 @@ export function queueBuildingUpgrade(
   advanceUniverse(universe, now);
   const planet = resolveActionPlanet(universe, player, planetId);
   if (!planet) return { ok: false, error: "Planet missing." };
+  if (!buildingAllowedOn(planet, buildingId)) {
+    return {
+      ok: false,
+      error: planet.kind === "moon"
+        ? "That structure cannot be built on a moon."
+        : "That structure can only be built on a moon.",
+    };
+  }
+  if (buildingId === "sensorArray" && (planet.buildings.lunarBase ?? 0) < 1) {
+    return { ok: false, error: "Sensor Array needs Lunar Base level 1." };
+  }
   if (planet.buildQueue) {
     return { ok: false, error: "A building is already under construction." };
   }
-  if (fieldsRemaining(planet) < 1) {
+
+  const current = planet.buildings[buildingId] ?? 0;
+  if (buildingId === "lunarBase") {
+    const nextCap =
+      MOON_FIELDS_BASE + (current + 1) * MOON_FIELDS_PER_LUNAR_BASE;
+    if (nextCap < fieldsUsed(planet) + 1) {
+      return { ok: false, error: "No free planet fields remaining." };
+    }
+  } else if (fieldsRemaining(planet) < 1) {
     return { ok: false, error: "No free planet fields remaining." };
   }
 
-  const current = planet.buildings[buildingId] ?? 0;
   const cost = buildingUpgradeCost(buildingId, current);
   if (!canAfford(planet.resources, cost)) {
     return { ok: false, error: "Not enough resources." };
