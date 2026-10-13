@@ -9452,20 +9452,16 @@ function createApp() {
       );
     }
   });
-  app2.get("/api/state/:playerId", async (c) => {
+  app2.get("/api/state", async (c) => {
+    const playerId = c.req.query("playerId")?.trim();
+    if (!playerId) {
+      return c.json({ error: "playerId query required." }, 400);
+    }
     try {
       const galaxy = Number(c.req.query("galaxy") || 0) || void 0;
       const system = Number(c.req.query("system") || 0) || void 0;
       return await withUniverse(
-        (universe) => c.json(
-          playerView(
-            universe,
-            c.req.param("playerId"),
-            Date.now(),
-            galaxy,
-            system
-          )
-        )
+        (universe) => c.json(playerView(universe, playerId, Date.now(), galaxy, system))
       );
     } catch (err) {
       return c.json(
