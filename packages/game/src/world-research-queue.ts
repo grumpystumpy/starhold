@@ -1,6 +1,7 @@
 import { RESEARCH } from "./catalog.js";
 import {
   canAfford,
+  levelBonuses,
   researchUpgradeCost,
   researchUpgradeSeconds,
   spend,
@@ -54,10 +55,12 @@ export function queueResearch(
   }
 
   const researchSpeed = playerBoosts(player, now).researchSpeed;
+  const lb = levelBonuses(player.level ?? 1);
+  // Stack: base → lab → level → officers/skills researchSpeed.
   const seconds = Math.max(
     1,
     Math.ceil(
-      researchUpgradeSeconds(researchId, current, lab) /
+      (researchUpgradeSeconds(researchId, current, lab) * lb.researchTime) /
         universe.speed /
         Math.max(0.01, researchSpeed),
     ),
