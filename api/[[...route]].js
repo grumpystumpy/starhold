@@ -2092,7 +2092,7 @@ var RESEARCH = {
   astrophysics: {
     id: "astrophysics",
     name: "Astrophysics",
-    description: "Each level allows +1 colony (beyond home).",
+    description: "Each level allows +1 colony (beyond home) and +1 concurrent expedition.",
     baseCost: { metal: 40, crystal: 80, deuterium: 40 },
     costGrowth: 1.8,
     baseResearchSeconds: 30,
@@ -2155,6 +2155,7 @@ var MINE_GROWTH = 1.1;
 var MAP_GALAXIES = 1;
 var MAP_SYSTEMS = 9;
 var MAP_SLOTS = 8;
+var EXPEDITION_SLOT = MAP_SLOTS + 1;
 
 // packages/game/src/formulas-build.ts
 function buildingUpgradeCost(buildingId, currentLevel) {
@@ -2663,6 +2664,9 @@ function maxFleetSlots(computerTech) {
 function maxColonies(astrophysics) {
   return 1 + Math.max(0, astrophysics);
 }
+function maxExpeditions(astrophysics) {
+  return 1 + Math.max(0, astrophysics);
+}
 
 // packages/game/src/world-bootstrap.ts
 function emptyBuildings() {
@@ -2697,6 +2701,7 @@ function createUniverse(name = "Alpha Drift", speed = 1, fleetSpeed = speed) {
     fleets: {},
     reports: {},
     spyReports: {},
+    expeditionReports: {},
     debris: {}
   };
 }
@@ -2724,6 +2729,7 @@ function ensureUniverseShape(universe) {
   if (!universe.fleets) universe.fleets = {};
   if (!universe.reports) universe.reports = {};
   if (!universe.spyReports) universe.spyReports = {};
+  if (!universe.expeditionReports) universe.expeditionReports = {};
   if (!universe.debris) universe.debris = {};
   if (!universe.fleetSpeed) universe.fleetSpeed = universe.speed || 1;
   for (const player of Object.values(universe.players)) {
@@ -2995,6 +3001,118 @@ function resolveEspionage(universe, fleet, target, now) {
   fleet.reportId = reportId;
 }
 
+// packages/game/src/world-expedition.ts
+function expeditionRoll(fleetId, at) {
+  let h = at >>> 0;
+  for (let i = 0; i < fleetId.length; i++) {
+    h = Math.imul(h, 31) + fleetId.charCodeAt(i) >>> 0;
+  }
+  return h % 100;
+}
+function expeditionKindFromRoll(roll) {
+  if (roll < 40) return "resources";
+  if (roll < 55) return "ships";
+  if (roll < 75) return "nothing";
+  return "pirates";
+}
+function scaleShipsKeep(ships, keepRatio) {
+  const out = emptyFleetShips();
+  const ratio = Math.min(1, Math.max(0, keepRatio));
+  for (const id of SHIP_ORDER) {
+    out[id] = Math.floor((ships[id] ?? 0) * ratio);
+  }
+  return normalizeFleetShips(out);
+}
+function resourceFind(ships, roll) {
+  const cap = fleetCargoCapacity(ships);
+  if (cap <= 0) {
+    return { metal: 0, crystal: 0, deuterium: 0 };
+  }
+  const power = Math.max(1, fleetCombatPower(ships));
+  const budget = Math.min(
+    cap,
+    Math.floor(80 + (cap * 0.35 + power * 0.5) * (0.55 + roll % 20 / 40))
+  );
+  const metal = Math.floor(budget * 0.55);
+  const crystal = Math.floor(budget * 0.3);
+  let deuterium = budget - metal - crystal;
+  if (deuterium < 0) deuterium = 0;
+  let total = metal + crystal + deuterium;
+  if (total > cap) deuterium = Math.max(0, deuterium - (total - cap));
+  return { metal, crystal, deuterium };
+}
+function resolveExpeditionArrival(universe, fleet, now) {
+  if (!universe.expeditionReports) universe.expeditionReports = {};
+  const roll = expeditionRoll(fleet.id, fleet.arrivesAt);
+  const kind = expeditionKindFromRoll(roll);
+  const before = normalizeFleetShips(fleet.ships);
+  let cargoGained = { metal: 0, crystal: 0, deuterium: 0 };
+  const shipsDelta = {};
+  let summary;
+  switch (kind) {
+    case "resources": {
+      cargoGained = resourceFind(before, roll);
+      fleet.cargo = { ...cargoGained };
+      summary = `Anomaly yield: ${cargoGained.metal}m / ${cargoGained.crystal}c / ${cargoGained.deuterium}d.`;
+      break;
+    }
+    case "ships": {
+      if (roll % 2 === 0) {
+        const n = 1 + roll % 3;
+        fleet.ships.scout = (fleet.ships.scout ?? 0) + n;
+        shipsDelta.scout = n;
+        summary = `Salvage drones joined the fleet (+${n} Scout Skiff).`;
+      } else {
+        fleet.ships.hauler = (fleet.ships.hauler ?? 0) + 1;
+        shipsDelta.hauler = 1;
+        summary = "Derelict freighter claimed (+1 Ore Hauler).";
+      }
+      fleet.ships = normalizeFleetShips(fleet.ships);
+      break;
+    }
+    case "nothing": {
+      fleet.cargo = { metal: 0, crystal: 0, deuterium: 0 };
+      summary = "Empty void \u2014 instruments found nothing of value.";
+      break;
+    }
+    case "pirates": {
+      const after = scaleShipsKeep(before, 0.7);
+      for (const id of SHIP_ORDER) {
+        const delta = (after[id] ?? 0) - (before[id] ?? 0);
+        if (delta !== 0) shipsDelta[id] = delta;
+      }
+      fleet.ships = after;
+      const crumb = Math.min(40, fleetCargoCapacity(after));
+      cargoGained = {
+        metal: Math.floor(crumb * 0.5),
+        crystal: Math.floor(crumb * 0.3),
+        deuterium: Math.max(0, crumb - Math.floor(crumb * 0.5) - Math.floor(crumb * 0.3))
+      };
+      fleet.cargo = { ...cargoGained };
+      summary = `Pirate ambush \u2014 ~30% hulls lost. Scrap salvage ${cargoGained.metal}m/${cargoGained.crystal}c/${cargoGained.deuterium}d.`;
+      break;
+    }
+    default: {
+      const _exhaustive = kind;
+      throw new Error(`Unhandled expedition kind: ${_exhaustive}`);
+    }
+  }
+  const reportId = `xpd_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  const report = {
+    id: reportId,
+    at: now,
+    missionId: fleet.id,
+    playerId: fleet.ownerPlayerId,
+    targetCoords: { ...fleet.targetCoords },
+    kind,
+    cargoGained,
+    shipsDelta,
+    summary
+  };
+  universe.expeditionReports[reportId] = report;
+  fleet.reportId = reportId;
+}
+
 // packages/game/src/world-spy-prune.ts
 function pruneSpyReports(universe, now = Date.now(), ttlMs = SPY_REPORT_TTL_MS) {
   let removed = 0;
@@ -3101,6 +3219,8 @@ function resolveFleetArrival(universe, fleet, now) {
           delete universe.debris[coordsKey(fleet.targetCoords)];
         }
       }
+    } else if (fleet.mission === "expedition") {
+      resolveExpeditionArrival(universe, fleet, now);
     }
     const returnSecs = flightSecondsOneWay(
       fleet.targetCoords,
@@ -3345,6 +3465,29 @@ function resolveLaunchTarget(universe, player, origin, mission, ships, targetPla
   let targetCoords;
   let targetPlanet = null;
   let targetPlayerId = null;
+  if (mission === "expedition") {
+    if (!targetCoordsOpt) {
+      return { ok: false, error: "targetCoords required for expedition." };
+    }
+    targetCoords = { ...targetCoordsOpt };
+    if (targetCoords.galaxy < 1 || targetCoords.galaxy > MAP_GALAXIES || targetCoords.system < 1 || targetCoords.system > MAP_SYSTEMS || targetCoords.slot !== EXPEDITION_SLOT) {
+      return {
+        ok: false,
+        error: `Expedition requires deep-space slot ${EXPEDITION_SLOT}.`
+      };
+    }
+    const activeExpeditions = Object.values(universe.fleets).filter(
+      (f) => f.ownerPlayerId === player.id && f.mission === "expedition"
+    ).length;
+    const cap = maxExpeditions(player.research.astrophysics);
+    if (activeExpeditions >= cap) {
+      return {
+        ok: false,
+        error: `Expedition limit reached (Astrophysics \u2192 ${cap} concurrent).`
+      };
+    }
+    return { ok: true, targetCoords, targetPlanet: null, targetPlayerId: null };
+  }
   if (mission === "colonize" || mission === "harvest") {
     if (!targetCoordsOpt) {
       return {
@@ -3427,7 +3570,8 @@ var MISSIONS = [
   "transport",
   "espionage",
   "colonize",
-  "harvest"
+  "harvest",
+  "expedition"
 ];
 function launchFleet(universe, playerIdOrOpts, targetPlanetId, mission, shipsInput, nowArg) {
   const opts = typeof playerIdOrOpts === "string" ? {
@@ -3594,6 +3738,7 @@ function playerView(universe, playerId, now = Date.now(), galaxy, system) {
     (r) => r.attackerPlayerId === playerId || r.defenderPlayerId === playerId
   ).sort((a, b) => b.at - a.at).slice(0, 12);
   const spyReports = Object.values(universe.spyReports).filter((r) => r.spyPlayerId === playerId).sort((a, b) => b.at - a.at).slice(0, 12);
+  const expeditionReports = Object.values(universe.expeditionReports ?? {}).filter((r) => r.playerId === playerId).sort((a, b) => b.at - a.at).slice(0, 12);
   const g = galaxy ?? planet.coords.galaxy;
   const s = system ?? planet.coords.system;
   return {
@@ -3626,7 +3771,8 @@ function playerView(universe, playerId, now = Date.now(), galaxy, system) {
     galaxy: galaxyViewFor(universe, playerId, g, s),
     fleets,
     reports,
-    spyReports
+    spyReports,
+    expeditionReports
   };
 }
 
