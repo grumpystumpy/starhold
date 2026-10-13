@@ -1,0 +1,30 @@
+name: Unpack plaintext Thread I leftovers
+on:
+  push:
+    branches: [cursor/player-levels-xp-8713]
+    paths:
+      - ".mcp-stage/plaintext/**"
+      - ".github/workflows/unpack-plaintext-i.yml"
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cursor/player-levels-xp-8713
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - run: python3 .mcp-stage/plaintext/unpack.py
+      - name: Commit and cleanup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -rf .mcp-stage
+          rm -f .github/workflows/unpack-plaintext-i.yml
+          rm -f .github/workflows/unpack-staged-sources.yml
+          rm -f .github/workflows/unpack-thread-i-rem.yml
+          git add -A
+          if git diff --cached --quiet; then echo "nothing to commit"; exit 0; fi
+          git commit -m "feat(I): unpack pages + pirates player-levels sources"
+          git push
