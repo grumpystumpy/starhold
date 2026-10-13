@@ -9,7 +9,7 @@ Send a fleet into **deep space** for a timed probe of the void: return with reso
 | Field | Rule |
 |-------|------|
 | Type | `expedition` |
-| Target | Deep-space coords: same galaxy/system as selected, **`slot = EXPEDITION_SLOT`** (`MAP_SLOTS + 1` = 9). Not a planet. |
+| Target | Deep-space coords: same galaxy/system as selected, **`slot = EXPEDITION_SLOT`** (`DEEP_SPACE_SLOT` = **16**). Not a planet. |
 | Ships | ≥1 any hull (haulers raise resource finds via cargo). |
 | Fuel | Outbound leg only (same as other missions). |
 | Caps | Concurrent expeditions per empire: **`maxExpeditions(astro) = 1 + astrophysics`**. Also bound by Computer Tech fleet slots. |
