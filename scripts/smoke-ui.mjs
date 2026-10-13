@@ -162,6 +162,11 @@ async function apiSmoke() {
   );
 }
 
+async function goNav(page, id) {
+  await page.click(`[data-testid="nav-${id}"]`);
+  await page.waitForSelector(`[data-testid="page-${id}"]`, { timeout: 10_000 });
+}
+
 async function uiSmoke() {
   const require = createRequire(import.meta.url);
   const playwright = require("playwright");
@@ -175,6 +180,8 @@ async function uiSmoke() {
     waitUntil: "networkidle",
   });
   await page.waitForSelector('[data-testid="resources"]', { timeout: 15_000 });
+  await page.waitForSelector('[data-testid="side-nav"]', { timeout: 10_000 });
+  await goNav(page, "highscore");
   await page.waitForSelector('[data-testid="highscores"]', { timeout: 10_000 });
   const hsRank = await page.locator('[data-testid="highscore-1"]').count();
   if (hsRank < 1) throw new Error("highscores missing rank #1");
@@ -194,6 +201,7 @@ async function uiSmoke() {
 
   // 2) P0: Shipyard Upgrade click must raise L0→L1 under aggressive poll pressure.
   // Catalog id is `shipyard` (data-testid=upgrade-shipyard) — not metalMine/Ore.
+  await goNav(page, "facilities");
   const yardLevelBefore = await page.textContent(
     '[data-testid="building-level-shipyard"]',
   );
@@ -280,6 +288,7 @@ async function uiSmoke() {
   logs.push("ui-upgrade-shipyard-level-under-poll-hammer");
 
   // 3) P1 double-queue flash + persistence across polls (yard already L1 — upgrade solar)
+  await goNav(page, "resources");
   await page.click('[data-testid="upgrade-solarPlant"]');
   await page.waitForSelector('[data-testid="flash-ok"], [data-testid="build-queue"]', {
     timeout: 10_000,
@@ -340,6 +349,7 @@ async function uiSmoke() {
     waitUntil: "networkidle",
   });
   await page.waitForSelector('[data-testid="resources"]');
+  await goNav(page, "facilities");
   // Prefer UI click path for yard (asserts P0 again on a fresh player + poll hammer)
   const hammer2 = await page.evaluateHandle(() =>
     window.setInterval(() => {
@@ -365,6 +375,7 @@ async function uiSmoke() {
     await page.evaluate((id) => window.clearInterval(id), hammer2);
   }
 
+  await goNav(page, "shipyard");
   // Wait until Build Scout is affordable and unlocked
   await page.waitForFunction(
     () => {
@@ -374,7 +385,14 @@ async function uiSmoke() {
       const metal = Number(String(metalText).replace(/,/g, ""));
       const label = btn?.textContent ?? "";
       const queue = document.querySelector('[data-testid="build-queue"]');
-      return Boolean(btn) && !queue && !label.includes("Locked") && metal >= 220;
+      const shipQ = document.querySelector('[data-testid="ship-queue"]');
+      return (
+        Boolean(btn) &&
+        !queue &&
+        !shipQ &&
+        !label.includes("Locked") &&
+        metal >= 220
+      );
     },
     undefined,
     { timeout: 180_000 },
@@ -431,11 +449,14 @@ async function uiSmoke() {
     });
     await page.waitForSelector('[data-testid="resources"]');
   }
-  await page.waitForSelector('[data-testid="fleet-form"]', { timeout: 15_000 });
-  const thumb = await page.locator('[data-testid="building-metalMine"] img.thumb').count();
-  if (thumb < 1) throw new Error("building thumbnail missing");
+  await goNav(page, "overview");
   const rec = await page.locator('[data-testid="recommended-next"]').count();
   if (rec < 1) throw new Error("recommended-next hint missing");
+  await goNav(page, "resources");
+  const thumb = await page.locator('[data-testid="building-metalMine"] img.thumb').count();
+  if (thumb < 1) throw new Error("building thumbnail missing");
+  await goNav(page, "fleet");
+  await page.waitForSelector('[data-testid="fleet-form"]', { timeout: 15_000 });
   logs.push("fleet-form-and-art");
 
   // UI launch preferred: pick attack mission, set 1 scout, submit form
