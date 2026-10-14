@@ -14,6 +14,7 @@ export function readFleetForm(): {
   targetCoords?: Coordinates;
   asteroidId?: string;
   pirateBaseId?: string;
+  alienBaseId?: string;
   cargo?: Partial<Resources>;
 } | null {
   const form = root.querySelector<HTMLFormElement>("#fleet-form");
@@ -70,6 +71,13 @@ export function readFleetForm(): {
       mission,
       ships,
       asteroidId: target.value.slice("asteroid:".length),
+    };
+  }
+  if (target.value.startsWith("alien:")) {
+    return {
+      mission: "alienRaid",
+      ships,
+      alienBaseId: target.value.slice("alien:".length),
     };
   }
   if (target.value.startsWith("pirate:")) {
