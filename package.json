@@ -16,6 +16,7 @@
     "smoke": "node scripts/smoke-ui.mjs",
     "e2e": "node scripts/smoke-ui.mjs",
     "e2e:layout": "node scripts/ui-layout-check.mjs",
+    "tuning-diff": "node scripts/tuning-diff.mjs",
     "start": "npm run start -w @starhold/server"
   },
   "dependencies": {
