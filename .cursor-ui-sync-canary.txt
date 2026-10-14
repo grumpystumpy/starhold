@@ -1,1 +1,1 @@
-ui-sync-canary-20261012
+email-password-auth-1afb-ci-kick
