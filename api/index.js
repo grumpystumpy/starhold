@@ -1,1 +1,1 @@
-/* SIZE_PROBE_ONLY — full api/index.js is 511660 bytes; MCP push_files cannot embed ~512KB. */
+PLACEHOLDER_TOO_LARGE_FOR_MCP_CREATE_OR_UPDATE — full file is 511660 bytes; cannot embed in MCP tool args. Assemble workflow will replace this.
