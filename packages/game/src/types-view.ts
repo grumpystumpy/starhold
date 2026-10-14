@@ -7,6 +7,7 @@ import type {
   DefenseQueueItem,
   DefenseStock,
   FleetMission,
+  FleetPreset,
   FleetShips,
   OccupationState,
   OfficerDef,
@@ -144,6 +145,8 @@ export interface PlayerState {
   highscoreStarshardsClaimed?: boolean;
   /** Linked email account (set after magic-link claim / authenticated join). */
   accountId?: string | null;
+  /** Saved fleet compositions (built-ins + custom), per player in this universe. */
+  fleetPresets?: FleetPreset[];
 }
 
 export interface UniverseState {

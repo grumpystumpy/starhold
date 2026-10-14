@@ -15,11 +15,14 @@ import {
   abandonOccupation,
   activateOfficer,
   advanceUniverse,
+  batchScanSystem,
   cancelQueueItem,
   claimDailyLogin,
+  deleteFleetPreset,
   ensureUniverseShape,
   joinUniverse,
   launchFleet,
+  launchMaxExpeditions,
   playerView,
   queueBuildingUpgrade,
   queueDefenseBuild,
@@ -27,6 +30,7 @@ import {
   queueShipBuild,
   reorderQueue,
   resolveMiniPlanetChoice,
+  saveFleetPreset,
   setActivePlanet,
   startOccupation,
   swarmProduce,
@@ -449,6 +453,93 @@ export function createApp(): Hono {
         asteroidId: body.asteroidId,
         pirateBaseId: body.pirateBaseId,
         cargo: body.cargo,
+        originPlanetId: body.originPlanetId,
+      });
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  app.post("/api/fleet-preset", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      id?: string;
+      name?: string;
+      ships?: Partial<FleetShips>;
+      delete?: boolean;
+    };
+    if (!body.playerId) {
+      return c.json({ error: "playerId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      ensureUniverseShape(universe);
+      if (body.delete) {
+        if (!body.id) {
+          return c.json({ error: "id required to delete preset." }, 400);
+        }
+        const result = deleteFleetPreset(universe, body.playerId!, body.id);
+        if (!result.ok) return c.json({ error: result.error }, 400);
+        return c.json(playerView(universe, body.playerId!));
+      }
+      if (!body.name || !body.ships) {
+        return c.json({ error: "name and ships required." }, 400);
+      }
+      const result = saveFleetPreset(universe, body.playerId!, {
+        id: body.id,
+        name: body.name,
+        ships: body.ships,
+      });
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  app.post("/api/launch-max-expeditions", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      originPlanetId?: string;
+      galaxy?: number;
+      system?: number;
+      ships?: Partial<FleetShips>;
+      presetId?: string;
+    };
+    if (!body.playerId) {
+      return c.json({ error: "playerId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = launchMaxExpeditions(universe, {
+        playerId: body.playerId!,
+        originPlanetId: body.originPlanetId,
+        galaxy: body.galaxy,
+        system: body.system,
+        ships: body.ships,
+        presetId: body.presetId,
+      });
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  app.post("/api/scan-system", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      galaxy?: number;
+      system?: number;
+      probesPerTarget?: number;
+      originPlanetId?: string;
+    };
+    if (!body.playerId || body.galaxy == null || body.system == null) {
+      return c.json(
+        { error: "playerId, galaxy, and system required." },
+        400,
+      );
+    }
+    return withUniverse((universe) => {
+      const result = batchScanSystem(universe, {
+        playerId: body.playerId!,
+        galaxy: body.galaxy!,
+        system: body.system!,
+        probesPerTarget: body.probesPerTarget,
         originPlanetId: body.originPlanetId,
       });
       if (!result.ok) return c.json({ error: result.error }, 400);
