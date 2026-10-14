@@ -197,6 +197,19 @@ export async function selectPlanet(
   return parse<PlayerView>(res);
 }
 
+export async function renamePlanet(
+  playerId: string,
+  planetId: string,
+  name: string,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/rename-planet", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, planetId, name }),
+  });
+  return parse<PlayerView>(res);
+}
+
 export async function launchFleetMission(
   playerId: string,
   opts: {
