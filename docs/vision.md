@@ -93,14 +93,14 @@ Shared contract: **[design/round2-contract.md](./design/round2-contract.md)** (o
 2. **Navigation** — Top-left dropdown; separate pages with real routes/URLs for Buildings, Defenses, Shipyard, Research, Galaxy, Officers, Skills, plus Overview, Fleet, Highscore, Messages.
 3. **Player levels** — No max level. XP from building, research, combat, expeditions, pirate kills (design amounts in contract). Each level grants: +0.5% resource production, time reduction on build/research/fleet, shielding tech, weapons tech, and ship build speed. Level + XP bar in the top bar and on highscores.
 4. **Pirates upgrade** — Bases build every ship type players can; bases level up over time; every 3h free weak ships scaled by base level (count grows with level); pirate techs stay very low vs players.
-5. **Rename audit** — OGame-identical labels → Starhold flavor (Crater Hab, Horizon Scanner, Fold Bridge, Voidforge Titan, Outpost Cradle, Salvage Trawler, Whisper Probe, Beam Emplacement, Aegis Cupola, Power Discipline, Pulse Drive, Ordnance Doctrine, Hull Weave, Aegis Lattice, Shadow Optics, Stellar Cartography, Fleet OS). Audit entire catalogs.
+5. **Rename audit** — OGame-identical labels → Starhold flavor (Crater Hab, Horizon Scanner, Fold Bridge, Voidforge Titan, Colonizer, Salvage Trawler, Whisper Probe, Beam Emplacement, Aegis Cupola, Power Discipline, Pulse Drive, Ordnance Doctrine, Hull Weave, Aegis Lattice, Shadow Optics, Stellar Cartography, Fleet OS). Audit entire catalogs.
 6. **Mini planets** — Random small planets outside slots 1–16; discoverable only via expedition outcome (reveals coords to finder). 3–4 special-only buildings. After colonize: attacker with ≥5 World Eaters who wins can **capture** (ownership transfer) or **destroy** (huge resource payout + debris).
 7. **New ships** (combat + rapid fire + tests; friend-group balance):
    - **Voidforge Titan** — moon-killer flagship; Deathstar-class balance reference only; moon destruction chance formula
    - **World Eater** — destroy mini planets → debris; cannot collect debris
-   - **Swarm Drone** — tiny/fast/low dmg/low armor/high shields/no cargo/cheap; swarm numbers bonus; intercepts damage to mothership; must be carried by Swarm Mothership
+   - **Swarm Drone** — tiny/fast/low dmg/low armor/high shields/no cargo/cheap; swarm numbers bonus; intercepts damage to mothership; must be carried by Mothership
    - **Swarm Harvester** — harvest debris + steal resources into mothership cargo; no weapons, high shields, medium armor; intercepts mothership damage; if mothership <30% armor, kamikaze for shield+armor damage; mothership-carried
-   - **Swarm Mothership** — carry up to 2000 swarm ships; produce drones anywhere (no home planet); research Swarm Hold +15% of base (300) capacity per level; can occupy enemy planet/moon up to 2 days after defenses destroyed (occupation effects in contract)
+   - **Mothership** — carry up to 2,000 swarm ships; produce drones anywhere (no home planet); research Swarm Hold +15% of base (300) capacity per level; can occupy enemy planet/moon up to 2 days after defenses destroyed (occupation effects in contract)
 
 ### Parallel workstreams (Round 2)
 

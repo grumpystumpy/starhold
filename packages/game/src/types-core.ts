@@ -103,7 +103,7 @@ export type QueueKind = "building" | "ship" | "defense" | "research";
  * - transport — move cargo between own planets
  * - espionage — probe report at target
  * - colonize — found colony on empty slot
- * - harvest — collect debris with Salvage Trawlers or Swarm Mothership
+ * - harvest — collect debris with Salvage Trawlers or Mothership
  * - harvestAsteroid — mine asteroid field with Salvage Trawlers
  * - expedition — deep-space probe (resources / ships / nothing / pirates / starshards)
  * - pirateRaid — attack an NPC pirate base
@@ -135,7 +135,7 @@ export type FleetPresetIntent =
 export interface FleetPreset {
   id: string;
   name: string;
-  /** Ship type → count. Display names come from the ship catalog (Outpost Cradle, Swarm Mothership, …). */
+  /** Ship type → count. Display names come from the ship catalog (Colonizer, Mothership, …). */
   ships: Partial<FleetShips>;
   builtIn: boolean;
   intent: FleetPresetIntent;
@@ -185,7 +185,7 @@ export interface ShipDef {
   /** Minimum research levels to queue at shipyard (v1 Round 2). */
   researchReq?: Partial<Record<ResearchId, number>>;
   /**
-   * When true, hull must ride with a Swarm Mothership (not free-flying alone).
+   * When true, hull must ride with a Mothership (not free-flying alone).
    * Count toward mothership swarm capacity.
    */
   swarmCarried?: boolean;
@@ -307,7 +307,7 @@ export interface FleetMission {
   phase: FleetPhase;
   /** Combat or espionage report id when relevant */
   reportId: string | null;
-  /** In-flight / parked Swarm Mothership drone production job. */
+  /** In-flight / parked Mothership drone production job. */
   swarmProduce?: {
     remaining: number;
     unitSeconds: number;
@@ -339,7 +339,7 @@ export interface PirateBase {
   destroyedAt: number | null;
 }
 
-/** Swarm Mothership occupation of an enemy body (Round 2). */
+/** Mothership occupation of an enemy body (Round 2). */
 export interface OccupationState {
   planetId: string;
   occupierPlayerId: string;

@@ -94,7 +94,7 @@ describe("Round 2 ship catalog fixtures (Micah amendments)", () => {
     assert.equal(SHIPS.swarmHarvester.buildSeconds, 5);
   });
 
-  it("Swarm Mothership is 2nd largest with amended cargo/combat", () => {
+  it("Mothership is 2nd largest with amended cargo/combat", () => {
     const s = SHIPS.swarmMothership;
     assert.equal(s.cargo, 150_050_000);
     assert.equal(s.attack, 3_000);
@@ -109,7 +109,7 @@ describe("Round 2 ship catalog fixtures (Micah amendments)", () => {
     );
   });
 
-  it("Swarm Mothership can harvest debris fields", () => {
+  it("Mothership can harvest debris fields", () => {
     const universe = createUniverse("MS Harvest Drift", 8);
     const a = joinUniverse(universe, "SwarmSalvage", 240_000_000);
     const coords = { ...a.planet.coords, slot: 3 };

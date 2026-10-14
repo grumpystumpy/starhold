@@ -171,7 +171,7 @@ export interface UniverseState {
   debris: Record<string, DebrisField>;
   asteroids?: Record<string, AsteroidField>;
   pirateBases?: Record<string, PirateBase>;
-  /** Active Swarm Mothership occupations keyed by planetId. */
+  /** Active Mothership occupations keyed by planetId. */
   occupations?: Record<string, OccupationState>;
   /** Mini planet ids (thread K fills discovery). */
   miniPlanetIds?: string[];
