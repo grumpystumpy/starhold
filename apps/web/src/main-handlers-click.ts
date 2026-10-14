@@ -2,6 +2,7 @@ import type {
   BuildingId,
   DefenseId,
   OfficerId,
+  PlayerClassId,
   ResearchId,
   ShipId,
 } from "@starhold/game";
@@ -21,6 +22,8 @@ import {
   doBuild,
   doBuildDefense,
   doCancelQueue,
+  doChangeClass,
+  doChooseClass,
   doClaimDaily,
   doDeleteFleetPreset,
   doGalaxyNav,
@@ -222,6 +225,26 @@ export function bindClickHandlers(): void {
         ev.preventDefault();
         const skillId = skillBtn.getAttribute("data-unlock-skill");
         if (skillId) void doUnlockSkill(skillId);
+        return;
+      }
+
+      const chooseClassBtn = closestActionEl(target, "[data-choose-class]");
+      if (chooseClassBtn) {
+        ev.preventDefault();
+        const classId = chooseClassBtn.getAttribute(
+          "data-choose-class",
+        ) as PlayerClassId | null;
+        if (classId) void doChooseClass(classId);
+        return;
+      }
+
+      const changeClassBtn = closestActionEl(target, "[data-change-class]");
+      if (changeClassBtn) {
+        ev.preventDefault();
+        const classId = changeClassBtn.getAttribute(
+          "data-change-class",
+        ) as PlayerClassId | null;
+        if (classId) void doChangeClass(classId);
         return;
       }
 
