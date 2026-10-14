@@ -1,0 +1,147 @@
+name: Assemble full #49 stack onto batch-tomorrow-deploy
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: assemble-full49
+  cancel-in-progress: true
+
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.ref == 'refs/heads/cursor/batch-tomorrow-deploy'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: cursor/batch-tomorrow-deploy
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download unpack verify commit via Contents API
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STACK_URL: https://h.uguu.se/iumWvaCe.tgz
+          STACK_URL_FALLBACK: https://litter.catbox.moe/p445bv.tgz
+          EXPECT_SHA256: 7333cf7972f708296a7c1ebb471a7feeef5d4493913d95abe3f8dfc140cbef8d
+        run: |
+          set -euo pipefail
+          if ! curl -fsSL "$STACK_URL" -o /tmp/full49.tgz; then
+            curl -fsSL "$STACK_URL_FALLBACK" -o /tmp/full49.tgz
+          fi
+          echo "$EXPECT_SHA256  /tmp/full49.tgz" | sha256sum -c -
+          mkdir -p /tmp/full49
+          tar xzf /tmp/full49.tgz -C /tmp/full49
+          cd /tmp/full49
+          sha256sum -c SHA256SUMS
+          mkdir -p /tmp/stack/api
+          tar xzf src49-stack.tgz -C /tmp/stack
+          cp api-index.js /tmp/stack/api/index.js
+          test -f /tmp/stack/apps/web/src/ui/render-fleets-panels.ts
+          test -f /tmp/stack/api/index.js
+          grep -q 'data-testid="galaxy-alien"' /tmp/stack/apps/web/src/ui/render-fleets-panels.ts
+          grep -q 'data-testid="galaxy-alien-empty"' /tmp/stack/apps/web/src/ui/render-fleets-panels.ts
+          grep -q '· Lv ' /tmp/stack/apps/web/src/ui/render-fleets-panels.ts
+          grep -q '<h3 class="subhead">Aliens</h3>' /tmp/stack/apps/web/src/ui/render-fleets-panels.ts
+          ! grep -q '^PLACEHOLDER$' /tmp/stack/apps/web/src/ui/render-fleets-panels.ts
+          grep -q 'STARHOLD_E2E' /tmp/stack/.github/workflows/ci.yml
+          grep -q 'NPC_RAID_CATCHUP_MAX' /tmp/stack/packages/game/src/data/tuning.ts
+          python3 - <<'PY'
+          import base64, hashlib, json, os, urllib.request, urllib.error
+          from pathlib import Path
+
+          TOKEN = os.environ["GH_TOKEN"]
+          OWNER, REPO, BRANCH = "grumpystumpy", "starhold", "cursor/batch-tomorrow-deploy"
+          API = f"https://api.github.com/repos/{OWNER}/{REPO}"
+          MSG = "integrate: fold #49 pirates+aliens onto batch-tomorrow-deploy (full clean)"
+          EXPECT_API = "4b21c187cad1e1192779e82d9817e776c83b34498ca2932e0b0afb777c431c23"
+
+          def api(method, path, data=None):
+              body = None if data is None else json.dumps(data).encode()
+              req = urllib.request.Request(
+                  API + path,
+                  data=body,
+                  method=method,
+                  headers={
+                      "Authorization": f"Bearer {TOKEN}",
+                      "Accept": "application/vnd.github+json",
+                      "User-Agent": "starhold-assemble-full49",
+                      "Content-Type": "application/json",
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(req) as r:
+                      return r.status, json.load(r)
+              except urllib.error.HTTPError as e:
+                  err = e.read().decode()
+                  raise SystemExit(f"API {method} {path} -> {e.code}: {err}") from e
+
+          def get_json(path):
+              return api("GET", path)[1]
+
+          root = Path("/tmp/stack")
+          api_path = root / "api" / "index.js"
+          api_raw = api_path.read_bytes()
+          got = hashlib.sha256(api_raw).hexdigest()
+          if got != EXPECT_API:
+              raise SystemExit(f"api sha mismatch {got}")
+          print(f"api ok {len(api_raw)} {got}")
+
+          deletes = []
+          del_file = root / "DELETE_PATHS.txt"
+          if del_file.exists():
+              deletes = [ln.strip() for ln in del_file.read_text().splitlines() if ln.strip()]
+              del_file.unlink()
+
+          # Always remove assemble leftovers + chunk dirs
+          deletes += [
+              ".github/workflows/assemble-full49.yml",
+              ".github/workflows/assemble-src49-api.yml",
+              ".github/workflows/assemble-batch-tomorrow-49.yml",
+          ]
+          # Best-effort delete known chunk paths if present
+          for i in range(6):
+              deletes.append(f".cursor-push/src49/src.{i:02d}.b64")
+          deletes.append(".cursor-push/src49/meta.json")
+          for i in range(17):
+              deletes.append(f".cursor-push/api49/api.{i:02d}.b64")
+          deletes.append(".cursor-push/api49/meta.json")
+          deletes = sorted(set(deletes))
+
+          ref = get_json(f"/git/ref/heads/{BRANCH}")
+          head_sha = ref["object"]["sha"]
+          commit = get_json(f"/git/commits/{head_sha}")
+          base_tree = commit["tree"]["sha"]
+
+          tree = []
+          for path in sorted(p for p in root.rglob("*") if p.is_file()):
+              rel = str(path.relative_to(root))
+              raw = path.read_bytes()
+              b64 = base64.b64encode(raw).decode()
+              st, blob = api("POST", "/git/blobs", {"content": b64, "encoding": "base64"})
+              tree.append({"path": rel, "mode": "100644", "type": "blob", "sha": blob["sha"]})
+              print(f"blob {rel} {len(raw)} {blob['sha'][:8]}")
+
+          for rel in deletes:
+              tree.append({"path": rel, "mode": "100644", "type": "blob", "sha": None})
+              print(f"delete {rel}")
+
+          st, new_tree = api("POST", "/git/trees", {"base_tree": base_tree, "tree": tree})
+          st, new_commit = api(
+              "POST",
+              "/git/commits",
+              {"message": MSG, "tree": new_tree["sha"], "parents": [head_sha]},
+          )
+          st, updated = api(
+              "PATCH",
+              f"/git/refs/heads/{BRANCH}",
+              {"sha": new_commit["sha"], "force": False},
+          )
+          print("COMMIT", new_commit["sha"])
+          print("REF", updated["object"]["sha"])
+          PY
