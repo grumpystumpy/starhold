@@ -22,6 +22,7 @@ import type {
   UniverseState,
 } from "./types.js";
 import { seedUniverseAsteroids } from "./world-asteroids.js";
+import { ensurePlayerFleetPresets } from "./world-fleet-presets.js";
 import { seedUniversePirates } from "./world-pirates.js";
 
 export function emptyBuildings(): PlanetState["buildings"] {
@@ -171,6 +172,7 @@ export function ensureUniverseShape(universe: UniverseState): void {
     if (player.level == null || player.level < 1) player.level = 1;
     if (player.xp == null || player.xp < 0) player.xp = 0;
     if (player.xpTotal == null || player.xpTotal < 0) player.xpTotal = 0;
+    ensurePlayerFleetPresets(player);
   }
   const seed = universe.seed ?? universe.id;
   for (const planet of Object.values(universe.planets)) {
@@ -285,7 +287,9 @@ export function joinUniverse(
     officers: [],
     skillsUnlocked: [],
     highscoreStarshardsClaimed: false,
+    fleetPresets: [],
   };
+  ensurePlayerFleetPresets(player);
 
   universe.players[playerId] = player;
   universe.planets[planetId] = planet;

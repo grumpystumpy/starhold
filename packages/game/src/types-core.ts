@@ -76,6 +76,24 @@ export type MissionType =
 
 export type FleetPhase = "outbound" | "returning";
 
+/** Fleet composition templates (per player, per universe). */
+export type FleetPresetIntent =
+  | "expedition"
+  | "raid"
+  | "moonDestruction"
+  | "miniCapture"
+  | "miniDestroy"
+  | "custom";
+
+export interface FleetPreset {
+  id: string;
+  name: string;
+  /** Ship type → count. Display names come from the ship catalog (Outpost Cradle, Swarm Mothership, …). */
+  ships: Partial<FleetShips>;
+  builtIn: boolean;
+  intent: FleetPresetIntent;
+}
+
 export interface Resources {
   metal: number;
   crystal: number;
