@@ -22,6 +22,7 @@ import {
   doBuildDefense,
   doCancelQueue,
   doClaimDaily,
+  doClaimGoal,
   doDeleteFleetPreset,
   doGalaxyNav,
   doClaimAnonymous,
@@ -204,6 +205,14 @@ export function bindClickHandlers(): void {
       if (closestActionEl(target, "[data-claim-daily]")) {
         ev.preventDefault();
         void doClaimDaily();
+        return;
+      }
+
+      const goalBtn = closestActionEl(target, "[data-claim-goal]");
+      if (goalBtn) {
+        ev.preventDefault();
+        const goalId = goalBtn.getAttribute("data-claim-goal");
+        if (goalId) void doClaimGoal(goalId);
         return;
       }
 

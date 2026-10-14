@@ -1,6 +1,7 @@
 /** Classic shell destinations with real URL paths (Round 2 contract §3). */
 export const NAV_PAGES = [
   "overview",
+  "goals",
   "buildings",
   "defenses",
   "shipyard",
@@ -17,6 +18,7 @@ export type NavPage = (typeof NAV_PAGES)[number];
 
 export const NAV_LABELS: Record<NavPage, string> = {
   overview: "Overview",
+  goals: "Goals",
   buildings: "Buildings",
   defenses: "Defenses",
   shipyard: "Shipyard",
@@ -32,6 +34,7 @@ export const NAV_LABELS: Record<NavPage, string> = {
 /** Canonical path for each page (`/` also resolves to overview). */
 export const NAV_PATHS: Record<NavPage, string> = {
   overview: "/overview",
+  goals: "/goals",
   buildings: "/buildings",
   defenses: "/defenses",
   shipyard: "/shipyard",

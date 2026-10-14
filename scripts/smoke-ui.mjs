@@ -553,7 +553,98 @@ async function uiSmoke() {
   return { logs };
 }
 
+async function authAndGoalsSmoke() {
+  const require = createRequire(import.meta.url);
+  const playwright = require("playwright");
+  const browser = await playwright.chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  const stamp = Date.now().toString(36);
+  const email = `goals${stamp}@example.com`;
+  const password = "starhold-goals";
+  const name = `Goal${stamp.slice(-4)}`;
+  const logs = [];
+
+  await page.goto(`${WEB}/`, { waitUntil: "networkidle" });
+  await page.fill('[data-testid="auth-email"]', email);
+  await page.fill('[data-testid="auth-password"]', password);
+  await page.click('[data-testid="auth-signup-btn"]');
+  await page.waitForSelector('[data-testid="account-email"]', { timeout: 15_000 });
+  logs.push("signup");
+
+  await page.fill('[data-testid="commander-input"]', name);
+  await page.click('[data-testid="join-btn"]');
+  await page.waitForSelector('[data-testid="resources"]', { timeout: 15_000 });
+  const playerId = await page.evaluate(() => window.starhold.getState().playerId);
+  if (!playerId) throw new Error("signup join missing player");
+  logs.push(`joined:${name}`);
+
+  await page.evaluate(() => localStorage.clear());
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForSelector('[data-testid="resources"]', { timeout: 15_000 });
+  const persisted = await page.evaluate(() => window.starhold.getState());
+  if (persisted.playerId !== playerId || persisted.name !== name) {
+    throw new Error(`cookie persist failed: ${JSON.stringify(persisted)}`);
+  }
+  logs.push("cookie-persist");
+
+  await goNav(page, "goals");
+  await page.waitForSelector('[data-testid="goals-daily"]', { timeout: 10_000 });
+  await page.waitForSelector('[data-testid="goals-weekly"]', { timeout: 10_000 });
+  const progress = await page.textContent(
+    '[data-testid="goal-progress-dailyPirateWins"]',
+  );
+  const reward = await page.textContent(
+    '[data-testid="goal-reward-dailyExpeditions"]',
+  );
+  const weeklyReward = await page.textContent(
+    '[data-testid="goal-reward-weeklyExpeditions"]',
+  );
+  const panel = await page.innerText('[data-testid="goals-panel"]');
+  if (progress?.trim() !== "0 / 3") {
+    throw new Error(`daily pirate progress: ${progress}`);
+  }
+  if (!reward?.includes("2,000") || !weeklyReward?.includes("12,000")) {
+    throw new Error(`goal rewards missing commas: ${reward} | ${weeklyReward}`);
+  }
+  if (panel.includes("_")) {
+    throw new Error(`underscore in goals UI: ${panel}`);
+  }
+  const claim = page.locator('[data-testid="claim-goal-dailyPirateWins"]');
+  if (await claim.isEnabled()) {
+    throw new Error("unfinished pirate goal should not be claimable");
+  }
+  logs.push("goals-ui");
+
+  await page.evaluate(async () => {
+    await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+    localStorage.clear();
+  });
+  await page.goto(`${WEB}/`, { waitUntil: "networkidle" });
+  await page.waitForSelector('[data-testid="auth-login-btn"]', { timeout: 15_000 });
+  if ((await page.locator('[data-testid="resources"]').count()) > 0) {
+    throw new Error("logout still showed the resource bar");
+  }
+  await page.fill('[data-testid="auth-email"]', email);
+  await page.fill('[data-testid="auth-password"]', password);
+  await page.click('[data-testid="auth-login-btn"]');
+  await page.waitForSelector('[data-testid="resources"]', { timeout: 15_000 });
+  const afterLogin = await page.evaluate(() => window.starhold.getState());
+  if (afterLogin.playerId !== playerId || afterLogin.name !== name) {
+    throw new Error(`login did not resume commander: ${JSON.stringify(afterLogin)}`);
+  }
+  await goNav(page, "goals");
+  await page.waitForSelector('[data-testid="goal-progress-dailyExpeditions"]', {
+    timeout: 10_000,
+  });
+  logs.push("login-persist");
+
+  await browser.close();
+  console.log("Auth + goals smoke OK", logs);
+  return { logs, playerId, email };
+}
+
 await waitHealthy();
 const api = await apiSmoke();
+const authGoals = await authAndGoalsSmoke();
 const ui = await uiSmoke();
-console.log(JSON.stringify({ ok: true, api, ui }, null, 2));
+console.log(JSON.stringify({ ok: true, api, authGoals, ui }, null, 2));

@@ -22,6 +22,7 @@ import {
   expeditionStarshardsAmount,
   grantStarshards,
 } from "./world-boosts.js";
+import { noteGoalMetric } from "./world-goals.js";
 
 /** Deterministic 0..99 roll from fleet id + arrival time. */
 export function expeditionRoll(fleetId: string, at: number): number {
@@ -162,13 +163,14 @@ export function resolveExpeditionArrival(
     }
   }
 
-  // Non-empty expedition outcomes grant XP (contract v1).
-  if (kind !== "nothing") {
-    const owner = universe.players[fleet.ownerPlayerId];
-    if (owner) {
-      grantPlayerXp(owner, xpForExpedition());
-      universe.players[owner.id] = owner;
-    }
+  const owner = universe.players[fleet.ownerPlayerId];
+  if (owner) {
+    // Non-empty expedition outcomes grant XP (contract v1).
+    if (kind !== "nothing") grantPlayerXp(owner, xpForExpedition());
+    // Outbound arrival counts as a run, including an empty find.
+    // `now` is the lazy catch-up clock, so offline flights credit the open period.
+    noteGoalMetric(owner, "expedition", 1, now);
+    universe.players[owner.id] = owner;
   }
 
   const reportId = `xpd_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;

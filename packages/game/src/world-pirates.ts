@@ -47,6 +47,7 @@ import {
   grantPirateDestroyStarshards,
   grantPirateFleetKillStarshards,
 } from "./world-boosts.js";
+import { noteGoalMetric } from "./world-goals.js";
 import { emptyCargo, planetAtCoords } from "./world-bootstrap.js";
 import { subtractCargo } from "./world-tick.js";
 
@@ -412,6 +413,7 @@ function applyPirateRaidOnPlanet(
     grantPlayerXp(owner, xpForCombatLose());
   } else if (combat.outcome === "defender_win") {
     grantPirateFleetKillStarshards(owner);
+    noteGoalMetric(owner, "pirateWin", 1, now);
     const killed = resourcesCostTotal(
       destroyedShipResources(raidFleet, combat.attackerAfter),
     );
@@ -538,6 +540,7 @@ export function resolvePirateRaidArrival(
     markPirateDestroyed(base, now);
     if (owner) {
       grantPirateDestroyStarshards(owner, tierAtFight);
+      noteGoalMetric(owner, "pirateWin", 1, now);
       grantPlayerXp(
         owner,
         xpForCombatWin(killed) +

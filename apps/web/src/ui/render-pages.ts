@@ -29,6 +29,7 @@ import {
   type FleetDraft,
 } from "./render-fleets";
 import { recommendedNext } from "./render-helpers";
+import { goalsPageHtml } from "./render-goals";
 import {
   officersPanelHtml,
   skillsPanelHtml,
@@ -240,6 +241,8 @@ export function pageHtml(
   switch (page) {
     case "overview":
       return overviewPage(view, busy);
+    case "goals":
+      return goalsPageHtml(view, busy);
     case "buildings":
       return buildingsPage(view, busy);
     case "research":

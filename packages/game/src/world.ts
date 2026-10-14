@@ -112,6 +112,7 @@ export {
   activateOfficer,
   canClaimDailyLogin,
   claimDailyLogin,
+  claimPlayerGoal,
   emptyBoosts,
   expeditionStarshardsAmount,
   grantPirateDestroyStarshards,
@@ -124,6 +125,14 @@ export {
   type PlayerBoosts,
   type StarshardActionResult,
 } from "./world-starshards.js";
+export {
+  claimGoal,
+  ensureGoalBoard,
+  goalsView,
+  noteGoalMetric,
+  utcWeekKey,
+  type GoalActionResult,
+} from "./world-goals.js";
 export {
   effectiveCombatResearch,
   ensurePlayerProgress,
