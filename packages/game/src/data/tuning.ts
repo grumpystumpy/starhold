@@ -119,8 +119,8 @@ export const SHIPS: Record<ShipId, ShipDef> = {
   },
   colonyShip: {
     id: "colonyShip",
-    name: "Outpost Cradle",
-    description: "Found a new outpost on an empty planet slot. Consumed on landing.",
+    name: "Colonizer",
+    description: "Found a new colony on an empty planet slot. Consumed on landing.",
     cost: { metal: 800, crystal: 800, deuterium: 200 },
     buildSeconds: 50,
     shipyardLevel: 2,
@@ -177,7 +177,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
     id: "swarmDrone",
     name: "Swarm Drone",
     description:
-      "Carried strike mite. Must ride a Swarm Mothership; intercepts fire aimed at the carrier.",
+      "Carried strike mite. Must ride a Mothership; intercepts fire aimed at the carrier.",
     cost: { metal: 50, crystal: 20, deuterium: 0 },
     buildSeconds: 2,
     shipyardLevel: 4,
@@ -207,9 +207,9 @@ export const SHIPS: Record<ShipId, ShipDef> = {
   },
   swarmMothership: {
     id: "swarmMothership",
-    name: "Swarm Mothership",
+    name: "Mothership",
     description:
-      "2nd-largest hull — very high shields, low attack. Carries 2000 swarms; occupies mini planets; harvests debris.",
+      "2nd-largest hull — very high shields, low attack. Carries 2,000 swarms; occupies mini planets; harvests debris.",
     cost: { metal: 2_500_000, crystal: 2_000_000, deuterium: 750_000 },
     buildSeconds: 80_000,
     shipyardLevel: 13,
@@ -878,7 +878,7 @@ export const RESEARCH: Record<ResearchId, ResearchDef> = {
     id: "swarmHold",
     name: "Swarm Hold",
     description:
-      "+15% of base (2000) Swarm Mothership capacity per level.",
+      "+15% of base (2,000) Mothership capacity per level.",
     baseCost: { metal: 200, crystal: 400, deuterium: 200 },
     costGrowth: 2,
     baseResearchSeconds: 40,
@@ -888,7 +888,7 @@ export const RESEARCH: Record<ResearchId, ResearchDef> = {
     id: "gravityWell",
     name: "Well Binding",
     description:
-      "Gravity doctrine — required for Void Titan, Swarm Mothership, and World Eater.",
+      "Gravity doctrine — required for Void Titan, Mothership, and World Eater.",
     baseCost: { metal: 0, crystal: 4000, deuterium: 2000 },
     costGrowth: 2.0,
     baseResearchSeconds: 120,
@@ -897,7 +897,7 @@ export const RESEARCH: Record<ResearchId, ResearchDef> = {
 
 };
 
-/** Swarm Mothership base carry capacity (drones + harvesters). */
+/** Mothership base carry capacity (drones + harvesters). */
 export const SWARM_CAPACITY_BASE = 2000;
 /** +15% of base capacity per Swarm Hold level. */
 export const SWARM_HOLD_BONUS_PER_LEVEL = 0.15;

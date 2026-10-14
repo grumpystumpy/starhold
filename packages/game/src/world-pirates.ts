@@ -55,7 +55,7 @@ const PIRATE_NAMES = [
   "Corsair Nest",
   "Rogue Drift",
   "Scarlet Wake",
-  "Iron Maw Outpost",
+  "Iron Maw Colony",
   "Void Reaver Camp",
   "Ashen Jolly",
   "Cutlass Beacon",
