@@ -14,44 +14,117 @@ concurrency:
 jobs:
   assemble:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     if: github.ref == 'refs/heads/cursor/batch-tomorrow-deploy'
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: cursor/batch-tomorrow-deploy
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Download and unpack #49 stack
+      - name: Download unpack verify and commit via Contents API
         env:
-          STACK_URL: https://litter.catbox.moe/zdbyf6.tgz
-          EXPECT_SHA256: 1ce95ec7ff2b2972450ee27b8d38f194bdd9d4968fb31c9fade178d9379e5fee
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STACK_URL: https://d.uguu.se/AkTDJHhM.tgz
+          EXPECT_SHA256: 7f383d2dc5bd3d56f223acffae8f76ddbccb67ff01e21297de1d26cc65bfe69e
         run: |
           set -euo pipefail
           curl -fsSL "$STACK_URL" -o /tmp/stack.tgz
           echo "$EXPECT_SHA256  /tmp/stack.tgz" | sha256sum -c -
-          tar xzf /tmp/stack.tgz -C .
-          test -f packages/game/src/world-pirates.ts
-          test -f scripts/quality-gate-pirates-aliens.mjs
-          test -f docs/design/pirates-aliens-redesign.md
-          test -f api/index.js
-          grep -q 'NPC_RAID_CATCHUP_MAX' packages/game/src/data/tuning.ts
-          grep -q 'isRelicWorldPlanet' packages/game/src/world-pirates.ts
-          grep -q 'alienBase' packages/game/src/world-view.ts
-          grep -q 'miniPlanetIds' packages/game/src/world-view.ts
-          grep -q 'STARHOLD_E2E' .github/workflows/ci.yml
-          grep -q 'e2e:gate:pirates' package.json
-          grep -q 'alienBaseId' apps/server/src/app.ts
+          mkdir -p /tmp/stack
+          tar xzf /tmp/stack.tgz -C /tmp/stack
+          test -f /tmp/stack/apps/web/src/ui/render-fleets-panels.ts
+          test -f /tmp/stack/api/index.js
+          grep -q 'data-testid="galaxy-alien"' /tmp/stack/apps/web/src/ui/render-fleets-panels.ts
+          grep -q 'data-testid="galaxy-alien-empty"' /tmp/stack/apps/web/src/ui/render-fleets-panels.ts
+          grep -q '· Lv ' /tmp/stack/apps/web/src/ui/render-fleets-panels.ts
+          grep -q '<h3 class="subhead">Aliens</h3>' /tmp/stack/apps/web/src/ui/render-fleets-panels.ts
+          grep -q 'NPC_RAID_CATCHUP_MAX' /tmp/stack/packages/game/src/data/tuning.ts
+          grep -q 'STARHOLD_E2E' /tmp/stack/.github/workflows/ci.yml
+          python3 <<'PY'
+          import base64, json, os, urllib.request, urllib.error
+          from pathlib import Path
 
-      - name: Commit stacked files and self-delete workflow
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          rm -f .github/workflows/assemble-batch-tomorrow-49.yml
-          git add -A
-          if git diff --cached --quiet; then
-            echo 'nothing to commit'
-            exit 0
-          fi
-          git commit -m 'integrate: fold #49 pirates+aliens onto batch-tomorrow-deploy'
-          git push origin HEAD:cursor/batch-tomorrow-deploy
+          TOKEN = os.environ["GH_TOKEN"]
+          OWNER, REPO, BRANCH = "grumpystumpy", "starhold", "cursor/batch-tomorrow-deploy"
+          API = f"https://api.github.com/repos/{OWNER}/{REPO}"
+          MSG = "integrate: fold #49 pirates+aliens onto batch-tomorrow-deploy (clean)"
+
+          def api(method, path, data=None):
+              body = None if data is None else json.dumps(data).encode()
+              req = urllib.request.Request(
+                  API + path,
+                  data=body,
+                  method=method,
+                  headers={
+                      "Authorization": f"Bearer {TOKEN}",
+                      "Accept": "application/vnd.github+json",
+                      "User-Agent": "starhold-assemble-49",
+                      "Content-Type": "application/json",
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(req) as r:
+                      return r.status, json.load(r)
+              except urllib.error.HTTPError as e:
+                  err = e.read().decode()
+                  raise SystemExit(f"API {method} {path} -> {e.code}: {err}") from e
+
+          def get_json(path):
+              return api("GET", path)[1]
+
+          ref = get_json(f"/git/ref/heads/{BRANCH}")
+          head_sha = ref["object"]["sha"]
+          commit = get_json(f"/git/commits/{head_sha}")
+          base_tree = commit["tree"]["sha"]
+
+          root = Path("/tmp/stack")
+          deletes = []
+          del_file = root / "DELETE_PATHS.txt"
+          if del_file.exists():
+              deletes = [ln.strip() for ln in del_file.read_text().splitlines() if ln.strip()]
+              del_file.unlink()
+
+          tree = []
+          for path in sorted(p for p in root.rglob("*") if p.is_file()):
+              rel = str(path.relative_to(root))
+              if rel == "DELETE_PATHS.txt":
+                  continue
+              raw = path.read_bytes()
+              b64 = base64.b64encode(raw).decode()
+              st, blob = api("POST", "/git/blobs", {"content": b64, "encoding": "base64"})
+              tree.append({"path": rel, "mode": "100644", "type": "blob", "sha": blob["sha"]})
+              print(f"blob {rel} {len(raw)} {blob['sha'][:8]}")
+
+          for rel in deletes:
+              tree.append({"path": rel, "mode": "100644", "type": "blob", "sha": None})
+              print(f"delete {rel}")
+
+          wf = ".github/workflows/assemble-batch-tomorrow-49.yml"
+          if not any(t["path"] == wf for t in tree):
+              tree.append({"path": wf, "mode": "100644", "type": "blob", "sha": None})
+              print(f"delete {wf}")
+
+          st, new_tree = api(
+              "POST",
+              "/git/trees",
+              {"base_tree": base_tree, "tree": tree},
+          )
+          st, new_commit = api(
+              "POST",
+              "/git/commits",
+              {
+                  "message": MSG,
+                  "tree": new_tree["sha"],
+                  "parents": [head_sha],
+              },
+          )
+          st, updated = api(
+              "PATCH",
+              f"/git/refs/heads/{BRANCH}",
+              {"sha": new_commit["sha"], "force": False},
+          )
+          print("COMMIT", new_commit["sha"])
+          print("REF", updated["object"]["sha"])
+          PY
