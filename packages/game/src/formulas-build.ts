@@ -1,6 +1,7 @@
 import {
   BUILDINGS,
   DEFENSES,
+  MANTLE_LOOM_FIELDS_USED,
   MINE_BASE_PER_HOUR,
   MINE_GROWTH,
   MOON_BUILDING_ORDER,
@@ -23,6 +24,14 @@ import {
   productionMultForSlot,
   rollPlanetFields,
 } from "./formulas-position.js";
+import {
+  gridStakeEnergyMult,
+  helioBuoyEnergy,
+  mantleLoomFieldsBonus,
+  rigFoundryTimeFactor,
+  solarTempFactor,
+  veinAnchorMineMult,
+} from "./formulas-round3.js";
 
 export function isMoon(planet: PlanetState): boolean {
   return planet.kind === "moon";
@@ -41,14 +50,14 @@ export function fieldsCap(planet: PlanetState): number {
     const lunar = planet.buildings.lunarBase ?? 0;
     return MOON_FIELDS_BASE + lunar * MOON_FIELDS_PER_LUNAR_BASE;
   }
-  if (typeof planet.fieldsCap === "number" && planet.fieldsCap > 0) {
-    return planet.fieldsCap;
-  }
-  // Deterministic backfill for blobs missing fieldsCap.
-  return rollPlanetFields(
-    planet.coords.slot,
-    `${planet.id}:${planet.coords.galaxy}:${planet.coords.system}:${planet.coords.slot}`,
-  );
+  let rolled =
+    typeof planet.fieldsCap === "number" && planet.fieldsCap > 0
+      ? planet.fieldsCap
+      : rollPlanetFields(
+          planet.coords.slot,
+          `${planet.id}:${planet.coords.galaxy}:${planet.coords.system}:${planet.coords.slot}`,
+        );
+  return rolled + mantleLoomFieldsBonus(planet);
 }
 
 /** Cost to go from `currentLevel` → `currentLevel + 1`. */
@@ -82,6 +91,20 @@ export function chronoLatheTimeFactor(chronoLatheLevel: number): number {
 }
 
 /**
+ * Combined construction time factor: Rig Foundry then Chrono Lathe.
+ * Order (Round 3): rigFoundry × chronoLathe.
+ */
+export function constructionSpeedFactor(
+  rigFoundryLevel = 0,
+  chronoLatheLevel = 0,
+): number {
+  return (
+    rigFoundryTimeFactor(rigFoundryLevel) *
+    chronoLatheTimeFactor(chronoLatheLevel)
+  );
+}
+
+/**
  * Sub-second batch helper (Micah): when unitSeconds < 1, return
  * floor(elapsed / unitSeconds) capped by remaining; otherwise 0 (use completesAt).
  */
@@ -107,12 +130,13 @@ export function buildingUpgradeSeconds(
   buildingId: BuildingId,
   currentLevel: number,
   naniteLevel = 0,
+  rigFoundryLevel = 0,
 ): number {
   const def = BUILDINGS[buildingId];
   const raw =
     def.baseBuildSeconds *
     Math.pow(def.costGrowth, currentLevel) *
-    constructionTimeMultiplier(naniteLevel);
+    constructionSpeedFactor(rigFoundryLevel, naniteLevel);
   return Math.max(MIN_UNIT_SECONDS, raw);
 }
 
@@ -130,11 +154,13 @@ export function shipUnitBuildSeconds(
   shipId: ShipId,
   shipyardLevel: number,
   naniteLevel = 0,
+  rigFoundryLevel = 0,
 ): number {
   const def = SHIPS[shipId];
   const speedFactor = 1 + Math.max(0, shipyardLevel - 1) * 0.1;
   const raw =
-    (def.buildSeconds / speedFactor) * constructionTimeMultiplier(naniteLevel);
+    (def.buildSeconds / speedFactor) *
+    constructionSpeedFactor(rigFoundryLevel, naniteLevel);
   return Math.max(MIN_UNIT_SECONDS, raw);
 }
 
@@ -143,8 +169,12 @@ export function shipBuildSeconds(
   count: number,
   shipyardLevel: number,
   naniteLevel = 0,
+  rigFoundryLevel = 0,
 ): number {
-  return shipUnitBuildSeconds(shipId, shipyardLevel, naniteLevel) * count;
+  return (
+    shipUnitBuildSeconds(shipId, shipyardLevel, naniteLevel, rigFoundryLevel) *
+    count
+  );
 }
 
 export function defenseCost(defenseId: DefenseId, count: number): Resources {
@@ -161,11 +191,13 @@ export function defenseUnitBuildSeconds(
   defenseId: DefenseId,
   shipyardLevel: number,
   naniteLevel = 0,
+  rigFoundryLevel = 0,
 ): number {
   const def = DEFENSES[defenseId];
   const speedFactor = 1 + Math.max(0, shipyardLevel - 1) * 0.1;
   const raw =
-    (def.buildSeconds / speedFactor) * constructionTimeMultiplier(naniteLevel);
+    (def.buildSeconds / speedFactor) *
+    constructionSpeedFactor(rigFoundryLevel, naniteLevel);
   return Math.max(MIN_UNIT_SECONDS, raw);
 }
 
@@ -174,8 +206,16 @@ export function defenseBuildSeconds(
   count: number,
   shipyardLevel: number,
   naniteLevel = 0,
+  rigFoundryLevel = 0,
 ): number {
-  return defenseUnitBuildSeconds(defenseId, shipyardLevel, naniteLevel) * count;
+  return (
+    defenseUnitBuildSeconds(
+      defenseId,
+      shipyardLevel,
+      naniteLevel,
+      rigFoundryLevel,
+    ) * count
+  );
 }
 
 export function researchUpgradeCost(
@@ -241,9 +281,14 @@ export function energyProduced(
   planet: PlanetState,
   energyOutputMult = 1,
 ): number {
+  const slot = planet.coords.slot;
   const base = solarEnergy(planet.buildings.solarPlant ?? 0);
-  const mult = productionMultForSlot(planet.coords.slot).energy;
-  return Math.floor(base * mult * Math.max(0, energyOutputMult));
+  const posMult = productionMultForSlot(slot).energy;
+  const temp = solarTempFactor(slot);
+  const solar =
+    base * posMult * temp * Math.max(0, energyOutputMult) * gridStakeEnergyMult(planet);
+  const buoy = helioBuoyEnergy(planet) * Math.max(0, energyOutputMult);
+  return Math.floor(solar + buoy);
 }
 
 /** 0..1 production multiplier from energy surplus/shortfall. */
@@ -267,8 +312,13 @@ export function storageFor(planet: PlanetState): Resources {
 
 export function fieldsUsed(planet: PlanetState): number {
   let used = 0;
-  for (const level of Object.values(planet.buildings)) {
-    used += level;
+  for (const [id, level] of Object.entries(planet.buildings)) {
+    if (id === "mantleLoom") {
+      // Mantle Loom always occupies 1 field regardless of level.
+      if ((level ?? 0) > 0) used += MANTLE_LOOM_FIELDS_USED;
+      continue;
+    }
+    used += level ?? 0;
   }
   return used;
 }
@@ -293,7 +343,9 @@ export function productionPerHour(
   const factor = energyFactor(planet, energyMult);
   const techBonus = 1 + energyTechLevel * 0.02;
   // universe.speed scales timers + income; PRODUCTION_MULT is income-only test tuning.
-  const incomeScale = universeSpeed * PRODUCTION_MULT * techBonus * mineMult;
+  const vein = veinAnchorMineMult(planet);
+  const incomeScale =
+    universeSpeed * PRODUCTION_MULT * techBonus * mineMult * vein;
   const pos = productionMultForSlot(planet.coords.slot);
   return {
     metal:
