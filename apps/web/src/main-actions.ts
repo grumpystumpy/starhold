@@ -31,4 +31,6 @@ export {
   doClaimDaily,
   doActivateOfficer,
   doUnlockSkill,
+  doChooseClass,
+  doChangeClass,
 } from "./main-actions-starshards.js";
