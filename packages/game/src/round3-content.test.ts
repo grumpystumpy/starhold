@@ -54,10 +54,10 @@ const R3_DEFENSE_IDS = [
 const MISSILE_NAMES = /missile|anti.?ballistic|interplanetary/i;
 
 describe("Round 3 content + engine (11–19)", () => {
-  it("schema version is 4", () => {
-    assert.equal(UNIVERSE_SCHEMA_VERSION, 4);
+  it("schema version is 5", () => {
+    assert.equal(UNIVERSE_SCHEMA_VERSION, 5);
     const u = createUniverse("R3", 8);
-    assert.equal(u.schemaVersion, 4);
+    assert.equal(u.schemaVersion, UNIVERSE_SCHEMA_VERSION);
   });
 
   it("has 15 new defenses and no missile ids", () => {
@@ -295,7 +295,7 @@ describe("Round 3 content + engine (11–19)", () => {
     );
   });
 
-  it("migrates schema 3 → 4 with playerClass defaults", () => {
+  it("migrates schema 3 → 4 then 5 with playerClass defaults", () => {
     const universe = createUniverse("V4", 8);
     const { player } = joinUniverse(universe, "Migratee", 405_000_000);
     universe.schemaVersion = 3;
@@ -310,7 +310,7 @@ describe("Round 3 content + engine (11–19)", () => {
     });
     const again = migrateOrResetUniverse(universe);
     assert.equal(again.didReset, false);
-    assert.equal(again.universe.schemaVersion, 4);
+    assert.equal(again.universe.schemaVersion, UNIVERSE_SCHEMA_VERSION);
   });
 
   it("class bonus table matches contract sheet", () => {

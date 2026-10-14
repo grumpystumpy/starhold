@@ -182,6 +182,22 @@ export function galaxyViewFor(
     });
   }
 
+  const alien = Object.values(universe.alienBases ?? {}).find(
+    (b) =>
+      b.destroyedAt == null &&
+      b.coords.galaxy === g &&
+      b.coords.system === s,
+  );
+  if (alien) {
+    const slot = slots.find((row) => row.coords.slot === alien.coords.slot);
+    if (slot && (slot.activity === "empty" || slot.activity == null)) {
+      slot.activity = "alien";
+    }
+  }
+
+  const pirateLevel = pirate ? (pirate.level ?? pirate.tier) : 0;
+  const alienLevel = alien ? (alien.level ?? alien.tier) : 0;
+
   return {
     galaxy: g,
     system: s,
@@ -195,8 +211,21 @@ export function galaxyViewFor(
           coords: pirate.coords,
           name: pirate.name,
           tier: pirate.tier,
+          level: pirateLevel,
           threatHint:
-            pirate.tier >= 5 ? "high" : pirate.tier >= 2 ? "medium" : "low",
+            pirateLevel >= 50 ? "high" : pirateLevel >= 15 ? "medium" : "low",
+        }
+      : null,
+    alienBase: alien
+      ? {
+          id: alien.id,
+          coords: alien.coords,
+          name: alien.name,
+          tier: alien.tier,
+          level: alienLevel,
+          threatHint:
+            alienLevel >= 50 ? "high" : alienLevel >= 15 ? "medium" : "low",
+          active: Date.now() >= (alien.buildupEndsAt ?? 0),
         }
       : null,
   };

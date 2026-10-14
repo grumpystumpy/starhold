@@ -111,6 +111,7 @@ export type QueueKind = "building" | "ship" | "defense" | "research";
  * - harvestAsteroid — mine asteroid field with Salvage Trawlers
  * - expedition — deep-space probe (resources / ships / nothing / pirates / starshards)
  * - pirateRaid — attack an NPC pirate base
+ * - alienRaid — attack an NPC alien base
  * - jump — instant moon→moon hop via Fold Bridge (own moons)
  */
 export type MissionType =
@@ -123,6 +124,7 @@ export type MissionType =
   | "harvestAsteroid"
   | "expedition"
   | "pirateRaid"
+  | "alienRaid"
   | "jump";
 
 export type FleetPhase = "outbound" | "returning";
@@ -303,6 +305,8 @@ export interface FleetMission {
   targetAsteroidId?: string | null;
   /** Set for pirateRaid missions. */
   targetPirateBaseId?: string | null;
+  /** Set for alienRaid missions. */
+  targetAlienBaseId?: string | null;
   mission: MissionType;
   ships: FleetShips;
   /** Loot, transport cargo, or harvest haul on the return leg */
@@ -333,16 +337,68 @@ export interface AsteroidField {
 }
 
 /** NPC pirate base stub (thread E fills behavior). */
+/** Pirate combat techs — kept low vs players. */
+export interface PirateTechs {
+  weapons: number;
+  armour: number;
+  shielding: number;
+}
+
+/**
+ * NPC pirate base (Micah redesign §5): levels to 100, defenses, 3h free ships,
+ * split/coalition, hourly random nextRaidAt.
+ */
 export interface PirateBase {
   id: string;
   coords: Coordinates;
   name: string;
+  /** Growth tier; kept in sync with `level`. */
   tier: number;
+  /** Alias of `tier` (0..PIRATE_MAX_LEVEL). */
+  level: number;
   ships: FleetShips;
+  /** Accumulated static defenses (level grants + 3h free-spawn). */
+  defenses: DefenseStock;
   resources: Resources;
+  techs: PirateTechs;
   lastGrewAt: number;
   lastRaidAt: number;
+  /** Random time within the current/next hour window. */
+  nextRaidAt: number;
+  /** Cadence for free weak-ship + defense spawns (3h). */
+  lastFreeSpawnAt: number;
   destroyedAt: number | null;
+  /** Split lineage root — same coalition never raids each other. */
+  coalitionId: string;
+  /** True after the one-time split at PIRATE_SPLIT_LEVEL. */
+  splitDone: boolean;
+}
+
+/**
+ * Alien base (§5b) — same growth path; split at 50; tech = top+1.
+ * Zero at universe start; appear only via expedition find.
+ */
+export interface AlienBase {
+  id: string;
+  coords: Coordinates;
+  name: string;
+  tier: number;
+  level: number;
+  ships: FleetShips;
+  defenses: DefenseStock;
+  resources: Resources;
+  techs: PirateTechs;
+  lastGrewAt: number;
+  lastRaidAt: number;
+  nextRaidAt: number;
+  lastFreeSpawnAt: number;
+  destroyedAt: number | null;
+  coalitionId: string;
+  splitDone: boolean;
+  /** Wall-clock when buildup ends; raids locked until then. */
+  buildupEndsAt: number;
+  foundAt: number;
+  foundByPlayerId: string;
 }
 
 /** Swarm Mothership occupation of an enemy body (Round 2). */

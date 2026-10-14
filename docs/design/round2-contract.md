@@ -292,37 +292,179 @@ interface PlayerView {
 
 ---
 
-## 5. Pirates upgrade
+## 5. Pirates upgrade — Micah redesign (2026-10-14)
 
-Extends Round 1 `PirateBase` (`tier` → also expose as **base level**).
+**Supersedes** Round 2 v1 cap-12 / “every ship including titans” / ~100-base density, and open PR **#44**. Vision: [vision.md — Pirates + Aliens redesign](../vision.md#pirates--aliens-redesign-2026-10-14). Implementer handoff: Project store `internal/pirates-aliens-redesign.md`.
+
+Extends Round 1 `PirateBase` (`tier` → **base level**). All numbers below are **tuning.ts knobs** (names fixed; magnitudes v1 placeholders until Micah retunes).
 
 ```ts
 interface PirateBase {
   // existing fields...
-  tier: number;              // = base level 0..N
-  level: number;             // alias of tier for Round 2 clarity (keep both in sync)
-  ships: FleetShips;         // may include ANY player ShipId once researched-equivalent unlock table says so
+  tier: number;              // = base level; keep in sync with level
+  level: number;             // 0..PIRATE_MAX_LEVEL
+  ships: FleetShips;         // every ShipId except PIRATE_EXCLUDED_SHIP_IDS
+  defenses: Partial<Record<DefenseId, number>>; // accumulates forever
   techs: {
-    weapons: number;         // hard-capped low
+    weapons: number;
     armour: number;
     shielding: number;
   };
-  lastFreeSpawnAt: number;   // 3h cadence
+  lastFreeSpawnAt: number;   // 3h ship + defense spawn
+  lastRaidAt: number;        // last fired raid
+  nextRaidAt: number;        // random time within current/next hour window
+  lastGrewAt: number;        // level growth interval
+  /** Split lineage: same root never raid each other (coalition). */
+  coalitionId: string;       // = id of split root (self until first split)
+  splitDone: boolean;        // true after the one-time level-25 split
+  destroyedAt: number | null;
 }
 ```
 
-### Rules (v1)
+### Rules (redesign)
 
-| Rule | Value |
-|------|------:|
-| Base levels over time | Keep growth interval **6h → +1 level**, cap **12** (was 8; raise for Round 2) |
-| Ship catalog | Bases may hold/build **every `ShipId` players can**, including Round 2 ships, scaled by level unlock table |
-| Free ships every **3h** | Weak composition: mostly Scout Skiff + Interceptor; count = `10 + 5 * level` total hulls |
-| Free-ship power | Each free ship uses pirate techs only (below) |
-| Pirate weapons / armour / shielding | `min(2, floor(level / 4))` — **very low** vs players |
-| Player destroy | unchanged Starshards; respawn elsewhere |
+| Rule | Value | `tuning.ts` constant(s) |
+|------|------:|-------------------------|
+| Max level | **100** | `PIRATE_MAX_LEVEL` |
+| Level growth | **6h → +1** (unchanged cadence) | `PIRATE_LEVEL_GROWTH_INTERVAL_MS` |
+| Level-up defenses | Every level grants defenses; **higher levels grant more** | `PIRATE_LEVEL_DEFENSE_BASE`, `PIRATE_LEVEL_DEFENSE_PER_LEVEL`, `PIRATE_LEVEL_DEFENSE_COMPOSITION` |
+| Free spawn interval | **3h** | `PIRATE_FREE_SPAWN_INTERVAL_MS` |
+| Free ships (3h) | Weak hulls; count scales with level | `PIRATE_FREE_SHIP_BASE`, `PIRATE_FREE_SHIP_PER_LEVEL`, `PIRATE_FREE_SHIP_COMPOSITION` |
+| Free defenses (3h) | **Also** added each spawn period; **accumulate forever**; amount scales with level | `PIRATE_FREE_DEFENSE_BASE`, `PIRATE_FREE_DEFENSE_PER_LEVEL`, `PIRATE_FREE_DEFENSE_COMPOSITION` |
+| Ship catalog | All non-class, non-stationary ships **except** World Eater, Mothership, Void Titan | `PIRATE_EXCLUDED_SHIP_IDS` |
+| Pirate techs | Stay low vs players (legacy formula OK until retuned) | `PIRATE_TECH_WEAPONS_CAP` / formula helpers |
+| Raid schedule (vs players) | **Once per hour**, at a **random time within that hour** | `PIRATE_RAID_PERIOD_MS`; store `nextRaidAt` |
+| Raid schedule (vs pirates) | Same hourly window model; slightly **less often** than vs players | `PIRATE_VS_PIRATE_RAID_PERIOD_MULT` (stretch / skip) |
+| Target density | **200** bases / universe | `PIRATE_TARGET_BASE_COUNT` |
+| Seed / migrate | New universe seeds to 200; existing tops up to 200 **without wiping players** | migrator + `PIRATE_TARGET_BASE_COUNT` |
+| Split | **Once**, at exactly **level 25**: original unchanged + **2** new L1 bases nearby | `PIRATE_SPLIT_LEVEL`, `PIRATE_SPLIT_CHILD_COUNT`, `PIRATE_SPLIT_CHILD_LEVEL`, `PIRATE_SPLIT_NEARBY_SYSTEM_RADIUS` |
+| Coalition | Same `coalitionId` (split family) **never** attack each other | schema field; no numeric knob |
+| Player destroy | Starshards + destroy/respawn behavior retained unless Micah says otherwise | existing Starshard keys |
+| **Fairness (queued 2026-10-14)** | Targets under **100k** points: each pirate raid that calendar day reduces remaining raid chance by **−1% of the original** chance (stacks per raid/day). **Pirates only — not aliens.** | `PIRATE_FAIRNESS_POINTS_THRESHOLD`, `PIRATE_FAIRNESS_CHANCE_DECAY_PER_RAID` |
 
-Unlock table (which ship types appear in pirate hangars by level): level 0–2 light hulls; 3–5 +cruiser/bomber; 6–8 +recycler/colony; 9+ may include World Eater / swarm in **tiny** counts (never Voidforge Titan free-spawn).
+**Raid scheduling:** each period of `PIRATE_RAID_PERIOD_MS` (1h), assign `nextRaidAt = periodStart + floor(rng × period)`. After firing, advance to the next period and roll a new offset. Pirate-vs-pirate uses the same model with period stretched by `PIRATE_VS_PIRATE_RAID_PERIOD_MULT` (or equivalent skip chance).
+
+Unlock table (hangar by level): light → mid → heavy through common warships; **never** field `worldEater`, `swarmMothership`, `voidforgeTitan` (ids). Class-exclusive and stationary hulls stay out.
+
+### Tuning constant names (must exist in `tuning.ts` before/with implementation)
+
+```ts
+export const PIRATE_MAX_LEVEL = 100;
+export const PIRATE_LEVEL_GROWTH_INTERVAL_MS = 6 * 60 * 60 * 1000;
+export const PIRATE_TARGET_BASE_COUNT = 200;
+export const PIRATE_RAID_PERIOD_MS = 60 * 60 * 1000; // once per hour, random offset within hour
+export const PIRATE_VS_PIRATE_RAID_PERIOD_MULT = 1.25; // slightly less often
+export const PIRATE_FREE_SPAWN_INTERVAL_MS = 3 * 60 * 60 * 1000;
+export const PIRATE_FREE_SHIP_BASE = 10;          // v1 placeholder
+export const PIRATE_FREE_SHIP_PER_LEVEL = 5;      // v1 placeholder
+export const PIRATE_FREE_DEFENSE_BASE = 5;        // v1 placeholder
+export const PIRATE_FREE_DEFENSE_PER_LEVEL = 2;   // v1 placeholder
+export const PIRATE_LEVEL_DEFENSE_BASE = 3;       // v1 placeholder
+export const PIRATE_LEVEL_DEFENSE_PER_LEVEL = 1;  // higher levels → more
+export const PIRATE_SPLIT_LEVEL = 25;
+export const PIRATE_SPLIT_CHILD_COUNT = 2;
+export const PIRATE_SPLIT_CHILD_LEVEL = 1;
+export const PIRATE_SPLIT_NEARBY_SYSTEM_RADIUS = 5; // v1 placeholder
+export const PIRATE_EXCLUDED_SHIP_IDS = [
+  "worldEater",
+  "swarmMothership",
+  "voidforgeTitan",
+] as const;
+// Queued Micah 2026-10-14 (not implemented until backlog reaches CHANGE #9):
+export const PIRATE_FAIRNESS_POINTS_THRESHOLD = 100_000;
+export const PIRATE_FAIRNESS_CHANCE_DECAY_PER_RAID = 0.01; // −1% of original chance per raid/day
+```
+
+Composition maps (`PIRATE_FREE_SHIP_COMPOSITION`, `PIRATE_FREE_DEFENSE_COMPOSITION`, `PIRATE_LEVEL_DEFENSE_COMPOSITION`) are also tuning-owned. **Do not** use a fixed 30‑minute `PIRATE_RAID_INTERVAL_MS` — superseded by `PIRATE_RAID_PERIOD_MS`.
+
+---
+
+## 5b. Aliens faction (new — 2026-10-14)
+
+Original faction name **Aliens** (no OGame terms). Hidden NPC bases found only via expedition.
+
+```ts
+interface AlienBase {
+  id: string;
+  coords: Coordinates;       // settled on a real slot-1 planet body / claim
+  level: number;             // 0..ALIEN_MAX_LEVEL
+  ships: FleetShips;
+  defenses: Partial<Record<DefenseId, number>>;
+  techs: Record<ResearchId, number>; // or combat subset; always topPlayer+1
+  lastFreeSpawnAt: number;
+  lastRaidAt: number;
+  nextRaidAt: number;        // same hourly random schedule as pirates
+  lastGrewAt: number;
+  coalitionId: string;
+  splitDone: boolean;
+  /** Wall-clock when buildup ends; raids locked until then. */
+  buildupEndsAt: number;
+  foundAt: number;
+  foundByPlayerId: string;
+  destroyedAt: number | null;
+}
+
+// UniverseState additions:
+alienBases: Record<string, AlienBase>; // starts EMPTY — no seed aliens
+alienDailyFindSeed: number;     // resets each UTC day
+alienFoundCountToday: number;   // optional telemetry
+```
+
+### Rules
+
+| Rule | Value | `tuning.ts` constant(s) |
+|------|------:|-------------------------|
+| Initial density | **Zero** — no alien bases at universe create | `ALIEN_INITIAL_BASE_COUNT = 0` |
+| Find chance | **0.001%** per expedition (`0.00001`) | `ALIEN_EXPEDITION_FIND_CHANCE` |
+| Daily reset | Universe daily find window/roll resets each day | `ALIEN_DAILY_FIND_RESET_TZ` / day-key helper |
+| Settle | Nearest **open slot-1** planet vs finder’s expedition origin | `ALIEN_SETTLE_SLOT` (= `1`) |
+| Buildup | **4 hours** before first raid | `ALIEN_BUILDUP_MS` |
+| Max level | **100** (same path as pirates) | `ALIEN_MAX_LEVEL` |
+| Split | Once at **level 50** (original + 2× L1 nearby) | `ALIEN_SPLIT_LEVEL`, `ALIEN_SPLIT_CHILD_COUNT`, `ALIEN_SPLIT_CHILD_LEVEL`, `ALIEN_SPLIT_NEARBY_SYSTEM_RADIUS` |
+| Raids | **Same as pirates:** once per hour, random time within the hour (after buildup); coalition rules like pirates | `ALIEN_RAID_PERIOD_MS` (= pirate period), `ALIEN_VS_ALIEN_RAID_PERIOD_MULT` |
+| Free spawn | 3h ships **and** defenses; **stronger / more** than pirates | `ALIEN_FREE_SPAWN_INTERVAL_MS`, `ALIEN_FREE_SHIP_*`, `ALIEN_FREE_DEFENSE_*`, `ALIEN_STRENGTH_MULT` |
+| Cap | **Few** bases (found only; hard cap) | `ALIEN_MAX_BASE_COUNT` |
+| Tech | Always **top player tech + 1** per research | `ALIEN_TECH_ABOVE_TOP_PLAYER` |
+| Ships | Same exclusions as pirates unless Micah expands | reuse `PIRATE_EXCLUDED_SHIP_IDS` or `ALIEN_EXCLUDED_SHIP_IDS` |
+
+```ts
+export const ALIEN_INITIAL_BASE_COUNT = 0; // universe never seeds aliens
+export const ALIEN_EXPEDITION_FIND_CHANCE = 0.00001; // 0.001%
+export const ALIEN_SETTLE_SLOT = 1;
+export const ALIEN_BUILDUP_MS = 4 * 60 * 60 * 1000;
+export const ALIEN_MAX_LEVEL = 100;
+export const ALIEN_SPLIT_LEVEL = 50;
+export const ALIEN_SPLIT_CHILD_COUNT = 2;
+export const ALIEN_SPLIT_CHILD_LEVEL = 1;
+export const ALIEN_SPLIT_NEARBY_SYSTEM_RADIUS = 5; // v1 placeholder
+export const ALIEN_RAID_PERIOD_MS = 60 * 60 * 1000; // same schedule as pirates
+export const ALIEN_VS_ALIEN_RAID_PERIOD_MULT = 1.25;
+export const ALIEN_FREE_SPAWN_INTERVAL_MS = 3 * 60 * 60 * 1000;
+export const ALIEN_STRENGTH_MULT = 1.5;           // ships/defenses vs pirate tables
+export const ALIEN_FREE_SHIP_BASE = 15;           // v1 placeholder
+export const ALIEN_FREE_SHIP_PER_LEVEL = 8;       // v1 placeholder
+export const ALIEN_FREE_DEFENSE_BASE = 8;         // v1 placeholder
+export const ALIEN_FREE_DEFENSE_PER_LEVEL = 3;    // v1 placeholder
+export const ALIEN_LEVEL_DEFENSE_BASE = 5;        // v1 placeholder
+export const ALIEN_LEVEL_DEFENSE_PER_LEVEL = 2;   // v1 placeholder
+export const ALIEN_MAX_BASE_COUNT = 12;           // "few"; v1 placeholder
+export const ALIEN_TECH_ABOVE_TOP_PLAYER = 1;
+```
+
+More expedition runners → more independent `ALIEN_EXPEDITION_FIND_CHANCE` rolls (no shared single-finder lock beyond daily seed/cap policy). Migrators must **not** top up aliens — only pirates use `PIRATE_TARGET_BASE_COUNT`.
+
+### Performance (required)
+
+Universe blob is **one** Upstash/KV document. **~200** pirate bases + rare aliens + **hourly** random raids must not explode command count or latency.
+
+| Approach | Hobby fit |
+|----------|-----------|
+| Per-base cron / per-raid write | **Reject** — blows Upstash free commands + serverless |
+| Vercel Hobby cron every hour | **Reject** — Hobby cron is **daily-only**; would also RMW the whole universe ~24×/day |
+| **Lazy catch-up on read** (galaxy / tick / mission resolve) | **Recommended** — batch elapsed hour-windows for all AI in one in-memory pass, single write-back |
+| Optional daily cron | OK for alien day-key reset + pirate count top-up only |
+
+**Recommendation:** implement AI with **lazy/batched simulation on universe load or player-driven tick**. Do **not** add hourly Vercel crons on Hobby. Treat frequent full-document RMW as a free-tier risk; keep AI updates coalesced.
 
 ---
 
@@ -437,7 +579,7 @@ On success: moon deleted; parent `moonId` cleared; fleets on moon → debris 50%
 | Attack | `300_000` (strongest) |
 | Shield | `800_000` |
 | Hull | `2_000_000` |
-| Speed | `600` |
+| Speed | `600` → **queued −50% → `300`** (Micah 2026-10-14; apply in `tuning.ts` when backlog CHANGE #10 lands) |
 | Fuel / distance | `4` |
 
 Can **destroy** mini planets (≥1 survived on win); capture no longer gates on World Eater count. Counts toward moon-kill chance with Void Titans.

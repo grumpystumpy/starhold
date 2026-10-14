@@ -29,7 +29,7 @@ import {
   isUnclaimedMini,
   playerKnowsMini,
 } from "./world-mini.js";
-import { pirateBaseAtCoords } from "./world-pirates.js";
+import { alienBaseAtCoords, pirateBaseAtCoords } from "./world-pirates.js";
 import { getDebris } from "./world-tick.js";
 
 export type LaunchTargetResult =
@@ -40,6 +40,7 @@ export type LaunchTargetResult =
       targetPlayerId: string | null;
       targetAsteroidId: string | null;
       targetPirateBaseId: string | null;
+      targetAlienBaseId: string | null;
     }
   | { ok: false; error: string };
 
@@ -53,12 +54,14 @@ export function resolveLaunchTarget(
   targetCoordsOpt: Coordinates | undefined,
   targetAsteroidIdOpt?: string,
   targetPirateBaseIdOpt?: string,
+  targetAlienBaseIdOpt?: string,
 ): LaunchTargetResult {
   let targetCoords: Coordinates;
   let targetPlanet: PlanetState | null = null;
   let targetPlayerId: string | null = null;
   let targetAsteroidId: string | null = null;
   let targetPirateBaseId: string | null = null;
+  let targetAlienBaseId: string | null = null;
 
   if (mission === "expedition") {
     if (!targetCoordsOpt) {
@@ -96,6 +99,7 @@ export function resolveLaunchTarget(
       targetPlayerId: null,
       targetAsteroidId: null,
       targetPirateBaseId: null,
+      targetAlienBaseId: null,
     };
   }
 
@@ -117,6 +121,29 @@ export function resolveLaunchTarget(
       targetPlayerId: null,
       targetAsteroidId: null,
       targetPirateBaseId,
+      targetAlienBaseId: null,
+    };
+  }
+
+  if (mission === "alienRaid") {
+    const alienId = targetAlienBaseIdOpt?.trim();
+    if (!alienId) {
+      return { ok: false, error: "alienBaseId required for alienRaid." };
+    }
+    const base = universe.alienBases?.[alienId];
+    if (!base || base.destroyedAt != null) {
+      return { ok: false, error: "Alien base not found." };
+    }
+    targetAlienBaseId = alienId;
+    targetCoords = { ...base.coords };
+    return {
+      ok: true,
+      targetCoords,
+      targetPlanet: null,
+      targetPlayerId: null,
+      targetAsteroidId: null,
+      targetPirateBaseId: null,
+      targetAlienBaseId,
     };
   }
 
@@ -141,6 +168,7 @@ export function resolveLaunchTarget(
       targetPlayerId: null,
       targetAsteroidId,
       targetPirateBaseId: null,
+      targetAlienBaseId: null,
     };
   }
 
@@ -167,6 +195,12 @@ export function resolveLaunchTarget(
     }
     targetPlanet = planetAtCoords(universe, targetCoords);
     if (mission === "colonize") {
+      if (pirateBaseAtCoords(universe, targetCoords)) {
+        return { ok: false, error: "Pirate base occupies that slot." };
+      }
+      if (alienBaseAtCoords(universe, targetCoords)) {
+        return { ok: false, error: "Alien base occupies that slot." };
+      }
       const hasCradle = (ships.colonyShip ?? 0) >= 1;
       const hasArk = (ships.foundationArk ?? 0) >= 1;
       if (!hasCradle && !hasArk) {
@@ -278,5 +312,6 @@ export function resolveLaunchTarget(
     targetPlayerId,
     targetAsteroidId,
     targetPirateBaseId,
+      targetAlienBaseId: null,
   };
 }

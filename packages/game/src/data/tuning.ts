@@ -1176,6 +1176,160 @@ export const PLAYER_CLASS_BONUSES: Readonly<
   },
 };
 
+/** ========== Pirates + Aliens (Micah redesign 2026-10-14) ==========
+ * Constant names fixed by docs/design/round2-contract.md §5–5b.
+ * Magnitudes are v1 placeholders except Micah overrides (200 / hourly / 0 aliens).
+ */
+
+export const PIRATE_MAX_LEVEL = 100;
+/** @deprecated Alias — prefer PIRATE_MAX_LEVEL. */
+export const PIRATE_LEVEL_CAP = PIRATE_MAX_LEVEL;
+/** @deprecated Alias of PIRATE_MAX_LEVEL (tier === level). */
+export const PIRATE_TIER_CAP = PIRATE_MAX_LEVEL;
+
+export const PIRATE_LEVEL_GROWTH_INTERVAL_MS = 6 * 60 * 60 * 1000;
+/** @deprecated Prefer PIRATE_LEVEL_GROWTH_INTERVAL_MS. */
+export const PIRATE_GROWTH_INTERVAL_MS = PIRATE_LEVEL_GROWTH_INTERVAL_MS;
+
+export const PIRATE_TARGET_BASE_COUNT = 200;
+
+/** Once per hour; each base rolls nextRaidAt = periodStart + offset. */
+export const PIRATE_RAID_PERIOD_MS = 60 * 60 * 1000;
+/** Stretch / skip factor so pirate-vs-pirate is slightly less often. */
+export const PIRATE_VS_PIRATE_RAID_PERIOD_MULT = 1.25;
+/** @deprecated Prefer PIRATE_RAID_PERIOD_MS. */
+export const NPC_RAID_PERIOD_MS = PIRATE_RAID_PERIOD_MS;
+/** @deprecated */
+export const PIRATE_RAID_INTERVAL_MIN_MS = PIRATE_RAID_PERIOD_MS;
+/** @deprecated */
+export const PIRATE_RAID_INTERVAL_MAX_MS = PIRATE_RAID_PERIOD_MS;
+
+export const PIRATE_FREE_SPAWN_INTERVAL_MS = 3 * 60 * 60 * 1000;
+export const PIRATE_FREE_SHIP_BASE = 10;
+export const PIRATE_FREE_SHIP_PER_LEVEL = 5;
+/** @deprecated Prefer PIRATE_FREE_SHIP_*. */
+export const PIRATE_FREE_SPAWN_BASE = PIRATE_FREE_SHIP_BASE;
+/** @deprecated Prefer PIRATE_FREE_SHIP_*. */
+export const PIRATE_FREE_SPAWN_PER_LEVEL = PIRATE_FREE_SHIP_PER_LEVEL;
+
+export const PIRATE_FREE_DEFENSE_BASE = 5;
+export const PIRATE_FREE_DEFENSE_PER_LEVEL = 2;
+export const PIRATE_LEVEL_DEFENSE_BASE = 3;
+export const PIRATE_LEVEL_DEFENSE_PER_LEVEL = 1;
+
+/** Composition weights (relative). Ids must be DefenseId / ShipId. */
+export const PIRATE_FREE_SHIP_COMPOSITION: Readonly<Record<string, number>> = {
+  scout: 7,
+  interceptor: 3,
+};
+export const PIRATE_FREE_DEFENSE_COMPOSITION: Readonly<Record<string, number>> = {
+  laserBattery: 5,
+  needleTurret: 3,
+  arcLattice: 1,
+};
+export const PIRATE_LEVEL_DEFENSE_COMPOSITION: Readonly<Record<string, number>> = {
+  laserBattery: 4,
+  needleTurret: 3,
+  arcLattice: 2,
+  kineticFence: 1,
+  flakCurtain: 1,
+  pulseBastion: 1,
+  rippleArray: 1,
+  gaussRail: 1,
+  ionSheath: 1,
+  emberMortar: 1,
+  plasmaSpire: 1,
+  siegeBlockade: 1,
+  voidWard: 1,
+  crownAegis: 1,
+};
+
+export const PIRATE_SPLIT_LEVEL = 25;
+export const PIRATE_SPLIT_CHILD_COUNT = 2;
+export const PIRATE_SPLIT_CHILD_LEVEL = 1;
+export const PIRATE_SPLIT_NEARBY_SYSTEM_RADIUS = 5;
+
+export const PIRATE_EXCLUDED_SHIP_IDS = [
+  "worldEater",
+  "swarmMothership",
+  "voidforgeTitan",
+] as const;
+
+/** After player destroy: respawn delay elsewhere (inclusive range). */
+export const PIRATE_RESPAWN_DELAY_MIN_MS = 12 * 60 * 60 * 1000;
+export const PIRATE_RESPAWN_DELAY_MAX_MS = 36 * 60 * 60 * 1000;
+
+/** Starshards: destroy base = base + per-tier; win defense vs pirate raid. */
+export const PIRATE_DESTROY_STARSHARDS_BASE = 40;
+export const PIRATE_DESTROY_STARSHARDS_PER_TIER = 5;
+export const PIRATE_DEFENSE_WIN_STARSHARDS = 10;
+
+/**
+ * Soft cap for NPC raid detachment vs small empires:
+ * raid power ≤ defenderPower × factor + floor.
+ */
+export const PIRATE_RAID_POWER_FACTOR = 1.4;
+export const PIRATE_RAID_POWER_FLOOR = 40;
+
+/** Max catch-up raid firings per base per tick (lazy Hobby path). */
+export const NPC_RAID_CATCHUP_MAX = 24;
+/** Max AI bases processed per lazy tick batch (bounded Hobby maxDuration). */
+export const NPC_AI_BATCH_SIZE = 200;
+
+/* ---- Aliens ---- */
+
+export const ALIEN_INITIAL_BASE_COUNT = 0;
+/** 0.001% per expedition. */
+export const ALIEN_EXPEDITION_FIND_CHANCE = 0.00001;
+export const ALIEN_SETTLE_SLOT = 1;
+export const ALIEN_BUILDUP_MS = 4 * 60 * 60 * 1000;
+export const ALIEN_MAX_LEVEL = 100;
+export const ALIEN_SPLIT_LEVEL = 50;
+export const ALIEN_SPLIT_CHILD_COUNT = 2;
+export const ALIEN_SPLIT_CHILD_LEVEL = 1;
+export const ALIEN_SPLIT_NEARBY_SYSTEM_RADIUS = 5;
+export const ALIEN_RAID_PERIOD_MS = PIRATE_RAID_PERIOD_MS;
+export const ALIEN_VS_ALIEN_RAID_PERIOD_MULT = 1.25;
+export const ALIEN_FREE_SPAWN_INTERVAL_MS = 3 * 60 * 60 * 1000;
+export const ALIEN_STRENGTH_MULT = 1.5;
+export const ALIEN_FREE_SHIP_BASE = 15;
+export const ALIEN_FREE_SHIP_PER_LEVEL = 8;
+export const ALIEN_FREE_DEFENSE_BASE = 8;
+export const ALIEN_FREE_DEFENSE_PER_LEVEL = 3;
+export const ALIEN_LEVEL_DEFENSE_BASE = 5;
+export const ALIEN_LEVEL_DEFENSE_PER_LEVEL = 2;
+export const ALIEN_MAX_BASE_COUNT = 12;
+export const ALIEN_TECH_ABOVE_TOP_PLAYER = 1;
+export const ALIEN_EXCLUDED_SHIP_IDS = PIRATE_EXCLUDED_SHIP_IDS;
+
+export const ALIEN_FREE_SHIP_COMPOSITION: Readonly<Record<string, number>> = {
+  scout: 6,
+  interceptor: 4,
+};
+export const ALIEN_FREE_DEFENSE_COMPOSITION: Readonly<Record<string, number>> = {
+  laserBattery: 4,
+  needleTurret: 3,
+  arcLattice: 2,
+  flakCurtain: 1,
+};
+export const ALIEN_LEVEL_DEFENSE_COMPOSITION: Readonly<Record<string, number>> =
+  PIRATE_LEVEL_DEFENSE_COMPOSITION;
+
+/** @deprecated Prefer ALIEN_EXPEDITION_FIND_CHANCE. */
+export const ALIEN_FIND_CHANCE_DENOM = Math.round(1 / ALIEN_EXPEDITION_FIND_CHANCE);
+/** @deprecated Prefer ALIEN_MAX_BASE_COUNT. */
+export const ALIEN_MAX_LIVING = ALIEN_MAX_BASE_COUNT;
+/** @deprecated Prefer ALIEN_STRENGTH_MULT. */
+export const ALIEN_SHIP_MULT = ALIEN_STRENGTH_MULT;
+/** @deprecated Prefer ALIEN_STRENGTH_MULT. */
+export const ALIEN_DEFENSE_MULT = ALIEN_STRENGTH_MULT;
+/** @deprecated Prefer ALIEN_STRENGTH_MULT. */
+export const ALIEN_FREE_SPAWN_MULT = ALIEN_STRENGTH_MULT;
+/** @deprecated Prefer ALIEN_TECH_ABOVE_TOP_PLAYER. */
+export const ALIEN_TECH_TOP_PLUS = ALIEN_TECH_ABOVE_TOP_PLAYER;
+/** @deprecated Prefer ALIEN_MAX_LEVEL. */
+export const ALIEN_LEVEL_CAP = ALIEN_MAX_LEVEL;
+
 /** Fold Bridge base cooldown (wall-clock). Class / Beacon multiply. */
 export const JUMP_GATE_BASE_COOLDOWN_MS = 300_000;
 

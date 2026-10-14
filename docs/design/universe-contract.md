@@ -447,13 +447,15 @@ interface PlayerView {
 
 ### Pirates
 
-| Key | v1 |
-|-----|---:|
-| Target density | ~1 base per `40` systems (≈100 bases / universe at steady state) |
-| Growth interval | `6h` → tier+1 (cap tier `8`) |
-| Player destroy → respawn delay | `12–36h` random elsewhere |
-| Raid interval (NPC) | `8–24h` |
-| Threat vs small players | fleets capped so early empires can survive with losses, not wipe |
+> **Superseded for density / level cap / raid cadence** by Micah redesign 2026-10-14 — see [round2-contract.md](./round2-contract.md) §5 and [vision.md](../vision.md#pirates--aliens-redesign-2026-10-14). Legacy v1 numbers below are historical only.
+
+| Key | Legacy v1 | Redesign |
+|-----|---:|----------|
+| Target density | ~1 base per `40` systems (≈100 / universe) | **`PIRATE_TARGET_BASE_COUNT = 200`** |
+| Growth interval | `6h` → tier+1 (cap tier `8`) | `6h` → +1; **`PIRATE_MAX_LEVEL = 100`** |
+| Player destroy → respawn delay | `12–36h` random elsewhere | retain unless retuned |
+| Raid interval (NPC) | `8–24h` | **`PIRATE_RAID_PERIOD_MS` = 1 h**, random offset within the hour |
+| Threat vs small players | fleets capped so early empires can survive with losses, not wipe | still aim for survivable early game; balance via tuning |
 
 ### Moons (carry forward)
 

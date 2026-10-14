@@ -25,7 +25,10 @@ import { emptyPlayerClass } from "./formulas-round3.js";
 import { seedUniverseAsteroids } from "./world-asteroids.js";
 import { ensurePlayerFleetPresets } from "./world-fleet-presets.js";
 import { seedUniverseMinis } from "./world-mini.js";
-import { seedUniversePirates } from "./world-pirates.js";
+import {
+  ensurePirateBaseShape,
+  seedUniversePirates,
+} from "./world-pirates.js";
 
 export function emptyBuildings(): PlanetState["buildings"] {
   return {
@@ -90,6 +93,7 @@ export function createUniverse(
     debris: {},
     asteroids: {},
     pirateBases: {},
+    alienBases: {},
     occupations: {},
     miniPlanetIds: [],
   };
@@ -151,6 +155,10 @@ export function ensureUniverseShape(universe: UniverseState): void {
   if (!universe.debris) universe.debris = {};
   if (!universe.asteroids) universe.asteroids = {};
   if (!universe.pirateBases) universe.pirateBases = {};
+  if (!universe.alienBases) universe.alienBases = {};
+  for (const base of Object.values(universe.pirateBases)) {
+    ensurePirateBaseShape(base);
+  }
   if (!universe.occupations) universe.occupations = {};
   if (!universe.miniPlanetIds) universe.miniPlanetIds = [];
   if (!universe.fleetSpeed) universe.fleetSpeed = universe.speed || 1;

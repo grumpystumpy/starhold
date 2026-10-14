@@ -1,6 +1,10 @@
 import { UNIVERSE_SCHEMA_VERSION } from "./catalog.js";
 import { emptyPlayerClass } from "./formulas-round3.js";
 import type { PirateBase, UniverseState } from "./types.js";
+import {
+  ensurePirateBaseShape,
+  ensurePiratePopulation,
+} from "./world-pirates.js";
 import { createUniverse, ensureUniverseShape } from "./world-bootstrap.js";
 import {
   normalizeBuildQueue,
@@ -128,9 +132,10 @@ export function migrateUniverseV3ToV4(universe: UniverseState): UniverseState {
 
 /**
  * Load-path helper:
- * - schema >= 4: shape-normalize in place
- * - schema 3: additive migrate to 4
- * - schema 2: additive migrate to 3 then 4
+ * - schema >= 5: shape-normalize in place
+ * - schema 4: additive migrate to 5 (pirate top-up + alienBases)
+ * - schema 3: additive migrate to 4 then 5
+ * - schema 2: additive migrate to 3→4→5
  * - schema < 2: full universe reset (prototype 1×9×8 → contract map)
  */
 export function migrateOrResetUniverse(
@@ -147,14 +152,21 @@ export function migrateOrResetUniverse(
     return { universe: data, didReset: false, archived: null };
   }
 
+  if (version === 4 && data.id) {
+    migrateUniverseV4ToV5(data);
+    return { universe: data, didReset: false, archived: null };
+  }
+
   if (version === 3 && data.id) {
     migrateUniverseV3ToV4(data);
+    migrateUniverseV4ToV5(data);
     return { universe: data, didReset: false, archived: null };
   }
 
   if (version === 2 && data.id) {
     migrateUniverseV2ToV3(data);
     migrateUniverseV3ToV4(data);
+    migrateUniverseV4ToV5(data);
     return { universe: data, didReset: false, archived: null };
   }
 
@@ -165,6 +177,35 @@ export function migrateOrResetUniverse(
   );
   ensureUniverseShape(fresh);
   return { universe: fresh, didReset: true, archived: data };
+}
+
+
+/**
+ * Additive pirates+aliens redesign: shape pirate fields, top-up to 200,
+ * empty alienBases. Idempotent when schemaVersion >= 5. No player wipe.
+ */
+export function migrateUniverseV4ToV5(
+  universe: UniverseState,
+  now = Date.now(),
+): UniverseState {
+  if ((universe.schemaVersion ?? 0) >= 5) {
+    ensureUniverseShape(universe);
+    return universe;
+  }
+  if ((universe.schemaVersion ?? 0) < 4) {
+    migrateUniverseV3ToV4(universe);
+  }
+  if (!universe.alienBases) universe.alienBases = {};
+  // Never seed aliens on migrate.
+  if (universe.pirateBases) {
+    for (const base of Object.values(universe.pirateBases) as PirateBase[]) {
+      ensurePirateBaseShape(base, now);
+    }
+  }
+  ensurePiratePopulation(universe, now);
+  universe.schemaVersion = 5;
+  ensureUniverseShape(universe);
+  return universe;
 }
 
 /** Archive key helper for Upstash / KV. */
