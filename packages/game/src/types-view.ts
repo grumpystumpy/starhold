@@ -12,6 +12,7 @@ import type {
   OccupationState,
   OfficerDef,
   OfficerState,
+  AlienBase,
   PirateBase,
   PlayerClassState,
   ResearchLevels,
@@ -171,6 +172,15 @@ export interface UniverseState {
   debris: Record<string, DebrisField>;
   asteroids?: Record<string, AsteroidField>;
   pirateBases?: Record<string, PirateBase>;
+  /** Alien bases — empty until expedition find. */
+  alienBases?: Record<string, AlienBase>;
+  /** UTC-day key for alien find RNG window. */
+  alienDailyFindDay?: string;
+  alienDailyFindSeed?: number;
+  alienFoundCountToday?: number;
+  /** Lazy AI catch-up cursor (Hobby bounded batch). */
+  lastAiSimAt?: number;
+  aiCatchUpCursor?: string | null;
   /** Active Swarm Mothership occupations keyed by planetId. */
   occupations?: Record<string, OccupationState>;
   /** Mini planet ids (thread K fills discovery). */
@@ -182,7 +192,19 @@ export interface PirateBasePublic {
   coords: Coordinates;
   name: string;
   tier: number;
+  level: number;
   threatHint: "low" | "medium" | "high";
+}
+
+export interface AlienBasePublic {
+  id: string;
+  coords: Coordinates;
+  name: string;
+  tier: number;
+  level: number;
+  threatHint: "low" | "medium" | "high";
+  /** False during 4h buildup (not yet raiding). */
+  active: boolean;
 }
 
 export interface GalaxySlot {
@@ -196,7 +218,7 @@ export interface GalaxySlot {
   isOwn: boolean;
   hasMoon: boolean;
   moonId: string | null;
-  activity: "empty" | "planet" | "pirate" | null;
+  activity: "empty" | "planet" | "pirate" | "alien" | null;
 }
 
 export interface GalaxyView {
@@ -206,6 +228,7 @@ export interface GalaxyView {
   deepSpace: { coords: Coordinates };
   asteroids: AsteroidField[];
   pirateBase: PirateBasePublic | null;
+  alienBase: AlienBasePublic | null;
 }
 
 export interface PlayerView {
