@@ -21,7 +21,6 @@ jobs:
           test -f .cursor-push/CHUNK_COUNT
           python3 <<'PATCH'
           from pathlib import Path
-          # MCP paste introduced single-byte flips; correct them before decode.
           fixes = {
               ".cursor-push/redesign-part-08.b64": {3801: "L", 3833: "r"},
               ".cursor-push/redesign-part-29.b64": {2539: "S"},
@@ -58,9 +57,6 @@ jobs:
               if st.returncode != 0:
                   subprocess.check_call(["git", "commit", "-m", b["message"]])
           subprocess.check_call(["git", "rm", "-r", "--ignore-unmatch", ".cursor-push"])
-          wf = ".github/workflows/apply-redesign-payload.yml"
-          if os.path.exists(wf):
-              subprocess.check_call(["git", "rm", "-f", wf])
           st = subprocess.run(["git", "diff", "--cached", "--quiet"])
           if st.returncode != 0:
               subprocess.check_call(["git", "commit", "-m", "chore: remove redesign upload payload"])
