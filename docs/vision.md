@@ -206,3 +206,17 @@ Main-only production deploys stay; staging is the exception path for daily batch
 2. **Deploys:** at most 3–4 production updates per day, each approved by Micah first. Keep Vercel usage minimal (spare deploys for urgent fixes). No PR preview deploys — `git.deploymentEnabled` main-only (or ignoreCommand).
 3. **Queue order:** Micah's send order, oldest first. Keep lanes busy continuously.
 4. **Reporting:** as soon as each item is done, report merge-ready (PR link + one-line plain summary) for Micah's approval list; also report blockers.
+
+### Quality gate (2026-10-14)
+
+An item only goes on Micah's merge list after it is proven against what's currently running:
+
+1. Rebase on latest `main` (includes #39 nested `/api/*`).
+2. Unit tests + typecheck + production build green.
+3. Playwright against a **local** production build (`npm run build:vercel` + local serve of `apps/web/dist` + API — not Next.js; Starhold is Vite/Hono). Env shape like prod: KV + `SESSION_SECRET`. Cover signup → login → cookie persistence **and** the new feature end-to-end.
+4. UI reviewer sign-off at desktop 1280×800 and phone 390×844.
+5. Save-format compatibility with existing Upstash KV player data (no resets; migrate if needed).
+6. Combines cleanly with other merge-ready items.
+7. **Do not** use Vercel preview deploys for this testing.
+
+Report to coordinator only when passed: PR link + one-line summary + what was tested.
