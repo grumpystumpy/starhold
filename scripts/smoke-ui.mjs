@@ -502,18 +502,26 @@ async function uiSmoke() {
   });
   await rivalPage.waitForSelector('[data-testid="resources"]', { timeout: 15_000 });
   logs.push(`rival-join:${rivalName}`);
-  const rivalId = await rivalPage.evaluate(() => window.starhold?.getState()?.player?.id);
-  if (rivalId) {
-    const grad = await apiJson("/api/e2e/graduate-newbie", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ playerId: rivalId }),
-    });
-    if (grad.error) {
-      throw new Error(`UI rival graduate failed: ${JSON.stringify(grad)}`);
-    }
-    logs.push("rival-graduated");
+  // getState() exposes playerId (not player.id) + roster planet ids.
+  const rivalMeta = await rivalPage.evaluate(() => {
+    const st = window.starhold?.getState();
+    const playerId = st?.playerId ?? null;
+    const planetId =
+      st?.roster?.find((r) => r.id === playerId)?.planetId ?? null;
+    return { playerId, planetId };
+  });
+  if (!rivalMeta.playerId || !rivalMeta.planetId) {
+    throw new Error(`rival join missing ids: ${JSON.stringify(rivalMeta)}`);
   }
+  const grad = await apiJson("/api/e2e/graduate-newbie", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId: rivalMeta.playerId }),
+  });
+  if (grad.error) {
+    throw new Error(`UI rival graduate failed: ${JSON.stringify(grad)}`);
+  }
+  logs.push("rival-graduated");
 
   await page.reload({ waitUntil: "networkidle" });
   const hasResources = await page.locator('[data-testid="resources"]').count();
@@ -534,11 +542,32 @@ async function uiSmoke() {
   logs.push("fleet-form-and-art");
 
   await page.click('[data-testid="mission-raid"]');
+  // Default target is roster[0] (often another newbie). Aim at the graduated rival.
+  await page.waitForFunction(
+    (planetId) => {
+      const sel = document.querySelector('[data-testid="fleet-target"]');
+      return Boolean(
+        sel &&
+          [...sel.options].some((o) => o.value === `planet:${planetId}`),
+      );
+    },
+    rivalMeta.planetId,
+    { timeout: 10_000 },
+  );
+  await page.selectOption(
+    '[data-testid="fleet-target"]',
+    `planet:${rivalMeta.planetId}`,
+  );
   await page.fill('[data-testid="fleet-count-scout"]', "1");
   await page.click('[data-testid="launch-fleet"]');
   await page.waitForSelector('[data-testid="fleets-live"], [data-testid="flash-ok"]', {
     timeout: 10_000,
   });
+  const launchErr = await page.locator('[data-testid="flash-error"]').count();
+  if (launchErr > 0) {
+    const errText = await page.textContent('[data-testid="flash-error"]');
+    throw new Error(`UI fleet launch error: ${errText}`);
+  }
   logs.push("ui-fleet-mission-launch");
 
   await page.waitForFunction(
