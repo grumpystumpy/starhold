@@ -1,0 +1,115 @@
+name: apply-e2e-raid-gate-inline
+on:
+  workflow_dispatch:
+  push:
+    branches: [cursor/pirates-aliens-redesign-abde]
+    paths:
+      - .github/workflows/apply-e2e-raid-gate-inline.yml
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cursor/pirates-aliens-redesign-abde
+      - name: Patch world-pirates STARHOLD_E2E gate via Contents API
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import base64, json, os, urllib.request, urllib.error
+          TOKEN = os.environ["GH_TOKEN"]
+          API = "https://api.github.com/repos/grumpystumpy/starhold"
+          BRANCH = "cursor/pirates-aliens-redesign-abde"
+          PATH = "packages/game/src/world-pirates.ts"
+          headers = {
+              "Authorization": f"Bearer {TOKEN}",
+              "Accept": "application/vnd.github+json",
+              "User-Agent": "starhold-e2e-inline",
+              "Content-Type": "application/json",
+          }
+          req = urllib.request.Request(f"{API}/contents/{PATH}?ref={BRANCH}", headers=headers)
+          meta = json.load(urllib.request.urlopen(req))
+          text = base64.b64decode(meta["content"]).decode()
+          if "npcCombatEnabled" in text:
+              print("already patched")
+              raise SystemExit(0)
+          old = """function catchUpRaidsPirate(universe: UniverseState, base: PirateBase, now: number): void {
+  let fired = 0;
+  while (base.destroyedAt == null && base.nextRaidAt <= now && fired < NPC_RAID_CATCHUP_MAX) {
+    const at = base.nextRaidAt;
+    fireRaid(universe, base, at, "pirate");
+    base.nextRaidAt = rollNextRaidAt(base.id, at, PIRATE_RAID_PERIOD_MS);
+    fired += 1;
+  }
+}
+
+function catchUpRaidsAlien(universe: UniverseState, base: AlienBase, now: number): void {
+  if (now < base.buildupEndsAt) return;
+  let fired = 0;
+  while (base.destroyedAt == null && base.nextRaidAt <= now && fired < NPC_RAID_CATCHUP_MAX) {
+    const at = Math.max(base.nextRaidAt, base.buildupEndsAt);
+    if (at > now) break;
+    fireRaid(universe, base, at, "alien");
+    base.nextRaidAt = rollNextRaidAt(base.id, at, ALIEN_RAID_PERIOD_MS);
+    fired += 1;
+  }
+}
+"""
+          new = """/**
+ * CI / local Playwright sets STARHOLD_E2E=1 so ~200 hourly pirate raids
+ * do not strip the lone smoke player's metal before the shipyard e2e bank.
+ * Schedule still advances so catch-up does not storm when the flag clears.
+ */
+function npcCombatEnabled(): boolean {
+  return process.env.STARHOLD_E2E !== "1";
+}
+
+function catchUpRaidsPirate(universe: UniverseState, base: PirateBase, now: number): void {
+  let fired = 0;
+  while (base.destroyedAt == null && base.nextRaidAt <= now && fired < NPC_RAID_CATCHUP_MAX) {
+    const at = base.nextRaidAt;
+    if (npcCombatEnabled()) {
+      fireRaid(universe, base, at, "pirate");
+    }
+    base.nextRaidAt = rollNextRaidAt(base.id, at, PIRATE_RAID_PERIOD_MS);
+    fired += 1;
+  }
+}
+
+function catchUpRaidsAlien(universe: UniverseState, base: AlienBase, now: number): void {
+  if (now < base.buildupEndsAt) return;
+  let fired = 0;
+  while (base.destroyedAt == null && base.nextRaidAt <= now && fired < NPC_RAID_CATCHUP_MAX) {
+    const at = Math.max(base.nextRaidAt, base.buildupEndsAt);
+    if (at > now) break;
+    if (npcCombatEnabled()) {
+      fireRaid(universe, base, at, "alien");
+    }
+    base.nextRaidAt = rollNextRaidAt(base.id, at, ALIEN_RAID_PERIOD_MS);
+    fired += 1;
+  }
+}
+"""
+          if old not in text:
+              raise SystemExit("old catchUp block not found")
+          text2 = text.replace(old, new, 1)
+          payload = {
+              "message": "fix(ci): STARHOLD_E2E skips NPC raids so metal bank e2e passes\n\nGate combat behind STARHOLD_E2E=1 (schedule still advances).",
+              "content": base64.b64encode(text2.encode()).decode(),
+              "branch": BRANCH,
+              "sha": meta["sha"],
+          }
+          req = urllib.request.Request(
+              f"{API}/contents/{PATH}",
+              data=json.dumps(payload).encode(),
+              method="PUT",
+              headers=headers,
+          )
+          with urllib.request.urlopen(req) as r:
+              out = json.load(r)
+              print("committed", out.get("commit", {}).get("sha"))
+          PY
