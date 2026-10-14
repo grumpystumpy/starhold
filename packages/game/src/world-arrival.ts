@@ -32,7 +32,11 @@ import { resolveEspionage } from "./world-espionage.js";
 import { resolveExpeditionArrival } from "./world-expedition.js";
 import { ownedPlanetCount } from "./world-moons.js";
 import { playerBoosts } from "./world-boosts.js";
-import { resolvePirateRaidArrival, tickPirates } from "./world-pirates.js";
+import {
+  resolveAlienRaidArrival,
+  resolvePirateRaidArrival,
+  tickPirates,
+} from "./world-pirates.js";
 import { pruneSpyReports } from "./world-spy-prune.js";
 import {
   clearOccupationIfFleetGone,
@@ -218,6 +222,8 @@ export function resolveFleetArrival(
       resolveExpeditionArrival(universe, fleet, now);
     } else if (fleet.mission === "pirateRaid") {
       resolvePirateRaidArrival(universe, fleet, now);
+    } else if (fleet.mission === "alienRaid") {
+      resolveAlienRaidArrival(universe, fleet, now);
     }
 
     const returnSecs = flightSecondsOneWay(
