@@ -152,6 +152,29 @@ export interface PlayerState {
   fleetPresets?: FleetPreset[];
   /** Round 3 player class (Miner / Explorer / Fleeter / Expansionist). */
   playerClass?: PlayerClassState;
+  /** Daily goals progress (UTC day key + sparse counts). */
+  goalsDaily?: GoalProgress;
+  /** Weekly goals progress (UTC ISO week key + sparse counts). */
+  goalsWeekly?: GoalProgress;
+}
+
+/** Sparse goal counters for one cadence period. */
+export interface GoalProgress {
+  periodKey: string;
+  counts: Partial<Record<string, number>>;
+  claimed: string[];
+}
+
+export interface GoalView {
+  id: string;
+  cadence: "daily" | "weekly";
+  name: string;
+  description: string;
+  progress: number;
+  target: number;
+  claimable: boolean;
+  claimed: boolean;
+  rewardLabel: string;
 }
 
 export interface UniverseState {
@@ -248,6 +271,8 @@ export interface PlayerView {
   skillCatalog: SkillNodeDef[];
   /** True when daily login Starshards can be claimed (UTC day). */
   dailyLoginAvailable: boolean;
+  /** Daily + weekly goals for Overview. */
+  goals: GoalView[];
   /** Player level / XP progress (Round 2). */
   progress: {
     level: number;

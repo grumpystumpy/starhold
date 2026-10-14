@@ -35,6 +35,7 @@ import {
   playerBoosts,
   pruneExpiredOfficers,
 } from "./world-boosts.js";
+import { listGoals } from "./world-goals.js";
 import {
   activePlanet,
   ensureUniverseShape,
@@ -292,6 +293,7 @@ export function playerView(
     officerCatalog: OFFICER_ORDER.map((id) => OFFICERS[id]),
     skillCatalog: SKILL_ORDER.map((id) => SKILLS[id]),
     dailyLoginAvailable: canClaimDailyLogin(player, now),
+    goals: listGoals(player, now),
     progress: playerProgressView(player),
     occupation: occupationForPlanet(universe, planet.id, now),
   };
