@@ -174,8 +174,11 @@ export function galaxyPanel(
           .join("")}</ul>`
       : `<p class="hint" data-testid="galaxy-asteroids-empty">No asteroid fields in this system.</p>`;
   const pirate = galaxy.pirateBase
-    ? `<p class="hint pirate-row" data-testid="galaxy-pirate">${escapeHtml(galaxy.pirateBase.name)} · tier ${fmt(galaxy.pirateBase.tier)} · threat ${escapeHtml(galaxy.pirateBase.threatHint)} · ${fmtCoords(galaxy.pirateBase.coords)}</p>`
-    : `<p class="hint" data-testid="galaxy-pirate-empty">No pirate base reported.</p>`;  const deep = galaxy.deepSpace
+    ? `<p class="hint pirate-row" data-testid="galaxy-pirate">${escapeHtml(galaxy.pirateBase.name)} · Lv ${fmt(galaxy.pirateBase.level ?? galaxy.pirateBase.tier)} · threat ${escapeHtml(galaxy.pirateBase.threatHint)} · ${fmtCoords(galaxy.pirateBase.coords)}</p>`
+    : `<p class="hint" data-testid="galaxy-pirate-empty">No pirate base reported.</p>`;
+  const alien = galaxy.alienBase
+    ? `<p class="hint alien-row" data-testid="galaxy-alien">${escapeHtml(galaxy.alienBase.name)} · Aliens · Lv ${fmt(galaxy.alienBase.level ?? galaxy.alienBase.tier)} · threat ${escapeHtml(galaxy.alienBase.threatHint)}${galaxy.alienBase.active ? "" : " · buildup"} · ${fmtCoords(galaxy.alienBase.coords)}</p>`
+    : `<p class="hint" data-testid="galaxy-alien-empty">No alien base reported.</p>`;  const deep = galaxy.deepSpace
     ? `<p class="hint" data-testid="galaxy-deep-space">Deep space ${fmtCoords(galaxy.deepSpace.coords)} — expedition target.</p>`
     : "";
   return `
@@ -198,6 +201,8 @@ export function galaxyPanel(
       ${asteroids}
       <h3 class="subhead">Pirates</h3>
       ${pirate}
+      <h3 class="subhead">Aliens</h3>
+      ${alien}
       <p class="hint">Use Fleet → Colonize / Harvest / Expedition with coords from this view.</p>
     </section>
   `;
