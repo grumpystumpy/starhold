@@ -1,0 +1,57 @@
+name: Assemble batch-tomorrow 49
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: assemble-batch-tomorrow-49
+  cancel-in-progress: true
+
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.ref == 'refs/heads/cursor/batch-tomorrow-deploy'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download and unpack #49 stack
+        env:
+          STACK_URL: https://litter.catbox.moe/zdbyf6.tgz
+          EXPECT_SHA256: 1ce95ec7ff2b2972450ee27b8d38f194bdd9d4968fb31c9fade178d9379e5fee
+        run: |
+          set -euo pipefail
+          curl -fsSL "$STACK_URL" -o /tmp/stack.tgz
+          echo "$EXPECT_SHA256  /tmp/stack.tgz" | sha256sum -c -
+          tar xzf /tmp/stack.tgz -C .
+          test -f packages/game/src/world-pirates.ts
+          test -f scripts/quality-gate-pirates-aliens.mjs
+          test -f docs/design/pirates-aliens-redesign.md
+          test -f api/index.js
+          grep -q 'NPC_RAID_CATCHUP_MAX' packages/game/src/data/tuning.ts
+          grep -q 'isRelicWorldPlanet' packages/game/src/world-pirates.ts
+          grep -q 'alienBase' packages/game/src/world-view.ts
+          grep -q 'miniPlanetIds' packages/game/src/world-view.ts
+          grep -q 'STARHOLD_E2E' .github/workflows/ci.yml
+          grep -q 'e2e:gate:pirates' package.json
+          grep -q 'alienBaseId' apps/server/src/app.ts
+
+      - name: Commit stacked files and self-delete workflow
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          rm -f .github/workflows/assemble-batch-tomorrow-49.yml
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'nothing to commit'
+            exit 0
+          fi
+          git commit -m 'integrate: fold #49 pirates+aliens onto batch-tomorrow-deploy'
+          git push origin HEAD:cursor/batch-tomorrow-deploy
