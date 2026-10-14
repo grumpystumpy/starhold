@@ -15,12 +15,36 @@ jobs:
         with:
           ref: cursor/pirates-aliens-redesign-abde
           fetch-depth: 0
-      - name: Unpack payload and commit batches
+      - name: Unpack and apply via API
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          test -f .cursor-push/CHUNK_COUNT
-          python3 <<'PATCH'
+          python3 <<'PY'
           from pathlib import Path
+          import base64, hashlib, json, os, tarfile, tempfile, time, urllib.request, urllib.error
+          TOKEN = os.environ["GH_TOKEN"]
+          OWNER, REPO, BRANCH = "grumpystumpy", "starhold", "cursor/pirates-aliens-redesign-abde"
+          API = f"https://api.github.com/repos/{OWNER}/{REPO}"
+          def api(method, path, data=None):
+              url = API + path
+              body = None if data is None else json.dumps(data).encode()
+              req = urllib.request.Request(url, data=body, method=method, headers={
+                  "Authorization": f"Bearer {TOKEN}",
+                  "Accept": "application/vnd.github+json",
+                  "User-Agent": "starhold-apply",
+                  "Content-Type": "application/json",
+              })
+              try:
+                  with urllib.request.urlopen(req) as r:
+                      return r.status, json.load(r) if r.headers.get("Content-Type","").startswith("application/json") else {}
+              except urllib.error.HTTPError as e:
+                  err = e.read().decode()
+                  print("API_ERR", method, path, e.code, err[:500])
+                  raise
+          log = []
+          def L(m):
+              print(m, flush=True); log.append(m)
           fixes = {
               ".cursor-push/redesign-part-08.b64": {3801: "L", 3833: "r"},
               ".cursor-push/redesign-part-29.b64": {2539: "S"},
@@ -30,35 +54,53 @@ jobs:
               p = Path(path)
               data = bytearray(p.read_bytes().strip())
               for idx, ch in positions.items():
-                  data[idx] = ord(ch)
+                  before = chr(data[idx]); data[idx] = ord(ch)
+                  L(f"{path} @{idx} {before!r}->{ch!r}")
               p.write_bytes(bytes(data))
-              print(f"patched {path}")
-          PATCH
-          cat .cursor-push/redesign-part-*.b64 | tr -d '\n' | base64 -d > /tmp/redesign.tar.gz
-          echo "33a3e5f893ff89406f1a15490797d6403a6c62498c139534406ff67af898ed59  /tmp/redesign.tar.gz" | sha256sum -c -
-          mkdir -p /tmp/extract
-          tar -xzf /tmp/redesign.tar.gz -C /tmp/extract
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          python3 <<'PY'
-          import json, os, shutil, subprocess
+          parts = sorted(Path(".cursor-push").glob("redesign-part-*.b64"))
+          blob = b"".join(p.read_bytes().strip() for p in parts)
+          gz = base64.b64decode(blob)
+          got = hashlib.sha256(gz).hexdigest()
+          expected = "33a3e5f893ff89406f1a15490797d6403a6c62498c139534406ff67af898ed59"
+          L(f"sha256={got} ok={got==expected}")
+          if got != expected:
+              raise SystemExit("hash mismatch")
+          tmp = Path(tempfile.mkdtemp())
+          with tarfile.open(fileobj=__import__("io").BytesIO(gz), mode="r:gz") as tar:
+              tar.extractall(tmp)
           batches = json.load(open(".cursor-push/batches-meta.json"))
-          root = "/tmp/extract"
+          def put_file(path, content_bytes, message):
+              b64 = base64.b64encode(content_bytes).decode()
+              sha = None
+              try:
+                  st, meta = api("GET", f"/contents/{path}?ref={BRANCH}")
+                  sha = meta.get("sha")
+              except Exception:
+                  pass
+              payload = {"message": message, "content": b64, "branch": BRANCH}
+              if sha:
+                  payload["sha"] = sha
+              st, meta = api("PUT", f"/contents/{path}", payload)
+              L(f"put {path} status={st} commit={meta.get('commit',{}).get('sha','')[:12]}")
+              time.sleep(0.3)
           for b in batches:
               for path in b["paths"]:
-                  src = os.path.join(root, path)
-                  dst = path
-                  parent = os.path.dirname(dst)
-                  if parent:
-                      os.makedirs(parent, exist_ok=True)
-                  shutil.copyfile(src, dst)
-                  subprocess.check_call(["git", "add", "--", dst])
-              st = subprocess.run(["git", "diff", "--cached", "--quiet"])
-              if st.returncode != 0:
-                  subprocess.check_call(["git", "commit", "-m", b["message"]])
-          subprocess.check_call(["git", "rm", "-r", "--ignore-unmatch", ".cursor-push"])
-          st = subprocess.run(["git", "diff", "--cached", "--quiet"])
-          if st.returncode != 0:
-              subprocess.check_call(["git", "commit", "-m", "chore: remove redesign upload payload"])
+                  content = (tmp / path).read_bytes()
+                  put_file(path, content, b["message"] + f" ({path})")
+          put_file("docs/design/_apply-log.txt", ("\n".join(log)+"\nAPPLY_OK\n").encode(), "debug: apply redesign success log")
+          st, listing = api("GET", f"/contents/.cursor-push?ref={BRANCH}")
+          if isinstance(listing, list):
+              for item in listing:
+                  put = {"message": "chore: remove redesign upload payload file", "branch": BRANCH, "sha": item["sha"]}
+                  url = API + f"/contents/{item['path']}"
+                  req = urllib.request.Request(url, data=json.dumps(put).encode(), method="DELETE", headers={
+                      "Authorization": f"Bearer {TOKEN}",
+                      "Accept": "application/vnd.github+json",
+                      "User-Agent": "starhold-apply",
+                      "Content-Type": "application/json",
+                  })
+                  with urllib.request.urlopen(req) as r:
+                      L(f"deleted {item['path']} {r.status}")
+                  time.sleep(0.2)
+          L("done")
           PY
-          git push origin HEAD:cursor/pirates-aliens-redesign-abde
