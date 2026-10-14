@@ -1,1 +1,23 @@
-PLACEHOLDER
+{
+  "name": "@starhold/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test src/ui/nav.test.ts src/ui/render-messages.test.ts"
+  },
+  "dependencies": {
+    "@starhold/game": "*"
+  },
+  "devDependencies": {
+    "playwright": "^1.64.0",
+    "vite": "^6.2.2"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-linux-x64-gnu": "^4.64.5"
+  }
+}
