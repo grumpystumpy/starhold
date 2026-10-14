@@ -52,9 +52,9 @@ function paint(): void {
       busy: session.busy,
       joinDraft: session.joinDraft,
       emailDraft: session.emailDraft,
+      passwordDraft: session.passwordDraft,
       accountEmail: session.account?.email ?? null,
       claimablePlayerId: session.claimablePlayerId,
-      devMagicUrl: session.devMagicUrl,
       activePage: session.activePage,
     },
     {
@@ -127,34 +127,9 @@ async function boot(): Promise<void> {
   const authParam = params.get("auth")?.trim();
   const claimParam = params.get("claim")?.trim();
 
-  if (authParam === "ok") {
-    const fromCookie = await resumeFromCookie();
+  // Legacy magic-link query params — clear and ignore.
+  if (authParam || claimParam) {
     stripAuthParams();
-    if (fromCookie) {
-      if (claimParam === "claimed") {
-        setFlash("notice", "Guest save linked to your email.");
-        schedulePaint();
-      }
-      return;
-    }
-    if (claimParam === "account_has_player") {
-      setFlash(
-        "error",
-        "That email already owns a commander — guest save was not claimed.",
-      );
-    } else {
-      setFlash(
-        "notice",
-        "Signed in — enter a commander name or claim your guest save.",
-      );
-    }
-    schedulePaint();
-    return;
-  }
-  if (authParam === "invalid_or_expired" || authParam === "missing_token") {
-    setFlash("error", "Sign-in link invalid or expired — request a new one.");
-    stripAuthParams();
-    schedulePaint();
   }
 
   // Cookie session wins over localStorage when present.

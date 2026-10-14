@@ -5,9 +5,10 @@ import {
   fetchAuthMe,
   fetchState,
   joinGame,
-  requestMagicLink,
+  loginAccount,
   renamePlanet,
   selectPlanet,
+  signupAccount,
 } from "./api";
 import {
   SESSION_KEY,
@@ -99,17 +100,50 @@ export async function doJoin(name: string): Promise<void> {
   }
 }
 
-export async function doRequestMagicLink(email: string): Promise<void> {
+async function applyAuthSuccess(opts: {
+  account: { id: string; email: string; playerId: string | null };
+  view?: Awaited<ReturnType<typeof fetchState>> | null;
+  notice: string;
+}): Promise<void> {
+  session.account = opts.account;
+  session.passwordDraft = "";
+  if (opts.view?.player?.id) {
+    session.view = opts.view;
+    session.galaxySystem = opts.view.planet.coords.system;
+    session.joinDraft = opts.view.player.name;
+    localStorage.setItem(SESSION_KEY, opts.view.player.id);
+    session.claimablePlayerId = null;
+    stripJoinParams();
+    syncSessionUrl({ replace: true });
+    startPolling(opts.view.player.id);
+    setFlash("notice", opts.notice);
+    return;
+  }
+  const guest = localStorage.getItem(SESSION_KEY);
+  session.claimablePlayerId = guest;
+  if (opts.account.email) session.emailDraft = opts.account.email;
+  setFlash("notice", opts.notice);
+}
+
+export async function doSignup(
+  email: string,
+  password: string,
+): Promise<void> {
   const trimmed = email.trim();
   session.emailDraft = email;
+  session.passwordDraft = password;
   if (!trimmed) {
-    setFlash("error", "Email is required for a magic link.");
+    setFlash("error", "Email is required.");
+    schedulePaint();
+    return;
+  }
+  if (!password || password.length < 8) {
+    setFlash("error", "Password must be at least 8 characters.");
     schedulePaint();
     return;
   }
   session.busy = true;
   clearFlash();
-  session.devMagicUrl = null;
   schedulePaint();
   try {
     const claimPlayerId =
@@ -117,28 +151,54 @@ export async function doRequestMagicLink(email: string): Promise<void> {
       localStorage.getItem(SESSION_KEY) ??
       session.view?.player.id ??
       null;
-    const res = await requestMagicLink(trimmed, claimPlayerId);
-    session.devMagicUrl = res.devMagicUrl ?? null;
-    if (res.emailed) {
-      setFlash(
-        "notice",
-        "Check your email for a Starhold sign-in link (15 minutes).",
-      );
-    } else if (res.devMagicUrl) {
-      setFlash(
-        "notice",
-        "Dev mode: open the magic link below (Resend not configured).",
-      );
-    } else {
-      setFlash(
-        "error",
-        res.error ?? "Could not send magic link.",
-      );
-    }
+    const res = await signupAccount(trimmed, password, claimPlayerId);
+    const me = await fetchAuthMe();
+    await applyAuthSuccess({
+      account: me.account ?? res.account,
+      view: me.view,
+      notice: me.view
+        ? `Signed up — welcome back, ${me.view.player.name}.`
+        : "Account created — enter a commander name or claim your guest save.",
+    });
   } catch (err) {
     setFlash(
       "error",
-      err instanceof Error ? err.message : "Magic link failed.",
+      err instanceof Error ? err.message : "Sign up failed.",
+    );
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doLogin(
+  email: string,
+  password: string,
+): Promise<void> {
+  const trimmed = email.trim();
+  session.emailDraft = email;
+  session.passwordDraft = password;
+  if (!trimmed || !password) {
+    setFlash("error", "Email and password required.");
+    schedulePaint();
+    return;
+  }
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    const res = await loginAccount(trimmed, password);
+    await applyAuthSuccess({
+      account: res.account,
+      view: res.view,
+      notice: res.view
+        ? `Signed in as ${res.view.player.name}.`
+        : "Signed in — enter a commander name or claim your guest save.",
+    });
+  } catch (err) {
+    setFlash(
+      "error",
+      err instanceof Error ? err.message : "Log in failed.",
     );
   } finally {
     session.busy = false;
@@ -150,7 +210,7 @@ export async function doClaimAnonymous(): Promise<void> {
   const playerId =
     session.claimablePlayerId ?? localStorage.getItem(SESSION_KEY);
   if (!session.account) {
-    setFlash("error", "Sign in with email before claiming a guest save.");
+    setFlash("error", "Sign in before claiming a guest save.");
     schedulePaint();
     return;
   }
@@ -198,6 +258,9 @@ export async function resumeFromCookie(): Promise<boolean> {
       syncSessionUrl({ replace: true });
       startPolling(me.view.player.id);
       setFlash("notice", `Signed in as ${me.view.player.name}.`);
+      // Paint immediately — boot() returns early on true and would otherwise
+      // leave the join screen up until the first poll (~1s).
+      schedulePaint();
       return true;
     }
     if (me.account) {

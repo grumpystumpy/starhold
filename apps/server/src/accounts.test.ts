@@ -1,61 +1,101 @@
 import assert from "node:assert/strict";
 import { describe, it, beforeEach } from "node:test";
 import {
-  consumeMagicToken,
-  createMagicLink,
+  AUTH_RATE_MAX,
+  authenticateEmailPassword,
+  checkAuthRateLimit,
+  createAccountWithPassword,
   createSession,
   getAccountByEmail,
   getSession,
+  hashPassword,
   isValidEmail,
+  isValidPassword,
   normalizeEmail,
   resetMemoryAccounts,
   setAccountPlayerId,
-  upsertAccountForEmail,
+  verifyPassword,
 } from "./accounts.js";
 
 describe("accounts memory store", () => {
   beforeEach(() => {
     resetMemoryAccounts();
+    delete process.env.VERCEL;
+    delete process.env.SESSION_SECRET;
   });
 
-  it("normalizes and validates email", () => {
+  it("normalizes and validates email / password", () => {
     assert.equal(normalizeEmail("  Ada@Example.COM "), "ada@example.com");
     assert.equal(isValidEmail("ada@example.com"), true);
     assert.equal(isValidEmail("not-an-email"), false);
+    assert.equal(isValidPassword("short"), false);
+    assert.equal(isValidPassword("longenough"), true);
   });
 
-  it("upserts account by email and links playerId", async () => {
-    const a = await upsertAccountForEmail("pilot@starhold.test");
-    assert.ok(a.id.startsWith("acct_"));
-    assert.equal(a.email, "pilot@starhold.test");
-    assert.equal(a.playerId, null);
+  it("hashes and verifies passwords with scrypt", async () => {
+    const hash = await hashPassword("correct-horse");
+    assert.ok(hash.startsWith("scrypt$"));
+    assert.equal(await verifyPassword("correct-horse", hash), true);
+    assert.equal(await verifyPassword("wrong-password", hash), false);
+  });
 
-    const again = await upsertAccountForEmail("Pilot@Starhold.test");
-    assert.equal(again.id, a.id);
+  it("creates account with password and authenticates", async () => {
+    const created = await createAccountWithPassword(
+      "pilot@starhold.test",
+      "secretpass",
+    );
+    assert.equal(created.ok, true);
+    if (!created.ok) return;
+    assert.ok(created.account.id.startsWith("acct_"));
+    assert.equal(created.account.email, "pilot@starhold.test");
+    assert.ok(created.account.passwordHash.startsWith("scrypt$"));
 
-    const linked = await setAccountPlayerId(a.id, "plyr_test");
+    const dup = await createAccountWithPassword(
+      "Pilot@Starhold.test",
+      "otherpass1",
+    );
+    assert.equal(dup.ok, false);
+
+    const bad = await authenticateEmailPassword(
+      "pilot@starhold.test",
+      "wrongpass",
+    );
+    assert.equal(bad.ok, false);
+
+    const good = await authenticateEmailPassword(
+      "Pilot@Starhold.test",
+      "secretpass",
+    );
+    assert.equal(good.ok, true);
+    if (!good.ok) return;
+    assert.equal(good.account.id, created.account.id);
+
+    const linked = await setAccountPlayerId(created.account.id, "plyr_test");
     assert.equal(linked?.playerId, "plyr_test");
     const byEmail = await getAccountByEmail("pilot@starhold.test");
     assert.equal(byEmail?.playerId, "plyr_test");
   });
 
-  it("creates and consumes magic tokens once", async () => {
-    const { token } = await createMagicLink({
-      email: "m@test.dev",
-      claimPlayerId: "plyr_1",
-    });
-    const first = await consumeMagicToken(token);
-    assert.ok(first);
-    assert.equal(first.email, "m@test.dev");
-    assert.equal(first.claimPlayerId, "plyr_1");
-    const second = await consumeMagicToken(token);
-    assert.equal(second, null);
+  it("creates sessions that look up by id", async () => {
+    const created = await createAccountWithPassword("s@test.dev", "secretpass");
+    assert.equal(created.ok, true);
+    if (!created.ok) return;
+    const session = await createSession(created.account.id);
+    const found = await getSession(session.id);
+    assert.equal(found?.accountId, created.account.id);
   });
 
-  it("creates sessions that expire lookup after delete", async () => {
-    const account = await upsertAccountForEmail("s@test.dev");
-    const session = await createSession(account.id);
-    const found = await getSession(session.id);
-    assert.equal(found?.accountId, account.id);
+  it("rate-limits repeated auth attempts", async () => {
+    for (let i = 0; i < AUTH_RATE_MAX; i++) {
+      const r = await checkAuthRateLimit("login", "rate@test.dev", "1.2.3.4");
+      assert.equal(r.limited, false);
+    }
+    const blocked = await checkAuthRateLimit(
+      "login",
+      "rate@test.dev",
+      "1.2.3.4",
+    );
+    assert.equal(blocked.limited, true);
+    assert.ok(blocked.retryAfterSec >= 1);
   });
 });

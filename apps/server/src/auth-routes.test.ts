@@ -4,45 +4,33 @@ import { createApp } from "./app.js";
 import { resetMemoryAccounts } from "./accounts.js";
 import { resetMemoryUniverse } from "./store.js";
 
-describe("auth magic-link routes (memory)", () => {
+describe("auth email+password routes (memory)", () => {
   beforeEach(() => {
     resetMemoryAccounts();
     resetMemoryUniverse();
+    delete process.env.VERCEL;
+    delete process.env.SESSION_SECRET;
   });
 
-  it("request-link returns devMagicUrl without Resend", async () => {
-    delete process.env.RESEND_API_KEY;
+  it("signup sets session cookie and auth/me resumes player after join", async () => {
     const app = createApp();
-    const res = await app.request("/api/auth/request-link", {
+    const signup = await app.request("/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "pilot@example.com" }),
+      body: JSON.stringify({
+        email: "commander@example.com",
+        password: "hunter2xx",
+      }),
     });
-    assert.equal(res.status, 200);
-    const body = (await res.json()) as {
-      ok: boolean;
-      emailed: boolean;
-      devMagicUrl?: string;
-    };
-    assert.equal(body.ok, true);
-    assert.equal(body.emailed, false);
-    assert.ok(body.devMagicUrl?.includes("/api/auth/verify?token="));
-  });
-
-  it("verify sets session cookie and auth/me resumes player after join", async () => {
-    delete process.env.RESEND_API_KEY;
-    const app = createApp();
-    const linkRes = await app.request("/api/auth/request-link", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "commander@example.com" }),
-    });
-    const link = (await linkRes.json()) as { devMagicUrl: string };
-    const verify = await app.request(link.devMagicUrl);
-    assert.ok([302, 303].includes(verify.status));
-    const setCookie = verify.headers.get("set-cookie") ?? "";
+    assert.equal(signup.status, 200);
+    const setCookie = signup.headers.get("set-cookie") ?? "";
     assert.ok(setCookie.includes("starhold_session="));
     const cookie = setCookie.split(";")[0]!;
+    const signupBody = (await signup.json()) as {
+      account: { email: string; playerId: string | null };
+    };
+    assert.equal(signupBody.account.email, "commander@example.com");
+    assert.equal(signupBody.account.playerId, null);
 
     const me1 = await app.request("/api/auth/me", {
       headers: { Cookie: cookie },
@@ -72,10 +60,68 @@ describe("auth magic-link routes (memory)", () => {
     };
     assert.equal(meBody2.account.playerId, view.player.id);
     assert.equal(meBody2.view?.player.id, view.player.id);
+
+    // Login again with password resumes the same commander via cookie.
+    const login = await app.request("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "commander@example.com",
+        password: "hunter2xx",
+      }),
+    });
+    assert.equal(login.status, 200);
+    const loginCookie = (login.headers.get("set-cookie") ?? "").split(";")[0]!;
+    const loginBody = (await login.json()) as {
+      account: { playerId: string | null };
+      view: { player: { id: string } } | null;
+    };
+    assert.equal(loginBody.account.playerId, view.player.id);
+    assert.equal(loginBody.view?.player.id, view.player.id);
+
+    const me3 = await app.request("/api/auth/me", {
+      headers: { Cookie: loginCookie },
+    });
+    const meBody3 = (await me3.json()) as {
+      view: { player: { id: string } } | null;
+    };
+    assert.equal(meBody3.view?.player.id, view.player.id);
   });
 
-  it("claims anonymous playerId onto the account", async () => {
-    delete process.env.RESEND_API_KEY;
+  it("rejects bad password and duplicate signup", async () => {
+    const app = createApp();
+    const signup = await app.request("/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "dup@example.com",
+        password: "password1",
+      }),
+    });
+    assert.equal(signup.status, 200);
+
+    const again = await app.request("/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "dup@example.com",
+        password: "password2",
+      }),
+    });
+    assert.equal(again.status, 409);
+
+    const bad = await app.request("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "dup@example.com",
+        password: "wrongpass",
+      }),
+    });
+    assert.equal(bad.status, 401);
+  });
+
+  it("claims anonymous playerId on signup", async () => {
     const app = createApp();
     const guest = await app.request("/api/join", {
       method: "POST",
@@ -84,17 +130,17 @@ describe("auth magic-link routes (memory)", () => {
     });
     const guestView = (await guest.json()) as { player: { id: string } };
 
-    const linkRes = await app.request("/api/auth/request-link", {
+    const signup = await app.request("/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         email: "claim@example.com",
+        password: "claimpass",
         claimPlayerId: guestView.player.id,
       }),
     });
-    const link = (await linkRes.json()) as { devMagicUrl: string };
-    const verify = await app.request(link.devMagicUrl);
-    const cookie = (verify.headers.get("set-cookie") ?? "").split(";")[0]!;
+    assert.equal(signup.status, 200);
+    const cookie = (signup.headers.get("set-cookie") ?? "").split(";")[0]!;
 
     const me = await app.request("/api/auth/me", {
       headers: { Cookie: cookie },
@@ -106,5 +152,22 @@ describe("auth magic-link routes (memory)", () => {
     assert.equal(body.account.playerId, guestView.player.id);
     assert.equal(body.view?.player.id, guestView.player.id);
     assert.ok(body.view?.player.accountId);
+  });
+
+  it("requires SESSION_SECRET on Vercel", async () => {
+    process.env.VERCEL = "1";
+    delete process.env.SESSION_SECRET;
+    const app = createApp();
+    const res = await app.request("/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "prod@example.com",
+        password: "hunter2xx",
+      }),
+    });
+    assert.equal(res.status, 503);
+    const body = (await res.json()) as { error: string };
+    assert.ok(body.error.includes("SESSION_SECRET"));
   });
 });

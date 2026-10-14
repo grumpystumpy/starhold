@@ -22,9 +22,9 @@ export function renderApp(
     busy: boolean;
     joinDraft: string;
     emailDraft?: string;
+    passwordDraft?: string;
     accountEmail?: string | null;
     claimablePlayerId?: string | null;
-    devMagicUrl?: string | null;
     activePage: NavPage;
   },
   _handlers: UiHandlers,

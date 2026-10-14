@@ -146,7 +146,7 @@ export interface PlayerState {
   lastDailyLoginUtc?: string;
   /** Once-only top-3 highscore Starshard grant. */
   highscoreStarshardsClaimed?: boolean;
-  /** Linked email account (set after magic-link claim / authenticated join). */
+  /** Linked email account (set after password claim / authenticated join). */
   accountId?: string | null;
   /** Saved fleet compositions (built-ins + custom), per player in this universe. */
   fleetPresets?: FleetPreset[];

@@ -30,7 +30,8 @@ import {
   doLaunchMaxExpeditions,
   doRefresh,
   doRenamePlanet,
-  doRequestMagicLink,
+  doLogin,
+  doSignup,
   doResearch,
   doSaveFleetPreset,
   doScanSystem,
@@ -261,12 +262,25 @@ export function bindClickHandlers(): void {
       return;
     }
 
-    if (form.id === "magic-form") {
+    if (form.id === "auth-form") {
       ev.preventDefault();
-      const input = form.querySelector<HTMLInputElement>("#auth-email");
-      const value = input?.value ?? session.emailDraft;
-      session.emailDraft = value;
-      void doRequestMagicLink(value);
+      const emailInput = form.querySelector<HTMLInputElement>("#auth-email");
+      const passwordInput =
+        form.querySelector<HTMLInputElement>("#auth-password");
+      const email = emailInput?.value ?? session.emailDraft;
+      const password = passwordInput?.value ?? session.passwordDraft;
+      session.emailDraft = email;
+      session.passwordDraft = password;
+      const submitter = (ev as SubmitEvent).submitter;
+      const action =
+        submitter instanceof HTMLButtonElement
+          ? submitter.dataset.authAction
+          : "login";
+      if (action === "signup") {
+        void doSignup(email, password);
+      } else {
+        void doLogin(email, password);
+      }
       return;
     }
 
@@ -298,6 +312,9 @@ export function bindClickHandlers(): void {
     }
     if (el instanceof HTMLInputElement && el.id === "auth-email") {
       session.emailDraft = el.value;
+    }
+    if (el instanceof HTMLInputElement && el.id === "auth-password") {
+      session.passwordDraft = el.value;
     }
   });
 }

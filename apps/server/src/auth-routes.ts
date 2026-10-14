@@ -7,24 +7,24 @@ import {
   playerView,
 } from "@starhold/game";
 import {
-  appBaseUrl,
-  consumeMagicToken,
-  createMagicLink,
+  authenticateEmailPassword,
+  checkAuthRateLimit,
+  clientIp,
+  createAccountWithPassword,
   createSession,
   deleteSession,
   getAccountById,
   getSession,
-  isValidEmail,
   normalizeEmail,
+  requireSessionSecret,
+  sessionSecretConfigured,
   setAccountPlayerId,
-  upsertAccountForEmail,
 } from "./accounts.js";
 import {
   clearSessionCookie,
   readSessionId,
   setSessionCookie,
 } from "./cookies.js";
-import { resendConfigured, sendMagicLinkEmail } from "./email.js";
 import { withUniverse } from "./store.js";
 
 async function sessionAccount(c: Context) {
@@ -37,101 +37,172 @@ async function sessionAccount(c: Context) {
   return { session, account };
 }
 
-/** Mount email magic-link + session routes on the shared Hono app. */
+async function maybeClaimGuest(
+  accountId: string,
+  claimPlayerId: string | undefined,
+): Promise<string> {
+  if (!claimPlayerId) return "none";
+  let claimStatus = "none";
+  try {
+    await withUniverse((universe) => {
+      ensureUniverseShape(universe);
+      const result = claimPlayerToAccount(universe, claimPlayerId, accountId);
+      if (result.ok) {
+        claimStatus = "claimed";
+      } else if (result.code === "already_claimed") {
+        claimStatus = "already_claimed";
+      } else if (result.code === "conflict") {
+        claimStatus = "account_has_player";
+      } else {
+        claimStatus = "claim_failed";
+      }
+    });
+    if (claimStatus === "claimed") {
+      await setAccountPlayerId(accountId, claimPlayerId);
+    }
+  } catch (err) {
+    console.error("[starhold-auth] claim during signup", err);
+    claimStatus = "claim_failed";
+  }
+  return claimStatus;
+}
+
+function publicAccount(account: {
+  id: string;
+  email: string;
+  playerId: string | null;
+}) {
+  return {
+    id: account.id,
+    email: account.email,
+    playerId: account.playerId,
+  };
+}
+
+/** Mount email+password + session routes on the shared Hono app. */
 export function mountAuthRoutes(app: Hono): void {
-  app.post("/api/auth/request-link", async (c) => {
+  app.post("/api/auth/signup", async (c) => {
+    const secretErr = requireSessionSecret();
+    if (secretErr) return c.json({ error: secretErr }, 503);
+
     const body = (await c.req.json().catch(() => ({}))) as {
       email?: string;
+      password?: string;
       claimPlayerId?: string;
     };
     const email = normalizeEmail(body.email ?? "");
-    if (!isValidEmail(email)) {
-      return c.json({ error: "Valid email required." }, 400);
-    }
+    const password = body.password ?? "";
     const claimPlayerId = body.claimPlayerId?.trim() || undefined;
-    const { token } = await createMagicLink({ email, claimPlayerId });
-    const base = appBaseUrl(c.req.url);
-    const magicUrl = `${base}/api/auth/verify?token=${encodeURIComponent(token)}`;
 
-    const send = await sendMagicLinkEmail({ to: email, magicUrl });
-    if (!send.emailed) {
-      console.info("[starhold-auth] magic link (dev / no Resend):", magicUrl);
+    const rate = await checkAuthRateLimit(
+      "signup",
+      email,
+      clientIp(c.req.raw.headers),
+    );
+    if (rate.limited) {
+      return c.json(
+        {
+          error: `Too many signup attempts. Try again in ${rate.retryAfterSec}s.`,
+        },
+        429,
+      );
     }
 
-    return c.json({
-      ok: true,
-      emailed: send.emailed,
-      /** Present when Resend is unset or send failed — local/CI only convenience. */
-      devMagicUrl: send.emailed ? undefined : magicUrl,
-      resendConfigured: resendConfigured(),
-      error: send.error,
-    });
-  });
-
-  app.get("/api/auth/verify", async (c) => {
-    const token = c.req.query("token")?.trim() ?? "";
-    const base = appBaseUrl(c.req.url);
-    if (!token) {
-      return c.redirect(`${base}/?auth=missing_token`);
-    }
-    const magic = await consumeMagicToken(token);
-    if (!magic) {
-      return c.redirect(`${base}/?auth=invalid_or_expired`);
+    const created = await createAccountWithPassword(email, password);
+    if (!created.ok) {
+      const status = created.error.includes("already exists") ? 409 : 400;
+      return c.json({ error: created.error }, status);
     }
 
-    const account = await upsertAccountForEmail(magic.email);
-    let claimStatus = "none";
-
-    if (magic.claimPlayerId) {
-      try {
-        await withUniverse((universe) => {
-          ensureUniverseShape(universe);
-          if (account.playerId && account.playerId !== magic.claimPlayerId) {
-            claimStatus = "account_has_player";
-            return;
-          }
-          const result = claimPlayerToAccount(
-            universe,
-            magic.claimPlayerId!,
-            account.id,
-          );
-          if (result.ok) {
-            claimStatus = "claimed";
-          } else if (result.code === "already_claimed") {
-            claimStatus = "already_claimed";
-          } else {
-            claimStatus = "claim_failed";
-          }
-        });
-        if (claimStatus === "claimed") {
-          await setAccountPlayerId(account.id, magic.claimPlayerId);
-          account.playerId = magic.claimPlayerId;
-        }
-      } catch (err) {
-        console.error("[starhold-auth] claim during verify", err);
-        claimStatus = "claim_failed";
+    const account = created.account;
+    if (claimPlayerId) {
+      const accountFresh = await getAccountById(account.id);
+      if (accountFresh?.playerId && accountFresh.playerId !== claimPlayerId) {
+        /* skip claim */
+      } else {
+        await maybeClaimGuest(account.id, claimPlayerId);
+        const refreshed = await getAccountById(account.id);
+        if (refreshed) account.playerId = refreshed.playerId;
       }
     }
 
+    const session = await createSession(account.id);
+    setSessionCookie(c, session.id);
+    return c.json({
+      ok: true,
+      account: publicAccount(account),
+      auth: { sessionSecretConfigured: sessionSecretConfigured() },
+    });
+  });
+
+  app.post("/api/auth/login", async (c) => {
+    const secretErr = requireSessionSecret();
+    if (secretErr) return c.json({ error: secretErr }, 503);
+
+    const body = (await c.req.json().catch(() => ({}))) as {
+      email?: string;
+      password?: string;
+    };
+    const email = normalizeEmail(body.email ?? "");
+    const password = body.password ?? "";
+
+    const rate = await checkAuthRateLimit(
+      "login",
+      email,
+      clientIp(c.req.raw.headers),
+    );
+    if (rate.limited) {
+      return c.json(
+        {
+          error: `Too many login attempts. Try again in ${rate.retryAfterSec}s.`,
+        },
+        429,
+      );
+    }
+
+    const auth = await authenticateEmailPassword(email, password);
+    if (!auth.ok) {
+      return c.json({ error: auth.error }, auth.status);
+    }
+
     // Resolve playerId from universe if account index is stale.
-    if (!account.playerId) {
+    if (!auth.account.playerId) {
       try {
         await withUniverse((universe) => {
-          const linked = playerForAccount(universe, account.id);
-          if (linked) account.playerId = linked.id;
+          const linked = playerForAccount(universe, auth.account.id);
+          if (linked) auth.account.playerId = linked.id;
         });
-        if (account.playerId) {
-          await setAccountPlayerId(account.id, account.playerId);
+        if (auth.account.playerId) {
+          await setAccountPlayerId(auth.account.id, auth.account.playerId);
         }
       } catch {
         /* ignore */
       }
     }
 
-    const session = await createSession(account.id);
+    const session = await createSession(auth.account.id);
     setSessionCookie(c, session.id);
-    const q = new URLSearchParams({ auth: "ok", claim: claimStatus });
-    return c.redirect(`${base}/?${q.toString()}`);
+
+    let view = null;
+    if (auth.account.playerId) {
+      try {
+        await withUniverse((universe) => {
+          ensureUniverseShape(universe);
+          if (universe.players[auth.account.playerId!]) {
+            view = playerView(universe, auth.account.playerId!);
+          }
+        });
+      } catch {
+        /* ignore — client can refresh */
+      }
+    }
+
+    return c.json({
+      ok: true,
+      account: publicAccount(auth.account),
+      view,
+      auth: { sessionSecretConfigured: sessionSecretConfigured() },
+    });
   });
 
   app.get("/api/auth/me", async (c) => {
@@ -157,11 +228,7 @@ export function mountAuthRoutes(app: Hono): void {
       return c.json(
         {
           error: err instanceof Error ? err.message : "State failed.",
-          account: {
-            id: account.id,
-            email: account.email,
-            playerId: account.playerId,
-          },
+          account: publicAccount(account),
           view: null,
         },
         503,
@@ -178,7 +245,7 @@ export function mountAuthRoutes(app: Hono): void {
       },
       view,
       auth: {
-        resendConfigured: resendConfigured(),
+        sessionSecretConfigured: sessionSecretConfigured(),
       },
     });
   });

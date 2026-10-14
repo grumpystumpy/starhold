@@ -1910,8 +1910,8 @@ var SHIPS = {
   },
   colonyShip: {
     id: "colonyShip",
-    name: "Outpost Cradle",
-    description: "Found a new outpost on an empty planet slot. Consumed on landing.",
+    name: "Colonizer",
+    description: "Found a new colony on an empty planet slot. Consumed on landing.",
     cost: { metal: 800, crystal: 800, deuterium: 200 },
     buildSeconds: 50,
     shipyardLevel: 2,
@@ -1965,7 +1965,7 @@ var SHIPS = {
   swarmDrone: {
     id: "swarmDrone",
     name: "Swarm Drone",
-    description: "Carried strike mite. Must ride a Swarm Mothership; intercepts fire aimed at the carrier.",
+    description: "Carried strike mite. Must ride a Mothership; intercepts fire aimed at the carrier.",
     cost: { metal: 50, crystal: 20, deuterium: 0 },
     buildSeconds: 2,
     shipyardLevel: 4,
@@ -1994,8 +1994,8 @@ var SHIPS = {
   },
   swarmMothership: {
     id: "swarmMothership",
-    name: "Swarm Mothership",
-    description: "2nd-largest hull \u2014 very high shields, low attack. Carries 2000 swarms; occupies mini planets; harvests debris.",
+    name: "Mothership",
+    description: "2nd-largest hull \u2014 very high shields, low attack. Carries 2,000 swarms; occupies mini planets; harvests debris.",
     cost: { metal: 25e5, crystal: 2e6, deuterium: 75e4 },
     buildSeconds: 8e4,
     shipyardLevel: 13,
@@ -2642,7 +2642,7 @@ var RESEARCH = {
   swarmHold: {
     id: "swarmHold",
     name: "Swarm Hold",
-    description: "+15% of base (2000) Swarm Mothership capacity per level.",
+    description: "+15% of base (2,000) Mothership capacity per level.",
     baseCost: { metal: 200, crystal: 400, deuterium: 200 },
     costGrowth: 2,
     baseResearchSeconds: 40,
@@ -2651,7 +2651,7 @@ var RESEARCH = {
   gravityWell: {
     id: "gravityWell",
     name: "Well Binding",
-    description: "Gravity doctrine \u2014 required for Void Titan, Swarm Mothership, and World Eater.",
+    description: "Gravity doctrine \u2014 required for Void Titan, Mothership, and World Eater.",
     baseCost: { metal: 0, crystal: 4e3, deuterium: 2e3 },
     costGrowth: 2,
     baseResearchSeconds: 120,
@@ -4851,7 +4851,7 @@ var PIRATE_NAMES = [
   "Corsair Nest",
   "Rogue Drift",
   "Scarlet Wake",
-  "Iron Maw Outpost",
+  "Iron Maw Colony",
   "Void Reaver Camp",
   "Ashen Jolly",
   "Cutlass Beacon"
@@ -5432,7 +5432,7 @@ function joinUniverse(universe, playerName, now = Date.now()) {
   const planet = {
     id: planetId,
     ownerPlayerId: playerId,
-    name: `${trimmed}'s Outpost`,
+    name: `${trimmed}'s Colony`,
     coords,
     kind: "planet",
     parentPlanetId: null,
@@ -5640,7 +5640,7 @@ function startOccupation(universe, playerId, fleetId, now = Date.now()) {
     return { ok: false, error: "Fleet not found." };
   }
   if ((fleet.ships.swarmMothership ?? 0) < 1) {
-    return { ok: false, error: "Occupation requires a Swarm Mothership." };
+    return { ok: false, error: "Occupation requires a Mothership." };
   }
   const planetId = fleet.targetPlanetId;
   if (!planetId) {
@@ -5710,7 +5710,7 @@ function swarmProduce(universe, playerId, fleetId, count, now = Date.now()) {
   }
   const motherships = fleet.ships.swarmMothership ?? 0;
   if (motherships < 1) {
-    return { ok: false, error: "Swarm produce requires a Swarm Mothership." };
+    return { ok: false, error: "Swarm produce requires a Mothership." };
   }
   const player = universe.players[playerId];
   if (!player) return { ok: false, error: "Unknown player." };
@@ -7157,7 +7157,7 @@ function resolveLaunchTarget(universe, player, origin, mission, ships, targetPla
       if (!hasCradle && !hasArk) {
         return {
           ok: false,
-          error: "Colonize requires an Outpost Cradle or Foundation Ark."
+          error: "Colonize requires a Colonizer or Foundation Ark."
         };
       }
       const colonyCap = empireColonyCap(player, universe, maxColonies);
@@ -7175,7 +7175,7 @@ function resolveLaunchTarget(universe, player, origin, mission, ships, targetPla
       if (!canCollectDebris(ships)) {
         return {
           ok: false,
-          error: "Harvest requires a Salvage Trawler or Swarm Mothership."
+          error: "Harvest requires a Salvage Trawler or Mothership."
         };
       }
     }
@@ -7788,6 +7788,61 @@ function unlockSkill(universe, playerId, skillId, now = Date.now()) {
   player.skillsUnlocked = [...unlocked, skillId];
   universe.players[player.id] = player;
   return { ok: true };
+}
+
+// packages/game/src/world-planet-name.ts
+var PLANET_NAME_MAX_LEN = 24;
+var PLANET_NAME_MIN_LEN = 2;
+var PROFANITY = [
+  "fuck",
+  "shit",
+  "asshole",
+  "bitch",
+  "cunt",
+  "nigger",
+  "nigga",
+  "faggot",
+  "retard"
+];
+function validatePlanetName(raw2) {
+  const name = raw2.trim().replace(/\s+/g, " ");
+  if (!name) {
+    return { ok: false, error: "Planet name is required." };
+  }
+  if (name.length < PLANET_NAME_MIN_LEN) {
+    return { ok: false, error: "Planet name is too short." };
+  }
+  if (name.length > PLANET_NAME_MAX_LEN) {
+    return {
+      ok: false,
+      error: `Planet name must be ${PLANET_NAME_MAX_LEN} characters or fewer.`
+    };
+  }
+  if (!/^[\p{L}\p{N} .'_-]+$/u.test(name)) {
+    return { ok: false, error: "Planet name has invalid characters." };
+  }
+  const compact = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+  for (const bad of PROFANITY) {
+    if (compact.includes(bad)) {
+      return { ok: false, error: "Choose a different planet name." };
+    }
+  }
+  return { ok: true, name };
+}
+function renamePlanet(universe, playerId, planetId, rawName, now = Date.now()) {
+  const player = universe.players[playerId];
+  if (!player) return { ok: false, error: "Unknown player." };
+  advanceUniverse(universe, now);
+  if (!player.planetIds.includes(planetId)) {
+    return { ok: false, error: "You do not own that planet." };
+  }
+  const planet = universe.planets[planetId];
+  if (!planet) return { ok: false, error: "Planet missing." };
+  const checked = validatePlanetName(rawName);
+  if (!checked.ok) return { ok: false, error: checked.error };
+  planet.name = checked.name;
+  universe.planets[planetId] = planet;
+  return { ok: true, planet };
 }
 
 // apps/server/src/accounts.ts
@@ -13724,19 +13779,56 @@ async function withUniverse(fn) {
 // apps/server/src/accounts.ts
 var SESSION_COOKIE = "starhold_session";
 var SESSION_TTL_SEC = 30 * 24 * 60 * 60;
-var MAGIC_TTL_SEC = 15 * 60;
+var AUTH_RATE_TTL_SEC = 15 * 60;
+var AUTH_RATE_MAX = 10;
+var PASSWORD_MIN = 8;
+var PASSWORD_MAX = 128;
+var SCRYPT_N = 16384;
+var SCRYPT_R = 8;
+var SCRYPT_P = 1;
+var SCRYPT_KEYLEN = 64;
+var SCRYPT_SALT_BYTES = 16;
+function scryptAsync(password, salt, keylen) {
+  return new Promise((resolve, reject) => {
+    (0, import_node_crypto2.scrypt)(
+      password,
+      salt,
+      keylen,
+      { N: SCRYPT_N, r: SCRYPT_R, p: SCRYPT_P },
+      (err, derived) => {
+        if (err) reject(err);
+        else resolve(derived);
+      }
+    );
+  });
+}
 var memAccounts = /* @__PURE__ */ new Map();
 var memEmailIndex = /* @__PURE__ */ new Map();
 var memSessions = /* @__PURE__ */ new Map();
-var memMagic = /* @__PURE__ */ new Map();
+var memRate = /* @__PURE__ */ new Map();
 function sessionSecret() {
   return process.env.SESSION_SECRET?.trim() || "starhold-dev-session-secret-not-for-prod";
+}
+function sessionSecretConfigured() {
+  return Boolean(process.env.SESSION_SECRET?.trim());
+}
+function isVercelRuntime() {
+  return process.env.VERCEL === "1";
+}
+function requireSessionSecret() {
+  if (isVercelRuntime() && !sessionSecretConfigured()) {
+    return "SESSION_SECRET is required in production. Set it in Vercel \u2192 Environment Variables (openssl rand -base64 32), then redeploy.";
+  }
+  return null;
 }
 function normalizeEmail(email) {
   return email.trim().toLowerCase();
 }
 function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254;
+}
+function isValidPassword(password) {
+  return typeof password === "string" && password.length >= PASSWORD_MIN && password.length <= PASSWORD_MAX;
 }
 function hashToken(token) {
   return (0, import_node_crypto2.createHash)("sha256").update(`${sessionSecret()}:${token}`).digest("hex");
@@ -13753,8 +13845,8 @@ function emailKey(email) {
 function sessionKey(id) {
   return `starhold:session:${id}`;
 }
-function magicKey(hash) {
-  return `starhold:magic:${hash}`;
+function rateKey(bucket) {
+  return `starhold:ratelimit:auth:${bucket}`;
 }
 async function kvGet(client, key) {
   if (!client) return null;
@@ -13773,6 +13865,71 @@ async function kvDel(client, key) {
   if (!client) return;
   await client.del(key);
 }
+function pepperPassword(password) {
+  return `${sessionSecret()}:${password}`;
+}
+async function hashPassword(password) {
+  const salt = (0, import_node_crypto2.randomBytes)(SCRYPT_SALT_BYTES);
+  const derived = await scryptAsync(
+    pepperPassword(password),
+    salt,
+    SCRYPT_KEYLEN
+  );
+  return `scrypt$${salt.toString("base64url")}$${derived.toString("base64url")}`;
+}
+async function verifyPassword(password, encoded) {
+  const parts = encoded.split("$");
+  if (parts.length !== 3 || parts[0] !== "scrypt") return false;
+  const salt = Buffer.from(parts[1], "base64url");
+  const expected = Buffer.from(parts[2], "base64url");
+  if (salt.length === 0 || expected.length === 0) return false;
+  const derived = await scryptAsync(
+    pepperPassword(password),
+    salt,
+    expected.length
+  );
+  if (derived.length !== expected.length) return false;
+  return (0, import_node_crypto2.timingSafeEqual)(derived, expected);
+}
+async function checkAuthRateLimit(action, email, ip) {
+  const bucket = hashToken(
+    `${action}:${normalizeEmail(email)}:${(ip ?? "").trim() || "unknown"}`
+  );
+  const now = Date.now();
+  const client = getKvClient();
+  const key = rateKey(bucket);
+  if (!client) {
+    const cur = memRate.get(bucket);
+    if (!cur || cur.expiresAt < now) {
+      memRate.set(bucket, {
+        count: 1,
+        expiresAt: now + AUTH_RATE_TTL_SEC * 1e3
+      });
+      return { limited: false, retryAfterSec: 0 };
+    }
+    cur.count += 1;
+    if (cur.count > AUTH_RATE_MAX) {
+      return {
+        limited: true,
+        retryAfterSec: Math.max(1, Math.ceil((cur.expiresAt - now) / 1e3))
+      };
+    }
+    return { limited: false, retryAfterSec: 0 };
+  }
+  let rec = await kvGet(client, key);
+  if (!rec || rec.expiresAt < now) {
+    rec = { count: 1, expiresAt: now + AUTH_RATE_TTL_SEC * 1e3 };
+    await kvSet(client, key, rec, AUTH_RATE_TTL_SEC);
+    return { limited: false, retryAfterSec: 0 };
+  }
+  rec.count += 1;
+  const ttlSec = Math.max(1, Math.ceil((rec.expiresAt - now) / 1e3));
+  await kvSet(client, key, rec, ttlSec);
+  if (rec.count > AUTH_RATE_MAX) {
+    return { limited: true, retryAfterSec: ttlSec };
+  }
+  return { limited: false, retryAfterSec: 0 };
+}
 async function getAccountById(accountId) {
   const client = getKvClient();
   if (!client) return memAccounts.get(accountId) ?? null;
@@ -13789,23 +13946,50 @@ async function getAccountByEmail(email) {
   if (!id) return null;
   return kvGet(client, accountKey(id));
 }
-async function upsertAccountForEmail(email, now = Date.now()) {
+async function createAccountWithPassword(email, password, now = Date.now()) {
   const normalized = normalizeEmail(email);
+  if (!isValidEmail(normalized)) {
+    return { ok: false, error: "Valid email required." };
+  }
+  if (!isValidPassword(password)) {
+    return {
+      ok: false,
+      error: `Password must be ${PASSWORD_MIN}\u2013${PASSWORD_MAX} characters.`
+    };
+  }
   const existing = await getAccountByEmail(normalized);
   if (existing) {
-    existing.lastLoginAt = now;
-    await saveAccount(existing);
-    return existing;
+    return { ok: false, error: "An account with that email already exists." };
   }
+  const passwordHash = await hashPassword(password);
   const account = {
     id: `acct_${now.toString(36)}_${(0, import_node_crypto2.randomBytes)(4).toString("hex")}`,
     email: normalized,
+    passwordHash,
     playerId: null,
     createdAt: now,
     lastLoginAt: now
   };
   await saveAccount(account);
-  return account;
+  return { ok: true, account };
+}
+async function authenticateEmailPassword(email, password, now = Date.now()) {
+  const normalized = normalizeEmail(email);
+  if (!isValidEmail(normalized) || !password) {
+    return { ok: false, error: "Email and password required.", status: 400 };
+  }
+  const account = await getAccountByEmail(normalized);
+  if (!account?.passwordHash) {
+    await hashPassword(password).catch(() => void 0);
+    return { ok: false, error: "Invalid email or password.", status: 401 };
+  }
+  const match2 = await verifyPassword(password, account.passwordHash);
+  if (!match2) {
+    return { ok: false, error: "Invalid email or password.", status: 401 };
+  }
+  account.lastLoginAt = now;
+  await saveAccount(account);
+  return { ok: true, account };
 }
 async function saveAccount(account) {
   const client = getKvClient();
@@ -13824,40 +14008,6 @@ async function setAccountPlayerId(accountId, playerId) {
   account.lastLoginAt = Date.now();
   await saveAccount(account);
   return account;
-}
-async function createMagicLink(opts) {
-  const now = opts.now ?? Date.now();
-  const token = newToken(32);
-  const hash = hashToken(token);
-  const expiresAt = now + MAGIC_TTL_SEC * 1e3;
-  const record = {
-    email: normalizeEmail(opts.email),
-    createdAt: now,
-    expiresAt,
-    claimPlayerId: opts.claimPlayerId?.trim() || void 0
-  };
-  const client = getKvClient();
-  if (!client) {
-    memMagic.set(hash, record);
-  } else {
-    await kvSet(client, magicKey(hash), record, MAGIC_TTL_SEC);
-  }
-  return { token, expiresAt };
-}
-async function consumeMagicToken(token, now = Date.now()) {
-  const hash = hashToken(token);
-  const client = getKvClient();
-  let record;
-  if (!client) {
-    record = memMagic.get(hash) ?? null;
-    if (record) memMagic.delete(hash);
-  } else {
-    record = await kvGet(client, magicKey(hash));
-    if (record) await kvDel(client, magicKey(hash));
-  }
-  if (!record) return null;
-  if (record.expiresAt < now) return null;
-  return record;
 }
 async function createSession(accountId, now = Date.now()) {
   const id = newToken(32);
@@ -13899,20 +14049,13 @@ async function deleteSession(sessionId) {
   }
   await kvDel(client, sessionKey(sessionId));
 }
-function appBaseUrl(reqUrl) {
-  const fromEnv = process.env.APP_URL?.trim().replace(/\/$/, "");
-  if (fromEnv) return fromEnv;
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL.replace(/^https?:\/\//, "")}`;
+function clientIp(headers) {
+  const fwd = headers.get("x-forwarded-for");
+  if (fwd) {
+    const first = fwd.split(",")[0]?.trim();
+    if (first) return first;
   }
-  if (reqUrl) {
-    try {
-      const u = new URL(reqUrl);
-      return `${u.protocol}//${u.host}`;
-    } catch {
-    }
-  }
-  return "http://localhost:3001";
+  return headers.get("x-real-ip")?.trim() || null;
 }
 
 // apps/server/src/cookies.ts
@@ -13958,59 +14101,6 @@ function clearSessionCookie(c) {
   );
 }
 
-// apps/server/src/email.ts
-function resendConfigured() {
-  return Boolean(process.env.RESEND_API_KEY?.trim());
-}
-function resendFrom() {
-  return process.env.RESEND_FROM?.trim() || "Starhold <onboarding@resend.dev>";
-}
-async function sendMagicLinkEmail(opts) {
-  const apiKey = process.env.RESEND_API_KEY?.trim();
-  if (!apiKey) {
-    return { emailed: false };
-  }
-  try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        from: resendFrom(),
-        to: [opts.to],
-        subject: "Your Starhold sign-in link",
-        text: [
-          "Sign in to Starhold (link expires in 15 minutes):",
-          "",
-          opts.magicUrl,
-          "",
-          "If you did not request this, ignore this email."
-        ].join("\n"),
-        html: `<p>Sign in to <strong>Starhold</strong> (expires in 15 minutes):</p><p><a href="${opts.magicUrl}">${opts.magicUrl}</a></p><p>If you did not request this, ignore this email.</p>`
-      })
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      console.error("[starhold-auth] Resend error", res.status, body);
-      return {
-        emailed: false,
-        provider: "resend",
-        error: `Resend ${res.status}`
-      };
-    }
-    return { emailed: true, provider: "resend" };
-  } catch (err) {
-    console.error("[starhold-auth] Resend fetch failed", err);
-    return {
-      emailed: false,
-      provider: "resend",
-      error: err instanceof Error ? err.message : "send failed"
-    };
-  }
-}
-
 // apps/server/src/auth-routes.ts
 async function sessionAccount(c) {
   const sessionId = readSessionId(c);
@@ -14021,88 +14111,138 @@ async function sessionAccount(c) {
   if (!account) return null;
   return { session, account };
 }
-function mountAuthRoutes(app2) {
-  app2.post("/api/auth/request-link", async (c) => {
-    const body = await c.req.json().catch(() => ({}));
-    const email = normalizeEmail(body.email ?? "");
-    if (!isValidEmail(email)) {
-      return c.json({ error: "Valid email required." }, 400);
-    }
-    const claimPlayerId = body.claimPlayerId?.trim() || void 0;
-    const { token } = await createMagicLink({ email, claimPlayerId });
-    const base = appBaseUrl(c.req.url);
-    const magicUrl = `${base}/api/auth/verify?token=${encodeURIComponent(token)}`;
-    const send = await sendMagicLinkEmail({ to: email, magicUrl });
-    if (!send.emailed) {
-      console.info("[starhold-auth] magic link (dev / no Resend):", magicUrl);
-    }
-    return c.json({
-      ok: true,
-      emailed: send.emailed,
-      /** Present when Resend is unset or send failed — local/CI only convenience. */
-      devMagicUrl: send.emailed ? void 0 : magicUrl,
-      resendConfigured: resendConfigured(),
-      error: send.error
-    });
-  });
-  app2.get("/api/auth/verify", async (c) => {
-    const token = c.req.query("token")?.trim() ?? "";
-    const base = appBaseUrl(c.req.url);
-    if (!token) {
-      return c.redirect(`${base}/?auth=missing_token`);
-    }
-    const magic = await consumeMagicToken(token);
-    if (!magic) {
-      return c.redirect(`${base}/?auth=invalid_or_expired`);
-    }
-    const account = await upsertAccountForEmail(magic.email);
-    let claimStatus = "none";
-    if (magic.claimPlayerId) {
-      try {
-        await withUniverse((universe) => {
-          ensureUniverseShape(universe);
-          if (account.playerId && account.playerId !== magic.claimPlayerId) {
-            claimStatus = "account_has_player";
-            return;
-          }
-          const result = claimPlayerToAccount(
-            universe,
-            magic.claimPlayerId,
-            account.id
-          );
-          if (result.ok) {
-            claimStatus = "claimed";
-          } else if (result.code === "already_claimed") {
-            claimStatus = "already_claimed";
-          } else {
-            claimStatus = "claim_failed";
-          }
-        });
-        if (claimStatus === "claimed") {
-          await setAccountPlayerId(account.id, magic.claimPlayerId);
-          account.playerId = magic.claimPlayerId;
-        }
-      } catch (err) {
-        console.error("[starhold-auth] claim during verify", err);
+async function maybeClaimGuest(accountId, claimPlayerId) {
+  if (!claimPlayerId) return "none";
+  let claimStatus = "none";
+  try {
+    await withUniverse((universe) => {
+      ensureUniverseShape(universe);
+      const result = claimPlayerToAccount(universe, claimPlayerId, accountId);
+      if (result.ok) {
+        claimStatus = "claimed";
+      } else if (result.code === "already_claimed") {
+        claimStatus = "already_claimed";
+      } else if (result.code === "conflict") {
+        claimStatus = "account_has_player";
+      } else {
         claimStatus = "claim_failed";
       }
+    });
+    if (claimStatus === "claimed") {
+      await setAccountPlayerId(accountId, claimPlayerId);
     }
-    if (!account.playerId) {
-      try {
-        await withUniverse((universe) => {
-          const linked = playerForAccount(universe, account.id);
-          if (linked) account.playerId = linked.id;
-        });
-        if (account.playerId) {
-          await setAccountPlayerId(account.id, account.playerId);
-        }
-      } catch {
+  } catch (err) {
+    console.error("[starhold-auth] claim during signup", err);
+    claimStatus = "claim_failed";
+  }
+  return claimStatus;
+}
+function publicAccount(account) {
+  return {
+    id: account.id,
+    email: account.email,
+    playerId: account.playerId
+  };
+}
+function mountAuthRoutes(app2) {
+  app2.post("/api/auth/signup", async (c) => {
+    const secretErr = requireSessionSecret();
+    if (secretErr) return c.json({ error: secretErr }, 503);
+    const body = await c.req.json().catch(() => ({}));
+    const email = normalizeEmail(body.email ?? "");
+    const password = body.password ?? "";
+    const claimPlayerId = body.claimPlayerId?.trim() || void 0;
+    const rate = await checkAuthRateLimit(
+      "signup",
+      email,
+      clientIp(c.req.raw.headers)
+    );
+    if (rate.limited) {
+      return c.json(
+        {
+          error: `Too many signup attempts. Try again in ${rate.retryAfterSec}s.`
+        },
+        429
+      );
+    }
+    const created = await createAccountWithPassword(email, password);
+    if (!created.ok) {
+      const status = created.error.includes("already exists") ? 409 : 400;
+      return c.json({ error: created.error }, status);
+    }
+    const account = created.account;
+    if (claimPlayerId) {
+      const accountFresh = await getAccountById(account.id);
+      if (accountFresh?.playerId && accountFresh.playerId !== claimPlayerId) {
+      } else {
+        await maybeClaimGuest(account.id, claimPlayerId);
+        const refreshed = await getAccountById(account.id);
+        if (refreshed) account.playerId = refreshed.playerId;
       }
     }
     const session = await createSession(account.id);
     setSessionCookie(c, session.id);
-    const q = new URLSearchParams({ auth: "ok", claim: claimStatus });
-    return c.redirect(`${base}/?${q.toString()}`);
+    return c.json({
+      ok: true,
+      account: publicAccount(account),
+      auth: { sessionSecretConfigured: sessionSecretConfigured() }
+    });
+  });
+  app2.post("/api/auth/login", async (c) => {
+    const secretErr = requireSessionSecret();
+    if (secretErr) return c.json({ error: secretErr }, 503);
+    const body = await c.req.json().catch(() => ({}));
+    const email = normalizeEmail(body.email ?? "");
+    const password = body.password ?? "";
+    const rate = await checkAuthRateLimit(
+      "login",
+      email,
+      clientIp(c.req.raw.headers)
+    );
+    if (rate.limited) {
+      return c.json(
+        {
+          error: `Too many login attempts. Try again in ${rate.retryAfterSec}s.`
+        },
+        429
+      );
+    }
+    const auth = await authenticateEmailPassword(email, password);
+    if (!auth.ok) {
+      return c.json({ error: auth.error }, auth.status);
+    }
+    if (!auth.account.playerId) {
+      try {
+        await withUniverse((universe) => {
+          const linked = playerForAccount(universe, auth.account.id);
+          if (linked) auth.account.playerId = linked.id;
+        });
+        if (auth.account.playerId) {
+          await setAccountPlayerId(auth.account.id, auth.account.playerId);
+        }
+      } catch {
+      }
+    }
+    const session = await createSession(auth.account.id);
+    setSessionCookie(c, session.id);
+    let view = null;
+    if (auth.account.playerId) {
+      try {
+        await withUniverse((universe) => {
+          ensureUniverseShape(universe);
+          if (universe.players[auth.account.playerId]) {
+            view = playerView(universe, auth.account.playerId);
+          }
+        });
+      } catch {
+      }
+    }
+    return c.json({
+      ok: true,
+      account: publicAccount(auth.account),
+      view,
+      auth: { sessionSecretConfigured: sessionSecretConfigured() }
+    });
   });
   app2.get("/api/auth/me", async (c) => {
     const ctx = await sessionAccount(c);
@@ -14127,11 +14267,7 @@ function mountAuthRoutes(app2) {
       return c.json(
         {
           error: err instanceof Error ? err.message : "State failed.",
-          account: {
-            id: account.id,
-            email: account.email,
-            playerId: account.playerId
-          },
+          account: publicAccount(account),
           view: null
         },
         503
@@ -14148,7 +14284,7 @@ function mountAuthRoutes(app2) {
       },
       view,
       auth: {
-        resendConfigured: resendConfigured()
+        sessionSecretConfigured: sessionSecretConfigured()
       }
     });
   });
@@ -14320,7 +14456,8 @@ function createApp() {
           fleets: Object.keys(universe.fleets ?? {}).length,
           debris: Object.keys(universe.debris ?? {}).length,
           auth: {
-            resendConfigured: resendConfigured()
+            sessionSecretConfigured: sessionSecretConfigured(),
+            passwordAuth: true
           }
         });
       });
@@ -14560,6 +14697,25 @@ function createApp() {
         universe,
         body.playerId,
         body.planetId
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId));
+    });
+  });
+  app2.post("/api/rename-planet", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    if (!body.playerId || !body.planetId || typeof body.name !== "string") {
+      return c.json(
+        { error: "playerId, planetId, and name required." },
+        400
+      );
+    }
+    return withUniverse((universe) => {
+      const result = renamePlanet(
+        universe,
+        body.playerId,
+        body.planetId,
+        body.name
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId));
