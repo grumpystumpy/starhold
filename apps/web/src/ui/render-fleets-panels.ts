@@ -93,6 +93,31 @@ export function sensorContactsHtml(
   `;
 }
 
+export function hostileInboundHtml(
+  contacts: PlayerView["hostileInbound"],
+  roster: PlayerView["roster"],
+  now: number,
+): string {
+  if (!contacts?.length) {
+    return "";
+  }
+  const nameFor = (playerId: string) =>
+    roster.find((r) => r.id === playerId)?.name ?? "commander";
+  return `
+    <h3 class="subhead">Hostile inbound</h3>
+    <ul class="roster" data-testid="hostile-inbound">
+      ${contacts
+        .map((f) => {
+          const ships = SHIP_ORDER.filter((id) => (f.ships[id] ?? 0) > 0)
+            .map((id) => `${fmt(f.ships[id] ?? 0)}× ${SHIPS[id].name}`)
+            .join(", ");
+          return `<li data-testid="inbound-${f.id}"><span>${escapeHtml(nameFor(f.ownerPlayerId))} ${escapeHtml(f.mission)} → ${fmtCoords(f.targetCoords)}<br/><span class="meta">${escapeHtml(ships)}</span></span><span>${fmtEta(remainingSeconds(f.arrivesAt, now))}</span></li>`;
+        })
+        .join("")}
+    </ul>
+  `;
+}
+
 export function spyReportsHtml(reports: PlayerView["spyReports"]): string {
   if (!reports?.length) {
     return `<p class="hint">No espionage reports yet.</p>`;

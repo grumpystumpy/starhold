@@ -44,6 +44,7 @@ import {
 import { stampQueueView } from "./world-queue-manage.js";
 import { inSensorPhalanxRange, ownedPlanetCount } from "./world-moons.js";
 import { occupationForPlanet } from "./world-occupation.js";
+import { playerKnowsMini } from "./world-mini.js";
 import { getDebris } from "./world-tick.js";
 
 /** Empire total: all planets + in-flight ships + research once. */
@@ -158,12 +159,7 @@ export function galaxyViewFor(
     ) {
       continue;
     }
-    const known =
-      mini.ownerPlayerId === playerId ||
-      Boolean(mini.discoveredBy?.includes(playerId)) ||
-      Boolean(
-        universe.players[playerId]?.discoveredMiniIds?.includes(miniId),
-      );
+    const known = playerKnowsMini(universe, playerId, miniId);
     if (!known) continue;
     const owner = mini.ownerPlayerId
       ? universe.players[mini.ownerPlayerId]
@@ -280,6 +276,27 @@ export function playerView(
           .slice(0, 20)
       : [];
 
+  // Hostile inbound to owned worlds — suppressed for Moving Fortress targets.
+  const hostileInbound = Object.values(universe.fleets)
+    .filter((f) => {
+      if (f.ownerPlayerId === playerId) return false;
+      if (f.phase !== "outbound") return false;
+      if (f.targetPlayerId !== playerId) return false;
+      const mission = f.mission;
+      if (mission !== "raid" && mission !== "espionage") {
+        return false;
+      }
+      const target = f.targetPlanetId
+        ? universe.planets[f.targetPlanetId]
+        : null;
+      if (target?.flags?.mini && target.flags.miniKind === "fortress") {
+        return false;
+      }
+      return true;
+    })
+    .sort((a, b) => a.arrivesAt - b.arrivesAt)
+    .slice(0, 20);
+
   return {
     now,
     universe: {
@@ -326,6 +343,7 @@ export function playerView(
     spyReports,
     expeditionReports,
     sensorContacts,
+    hostileInbound,
     starshards: player.starshards ?? 0,
     officers: player.officers ?? [],
     skillsUnlocked: player.skillsUnlocked ?? [],

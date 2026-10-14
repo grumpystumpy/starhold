@@ -331,9 +331,9 @@ describe("Occupation", () => {
 });
 
 describe("World Eater mini gates + swarm produce", () => {
-  it("requires ≥5 World Eaters", () => {
-    assert.equal(canResolveMiniPlanet(normalizeFleetShips({ worldEater: 4 })), false);
-    assert.equal(canResolveMiniPlanet(normalizeFleetShips({ worldEater: 5 })), true);
+  it("destroy gate needs ≥1 World Eater", () => {
+    assert.equal(canResolveMiniPlanet(normalizeFleetShips({ worldEater: 0 })), false);
+    assert.equal(canResolveMiniPlanet(normalizeFleetShips({ worldEater: 1 })), true);
   });
 
   it("swarm produce queues a timed job (batching)", () => {

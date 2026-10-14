@@ -7,6 +7,8 @@ import {
   MINE_BASE_PER_HOUR,
   MINE_GROWTH,
   MINI_BUILDING_ORDER,
+  MINI_IRONWATER_DEUT_MULT,
+  MINI_RICH_MINE_MULT,
   MOON_BUILDING_ORDER,
   MOON_FIELDS_BASE,
   MOON_FIELDS_PER_LUNAR_BASE,
@@ -388,10 +390,15 @@ export function productionPerHour(
   // universe.speed scales timers + income; PRODUCTION_MULT is income-only test tuning.
   const vein = veinAnchorMineMult(planet);
   const rift = riftSiphonMineMult(planet);
+  const rich = isMiniBody(planet) ? MINI_RICH_MINE_MULT : 1;
   const incomeScale =
-    universeSpeed * PRODUCTION_MULT * techBonus * mineMult * vein * rift;
+    universeSpeed * PRODUCTION_MULT * techBonus * mineMult * vein * rift * rich;
   // Mini planets use slot-8 neutral mults (out-of-band slots already neutral).
   const pos = productionMultForSlot(planet.coords.slot);
+  const ironwaterDeut =
+    isMiniBody(planet) && planet.flags?.miniKind === "ironwater"
+      ? MINI_IRONWATER_DEUT_MULT
+      : 1;
   return {
     metal:
       mineOutputPerHour("metal", planet.buildings.metalMine ?? 0) *
@@ -407,7 +414,8 @@ export function productionPerHour(
       mineOutputPerHour("deuterium", planet.buildings.deutSynth ?? 0) *
       factor *
       incomeScale *
-      pos.deuterium,
+      pos.deuterium *
+      ironwaterDeut,
   };
 }
 

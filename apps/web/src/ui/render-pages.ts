@@ -1,11 +1,17 @@
 import {
   DEFENSE_ORDER,
+  MAP_GALAXIES,
+  MAP_SYSTEMS,
   MINI_BUILDING_ORDER,
+  MINI_FORTRESS_RELOCATE_ACCURACY,
+  MINI_FORTRESS_RELOCATE_GALAXY_RANGE,
   MOON_BUILDING_ORDER,
   PLANET_NAME_MAX_LEN,
   RESEARCH_ORDER,
   SHIP_ORDER,
   SHIPS,
+  fortressRelocateDeutCost,
+  fortressRelocateLandingWindow,
   type BuildingId,
   type PlayerView,
 } from "@starhold/game";
@@ -24,6 +30,7 @@ import {
   fleetComposer,
   fleetsInFlight,
   galaxyPanel,
+  hostileInboundHtml,
   reportsHtml,
   sensorContactsHtml,
   spyReportsHtml,
@@ -63,6 +70,9 @@ const FACILITY_BUILDINGS_MOON: BuildingId[] = MOON_BUILDING_ORDER.filter(
   (id) => !RESOURCE_BUILDINGS.includes(id),
 );
 const MINI_RESOURCE_BUILDINGS: BuildingId[] = [
+  "metalMine",
+  "crystalMine",
+  "deutSynth",
   "solarPlant",
   "metalStorage",
   "crystalStorage",
@@ -130,20 +140,56 @@ function buildingsPage(view: PlayerView, busy: boolean): string {
     <section class="panel" data-testid="buildings-panel">
       <h2>Buildings</h2>
       <p class="hint" data-testid="planet-fields">Fields ${fmt(view.economy.fields.used)} / ${fmt(view.economy.fields.cap)} · ${fmt(view.economy.fields.remaining)} free</p>
-      ${isMini ? `<p class="hint" data-testid="mini-planet-hint">Mini planet — special structures only (no mines or lab).</p>` : ""}
-      <h3 class="subhead">${isMini ? "Power &amp; storage" : "Extraction &amp; storage"}</h3>
+      ${
+        isMini
+          ? `<p class="hint" data-testid="mini-planet-hint">Mini planet — rich mines + specials${
+              planet.flags?.miniKind && planet.flags.miniKind !== "standard"
+                ? ` · ${planet.flags.miniKind}`
+                : ""
+            }.</p>`
+          : ""
+      }
+      <h3 class="subhead">Extraction &amp; storage</h3>
       ${resourceIds.map((id) => buildingRow(id, planet, universe.speed, now, busy)).join("")}
-      <h3 class="subhead">${isMini ? "Anomaly structures" : "Structures"}</h3>
+      <h3 class="subhead">${isMini ? "Structures &amp; anomaly specials" : "Structures"}</h3>
       ${facilityIds.map((id) => buildingRow(id, planet, universe.speed, now, busy)).join("")}
       ${
         buildQueueHtml(planet, now) ||
         (isMini
-          ? `<p class="hint">Mini colonies use Rift Siphon, Echo Vault, Anomaly Forge, and Drift Beacon.</p>`
+          ? `<p class="hint">Minis allow normal buildings plus Rift Siphon, Echo Vault, Anomaly Forge, and Drift Beacon.</p>`
           : planet.kind === "moon"
           ? `<p class="hint">Moons have no mines — expand crater structures on the moon.</p>`
           : `<p class="hint">One construction at a time. Upgrade the Solar Array if mines stall.</p>`)
       }
+      ${fortressRelocatePanel(view, busy)}
     </section>`;
+}
+
+function fortressRelocatePanel(view: PlayerView, busy: boolean): string {
+  const { planet } = view;
+  if (planet.flags?.miniKind !== "fortress") return "";
+  const aimG = planet.coords.galaxy;
+  const aimS = planet.coords.system;
+  const window = fortressRelocateLandingWindow(aimG, aimS);
+  const cost = fortressRelocateDeutCost(planet.coords, aimG, aimS);
+  const gMin = Math.max(1, planet.coords.galaxy - MINI_FORTRESS_RELOCATE_GALAXY_RANGE);
+  const gMax = Math.min(
+    MAP_GALAXIES,
+    planet.coords.galaxy + MINI_FORTRESS_RELOCATE_GALAXY_RANGE,
+  );
+  return `
+    <h3 class="subhead">Fortress jump</h3>
+    <p class="hint" data-testid="fortress-landing-window">
+      Aim a system in galaxy ${gMin}–${gMax}. Landing window for current aim:
+      <strong>${window.galaxy}:${window.systemMin}–${window.galaxy}:${window.systemMax}</strong>
+      (±${MINI_FORTRESS_RELOCATE_ACCURACY} systems). Free mini slot on landing. Est. cost at current aim: ${fmt(cost)} deut.
+    </p>
+    <form id="fortress-relocate-form" class="inline-form" data-testid="fortress-relocate-form">
+      <label>Galaxy <input id="fortress-aim-galaxy" name="galaxy" type="number" min="${gMin}" max="${gMax}" value="${aimG}" ${busy ? "disabled" : ""} /></label>
+      <label>System <input id="fortress-aim-system" name="system" type="number" min="1" max="${MAP_SYSTEMS}" value="${aimS}" ${busy ? "disabled" : ""} /></label>
+      <button type="submit" ${busy ? "disabled" : ""}>Jump</button>
+    </form>
+  `;
 }
 
 function researchPage(view: PlayerView, busy: boolean): string {
@@ -213,6 +259,7 @@ function fleetPage(
       <h2>Fleets &amp; missions</h2>
       ${fleetComposer(view, busy, fleetDraft)}
       ${fleetsInFlight(fleets, view.roster, view.now)}
+      ${hostileInboundHtml(view.hostileInbound ?? [], view.roster, view.now)}
       ${sensorContactsHtml(view.sensorContacts ?? [], view.roster, view.now)}
       ${reportsHtml(reports, view.player.id)}
       ${spyReportsHtml(spyReports)}

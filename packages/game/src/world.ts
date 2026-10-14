@@ -159,10 +159,21 @@ export {
 } from "./world-round2.js";
 export {
   discoverMiniPlanet,
+  fortressRelocateDeutCost,
+  fortressRelocateLandingWindow,
+  isIronwaterRock,
+  isMiniGalaxyPublic,
   isMiniPlanet,
+  isMovingFortress,
+  isRelicWorld,
   isUnclaimedMini,
+  miniKindOf,
   playerKnowsMini,
+  playerOwnsMiniKind,
+  relocateMovingFortress,
   seedUniverseMinis,
+  tickMiniDrift,
+  vacateMiniPlanet,
 } from "./world-mini.js";
 export {
   PLANET_NAME_MAX_LEN,

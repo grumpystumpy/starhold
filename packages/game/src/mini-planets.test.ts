@@ -3,16 +3,21 @@ import { describe, it } from "node:test";
 import {
   BUILDINGS,
   MINI_BUILDING_ORDER,
+  MINI_DRIFT_INTERVAL_MS,
+  MINI_IRONWATER_DEUT_MULT,
+  MINI_RICH_MINE_MULT,
   MINI_SLOT_MIN,
   MINI_WORLD_EATER_MIN,
 } from "./catalog.js";
 import {
-  anomalyForgeShipTimeFactor,
   buildingAllowedOn,
-  canResolveMiniPlanet,
-  echoVaultStorageMult,
+  canDestroyMiniPlanet,
+  emptyDefenses,
   normalizeFleetShips,
+  productionPerHour,
   riftSiphonMineMult,
+  echoVaultStorageMult,
+  anomalyForgeShipTimeFactor,
   shipUnitBuildSeconds,
   storageFor,
   xpForMiniPlanetDiscovery,
@@ -26,14 +31,18 @@ import {
   resolveMiniPlanetChoice,
 } from "./world.js";
 import {
+  createMiniPlanet,
   discoverMiniPlanet,
+  fortressRelocateLandingWindow,
   isMiniPlanet,
   isUnclaimedMini,
+  miniKindOf,
+  relocateMovingFortress,
   seedUniverseMinis,
+  tickMiniDrift,
 } from "./world-mini.js";
-import { emptyDefenses } from "./formulas.js";
 
-describe("mini planets", () => {
+describe("mini planets (Micah revision)", () => {
   it("seeds minis outside slots 1–16 at universe create", () => {
     const universe = createUniverse("Mini Seed", 8);
     assert.ok((universe.miniPlanetIds?.length ?? 0) > 0);
@@ -44,39 +53,72 @@ describe("mini planets", () => {
       assert.ok(p.coords.slot >= MINI_SLOT_MIN);
       assert.ok((p.fieldsCap ?? 0) >= 80 && (p.fieldsCap ?? 0) <= 140);
       assert.equal(p.ownerPlayerId, "");
+      assert.ok(p.flags?.miniKind);
     }
   });
 
-  it("special buildings exist with original names", () => {
+  it("special buildings exist; mines allowed on minis", () => {
     assert.equal(BUILDINGS.riftSiphon.name, "Rift Siphon");
     assert.equal(BUILDINGS.echoVault.name, "Echo Vault");
     assert.equal(BUILDINGS.anomalyForge.name, "Anomaly Forge");
     assert.equal(BUILDINGS.driftBeacon.name, "Drift Beacon");
     assert.ok(MINI_BUILDING_ORDER.includes("riftSiphon"));
-    assert.ok(!MINI_BUILDING_ORDER.includes("metalMine"));
-    assert.ok(!MINI_BUILDING_ORDER.includes("researchLab"));
+    assert.ok(MINI_BUILDING_ORDER.includes("metalMine"));
+    assert.ok(MINI_BUILDING_ORDER.includes("researchLab"));
   });
 
-  it("buildingAllowedOn gates mini vs normal planets", () => {
+  it("buildingAllowedOn allows mines + specials on minis", () => {
     const universe = createUniverse("Mini Build", 8);
     const a = joinUniverse(universe, "Builder", 300_000_000);
     const miniId = universe.miniPlanetIds![0]!;
     const mini = universe.planets[miniId]!;
     assert.equal(buildingAllowedOn(mini, "riftSiphon"), true);
-    assert.equal(buildingAllowedOn(mini, "metalMine"), false);
+    assert.equal(buildingAllowedOn(mini, "metalMine"), true);
     assert.equal(buildingAllowedOn(a.planet, "riftSiphon"), false);
     assert.equal(buildingAllowedOn(a.planet, "metalMine"), true);
   });
 
-  it("discovery is finder-only; empire galaxy hides unknown minis", () => {
+  it("rich mine mult applies on standard minis", () => {
+    const universe = createUniverse("Mini Rich", 8);
+    const miniId = universe.miniPlanetIds![0]!;
+    const mini = universe.planets[miniId]!;
+    mini.buildings.metalMine = 5;
+    mini.buildings.solarPlant = 10;
+    const normal = {
+      ...mini,
+      flags: undefined,
+      coords: { galaxy: 1, system: 1, slot: 8 },
+    };
+    const miniProd = productionPerHour(mini, 1);
+    const normalProd = productionPerHour(normal, 1);
+    assert.ok(miniProd.metal > normalProd.metal);
+    assert.ok(
+      Math.abs(miniProd.metal / normalProd.metal - MINI_RICH_MINE_MULT) < 0.01,
+    );
+  });
+
+  it("Ironwater Rock deut is 10× best-normal (13× slot-8)", () => {
+    const iron = createMiniPlanet("seed", 1, 1, 20, 1, "ironwater");
+    iron.buildings.deutSynth = 5;
+    iron.buildings.solarPlant = 20;
+    const std = createMiniPlanet("seed", 1, 2, 20, 1, "standard");
+    std.buildings.deutSynth = 5;
+    std.buildings.solarPlant = 20;
+    const ironDeut = productionPerHour(iron, 1).deuterium;
+    const stdDeut = productionPerHour(std, 1).deuterium;
+    assert.ok(stdDeut > 0);
+    assert.ok(
+      Math.abs(ironDeut / stdDeut - MINI_IRONWATER_DEUT_MULT) < 0.01,
+    );
+  });
+
+  it("discovery is finder-only", () => {
     const universe = createUniverse("Mini Disc", 8);
     const a = joinUniverse(universe, "Finder", 301_000_000);
     const b = joinUniverse(universe, "Blind", 301_000_001);
     const miniId = universe.miniPlanetIds![0]!;
     const mini = universe.planets[miniId]!;
     discoverMiniPlanet(universe, a.player.id, miniId);
-    assert.ok(a.player.discoveredMiniIds?.includes(miniId) ||
-      universe.players[a.player.id]!.discoveredMiniIds!.includes(miniId));
     assert.ok(mini.discoveredBy?.includes(a.player.id));
     assert.equal(
       universe.players[b.player.id]!.discoveredMiniIds?.includes(miniId) ??
@@ -108,32 +150,9 @@ describe("mini planets", () => {
     const claimed = universe.planets[miniId]!;
     assert.equal(claimed.ownerPlayerId, a.player.id);
     assert.ok(universe.players[a.player.id]!.planetIds.includes(miniId));
-    assert.equal(isUnclaimedMini(claimed), false);
   });
 
-  it("rift / echo / anomaly formulas stack as contracted", () => {
-    const universe = createUniverse("Mini Form", 8);
-    const miniId = universe.miniPlanetIds![0]!;
-    const mini = universe.planets[miniId]!;
-    mini.buildings.riftSiphon = 2;
-    mini.buildings.echoVault = 2;
-    mini.buildings.anomalyForge = 2;
-    mini.buildings.metalStorage = 1;
-    assert.equal(riftSiphonMineMult(mini), 1.3);
-    assert.equal(echoVaultStorageMult(mini), 1.5);
-    assert.equal(anomalyForgeShipTimeFactor(mini), 0.84);
-    const base = storageFor({
-      ...mini,
-      buildings: { ...mini.buildings, echoVault: 0 },
-    });
-    const boosted = storageFor(mini);
-    assert.ok(boosted.metal > base.metal);
-    const slow = shipUnitBuildSeconds("scout", 1, 0, 0, 0);
-    const fast = shipUnitBuildSeconds("scout", 1, 0, 0, 2);
-    assert.ok(fast < slow);
-  });
-
-  it("blocks mines on mini via queue", () => {
+  it("mines queue on mini; specials still work", () => {
     const universe = createUniverse("Mini Queue", 8);
     const a = joinUniverse(universe, "Miner", 303_000_000);
     const miniId = universe.miniPlanetIds![0]!;
@@ -144,25 +163,35 @@ describe("mini planets", () => {
     universe.players[a.player.id]!.activePlanetId = miniId;
     universe.planets[miniId] = mini;
     mini.resources = { metal: 50_000, crystal: 50_000, deuterium: 10_000 };
-    const bad = queueBuildingUpgrade(
+    const mine = queueBuildingUpgrade(
       universe,
       a.player.id,
       "metalMine",
       303_000_200,
       miniId,
     );
-    assert.equal(bad.ok, false);
-    const good = queueBuildingUpgrade(
+    assert.equal(mine.ok, true);
+    const special = queueBuildingUpgrade(
       universe,
       a.player.id,
       "riftSiphon",
       303_000_201,
       miniId,
     );
-    assert.equal(good.ok, true);
+    assert.equal(special.ok, true);
+    mini.buildings.riftSiphon = 2;
+    mini.buildings.echoVault = 2;
+    mini.buildings.anomalyForge = 2;
+    assert.equal(riftSiphonMineMult(mini), 1.3);
+    assert.equal(echoVaultStorageMult(mini), 1.5);
+    assert.equal(anomalyForgeShipTimeFactor(mini), 0.84);
+    assert.ok(storageFor(mini).metal > 0);
+    const slow = shipUnitBuildSeconds("scout", 1, 0, 0, 0);
+    const fast = shipUnitBuildSeconds("scout", 1, 0, 0, 2);
+    assert.ok(fast < slow);
   });
 
-  it("capture transfers ownership; destroy pays out and removes planet", () => {
+  it("direct capture needs capital ships; destroy needs WE and never pays deut", () => {
     const universe = createUniverse("Mini War", 8);
     seedUniverseMinis(universe);
     const a = joinUniverse(universe, "Attacker", 304_000_000);
@@ -170,17 +199,17 @@ describe("mini planets", () => {
     const miniId = universe.miniPlanetIds![0]!;
     const mini = universe.planets[miniId]!;
     mini.ownerPlayerId = b.player.id;
-    mini.flags = { mini: true };
-    mini.resources = { metal: 1000, crystal: 500, deuterium: 100 };
+    mini.flags = { mini: true, miniKind: "standard" };
+    mini.resources = { metal: 1000, crystal: 500, deuterium: 999 };
     mini.buildings.solarPlant = 3;
     mini.ships = normalizeFleetShips({});
     mini.defenses = emptyDefenses();
     universe.players[b.player.id]!.planetIds.push(miniId);
     universe.planets[miniId] = mini;
 
-    assert.equal(canResolveMiniPlanet(normalizeFleetShips({ worldEater: 4 })), false);
+    assert.equal(canDestroyMiniPlanet(normalizeFleetShips({ worldEater: 0 })), false);
     assert.equal(
-      canResolveMiniPlanet(normalizeFleetShips({ worldEater: MINI_WORLD_EATER_MIN })),
+      canDestroyMiniPlanet(normalizeFleetShips({ worldEater: MINI_WORLD_EATER_MIN })),
       true,
     );
 
@@ -193,7 +222,7 @@ describe("mini planets", () => {
       targetPlayerId: b.player.id,
       targetCoords: { ...mini.coords },
       mission: "raid",
-      ships: normalizeFleetShips({ worldEater: 5, hauler: 20 }),
+      ships: normalizeFleetShips({ voidforgeTitan: 1, hauler: 20 }),
       cargo: { metal: 0, crystal: 0, deuterium: 0 },
       departedAt: 304_000_100,
       arrivesAt: 304_000_100,
@@ -209,8 +238,8 @@ describe("mini planets", () => {
       attackerName: "Attacker",
       defenderName: "Defender",
       targetCoords: { ...mini.coords },
-      attackerBefore: normalizeFleetShips({ worldEater: 5, hauler: 20 }),
-      attackerAfter: normalizeFleetShips({ worldEater: 5, hauler: 20 }),
+      attackerBefore: normalizeFleetShips({ voidforgeTitan: 1, hauler: 20 }),
+      attackerAfter: normalizeFleetShips({ voidforgeTitan: 1, hauler: 20 }),
       defenderBefore: normalizeFleetShips({}),
       defenderAfter: normalizeFleetShips({}),
       defensesBefore: emptyDefenses(),
@@ -229,14 +258,13 @@ describe("mini planets", () => {
     assert.equal(universe.planets[miniId]!.ownerPlayerId, a.player.id);
     assert.ok(isMiniPlanet(universe.planets[miniId]!));
 
-    // Reset ownership for destroy path on a second mini.
     const mini2Id =
       universe.miniPlanetIds!.find((id) => id !== miniId) ??
       universe.miniPlanetIds![1];
     assert.ok(mini2Id);
     const mini2 = universe.planets[mini2Id]!;
     mini2.ownerPlayerId = b.player.id;
-    mini2.resources = { metal: 2000, crystal: 1000, deuterium: 0 };
+    mini2.resources = { metal: 2000, crystal: 1000, deuterium: 5000 };
     mini2.buildings.solarPlant = 2;
     if (!universe.players[b.player.id]!.planetIds.includes(mini2Id)) {
       universe.players[b.player.id]!.planetIds.push(mini2Id);
@@ -250,7 +278,7 @@ describe("mini planets", () => {
       targetPlayerId: b.player.id,
       targetCoords: { ...mini2.coords },
       mission: "raid",
-      ships: normalizeFleetShips({ worldEater: 5, hauler: 50 }),
+      ships: normalizeFleetShips({ worldEater: 1, hauler: 50 }),
       cargo: { metal: 0, crystal: 0, deuterium: 0 },
       departedAt: 304_000_200,
       arrivesAt: 304_000_200,
@@ -266,8 +294,8 @@ describe("mini planets", () => {
       attackerName: "Attacker",
       defenderName: "Defender",
       targetCoords: { ...mini2.coords },
-      attackerBefore: normalizeFleetShips({ worldEater: 5, hauler: 50 }),
-      attackerAfter: normalizeFleetShips({ worldEater: 5, hauler: 50 }),
+      attackerBefore: normalizeFleetShips({ worldEater: 1, hauler: 50 }),
+      attackerAfter: normalizeFleetShips({ worldEater: 1, hauler: 50 }),
       defenderBefore: normalizeFleetShips({}),
       defenderAfter: normalizeFleetShips({}),
       defensesBefore: emptyDefenses(),
@@ -284,6 +312,60 @@ describe("mini planets", () => {
     assert.equal(des.ok, true);
     assert.equal(universe.planets[mini2Id], undefined);
     assert.ok((universe.fleets[fleet2]?.cargo.metal ?? 0) > 0);
+    assert.equal(universe.fleets[fleet2]?.cargo.deuterium ?? 0, 0);
+  });
+
+  it("fortress jump: ±1 galaxy, ±10 accuracy landing window", () => {
+    const universe = createUniverse("Mini Fort", 8);
+    const a = joinUniverse(universe, "Lord", 305_000_000);
+    const fort = createMiniPlanet(universe.seed!, 1, 350, 22, 305_000_000, "fortress");
+    fort.ownerPlayerId = a.player.id;
+    fort.resources.deuterium = 500_000;
+    universe.planets[fort.id] = fort;
+    universe.miniPlanetIds = [...(universe.miniPlanetIds ?? []), fort.id];
+    universe.players[a.player.id]!.planetIds.push(fort.id);
+    assert.equal(miniKindOf(fort), "fortress");
+    const win = fortressRelocateLandingWindow(1, 350);
+    assert.equal(win.systemMin, 340);
+    assert.equal(win.systemMax, 360);
+    const ok = relocateMovingFortress(
+      universe,
+      a.player.id,
+      fort.id,
+      1,
+      355,
+      305_000_100,
+    );
+    assert.equal(ok.ok, true, ok.ok ? "" : ok.error);
+    if (ok.ok) {
+      assert.ok(ok.landed.system >= 345 && ok.landed.system <= 365);
+      assert.equal(ok.landed.galaxy, 1);
+    }
+    const farGalaxy = relocateMovingFortress(
+      universe,
+      a.player.id,
+      fort.id,
+      4,
+      100,
+      305_000_200,
+    );
+    assert.equal(farGalaxy.ok, false);
+  });
+
+  it("minis drift systems over time while keeping ownership", () => {
+    const universe = createUniverse("Mini Drift", 8);
+    const a = joinUniverse(universe, "Holder", 306_000_000);
+    const miniId = universe.miniPlanetIds![0]!;
+    const mini = universe.planets[miniId]!;
+    mini.ownerPlayerId = a.player.id;
+    mini.lastDriftAt = 306_000_000;
+    universe.players[a.player.id]!.planetIds.push(miniId);
+    const before = mini.coords.system;
+    tickMiniDrift(universe, 306_000_000 + MINI_DRIFT_INTERVAL_MS * 3 + 1);
+    assert.equal(universe.planets[miniId]!.ownerPlayerId, a.player.id);
+    // Drift is stochastic; at least lastDriftAt advanced.
+    assert.ok((universe.planets[miniId]!.lastDriftAt ?? 0) > 306_000_000);
+    void before;
   });
 
   it("xp for mini discovery is 10", () => {

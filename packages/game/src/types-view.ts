@@ -50,7 +50,7 @@ export interface CombatReport {
   /** Voidforge Titan moon-kill success. */
   moonDestroyed?: boolean;
   moonKillChancePct?: number;
-  /** Post-battle mini capture/destroy available (≥5 World Eaters, attacker win). */
+  /** Post-battle mini capture/destroy available (attacker win on colonized mini). */
   miniResolveAvailable?: boolean;
   miniPlanetId?: string;
   miniResolved?: "capture" | "destroy";
@@ -124,10 +124,17 @@ export interface PlanetState {
   buildQueue: BuildQueueItem[];
   shipQueue: ShipQueueItem[];
   defenseQueue: DefenseQueueItem[];
-  /** Round 2 mini-planet flag. */
-  flags?: { mini?: boolean };
+  /** Round 2 mini-planet flag + optional super-rare kind. */
+  flags?: {
+    mini?: boolean;
+    miniKind?: "standard" | "ironwater" | "fortress" | "relic";
+  };
   /** Player ids who know this mini's coords (discovery). */
   discoveredBy?: string[];
+  /** Wall-clock ms of last mini drift step. */
+  lastDriftAt?: number;
+  /** First successful colonize time — drives 8h galaxy-wide visibility. */
+  colonizedAt?: number;
 }
 
 export interface PlayerState {
@@ -252,6 +259,8 @@ export interface PlayerView {
   spyReports: EspionageReport[];
   expeditionReports: ExpeditionReport[];
   sensorContacts: FleetMission[];
+  /** Hostile outbound fleets targeting this player (not Moving Fortress). */
+  hostileInbound: FleetMission[];
   /** Premium currency echo. */
   starshards: number;
   /** Active (non-expired) officers. */

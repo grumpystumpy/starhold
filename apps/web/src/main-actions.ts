@@ -7,6 +7,7 @@ export {
   doGalaxyNav,
   doSelectPlanet,
   doRenamePlanet,
+  doRelocateFortress,
   doSignup,
   doLogin,
   doClaimAnonymous,

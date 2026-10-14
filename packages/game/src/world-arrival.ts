@@ -32,7 +32,10 @@ import { resolveEspionage } from "./world-espionage.js";
 import { resolveExpeditionArrival } from "./world-expedition.js";
 import {
   isUnclaimedMini,
+  miniKindOf,
   playerKnowsMini,
+  playerOwnsMiniKind,
+  tickMiniDrift,
 } from "./world-mini.js";
 import { ownedPlanetCount } from "./world-moons.js";
 import { playerBoosts } from "./world-boosts.js";
@@ -151,30 +154,26 @@ export function resolveFleetArrival(
       } else if (
         occupied &&
         isUnclaimedMini(occupied) &&
-        playerKnowsMini(universe, owner.id, occupied.id) &&
-        (hasCradle || hasArk) &&
+        playerKnowsMini(universe, owner.id, occupied.id, now) &&
+        hasCradle &&
         ownedPlanetCount(universe, owner.id) <
-          empireColonyCap(owner, universe, maxColonies)
+          empireColonyCap(owner, universe, maxColonies) &&
+        !(
+          (miniKindOf(occupied) === "fortress" ||
+            miniKindOf(occupied) === "relic") &&
+          playerOwnsMiniKind(universe, owner.id, miniKindOf(occupied))
+        )
       ) {
-        // Claim discovered mini planet (Colonizer / Foundation Ark).
+        // Claim unoccupied mini — Colonizer only (Micah).
         const remaining = normalizeFleetShips(fleet.ships);
-        if (hasArk) {
-          remaining.foundationArk = Math.max(0, remaining.foundationArk - 1);
-          for (const [bid, level] of Object.entries(FOUNDATION_ARK_BOOTSTRAP)) {
-            occupied.buildings[bid as BuildingId] = Math.max(
-              occupied.buildings[bid as BuildingId] ?? 0,
-              level ?? 0,
-            );
-          }
-        } else {
-          remaining.colonyShip = Math.max(0, remaining.colonyShip - 1);
-          occupied.buildings.solarPlant = Math.max(
-            occupied.buildings.solarPlant ?? 0,
-            1,
-          );
-        }
+        remaining.colonyShip = Math.max(0, remaining.colonyShip - 1);
+        occupied.buildings.solarPlant = Math.max(
+          occupied.buildings.solarPlant ?? 0,
+          1,
+        );
         occupied.ownerPlayerId = owner.id;
         occupied.name = `${owner.name}'s Colony`;
+        if (occupied.colonizedAt == null) occupied.colonizedAt = now;
         if (!occupied.discoveredBy) occupied.discoveredBy = [];
         if (!occupied.discoveredBy.includes(owner.id)) {
           occupied.discoveredBy.push(owner.id);
@@ -287,7 +286,7 @@ export function resolveFleetArrival(
     return;
   }
 
-  // Default capture if a mini resolve was left pending until return.
+  // Default direct-capture if capital fleet left resolve pending until return.
   if (fleet.reportId && fleet.mission === "raid") {
     const report = universe.reports[fleet.reportId];
     if (
@@ -393,6 +392,7 @@ export function advanceUniverse(universe: UniverseState, now = Date.now()): void
     advanceFleetSwarmProduce(fleet, now);
   }
   advanceFleets(universe, now);
+  tickMiniDrift(universe, now);
   tickPirates(universe, now);
   pruneSpyReports(universe, now);
 }

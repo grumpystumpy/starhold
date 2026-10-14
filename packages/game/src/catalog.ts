@@ -128,19 +128,20 @@ export const MOON_BUILDING_ORDER: BuildingId[] = [
 ];
 
 /**
- * Mini planets: specials + Solar Array + storages + Shipyard.
- * Mines, lab, moon buildings, Mantle Loom / Rig Foundry / Chrono Lathe blocked.
+ * Mini planets: normal planet buildings + four specials as extras.
+ * Moon-only buildings remain blocked (see buildingAllowedOn).
  */
-export const MINI_BUILDING_ORDER: BuildingId[] = [
+export const MINI_SPECIAL_BUILDINGS: BuildingId[] = [
   "riftSiphon",
   "echoVault",
   "anomalyForge",
   "driftBeacon",
-  "solarPlant",
-  "metalStorage",
-  "crystalStorage",
-  "deutTank",
-  "shipyard",
+];
+
+/** Full upgrade list for minis = planet order + specials. */
+export const MINI_BUILDING_ORDER: BuildingId[] = [
+  ...PLANET_BUILDING_ORDER,
+  ...MINI_SPECIAL_BUILDINGS,
 ];
 
 export const SHIP_ORDER: ShipId[] = [
@@ -270,8 +271,28 @@ export {
   MINI_SYSTEMS_PER,
   MINI_FIELDS_MIN,
   MINI_FIELDS_MAX,
+  MINI_RICH_MINE_MULT,
   MINI_DESTROY_RESOURCE_MULT,
   MINI_DESTROY_DEBRIS_FRAC,
+  MINI_GALAXY_VISIBLE_AFTER_MS,
+  MINI_DRIFT_INTERVAL_MS,
+  MINI_DRIFT_SYSTEM_STEP,
+  MINI_IRONWATER_SYSTEMS_PER,
+  MINI_FORTRESS_SYSTEMS_PER,
+  MINI_RELIC_SYSTEMS_PER,
+  MINI_IRONWATER_DEUT_MULT,
+  MINI_FORTRESS_RELOCATE_GALAXY_RANGE,
+  MINI_FORTRESS_RELOCATE_ACCURACY,
+  MINI_FORTRESS_RELOCATE_DEUT_BASE,
+  MINI_FORTRESS_RELOCATE_DEUT_PER_GALAXY,
+  MINI_FORTRESS_RELOCATE_DEUT_PER_SYSTEM,
+  MINI_FORTRESS_RELOCATE_SYSTEMS,
+  MINI_FORTRESS_SHIELD_MULT,
+  MINI_FORTRESS_ATTACK_MULT,
+  MINI_FORTRESS_ARMOR_MULT,
+  MINI_RELIC_RESEARCH_TIME,
+  MINI_RELIC_EXPEDITION_FIND,
+  MINI_RELIC_PIRATE_WEIGHT,
   RIFT_SIPHON_MINE_PER,
   ECHO_VAULT_STORAGE_PER,
   ANOMALY_FORGE_SHIP_TIME_PER,

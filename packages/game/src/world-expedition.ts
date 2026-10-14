@@ -26,6 +26,7 @@ import {
 } from "./world-boosts.js";
 import {
   discoverMiniPlanet,
+  empireRelicExpeditionFindMult,
   pickOrSeedMiniForDiscovery,
 } from "./world-mini.js";
 
@@ -102,7 +103,8 @@ export function resolveExpeditionArrival(
   const ownerForYield = universe.players[fleet.ownerPlayerId];
   const yieldMult =
     classBonuses(ownerForYield?.playerClass?.classId).expeditionYield *
-    vaultScoutExpeditionMult(before);
+    vaultScoutExpeditionMult(before) *
+    empireRelicExpeditionFindMult(universe, fleet.ownerPlayerId);
 
   switch (kind) {
     case "resources": {

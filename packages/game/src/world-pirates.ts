@@ -2,6 +2,7 @@ import {
   MAP_GALAXIES,
   MAP_SLOTS,
   MAP_SYSTEMS,
+  MINI_RELIC_PIRATE_WEIGHT,
   PIRATE_DESTROY_STARSHARDS_BASE,
   PIRATE_DESTROY_STARSHARDS_PER_TIER,
   PIRATE_GROWTH_INTERVAL_MS,
@@ -362,7 +363,16 @@ function pickRaidTarget(
   );
 
   if (planets.length > 0 && (others.length === 0 || roll % 10 < 7)) {
-    const planet = planets[roll % planets.length]!;
+    // Relic Worlds attract more pirate raids (weighted lottery).
+    const weighted: PlanetState[] = [];
+    for (const p of planets) {
+      const w =
+        p.flags?.mini && p.flags.miniKind === "relic"
+          ? MINI_RELIC_PIRATE_WEIGHT
+          : 1;
+      for (let i = 0; i < w; i++) weighted.push(p);
+    }
+    const planet = weighted[roll % weighted.length]!;
     return { kind: "planet", planet };
   }
   if (others.length > 0) {

@@ -23,8 +23,20 @@ import { playerBoosts } from "./world-boosts.js";
 import { emptyCargo } from "./world-bootstrap.js";
 import { tryFormMoon } from "./world-moons.js";
 import { clearOccupationIfRecaptured } from "./world-occupation.js";
-import { canResolveMiniPlanet } from "./formulas-round2.js";
-import { isMiniPlanet } from "./world-mini.js";
+import {
+  canDestroyMiniPlanet,
+  canDirectCaptureMini,
+} from "./formulas-round2.js";
+import {
+  MINI_FORTRESS_ARMOR_MULT,
+  MINI_FORTRESS_ATTACK_MULT,
+  MINI_FORTRESS_SHIELD_MULT,
+} from "./catalog.js";
+import {
+  isMiniPlanet,
+  isMovingFortress,
+  vacateMiniPlanet,
+} from "./world-mini.js";
 import { maybeDestroyMoonWithTitans } from "./world-round2.js";
 import { addDebris, subtractCargo } from "./world-tick.js";
 
@@ -43,6 +55,13 @@ export function resolveRaidArrival(
   const defCls = classBonuses(defenderOwner?.playerClass?.classId);
   const defensePower =
     playerBoosts(defenderOwner, now).defensePower * defCls.defensePower;
+  const fortressField = isMovingFortress(target)
+    ? {
+        shieldMult: MINI_FORTRESS_SHIELD_MULT,
+        attackMult: MINI_FORTRESS_ATTACK_MULT,
+        armorMult: MINI_FORTRESS_ARMOR_MULT,
+      }
+    : undefined;
   const combat = resolveCombat(
     fleet.ships,
     defenderBefore,
@@ -53,6 +72,7 @@ export function resolveRaidArrival(
       defensePower,
       attackMult: atkCls.attack,
       defenseSlot: target.coords.slot,
+      battlefield: fortressField,
     },
   );
   target.ships = combat.defenderAfter;
@@ -143,13 +163,24 @@ export function resolveRaidArrival(
     clearOccupationIfRecaptured(universe, target.id, target.ownerPlayerId);
   }
 
-  const miniEligible =
+  let miniResolveAvailable = false;
+  let miniPlanetId: string | undefined;
+  if (
     combat.outcome === "attacker_win" &&
     isMiniPlanet(target) &&
     Boolean(target.ownerPlayerId) &&
-    canResolveMiniPlanet(combat.attackerAfter);
-  if (miniEligible) {
-    summary = `${summary} Mini planet vulnerable — choose capture or destroy (≥5 World Eaters).`;
+    target.ownerPlayerId !== fleet.ownerPlayerId
+  ) {
+    miniPlanetId = target.id;
+    if (canDirectCaptureMini(combat.attackerAfter)) {
+      miniResolveAvailable = true;
+      summary = canDestroyMiniPlanet(combat.attackerAfter)
+        ? `${summary} Mini contested — capture directly or destroy with World Eater.`
+        : `${summary} Mini contested — capital ships can capture on resolve.`;
+    } else {
+      vacateMiniPlanet(universe, target);
+      summary = `${summary} Owner cleared — mini unoccupied. Reclaim with a Colonizer (this fleet cannot capture).`;
+    }
   }
 
   const report: CombatReport = {
@@ -175,8 +206,8 @@ export function resolveRaidArrival(
     moonFormed,
     moonDestroyed: moonDestroyed || undefined,
     moonKillChancePct,
-    miniResolveAvailable: miniEligible || undefined,
-    miniPlanetId: miniEligible ? target.id : undefined,
+    miniResolveAvailable: miniResolveAvailable || undefined,
+    miniPlanetId,
   };
   universe.reports[reportId] = report;
 

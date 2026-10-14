@@ -36,6 +36,7 @@ import {
   queueShipBuild,
   reorderQueue,
   renamePlanet,
+  relocateMovingFortress,
   resolveMiniPlanetChoice,
   saveFleetPreset,
   setActivePlanet,
@@ -758,6 +759,39 @@ export function createApp(): Hono {
         body.playerId!,
         body.fleetId!,
         body.choice ?? "capture",
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  app.post("/api/mini-relocate", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      planetId?: string;
+      galaxy?: number;
+      system?: number;
+    };
+    if (
+      !body.playerId ||
+      !body.planetId ||
+      body.galaxy == null ||
+      body.system == null
+    ) {
+      return c.json(
+        { error: "playerId, planetId, galaxy, and system required." },
+        400,
+      );
+    }
+    return withUniverse((universe) => {
+      advanceUniverse(universe);
+      const result = relocateMovingFortress(
+        universe,
+        body.playerId!,
+        body.planetId!,
+        Number(body.galaxy),
+        Number(body.system),
+        Date.now(),
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));

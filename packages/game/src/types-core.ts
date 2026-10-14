@@ -354,7 +354,7 @@ export interface OccupationState {
   endsAt: number;
 }
 
-/** Post-battle choice when ≥5 World Eaters win on a mini planet (K wires full flow). */
+/** Post-battle choice after winning on a colonized mini (destroy needs ≥1 World Eater). */
 export type MiniPlanetResolveChoice = "capture" | "destroy";
 
 export interface SlotProductionMult {
