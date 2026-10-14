@@ -13,6 +13,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: cursor/batch-40-43-7401
+          token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
       - name: Download api and commit
         env:
@@ -21,13 +22,18 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p api
-          curl -fsSL "$API_URL" -o api/index.js
+          echo "Fetching $API_URL"
+          curl -fL --retry 3 --retry-delay 2 "$API_URL" -o api/index.js
+          ls -la api/index.js
           GOT="$(sha256sum api/index.js | awk '{print $1}')"
-          echo "expect=$API_SHA got=$GOT"
-          test "$GOT" = "$API_SHA"
-          test "$(wc -c < api/index.js)" -ge 500000
-          ! grep -q 'SIZE_PROBE_ONLY' api/index.js
-          ! grep -q 'PLACEHOLDER_TOO_LARGE_FOR_MCP' api/index.js
+          echo "expect=$API_SHA"
+          echo "got=$GOT"
+          if [ "$GOT" != "$API_SHA" ]; then echo "SHA mismatch"; exit 1; fi
+          BYTES="$(wc -c < api/index.js | tr -d ' ')"
+          echo "bytes=$BYTES"
+          if [ "$BYTES" -lt 500000 ]; then echo "too small"; exit 1; fi
+          if grep -q 'SIZE_PROBE_ONLY' api/index.js; then echo "probe stub"; exit 1; fi
+          if grep -q 'PLACEHOLDER_TOO_LARGE_FOR_MCP' api/index.js; then echo "placeholder"; exit 1; fi
           rm -f .github/workflows/assemble-batch-40-43-api.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
