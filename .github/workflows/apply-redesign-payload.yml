@@ -19,7 +19,24 @@ jobs:
         run: |
           set -euo pipefail
           test -f .cursor-push/CHUNK_COUNT
+          python3 <<'PATCH'
+          from pathlib import Path
+          # MCP paste introduced single-byte flips; correct them before decode.
+          fixes = {
+              ".cursor-push/redesign-part-08.b64": {3801: "L", 3833: "r"},
+              ".cursor-push/redesign-part-29.b64": {2539: "S"},
+              ".cursor-push/redesign-part-30.b64": {1326: "6"},
+          }
+          for path, positions in fixes.items():
+              p = Path(path)
+              data = bytearray(p.read_bytes().strip())
+              for idx, ch in positions.items():
+                  data[idx] = ord(ch)
+              p.write_bytes(bytes(data))
+              print(f"patched {path}")
+          PATCH
           cat .cursor-push/redesign-part-*.b64 | tr -d '\n' | base64 -d > /tmp/redesign.tar.gz
+          echo "33a3e5f893ff89406f1a15490797d6403a6c62498c139534406ff67af898ed59  /tmp/redesign.tar.gz" | sha256sum -c -
           mkdir -p /tmp/extract
           tar -xzf /tmp/redesign.tar.gz -C /tmp/extract
           git config user.name "github-actions[bot]"
