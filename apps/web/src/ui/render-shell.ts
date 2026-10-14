@@ -117,7 +117,7 @@ export function shellHtml(
   );
 
   return `
-    <div class="game-shell" data-testid="game-shell" data-page="${activePage}">
+    <div class="game-shell" data-testid="game-shell" data-page="${activePage}" data-planet-id="${escapeAttr(planet.id)}" data-busy="${state.busy ? "1" : "0"}">
       <header class="topbar shell-top">
         ${pageDropdown(view, activePage)}
         <div class="topbar-brand">
@@ -128,7 +128,7 @@ export function shellHtml(
           </div>
         </div>
         <div class="topbar-progress" data-testid="player-level" title="Lifetime XP ${fmt(progress.xpTotal)}">
-          <span class="level-label">Lv ${progress.level}</span>
+          <span class="level-label">Lv ${fmt(progress.level)}</span>
           <div class="xp-bar" data-testid="xp-bar" role="progressbar" aria-valuemin="0" aria-valuemax="${progress.xpToNext}" aria-valuenow="${progress.xp}" aria-label="Experience">
             <div class="xp-fill" style="width:${xpPct}%"></div>
             <span class="xp-text">${fmt(progress.xp)} / ${fmt(progress.xpToNext)}</span>
