@@ -69,6 +69,7 @@ export {
   publicRoster,
 } from "./world-view.js";
 export {
+  graduateNewbieProtection,
   isNewbieProtected,
   pirateRaidPickWeight,
   recordSuccessfulPirateRaid,

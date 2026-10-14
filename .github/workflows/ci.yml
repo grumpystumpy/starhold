@@ -32,8 +32,10 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Start API + static
+        env:
+          ALLOW_E2E_HOOKS: "1"
         run: |
-          PORT=3001 npm start &
+          PORT=3001 ALLOW_E2E_HOOKS=1 npm start &
           echo $! > /tmp/starhold-server.pid
           for i in $(seq 1 60); do
             if curl -sf http://127.0.0.1:3001/api/health >/dev/null; then
@@ -49,12 +51,14 @@ jobs:
         env:
           STARHOLD_WEB: http://127.0.0.1:3001
           STARHOLD_API: http://127.0.0.1:3001
+          ALLOW_E2E_HOOKS: "1"
         run: npm run e2e
 
       - name: Playwright layout check (overlap / overflow / screenshots)
         env:
           STARHOLD_WEB: http://127.0.0.1:3001
           STARHOLD_API: http://127.0.0.1:3001
+          ALLOW_E2E_HOOKS: "1"
           UI_REVIEW_OUT: ui-review-out
           UI_REVIEW_BASELINE_DIR: scripts/ui-review-baselines
           UI_REVIEW_FAIL_ON: overlap,overflow,forbidden,contrast,truncated,overlap-img-text,screenshot-diff
