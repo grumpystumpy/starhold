@@ -29,6 +29,7 @@ import {
   doLaunchFleet,
   doLaunchMaxExpeditions,
   doRefresh,
+  doRenamePlanet,
   doRequestMagicLink,
   doResearch,
   doSaveFleetPreset,
@@ -278,6 +279,15 @@ export function bindClickHandlers(): void {
         return;
       }
       void doLaunchFleet(draft);
+      return;
+    }
+
+    if (form.id === "planet-rename-form") {
+      ev.preventDefault();
+      const input = form.querySelector<HTMLInputElement>(
+        "#planet-rename-input",
+      );
+      void doRenamePlanet(input?.value ?? "");
     }
   });
 
