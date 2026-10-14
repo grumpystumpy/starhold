@@ -29,6 +29,7 @@ export {
 } from "./main-actions-fleet.js";
 export {
   doClaimDaily,
+  doClaimGoal,
   doActivateOfficer,
   doUnlockSkill,
 } from "./main-actions-starshards.js";
