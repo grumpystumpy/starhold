@@ -86,7 +86,7 @@ export function validateSwarmCarry(
   if (motherships <= 0) {
     return {
       ok: false,
-      error: "Swarm drones/harvesters must ride a Swarm Mothership.",
+      error: "Swarm drones/harvesters must ride a Mothership.",
     };
   }
   const cap = swarmFleetCapacity(ships, swarmHoldLevel);
