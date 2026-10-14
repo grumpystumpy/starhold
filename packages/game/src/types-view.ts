@@ -268,9 +268,9 @@ export interface PlayerView {
   /** Unlocked skills. */
   skillsUnlocked: string[];
   /** Officer catalog for UI. */
-  skillCatalog: SkillNodeDef[];
-  /** Officer catalog for UI. */
   officerCatalog: OfficerDef[];
+  /** Skill tree catalog for UI. */
+  skillCatalog: SkillNodeDef[];
   /** True when daily login Starshards can be claimed (UTC day). */
   dailyLoginAvailable: boolean;
   /** Player level / XP progress (Round 2). */
