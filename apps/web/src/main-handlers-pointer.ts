@@ -19,6 +19,7 @@ import {
   doResearch,
   doUpgrade,
 } from "./main-actions";
+import { collapseTips, toggleTip } from "./ui/render-tooltips";
 
 function dispatchArmedUpgrade(buildingId: BuildingId): void {
   session.suppressClickUntil = Date.now() + GESTURE_PAINT_GRACE_MS;
@@ -45,6 +46,22 @@ export function bindPointerHandlers(): void {
     "pointerdown",
     (ev) => {
       session.pointersDown += 1;
+
+      // Tap toggles tooltips on phones (hover is unreliable on touch).
+      const tipEl = closestActionEl(ev.target, "[data-tip]");
+      if (tipEl) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        toggleTip(root, tipEl);
+        session.suppressClickUntil = Date.now() + GESTURE_PAINT_GRACE_MS;
+        session.armedUpgrade = null;
+        session.armedShip = null;
+        session.armedDefense = null;
+        session.armedResearch = null;
+        return;
+      }
+      collapseTips(root);
+
       const upgradeBtn = closestActionEl(ev.target, "[data-upgrade]");
       const shipBtn = closestActionEl(ev.target, "[data-ship]");
       const defenseBtn = closestActionEl(ev.target, "[data-defense]");
