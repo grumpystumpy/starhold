@@ -1,0 +1,35 @@
+name: Assemble r3c remaining tree
+on:
+  push:
+    branches: [cursor/round3-fastlane-ui-r3c-e1cf]
+    paths:
+      - .cursor-staging/r3c/READY
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cursor/round3-fastlane-ui-r3c-e1cf
+          fetch-depth: 0
+      - name: Unpack staged tree
+        run: |
+          set -euo pipefail
+          EXP=$(jq -r .b64_sha256 .cursor-staging/r3c/expected.json)
+          N=$(jq -r .n_parts .cursor-staging/r3c/expected.json)
+          cat .cursor-staging/r3c/parts/part-*.txt > /tmp/all.b64
+          echo "$EXP  /tmp/all.b64" | sha256sum -c -
+          test "$(ls .cursor-staging/r3c/parts/part-*.txt | wc -l)" -eq "$N"
+          base64 -d /tmp/all.b64 > /tmp/tree.tar.gz
+          TAR=$(jq -r .tar_sha256 .cursor-staging/r3c/expected.json)
+          echo "$TAR  /tmp/tree.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/tree.tar.gz
+          rm -rf .cursor-staging/r3c
+          rm -f .github/workflows/assemble-r3c-remaining.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat(ui): assemble round3 fast-lane remaining tree from staging"
+          git push origin HEAD:cursor/round3-fastlane-ui-r3c-e1cf
