@@ -3,8 +3,15 @@ import {
   FIELD_CENTER_BY_SLOT,
   FIELD_MIN,
   SLOT_PRODUCTION_MULT,
+  SLOT_TEMPERATURE_K,
+  SOLAR_TEMP_BASELINE_K,
 } from "./catalog.js";
 import type { SlotProductionMult } from "./types.js";
+
+/** Slot temperature K (same table as formulas-round3.planetTemperatureK). */
+export function temperatureKForSlot(slot: number): number {
+  return SLOT_TEMPERATURE_K[slot] ?? SOLAR_TEMP_BASELINE_K;
+}
 
 /** FNV-1a style hash → unsigned 32-bit. */
 export function hashSeed(seed: string): number {
