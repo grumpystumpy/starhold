@@ -185,16 +185,17 @@ Once per **merged batch**; no status-only wakes. After contract merge: short nam
 
 ---
 
-## Process (Micah-approved — adopt 2026-10-13)
+## Process (Micah-approved — adopt 2026-10-13; batch-merge rule 2026-10-14)
 
-1. **No status-only wakes/reports.** Do not schedule wakes just to note “waiting on CI” or rebase progress. Use CI completion / merge events. Report only on **merge**, **blocker**, or a **decision needed from Micah**.
+1. **No status-only wakes/reports.** Do not schedule wakes just to note “waiting on CI” or rebase progress. Use CI completion / merge events. Report only on a **batch merge to `main`**, a **blocker**, or a **decision needed from Micah**.
 2. **Max 3 concurrent build threads**, fixed lanes — apply after current H/J finish:
    - **(a) UI / routes**
    - **(b) Game engine / rules / persistence**
    - **(c) Content + balance data**
    Assign each thread to one lane; avoid cross-lane file edits (cuts rebase churn).
 3. **Single tuning source.** All ship/defense/building/research stats, costs, build times, XP awards, queue sizes, and level bonuses live in one module (e.g. `packages/game/src/data/tuning.ts` or JSON). Balance tweaks = edit that file only.
-4. **Fast lane.** Number tweaks, renames, copy/UI text → straight PR to `main` with auto-merge on green CI; **no** design doc. Design-contract-first **only** for new systems.
-5. **Staging + balance report.** Staging env (Vercel preview or second project on a `staging` branch, within Hobby deploy limits). Promote to production `main` about **once a day** in a batch. CI posts a PR comment diffing tuning values (stats/costs/requirements) vs `main`.
+4. **Fast lane.** Number tweaks, renames, copy/UI text → open a PR to `main`; **no** design doc. Design-contract-first **only** for new systems. **Turn off auto-merge** for fast-lane PRs. **Do not** merge small PRs to `main` one-at-a-time.
+5. **Protect Vercel Hobby deploy limit.** Each merge to `main` triggers a production deploy. Let all active lanes finish, then combine into **as few merges as possible** (ideally one batch PR) so production deploys once. No solo merges to `main`.
+6. **Staging + balance report.** Staging env (Vercel preview or second project on a `staging` branch, within Hobby deploy limits). Promote to production `main` about **once a day** in a batch. CI posts a PR comment diffing tuning values (stats/costs/requirements) vs `main`.
 
 Main-only production deploys stay; staging is the exception path for daily batch promote.
