@@ -1,3 +1,4 @@
+import { mintCombatShareCode } from "./combat-share.js";
 import {
   classBonuses,
   computeRaidLoot,
@@ -82,29 +83,31 @@ export function resolveRaidArrival(
   }
   addDebris(universe, target.coords, debrisCreated);
 
-  // XP: winner gets combat-win formula vs destroyed enemy ships; loser +8.
+  // XP: winner gets combat-win formula vs destroyed enemy ships; loser base.
   const atkDestroyed = resourcesCostTotal(
     destroyedShipResources(defenderBefore, combat.defenderAfter),
   );
   const defDestroyed = resourcesCostTotal(
     destroyedShipResources(fleet.ships, combat.attackerAfter),
   );
+  let attackerXp = 0;
+  let defenderXp = 0;
   if (owner) {
     if (combat.outcome === "attacker_win") {
-      grantPlayerXp(owner, xpForCombatWin(atkDestroyed));
+      attackerXp = xpForCombatWin(atkDestroyed);
     } else {
-      grantPlayerXp(owner, xpForCombatLose());
+      attackerXp = xpForCombatLose();
     }
+    grantPlayerXp(owner, attackerXp);
     universe.players[owner.id] = owner;
   }
   if (defenderOwner && defenderOwner.id !== owner?.id) {
     if (combat.outcome === "defender_win") {
-      grantPlayerXp(defenderOwner, xpForCombatWin(defDestroyed));
-    } else if (combat.outcome === "attacker_win") {
-      grantPlayerXp(defenderOwner, xpForCombatLose());
+      defenderXp = xpForCombatWin(defDestroyed);
     } else {
-      grantPlayerXp(defenderOwner, xpForCombatLose());
+      defenderXp = xpForCombatLose();
     }
+    grantPlayerXp(defenderOwner, defenderXp);
     universe.players[defenderOwner.id] = defenderOwner;
   }
 
@@ -164,6 +167,9 @@ export function resolveRaidArrival(
     moonFormed,
     moonDestroyed: moonDestroyed || undefined,
     moonKillChancePct,
+    roundLog: combat.roundLog.length ? combat.roundLog : undefined,
+    xpAwarded: { attacker: attackerXp, defender: defenderXp },
+    shareCode: mintCombatShareCode(universe),
   };
   universe.reports[reportId] = report;
 
