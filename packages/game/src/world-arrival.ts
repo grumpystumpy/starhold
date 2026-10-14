@@ -18,6 +18,10 @@ import type {
   PlanetState,
   UniverseState,
 } from "./types.js";
+import {
+  handleAcsOutboundArrival,
+  tickAcsGroups,
+} from "./world-acs.js";
 import { resolveRaidArrival } from "./world-arrival-raid.js";
 import { harvestAsteroidField } from "./world-asteroids.js";
 import {
@@ -80,7 +84,26 @@ export function resolveFleetArrival(
   const owner = universe.players[fleet.ownerPlayerId];
   const drive = owner?.research.combustionDrive ?? 0;
 
+  if (fleet.phase === "holding") {
+    if (fleet.acsGroupId) {
+      handleAcsOutboundArrival(universe, fleet, now);
+    } else {
+      fleet.phase = "returning";
+      fleet.arrivesAt = now + 1;
+      universe.fleets[fleet.id] = fleet;
+    }
+    return;
+  }
+
   if (fleet.phase === "outbound") {
+    if (
+      fleet.acsGroupId &&
+      (fleet.mission === "raid" || fleet.mission === "pirateRaid")
+    ) {
+      if (handleAcsOutboundArrival(universe, fleet, now)) {
+        return;
+      }
+    }
     if (fleet.mission === "raid") {
       const target = fleet.targetPlanetId
         ? universe.planets[fleet.targetPlanetId]
@@ -324,6 +347,7 @@ export function advanceUniverse(universe: UniverseState, now = Date.now()): void
   for (const fleet of Object.values(universe.fleets)) {
     advanceFleetSwarmProduce(fleet, now);
   }
+  tickAcsGroups(universe, now);
   advanceFleets(universe, now);
   tickPirates(universe, now);
   pruneSpyReports(universe, now);

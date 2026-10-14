@@ -121,7 +121,28 @@ export type MissionType =
   | "pirateRaid"
   | "jump";
 
-export type FleetPhase = "outbound" | "returning";
+export type FleetPhase = "outbound" | "holding" | "returning";
+
+/** ACS / Joint Strike group status. */
+export type AcsGroupStatus = "open" | "locked" | "resolved" | "cancelled";
+
+export interface AcsGroup {
+  id: string;
+  allianceId: string;
+  leaderPlayerId: string;
+  mission: "raid" | "pirateRaid";
+  targetCoords: Coordinates;
+  targetPlanetId: string | null;
+  targetPlayerId: string | null;
+  targetPirateBaseId?: string | null;
+  /** Join order; [0] is leader fleet. */
+  fleetIds: string[];
+  createdAt: number;
+  joinClosesAt: number;
+  /** Set when locked — max member arrivesAt. */
+  resolvesAt: number | null;
+  status: AcsGroupStatus;
+}
 
 /** Fleet composition templates (per player, per universe). */
 export type FleetPresetIntent =
@@ -307,6 +328,8 @@ export interface FleetMission {
   phase: FleetPhase;
   /** Combat or espionage report id when relevant */
   reportId: string | null;
+  /** Joint Strike (ACS) group id when participating. */
+  acsGroupId?: string | null;
   /** In-flight / parked Swarm Mothership drone production job. */
   swarmProduce?: {
     remaining: number;

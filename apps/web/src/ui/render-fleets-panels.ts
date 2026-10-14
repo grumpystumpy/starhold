@@ -28,10 +28,22 @@ export function fleetsInFlight(
             .map((id) => `${fmt(f.ships[id] ?? 0)}× ${SHIPS[id].name}`)
             .join(", ");
           const eta = fmtEta(remainingSeconds(f.arrivesAt, now));
-          const phase =
-            f.phase === "outbound"
-              ? `→ ${escapeHtml(nameFor(f.targetPlayerId))} @ ${fmtCoords(f.targetCoords)} (${f.mission})`
-              : `← returning home`;
+          let phase: string;
+          switch (f.phase) {
+            case "outbound":
+              phase = `→ ${escapeHtml(nameFor(f.targetPlayerId))} @ ${fmtCoords(f.targetCoords)} (${f.mission}${f.acsGroupId ? " · ACS" : ""})`;
+              break;
+            case "holding":
+              phase = `◎ holding ACS @ ${fmtCoords(f.targetCoords)}`;
+              break;
+            case "returning":
+              phase = `← returning home`;
+              break;
+            default: {
+              const _exhaustive: never = f.phase;
+              phase = _exhaustive;
+            }
+          }
           return `<li data-testid="fleet-${f.id}"><span>${phase}<br/><span class="meta">${escapeHtml(ships)}</span></span><span>${eta}</span></li>`;
         })
         .join("")}

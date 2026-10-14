@@ -47,6 +47,8 @@ export async function doLaunchFleet(opts: {
   asteroidId?: string;
   pirateBaseId?: string;
   cargo?: Partial<Resources>;
+  openAcs?: boolean;
+  acsGroupId?: string;
 }): Promise<void> {
   if (!session.view) return;
   if (session.busy) {

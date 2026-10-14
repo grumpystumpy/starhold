@@ -237,6 +237,8 @@ export async function launchFleetMission(
     asteroidId?: string;
     pirateBaseId?: string;
     cargo?: Partial<Resources>;
+    openAcs?: boolean;
+    acsGroupId?: string;
   },
 ): Promise<PlayerView> {
   const res = await credFetch("/api/launch-fleet", {

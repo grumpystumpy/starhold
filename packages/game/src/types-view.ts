@@ -1,4 +1,5 @@
 import type {
+  AcsGroup,
   AsteroidField,
   BodyKind,
   BuildingId,
@@ -50,6 +51,10 @@ export interface CombatReport {
   /** Voidforge Titan moon-kill success. */
   moonDestroyed?: boolean;
   moonKillChancePct?: number;
+  /** Joint Strike (ACS) group id when this report is a combined attack. */
+  acsGroupId?: string;
+  /** All attacking player ids in an ACS resolve. */
+  acsParticipantIds?: string[];
 }
 
 export interface EspionageReport {
@@ -232,6 +237,8 @@ export interface UniverseState {
   miniPlanetIds?: string[];
   /** Alliances keyed by id (lazy; no tick). */
   alliances?: Record<string, AllianceRecord>;
+  /** Active ACS / Joint Strike groups (lazy resolve on tick). */
+  acsGroups?: Record<string, AcsGroup>;
 }
 
 export interface PirateBasePublic {
@@ -318,6 +325,8 @@ export interface PlayerView {
   alliance: AllianceView | null;
   /** Lightweight directory of alliances (for join UI). */
   allianceDirectory: AllianceListEntry[];
+  /** Open Joint Strike (ACS) groups for the player's alliance. */
+  openAcsGroups: AcsGroup[];
 }
 
 export interface PublicPlayer {

@@ -87,6 +87,7 @@ export function createUniverse(
     pirateBases: {},
     occupations: {},
     alliances: {},
+    acsGroups: {},
     miniPlanetIds: [],
   };
   seedUniverseAsteroids(universe);
@@ -149,6 +150,7 @@ export function ensureUniverseShape(universe: UniverseState): void {
   if (!universe.occupations) universe.occupations = {};
   if (!universe.miniPlanetIds) universe.miniPlanetIds = [];
   if (!universe.alliances) universe.alliances = {};
+  if (!universe.acsGroups) universe.acsGroups = {};
   if (!universe.fleetSpeed) universe.fleetSpeed = universe.speed || 1;
   if (!universe.seed) universe.seed = `seed_${universe.id}`;
   for (const player of Object.values(universe.players)) {

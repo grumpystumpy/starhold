@@ -1112,3 +1112,11 @@ export const ALLIANCE_MAX_OFFICERS = 3;
 export const ALLIANCE_CREATE_MIN_POINTS = 0;
 /** Default join mode when creating an alliance. */
 export const ALLIANCE_JOIN_MODE_DEFAULT: "open" | "invite" = "open";
+
+/** ACS / Joint Strike (backlog #8) — same-alliance synced raids. */
+export const ACS_MAX_FLEETS = 8;
+export const ACS_JOIN_WINDOW_MS = 15 * 60 * 1000;
+export const ACS_HOLD_MAX_MS = 30 * 60 * 1000;
+export const ACS_MIN_FLEETS_TO_RESOLVE = 1;
+/** Drop resolved/cancelled ACS groups after this age on tick. */
+export const ACS_GROUP_PRUNE_MS = 24 * 60 * 60 * 1000;

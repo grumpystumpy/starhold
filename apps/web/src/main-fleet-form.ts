@@ -15,6 +15,8 @@ export function readFleetForm(): {
   asteroidId?: string;
   pirateBaseId?: string;
   cargo?: Partial<Resources>;
+  openAcs?: boolean;
+  acsGroupId?: string;
 } | null {
   const form = root.querySelector<HTMLFormElement>("#fleet-form");
   if (!form) return null;
@@ -57,12 +59,23 @@ export function readFleetForm(): {
       ),
     ),
   };
+  const acsJoin =
+    form.querySelector<HTMLSelectElement>("#fleet-acs-join")?.value || "";
+  const openAcs =
+    Boolean(
+      form.querySelector<HTMLInputElement>("#fleet-open-acs")?.checked,
+    ) && !acsJoin;
+  const acsOpts = {
+    openAcs: openAcs || undefined,
+    acsGroupId: acsJoin || undefined,
+  };
   if (target.value.startsWith("planet:")) {
     return {
       mission,
       ships,
       targetPlanetId: target.value.slice("planet:".length),
       cargo: mission === "transport" ? cargo : undefined,
+      ...acsOpts,
     };
   }
   if (target.value.startsWith("asteroid:")) {
@@ -70,6 +83,7 @@ export function readFleetForm(): {
       mission,
       ships,
       asteroidId: target.value.slice("asteroid:".length),
+      ...acsOpts,
     };
   }
   if (target.value.startsWith("pirate:")) {
@@ -77,6 +91,7 @@ export function readFleetForm(): {
       mission,
       ships,
       pirateBaseId: target.value.slice("pirate:".length),
+      ...acsOpts,
     };
   }
   if (target.value.startsWith("coords:")) {
@@ -89,6 +104,7 @@ export function readFleetForm(): {
       mission,
       ships,
       targetCoords: { galaxy: g, system: s, slot },
+      ...acsOpts,
     };
   }
   return null;

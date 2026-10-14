@@ -260,8 +260,44 @@ export function fleetComposer(
       ${cargoBlock}
       <div class="fleet-ships" data-testid="fleet-orbit-ships">${shipInputs}</div>
       ${needHint}
+      ${acsBlock(view, mission, busy)}
       <p class="hint">Ships shown are in orbit on the selected colony. Example one-way ETA ~${fmtEta(sampleEta)} · fuel ~${fmt(sampleFuel)} deut (1 scout). Fleet slots: ${fmt(1 + (view.player.research.computerTech ?? 0))}${mission === "expedition" ? ` · expeditions ${fmt(expeditionActive)}/${fmt(expeditionCap)}` : ""}.</p>
       <button type="submit" data-testid="launch-fleet" ${launchBlocked || orbitShipIds.length === 0 ? "disabled" : ""}>Launch fleet</button>
     </form>
+  `;
+}
+
+function acsBlock(
+  view: PlayerView,
+  mission: MissionType,
+  busy: boolean,
+): string {
+  if (mission !== "raid" && mission !== "pirateRaid") return "";
+  if (!view.alliance) {
+    return `<p class="hint" data-testid="acs-need-alliance">Joint Strike (ACS) requires an alliance.</p>`;
+  }
+  const open = view.openAcsGroups ?? [];
+  const joinOpts = open
+    .filter((g) => g.mission === mission)
+    .map(
+      (g) =>
+        `<option value="${escapeAttr(g.id)}">${escapeHtml(g.id.slice(0, 12))} · ${g.fleetIds.length} fleets · closes ${fmtEta(Math.max(0, (g.joinClosesAt - view.now) / 1000))}</option>`,
+    )
+    .join("");
+  return `
+    <fieldset class="acs-pick" data-testid="acs-pick">
+      <legend>Joint Strike (ACS)</legend>
+      <label>
+        <input type="checkbox" id="fleet-open-acs" data-testid="fleet-open-acs" ${busy ? "disabled" : ""} />
+        Open Joint Strike for alliance mates
+      </label>
+      <label>
+        Or join open ACS
+        <select id="fleet-acs-join" data-testid="fleet-acs-join" ${busy ? "disabled" : ""}>
+          <option value="">— solo / open new —</option>
+          ${joinOpts}
+        </select>
+      </label>
+    </fieldset>
   `;
 }

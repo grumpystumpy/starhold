@@ -2813,6 +2813,11 @@ var ALLIANCE_MAX_MEMBERS = 16;
 var ALLIANCE_MAX_OFFICERS = 3;
 var ALLIANCE_CREATE_MIN_POINTS = 0;
 var ALLIANCE_JOIN_MODE_DEFAULT = "open";
+var ACS_MAX_FLEETS = 8;
+var ACS_JOIN_WINDOW_MS = 15 * 60 * 1e3;
+var ACS_HOLD_MAX_MS = 30 * 60 * 1e3;
+var ACS_MIN_FLEETS_TO_RESOLVE = 1;
+var ACS_GROUP_PRUNE_MS = 24 * 60 * 60 * 1e3;
 
 // packages/game/src/catalog-rapid-fire.ts
 var RAPID_FIRE = {
@@ -4314,12 +4319,12 @@ function asteroidsInSystem(universe, galaxy, system) {
   out.sort((a, b) => a.id.localeCompare(b.id));
   return out;
 }
-function harvestAsteroidField(universe, asteroidId2, cargoCap) {
+function harvestAsteroidField(universe, asteroidId2, cargoCap2) {
   const field = universe.asteroids?.[asteroidId2];
-  if (!field || field.richness <= 0 || cargoCap <= 0) {
+  if (!field || field.richness <= 0 || cargoCap2 <= 0) {
     return { metal: 0, crystal: 0, deuterium: 0 };
   }
-  let remaining = cargoCap;
+  let remaining = cargoCap2;
   const takeMetal = Math.min(field.metal, remaining);
   remaining -= takeMetal;
   const takeCrystal = Math.min(field.crystal, remaining);
@@ -5302,6 +5307,7 @@ function createUniverse(name = "Alpha Drift", speed = 1, fleetSpeed = speed) {
     pirateBases: {},
     occupations: {},
     alliances: {},
+    acsGroups: {},
     miniPlanetIds: []
   };
   seedUniverseAsteroids(universe);
@@ -5348,6 +5354,7 @@ function ensureUniverseShape(universe) {
   if (!universe.occupations) universe.occupations = {};
   if (!universe.miniPlanetIds) universe.miniPlanetIds = [];
   if (!universe.alliances) universe.alliances = {};
+  if (!universe.acsGroups) universe.acsGroups = {};
   if (!universe.fleetSpeed) universe.fleetSpeed = universe.speed || 1;
   if (!universe.seed) universe.seed = `seed_${universe.id}`;
   for (const player of Object.values(universe.players)) {
@@ -5952,6 +5959,301 @@ function resolveRaidArrival(universe, fleet, target, now) {
   fleet.reportId = reportId;
 }
 
+// packages/game/src/world-acs.ts
+function cargoCap(ships) {
+  let cap = 0;
+  for (const id of SHIP_ORDER) {
+    cap += (ships[id] ?? 0) * SHIPS[id].cargo;
+  }
+  return cap;
+}
+function acsMap(universe) {
+  if (!universe.acsGroups) universe.acsGroups = {};
+  return universe.acsGroups;
+}
+function sameCoords(a, b) {
+  return a.galaxy === b.galaxy && a.system === b.system && a.slot === b.slot;
+}
+function mergeShips(parts) {
+  const out = normalizeFleetShips({});
+  for (const ships of parts) {
+    for (const id of SHIP_ORDER) {
+      out[id] = (out[id] ?? 0) + (ships[id] ?? 0);
+    }
+  }
+  return out;
+}
+function shipCount2(ships) {
+  return fleetShipCount(ships);
+}
+function splitSurvivors(beforeParts, afterCombined) {
+  const totals = beforeParts.map(shipCount2);
+  const totalBefore = totals.reduce((a, b) => a + b, 0);
+  if (totalBefore <= 0) {
+    return beforeParts.map(() => normalizeFleetShips({}));
+  }
+  const out = beforeParts.map(() => normalizeFleetShips({}));
+  for (const id of SHIP_ORDER) {
+    let remaining = afterCombined[id] ?? 0;
+    for (let i = 0; i < beforeParts.length; i++) {
+      if (i === beforeParts.length - 1) {
+        out[i][id] = remaining;
+        break;
+      }
+      const share = Math.floor(
+        (afterCombined[id] ?? 0) * totals[i] / totalBefore
+      );
+      out[i][id] = share;
+      remaining -= share;
+    }
+  }
+  return out;
+}
+function splitLootByCargo(loot, fleets) {
+  const caps = fleets.map((f) => cargoCap(f.ships));
+  const totalCap = caps.reduce((a, b) => a + b, 0);
+  if (totalCap <= 0) {
+    return fleets.map(() => emptyCargo());
+  }
+  const out = fleets.map(() => emptyCargo());
+  for (const key of ["metal", "crystal", "deuterium"]) {
+    let remaining = loot[key];
+    for (let i = 0; i < fleets.length; i++) {
+      if (i === fleets.length - 1) {
+        out[i][key] = remaining;
+        break;
+      }
+      const share = Math.floor(loot[key] * caps[i] / totalCap);
+      out[i][key] = share;
+      remaining -= share;
+    }
+  }
+  return out;
+}
+function listOpenAcsForAlliance(universe, allianceId) {
+  if (!allianceId) return [];
+  ensureUniverseShape(universe);
+  return Object.values(acsMap(universe)).filter(
+    (g) => g.allianceId === allianceId && g.status === "open"
+  );
+}
+function maybeLockAcsGroup(universe, group, now) {
+  if (group.status !== "open") return;
+  const full = group.fleetIds.length >= ACS_MAX_FLEETS;
+  const windowClosed = now >= group.joinClosesAt;
+  if (!full && !windowClosed) return;
+  lockAcsGroup(universe, group, now);
+}
+function lockAcsGroup(universe, group, now) {
+  if (group.status !== "open") return;
+  group.status = "locked";
+  let maxArrive = now;
+  for (const fid of group.fleetIds) {
+    const f = universe.fleets[fid];
+    if (f) maxArrive = Math.max(maxArrive, f.arrivesAt);
+  }
+  group.resolvesAt = maxArrive;
+  group.joinClosesAt = Math.min(group.joinClosesAt, now);
+  acsMap(universe)[group.id] = group;
+}
+function holdFeasible(group, newFleetArrivesAt, existingFleets) {
+  const arrivals = existingFleets.map((f) => f.arrivesAt);
+  arrivals.push(newFleetArrivesAt);
+  const resolveAt = Math.max(...arrivals);
+  for (const at of arrivals) {
+    if (resolveAt - at > ACS_HOLD_MAX_MS) return false;
+  }
+  return true;
+}
+function attachFleetToAcs(universe, fleet, opts, now) {
+  ensureUniverseShape(universe);
+  const player = universe.players[fleet.ownerPlayerId];
+  if (!player?.allianceId) {
+    return { ok: false, error: "Join an alliance to use Joint Strike (ACS)." };
+  }
+  if (fleet.mission !== "raid" && fleet.mission !== "pirateRaid") {
+    return { ok: false, error: "ACS only supports raid and pirate raids." };
+  }
+  if (opts.acsGroupId) {
+    const group2 = acsMap(universe)[opts.acsGroupId];
+    if (!group2 || group2.status !== "open") {
+      return { ok: false, error: "ACS group is not open for joins." };
+    }
+    if (group2.allianceId !== player.allianceId) {
+      return { ok: false, error: "ACS is limited to your alliance." };
+    }
+    if (group2.mission !== fleet.mission) {
+      return { ok: false, error: "ACS mission mismatch." };
+    }
+    if (!sameCoords(group2.targetCoords, fleet.targetCoords)) {
+      return { ok: false, error: "ACS target mismatch." };
+    }
+    if (group2.targetPlanetId !== fleet.targetPlanetId || (group2.targetPirateBaseId ?? null) !== (fleet.targetPirateBaseId ?? null)) {
+      return { ok: false, error: "ACS target mismatch." };
+    }
+    if (group2.fleetIds.length >= ACS_MAX_FLEETS) {
+      return { ok: false, error: `ACS is full (${ACS_MAX_FLEETS} fleets).` };
+    }
+    if (fleet.targetPlayerId) {
+      const defender = universe.players[fleet.targetPlayerId];
+      if (defender?.allianceId && defender.allianceId === player.allianceId) {
+        return { ok: false, error: "Cannot ACS against your own alliance." };
+      }
+    }
+    const members = group2.fleetIds.map((id2) => universe.fleets[id2]).filter((f) => Boolean(f));
+    if (!holdFeasible(group2, fleet.arrivesAt, members)) {
+      return {
+        ok: false,
+        error: "Join would force a hold longer than the ACS hold limit."
+      };
+    }
+    group2.fleetIds.push(fleet.id);
+    fleet.acsGroupId = group2.id;
+    maybeLockAcsGroup(universe, group2, now);
+    acsMap(universe)[group2.id] = group2;
+    universe.fleets[fleet.id] = fleet;
+    return { ok: true, fleet };
+  }
+  if (!opts.openAcs) return { ok: true, fleet };
+  if (fleet.targetPlayerId) {
+    const defender = universe.players[fleet.targetPlayerId];
+    if (defender?.allianceId && defender.allianceId === player.allianceId) {
+      return { ok: false, error: "Cannot ACS against your own alliance." };
+    }
+  }
+  const id = `acs_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  const group = {
+    id,
+    allianceId: player.allianceId,
+    leaderPlayerId: player.id,
+    mission: fleet.mission,
+    targetCoords: { ...fleet.targetCoords },
+    targetPlanetId: fleet.targetPlanetId,
+    targetPlayerId: fleet.targetPlayerId,
+    targetPirateBaseId: fleet.targetPirateBaseId ?? null,
+    fleetIds: [fleet.id],
+    createdAt: now,
+    joinClosesAt: now + ACS_JOIN_WINDOW_MS,
+    resolvesAt: null,
+    status: "open"
+  };
+  fleet.acsGroupId = id;
+  acsMap(universe)[id] = group;
+  universe.fleets[fleet.id] = fleet;
+  return { ok: true, fleet };
+}
+function handleAcsOutboundArrival(universe, fleet, now) {
+  if (!fleet.acsGroupId) return false;
+  const group = acsMap(universe)[fleet.acsGroupId];
+  if (!group || group.status === "cancelled" || group.status === "resolved") {
+    fleet.acsGroupId = null;
+    if ((fleet.phase === "holding" || fleet.phase === "outbound") && !fleet.reportId) {
+      fleet.phase = "returning";
+      fleet.arrivesAt = now + 1;
+    }
+    universe.fleets[fleet.id] = fleet;
+    return true;
+  }
+  maybeLockAcsGroup(universe, group, now);
+  if (group.status === "open") {
+    lockAcsGroup(universe, group, now);
+  }
+  const resolvesAt = group.resolvesAt ?? now;
+  if (now < resolvesAt) {
+    fleet.phase = "holding";
+    fleet.arrivesAt = resolvesAt;
+    universe.fleets[fleet.id] = fleet;
+    return true;
+  }
+  resolveAcsGroup(universe, group, now);
+  return true;
+}
+function resolveAcsGroup(universe, group, now) {
+  if (group.status === "resolved" || group.status === "cancelled") return;
+  maybeLockAcsGroup(universe, group, now);
+  if (group.status === "open") lockAcsGroup(universe, group, now);
+  const fleets = group.fleetIds.map((id) => universe.fleets[id]).filter((f) => Boolean(f));
+  if (fleets.length < ACS_MIN_FLEETS_TO_RESOLVE) {
+    group.status = "cancelled";
+    acsMap(universe)[group.id] = group;
+    return;
+  }
+  const beforeParts = fleets.map((f) => ({ ...f.ships }));
+  const combined = mergeShips(beforeParts);
+  const lead = fleets[0];
+  const combinedFleet = {
+    ...lead,
+    id: lead.id,
+    ships: combined,
+    cargo: emptyCargo(),
+    reportId: null
+  };
+  if (group.mission === "pirateRaid") {
+    resolvePirateRaidArrival(universe, combinedFleet, now);
+  } else {
+    const target = group.targetPlanetId ? universe.planets[group.targetPlanetId] : null;
+    if (!target) {
+      group.status = "cancelled";
+      for (const f of fleets) {
+        f.acsGroupId = null;
+        f.phase = "returning";
+        f.arrivesAt = now + 1;
+      }
+      acsMap(universe)[group.id] = group;
+      return;
+    }
+    resolveRaidArrival(universe, combinedFleet, target, now);
+  }
+  const afterParts = splitSurvivors(beforeParts, combinedFleet.ships);
+  for (let i = 0; i < fleets.length; i++) {
+    fleets[i].ships = afterParts[i];
+    fleets[i].reportId = combinedFleet.reportId;
+    fleets[i].acsGroupId = group.id;
+  }
+  const lootShares = splitLootByCargo(combinedFleet.cargo, fleets);
+  for (let i = 0; i < fleets.length; i++) {
+    fleets[i].cargo = lootShares[i];
+  }
+  if (combinedFleet.reportId && universe.reports[combinedFleet.reportId]) {
+    const report = universe.reports[combinedFleet.reportId];
+    const names = fleets.map((f) => universe.players[f.ownerPlayerId]?.name ?? "Unknown").join(", ");
+    report.acsGroupId = group.id;
+    report.acsParticipantIds = fleets.map((f) => f.ownerPlayerId);
+    report.summary = `Joint Strike (ACS) [${names}]: ${report.summary}`;
+    report.missionId = group.id;
+  }
+  group.status = "resolved";
+  acsMap(universe)[group.id] = group;
+  for (const f of fleets) {
+    if (fleetShipCount(f.ships) <= 0) {
+      delete universe.fleets[f.id];
+      continue;
+    }
+    const origin = universe.planets[f.originPlanetId];
+    const owner = universe.players[f.ownerPlayerId];
+    const drive = owner?.research.combustionDrive ?? 0;
+    const boosts = playerBoosts(owner, now);
+    const lb = levelBonuses(owner?.level ?? 1);
+    const speed = universe.fleetSpeed * Math.max(0.01, boosts.fleetSpeed) / Math.max(0.01, lb.fleetTime);
+    const returnSecs = origin ? flightSecondsOneWay(f.targetCoords, origin.coords, f.ships, speed, drive) : 1;
+    f.phase = "returning";
+    f.arrivesAt = now + returnSecs * 1e3;
+    f.acsGroupId = null;
+    universe.fleets[f.id] = f;
+  }
+}
+function tickAcsGroups(universe, now) {
+  ensureUniverseShape(universe);
+  for (const group of Object.values(acsMap(universe))) {
+    if (group.status === "open") {
+      maybeLockAcsGroup(universe, group, now);
+    }
+    if ((group.status === "resolved" || group.status === "cancelled") && now - group.createdAt > ACS_GROUP_PRUNE_MS) {
+      delete acsMap(universe)[group.id];
+    }
+  }
+}
+
 // packages/game/src/world-espionage.ts
 function resolveEspionage(universe, fleet, target, now) {
   const spy = universe.players[fleet.ownerPlayerId];
@@ -6158,7 +6460,22 @@ function resolveFleetArrival(universe, fleet, now) {
   }
   const owner = universe.players[fleet.ownerPlayerId];
   const drive = owner?.research.combustionDrive ?? 0;
+  if (fleet.phase === "holding") {
+    if (fleet.acsGroupId) {
+      handleAcsOutboundArrival(universe, fleet, now);
+    } else {
+      fleet.phase = "returning";
+      fleet.arrivesAt = now + 1;
+      universe.fleets[fleet.id] = fleet;
+    }
+    return;
+  }
   if (fleet.phase === "outbound") {
+    if (fleet.acsGroupId && (fleet.mission === "raid" || fleet.mission === "pirateRaid")) {
+      if (handleAcsOutboundArrival(universe, fleet, now)) {
+        return;
+      }
+    }
     if (fleet.mission === "raid") {
       const target = fleet.targetPlanetId ? universe.planets[fleet.targetPlanetId] : null;
       if (!target) {
@@ -6373,6 +6690,7 @@ function advanceUniverse(universe, now = Date.now()) {
   for (const fleet of Object.values(universe.fleets)) {
     advanceFleetSwarmProduce(fleet, now);
   }
+  tickAcsGroups(universe, now);
   advanceFleets(universe, now);
   tickPirates(universe, now);
   pruneSpyReports(universe, now);
@@ -7848,6 +8166,33 @@ function launchFleet(universe, playerIdOrOpts, targetPlanetId, mission, shipsInp
   }
   universe.fleets[fleetId] = fleet;
   universe.planets[origin.id] = origin;
+  if (opts.openAcs || opts.acsGroupId) {
+    const acs = attachFleetToAcs(
+      universe,
+      fleet,
+      { openAcs: opts.openAcs, acsGroupId: opts.acsGroupId },
+      now
+    );
+    if (!acs.ok) {
+      for (const id of SHIP_ORDER) {
+        origin.ships[id] = (origin.ships[id] ?? 0) + (ships[id] ?? 0);
+      }
+      origin.resources = {
+        ...origin.resources,
+        deuterium: origin.resources.deuterium + fuel
+      };
+      if (opts.mission === "transport") {
+        origin.resources = {
+          metal: origin.resources.metal + cargo.metal,
+          crystal: origin.resources.crystal + cargo.crystal,
+          deuterium: origin.resources.deuterium + cargo.deuterium
+        };
+      }
+      delete universe.fleets[fleetId];
+      universe.planets[origin.id] = origin;
+      return acs;
+    }
+  }
   return { ok: true, fleet, planet: origin };
 }
 
@@ -8154,7 +8499,8 @@ function playerView(universe, playerId, now = Date.now(), galaxy, system) {
     progress: playerProgressView(player),
     occupation: occupationForPlanet(universe, planet.id, now),
     alliance: allianceViewFor(universe, playerId),
-    allianceDirectory: allianceDirectory(universe)
+    allianceDirectory: allianceDirectory(universe),
+    openAcsGroups: listOpenAcsForAlliance(universe, player.allianceId)
   };
 }
 
@@ -15172,7 +15518,9 @@ function createApp() {
         asteroidId: body.asteroidId,
         pirateBaseId: body.pirateBaseId,
         cargo: body.cargo,
-        originPlanetId: body.originPlanetId
+        originPlanetId: body.originPlanetId,
+        openAcs: body.openAcs,
+        acsGroupId: body.acsGroupId
       });
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId));
