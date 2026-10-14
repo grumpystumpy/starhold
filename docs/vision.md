@@ -199,3 +199,10 @@ Once per **merged batch**; no status-only wakes. After contract merge: short nam
 6. **Staging + balance report.** Staging env (Vercel preview or second project on a `staging` branch, within Hobby deploy limits). Promote to production `main` about **once a day** in a batch. CI posts a PR comment diffing tuning values (stats/costs/requirements) vs `main`.
 
 Main-only production deploys stay; staging is the exception path for daily batch promote.
+
+### Micah approval gate (2026-10-14)
+
+1. **Nothing merges to `main` without Micah's explicit approval** (relayed by the coordinator). No auto-merge at all, including fast-lane. Finished work stays as open PRs or one integration branch until approved.
+2. **Deploys:** at most 3–4 production updates per day, each approved by Micah first. Keep Vercel usage minimal (spare deploys for urgent fixes). No PR preview deploys — `git.deploymentEnabled` main-only (or ignoreCommand).
+3. **Queue order:** Micah's send order, oldest first. Keep lanes busy continuously.
+4. **Reporting:** as soon as each item is done, report merge-ready (PR link + one-line plain summary) for Micah's approval list; also report blockers.
