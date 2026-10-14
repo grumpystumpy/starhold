@@ -1953,7 +1953,7 @@ var SHIPS = {
     attack: 3e5,
     shield: 8e5,
     hull: 2e6,
-    speed: 600,
+    speed: 300,
     fuelPerDistance: 4,
     researchReq: {
       weaponsTech: 14,
@@ -2805,6 +2805,9 @@ var FOUNDATION_ARK_BOOTSTRAP = {
   deutTank: 5,
   rigFoundry: 6
 };
+var NEWBIE_PROTECTION_POINTS = 2500;
+var PIRATE_FAIRNESS_POINTS_MAX = 1e5;
+var PIRATE_FAIRNESS_PENALTY_PER_RAID = 0.01;
 
 // packages/game/src/catalog-rapid-fire.ts
 var RAPID_FIRE = {
@@ -3673,6 +3676,19 @@ function researchPoints(research) {
     }
   }
   return points;
+}
+function empirePoints(universe, player) {
+  let points = researchPoints(player.research);
+  for (const id of player.planetIds ?? []) {
+    const planet = universe.planets[id];
+    if (planet) points += planetPoints(planet);
+  }
+  for (const fleet of Object.values(universe.fleets)) {
+    if (fleet.ownerPlayerId === player.id) {
+      points += shipStockPoints(fleet.ships);
+    }
+  }
+  return Math.floor(points);
 }
 function economySnapshot(planet, universeSpeed = 1, energyTechLevel = 0, boosts) {
   const used = fieldsUsed(planet);
@@ -4556,6 +4572,32 @@ function expeditionStarshardsAmount(roll) {
   return 5 + roll % 21;
 }
 
+// packages/game/src/world-protection.ts
+function isNewbieProtected(universe, player) {
+  return empirePoints(universe, player) < NEWBIE_PROTECTION_POINTS;
+}
+function pirateRaidPickWeight(universe, player, now) {
+  const points = empirePoints(universe, player);
+  if (points < NEWBIE_PROTECTION_POINTS) return 0;
+  if (points >= PIRATE_FAIRNESS_POINTS_MAX) return 1;
+  const day = utcDayKey(now);
+  const state = player.pirateRaidFairness;
+  const raids = state && state.dayKey === day ? Math.max(0, state.successfulRaids) : 0;
+  return Math.max(0, 1 - raids * PIRATE_FAIRNESS_PENALTY_PER_RAID);
+}
+function recordSuccessfulPirateRaid(player, now) {
+  const day = utcDayKey(now);
+  const prev = player.pirateRaidFairness;
+  if (prev && prev.dayKey === day) {
+    player.pirateRaidFairness = {
+      dayKey: day,
+      successfulRaids: prev.successfulRaids + 1
+    };
+  } else {
+    player.pirateRaidFairness = { dayKey: day, successfulRaids: 1 };
+  }
+}
+
 // packages/game/src/world-queue-normalize.ts
 function newQueueItemId(now = Date.now()) {
   return `q_${now.toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
@@ -5056,6 +5098,25 @@ function planetDefensePower(planet, universe) {
   const owner = universe.players[planet.ownerPlayerId];
   return fleetCombatPower(planet.ships, owner?.research) + defenseCombatPower(planet.defenses ?? emptyDefenses(), owner?.research);
 }
+function pickWeightedPlanet(universe, planets, roll, now) {
+  const weighted = [];
+  let total = 0;
+  for (const planet of planets) {
+    const owner = universe.players[planet.ownerPlayerId];
+    if (!owner) continue;
+    const weight = pirateRaidPickWeight(universe, owner, now);
+    if (weight <= 0) continue;
+    weighted.push({ planet, weight });
+    total += weight;
+  }
+  if (weighted.length === 0 || total <= 0) return null;
+  let cursor = roll % 1e6 / 1e6 * total;
+  for (const entry of weighted) {
+    cursor -= entry.weight;
+    if (cursor <= 0) return entry.planet;
+  }
+  return weighted[weighted.length - 1].planet;
+}
 function pickRaidTarget(universe, base, now) {
   const roll = hashSeed(`${base.id}:target:${base.lastRaidAt}:${now}`);
   const others = activePirateBases(universe).filter((b) => b.id !== base.id);
@@ -5063,8 +5124,8 @@ function pickRaidTarget(universe, base, now) {
     (p) => p.kind !== "moon"
   );
   if (planets.length > 0 && (others.length === 0 || roll % 10 < 7)) {
-    const planet = planets[roll % planets.length];
-    return { kind: "planet", planet };
+    const planet = pickWeightedPlanet(universe, planets, roll, now);
+    if (planet) return { kind: "planet", planet };
   }
   if (others.length > 0) {
     const other = others[roll % others.length];
@@ -5114,6 +5175,7 @@ function applyPirateRaidOnPlanet(universe, base, planet, now) {
   } else {
     grantPlayerXp(owner, xpForCombatLose());
   }
+  recordSuccessfulPirateRaid(owner, now);
   universe.players[owner.id] = owner;
   if (fleetShipCount(base.ships) <= 0) {
     markPirateDestroyed(base, now);
@@ -7208,6 +7270,14 @@ function resolveLaunchTarget(universe, player, origin, mission, ships, targetPla
           error: "Use transport or deploy to move between your own planets."
         };
       }
+      const defender = universe.players[targetPlanet.ownerPlayerId];
+      if (defender && isNewbieProtected(universe, defender)) {
+        const cap = NEWBIE_PROTECTION_POINTS.toLocaleString("en-US");
+        return {
+          ok: false,
+          error: `Target is under newbie protection (under ${cap} points).`
+        };
+      }
     } else if (mission === "espionage") {
       if (targetPlanet.ownerPlayerId === player.id) {
         return { ok: false, error: "Cannot spy on yourself." };
@@ -7543,19 +7613,6 @@ function batchScanSystem(universe, opts) {
 }
 
 // packages/game/src/world-view.ts
-function empirePoints(universe, player) {
-  let points = researchPoints(player.research);
-  for (const id of player.planetIds ?? []) {
-    const planet = universe.planets[id];
-    if (planet) points += planetPoints(planet);
-  }
-  for (const fleet of Object.values(universe.fleets)) {
-    if (fleet.ownerPlayerId === player.id) {
-      points += shipStockPoints(fleet.ships);
-    }
-  }
-  return Math.floor(points);
-}
 function highscoresBoard(universe) {
   const rows = Object.values(universe.players).map((p) => {
     const home = universe.planets[p.homePlanetId];
