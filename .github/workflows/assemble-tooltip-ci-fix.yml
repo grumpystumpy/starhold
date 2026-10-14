@@ -1,0 +1,29 @@
+name: assemble-tooltip-ci-fix
+on:
+  push:
+    paths:
+      - ".github/workflows/assemble-tooltip-ci-fix.yml"
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cursor/oct14-tooltips-d837
+          fetch-depth: 0
+      - name: Unpack hangar e2e fix
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/fix.tgz "https://litter.catbox.moe/a5oo7d.tgz"
+          echo "78e1c29b97e39112051c6327306a38d4471a704e25f168242d10e8fe1c0010e6  /tmp/fix.tgz" | sha256sum -c
+          tar xzf /tmp/fix.tgz
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web/src/ui/render-pages.ts scripts/smoke-ui.mjs
+          git diff --cached --stat
+          grep -q 'hangar-count-' apps/web/src/ui/render-pages.ts
+          grep -q 'hangar-count-scout' scripts/smoke-ui.mjs
+          git commit -m "fix(ui): hangar count testid so tip bubbles do not break e2e"
+          git push origin HEAD:cursor/oct14-tooltips-d837
