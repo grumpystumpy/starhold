@@ -1,9 +1,9 @@
 # Accounts & real multiplayer sessions
 
 **Lane:** engine / persistence (b)  
-**Status:** v1 implementation  
+**Status:** v1 implementation (email + password)  
 **Live:** https://starhold-two.vercel.app  
-**Related:** [vision.md](../vision.md), [vercel-deploy.md](../vercel-deploy.md)
+**Repo doc:** mirrored from starhold `docs/design/accounts.md`
 
 ## Goal
 
@@ -11,15 +11,16 @@ Friends share **one** Upstash-backed universe. Closing a tab must not wipe progr
 
 ## Auth (v1)
 
-**Magic link** via [Resend](https://resend.com) free tier (no paid plan / no credit card assumed).
+**Email + password** (no magic links, no outbound email / Resend).
 
-1. `POST /api/auth/request-link` `{ email, claimPlayerId? }` → email with one-time link (15 min).
-2. `GET /api/auth/verify?token=…` → create/load account, set **HttpOnly** session cookie, optional claim, redirect to app.
+1. `POST /api/auth/signup` `{ email, password, claimPlayerId? }` → create account (scrypt hash), set **HttpOnly** session cookie, optional claim.
+2. `POST /api/auth/login` `{ email, password }` → verify password, set session cookie, return `{ account, view? }`.
 3. `GET /api/auth/me` → `{ account, view? }` from cookie.
 4. `POST /api/auth/claim` `{ playerId }` → bind anonymous player to account (once).
 5. `POST /api/auth/logout` → revoke session + clear cookie.
+6. `POST /api/auth/join` `{ name }` → create commander linked to session when account has no player.
 
-Local / CI without `RESEND_API_KEY`: response includes `devMagicUrl` (also logged). No email send.
+Passwords: Node `crypto.scrypt` (N=16384, r=8, p=1) with per-password salt + `SESSION_SECRET` pepper. Rate limits (KV or memory): 10 signup/login attempts per email+IP per 15 minutes.
 
 ## Session cookie
 
@@ -32,44 +33,31 @@ Local / CI without `RESEND_API_KEY`: response includes `devMagicUrl` (also logge
 
 Closing the tab keeps the cookie; progress resumes via `/api/auth/me` (not localStorage alone).
 
-## KV keys (alongside universe blob)
+## KV keys
 
 | Key | Value |
 |-----|--------|
-| `starhold:account:{accountId}` | `{ id, email, playerId, createdAt, lastLoginAt }` |
-| `starhold:email:{normalizedEmail}` | `accountId` |
-| `starhold:session:{sessionId}` | `{ id, accountId, createdAt, expiresAt }` |
-| `starhold:magic:{sha256(token)}` | `{ email, expiresAt, claimPlayerId? }` |
+| `starhold:account:{id}` | `{ id, email, passwordHash, playerId, createdAt, lastLoginAt }` |
+| `starhold:email:{email}` | account id |
+| `starhold:session:{id}` | `{ id, accountId, createdAt, expiresAt }` |
+| `starhold:ratelimit:auth:{bucket}` | `{ count, expiresAt }` |
 
 Universe players stay in `STARHOLD_UNIVERSE_KEY`. `PlayerState.accountId` links a commander to an account after claim / authenticated join.
 
-## Anonymous → claim
+## Claim flow
 
-1. Guest joins as today (`POST /api/join` + `localStorage starhold.playerId`).
-2. Guest requests magic link with optional `claimPlayerId`.
-3. After verify (or later `POST /api/auth/claim`): if player has no `accountId` and account has no other player → bind both ways.
+1. Guest joins → `playerId` in localStorage.
+2. Sign up may send `claimPlayerId`, or use **Claim guest save** after sign-in.
+3. If player has no `accountId` and account has no other player → bind both ways.
 
-If the account already owns a different player → **409** (keep both; user continues as the account’s player).
-
-## Shared universe
-
-Unchanged: one document, galaxy roster, raids, highscores. Alliance tags remain the existing stub (`null` until an alliances thread). Authenticated and anonymous commanders coexist in the same map.
-
-## Env (Micah / Vercel)
+## Env (Micah)
 
 | Name | Required | Notes |
 |------|----------|--------|
-| `KV_REST_API_URL` + `KV_REST_API_TOKEN` | yes (prod) | Already on project |
-| `RESEND_API_KEY` | for real email | Free Resend → API key |
-| `RESEND_FROM` | optional | Default `Starhold <onboarding@resend.dev>` (Resend test sender) |
-| `SESSION_SECRET` | recommended | ≥32 random chars (HMAC pepper for token hashes) |
-| `APP_URL` | recommended | `https://starhold-two.vercel.app` (magic-link base) |
+| `KV_REST_API_*` | yes (prod) | Already on project |
+| `SESSION_SECRET` | **required on Vercel** | ≥32 random chars (`openssl rand -base64 32`). Signup/login return 503 without it in production. |
+| `APP_URL` | optional | `https://starhold-two.vercel.app` |
 
-See [vercel-deploy.md](../vercel-deploy.md) for exact Micah steps.
+**Remove** any `RESEND_API_KEY` / `RESEND_FROM` — unused.
 
-## Non-goals (v1)
-
-- Passwords / OAuth
-- Multi-universe / server picker
-- Full alliance CRUD
-- Forcing login (anonymous join remains for smoke / playtests)
+Full Micah steps: starhold `docs/vercel-deploy.md`.
