@@ -125,6 +125,13 @@ export {
   type StarshardActionResult,
 } from "./world-starshards.js";
 export {
+  claimGoal,
+  listGoals,
+  noteGoalProgress,
+  utcWeekKey,
+  type GoalActionResult,
+} from "./world-goals.js";
+export {
   effectiveCombatResearch,
   ensurePlayerProgress,
   grantPlayerXp,
