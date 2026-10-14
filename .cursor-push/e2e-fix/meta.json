@@ -1,0 +1,14 @@
+[
+  {
+    "name": "world-pirates.ts",
+    "parts": 11,
+    "sha256": "bf9637afec306da3db2c228b9e8d85eb434129ffcefb7a8594e861a76a6d5c93",
+    "bytes": 45918
+  },
+  {
+    "name": "smoke-ui.mjs",
+    "parts": 6,
+    "sha256": "aed758828a679e87a5c00d0a8d046ea6a5fe80bce45ece19076b7153c7299366",
+    "bytes": 23538
+  }
+]

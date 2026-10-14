@@ -1,0 +1,74 @@
+name: apply-e2e-raid-gate
+on:
+  workflow_dispatch:
+  push:
+    branches: [cursor/pirates-aliens-redesign-abde]
+    paths:
+      - .github/workflows/apply-e2e-raid-gate.yml
+      - .cursor-push/e2e-fix/**
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cursor/pirates-aliens-redesign-abde
+      - name: Assemble and commit via Contents API
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import base64, hashlib, json, os, urllib.request, urllib.error
+          from pathlib import Path
+          TOKEN = os.environ["GH_TOKEN"]
+          OWNER, REPO, BRANCH = "grumpystumpy", "starhold", "cursor/pirates-aliens-redesign-abde"
+          API = f"https://api.github.com/repos/{OWNER}/{REPO}"
+          def api(method, path, data=None):
+              body = None if data is None else json.dumps(data).encode()
+              req = urllib.request.Request(API + path, data=body, method=method, headers={
+                  "Authorization": f"Bearer {TOKEN}",
+                  "Accept": "application/vnd.github+json",
+                  "User-Agent": "starhold-e2e-apply",
+                  "Content-Type": "application/json",
+              })
+              try:
+                  with urllib.request.urlopen(req) as r:
+                      return r.status, json.load(r)
+              except urllib.error.HTTPError as e:
+                  print("API_ERR", method, path, e.code, e.read()[:400])
+                  raise
+          mapping = {
+              "world-pirates.ts": "packages/game/src/world-pirates.ts",
+              "smoke-ui.mjs": "scripts/smoke-ui.mjs",
+          }
+          meta = json.loads(Path(".cursor-push/e2e-fix/meta.json").read_text())
+          for item in meta:
+              name = item["name"]
+              parts = sorted(Path(".cursor-push/e2e-fix").glob(f"{name}.*.b64"))
+              blob = "".join(p.read_text().strip() for p in parts)
+              data = base64.b64decode(blob)
+              got = hashlib.sha256(data).hexdigest()
+              print(name, "parts", len(parts), "bytes", len(data), "sha", got, "ok", got == item["sha256"])
+              if got != item["sha256"]:
+                  raise SystemExit(f"hash mismatch for {name}")
+              path = mapping[name]
+              sha = None
+              try:
+                  _, meta_file = api("GET", f"/contents/{path}?ref={BRANCH}")
+                  sha = meta_file.get("sha")
+              except Exception:
+                  pass
+              payload = {
+                  "message": f"fix(ci): STARHOLD_E2E — assemble {path}",
+                  "content": base64.b64encode(data).decode(),
+                  "branch": BRANCH,
+              }
+              if sha:
+                  payload["sha"] = sha
+              st, res = api("PUT", f"/contents/{path}", payload)
+              print("put", path, st, res.get("commit", {}).get("sha"))
+          print("APPLY_E2E_OK")
+          PY
