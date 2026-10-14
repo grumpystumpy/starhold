@@ -33,6 +33,12 @@ import {
   storageFor,
 } from "./formulas-build.js";
 import { productionMultForSlot } from "./formulas-position.js";
+import {
+  helioBuoyEnergy,
+  mantleLoomFieldsBonus,
+  planetTemperatureK,
+  solarTempFactor,
+} from "./formulas-round3.js";
 
 export function clampToStorage(
   resources: Resources,
@@ -57,6 +63,7 @@ export function emptyResearch(): ResearchLevels {
     computerTech: 0,
     queueLogistics: 0,
     swarmHold: 0,
+    gravityWell: 0,
   };
 }
 
@@ -126,6 +133,7 @@ export function economySnapshot(
 ): EconomySnapshot {
   const used = fieldsUsed(planet);
   const energyMult = boosts?.energyOutput ?? 1;
+  const slot = planet.coords.slot;
   return {
     productionPerHour: productionPerHour(
       planet,
@@ -133,18 +141,22 @@ export function economySnapshot(
       energyTechLevel,
       boosts,
     ),
+    temperatureK: planetTemperatureK(slot),
     energy: {
       produced: energyProduced(planet, energyMult),
       used: energyUsed(planet),
       factor: energyFactor(planet, energyMult),
+      helioBuoy: helioBuoyEnergy(planet),
+      solarTempFactor: solarTempFactor(slot),
     },
     storage: storageFor(planet),
     fields: {
       used,
       cap: fieldsCap(planet),
       remaining: fieldsRemaining(planet),
+      mantleLoomBonus: mantleLoomFieldsBonus(planet),
     },
-    positionMult: productionMultForSlot(planet.coords.slot),
+    positionMult: productionMultForSlot(slot),
   };
 }
 
