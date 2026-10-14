@@ -91,7 +91,7 @@ export function renderJoin(
       <img class="thumb thumb-hero" src="${PLANET_ART.rocky}" alt="" width="72" height="72" />
       <div>
         <h1 class="brand">Starhold</h1>
-        <p class="tagline">Mine the crust, raise the yard, launch hulls — and raid rival outposts. One shared universe — open another tab to meet a rival commander.</p>
+        <p class="tagline">Mine the crust, raise the yard, launch hulls — and raid rival colonies. One shared universe — open another tab for attacking another rival.</p>
       </div>
     </header>
     <div data-flash-slot>${flashHtml(state.error, state.notice)}</div>
