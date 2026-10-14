@@ -94,10 +94,17 @@ Shared contract: **[design/round2-contract.md](./design/round2-contract.md)** (o
 3. **Player levels** — No max level. XP from building, research, combat, expeditions, pirate kills (design amounts in contract). Each level grants: +0.5% resource production, time reduction on build/research/fleet, shielding tech, weapons tech, and ship build speed. Level + XP bar in the top bar and on highscores.
 4. **Pirates upgrade** — Bases build every ship type players can; bases level up over time; every 3h free weak ships scaled by base level (count grows with level); pirate techs stay very low vs players.
 5. **Rename audit** — OGame-identical labels → Starhold flavor (Crater Hab, Horizon Scanner, Fold Bridge, Voidforge Titan, Outpost Cradle, Salvage Trawler, Whisper Probe, Beam Emplacement, Aegis Cupola, Power Discipline, Pulse Drive, Ordnance Doctrine, Hull Weave, Aegis Lattice, Shadow Optics, Stellar Cartography, Fleet OS). Audit entire catalogs.
-6. **Mini planets** — Random small planets outside slots 1–16; discoverable only via expedition outcome (reveals coords to finder). 3–4 special-only buildings. After colonize: attacker with ≥5 World Eaters who wins can **capture** (ownership transfer) or **destroy** (huge resource payout + debris).
+6. **Mini planets** (Micah revision — latest overrides):
+   - Spawn ~**1 per 5 systems** (multiple minis OK in same system); outside slots 1–16; **rich** output; drift over time; normal buildings + four specials.
+   - Expedition discovery = finder-only until **8h after colonized**, then galaxy-visible to all.
+   - **Any** winning fleet vs owner → owner removed, mini **unoccupied**; that same op **cannot** capture.
+   - Reclaim unoccupied → **Colonizer only** (separate colonize mission).
+   - Exception: win with **Void Titan / Mothership / World Eater** → **captures directly**.
+   - **Destroy** = World Eater only → massive metal/crystal debris (**never deuterium**); destroyed minis return to discoverable pool **immediately** (no respawn timer).
+   - **Super-rares** (tune in `packages/game/src/data/tuning.ts`): **Ironwater Rock** (deut 10× best normal); **Moving Fortress** (jump: aim current galaxy or ±1; landing accuracy ±10 systems clamped 1–399; free mini slot; deut cost; blank espionage; no inbound warning; battlefield shields×3 / attack×2 / armor−75%; one per player); **Relic World** (+30% research, +25% expedition finds, more pirate raids, one per player).
 7. **New ships** (combat + rapid fire + tests; friend-group balance):
    - **Voidforge Titan** — moon-killer flagship; Deathstar-class balance reference only; moon destruction chance formula
-   - **World Eater** — destroy mini planets → debris; cannot collect debris
+   - **World Eater** — destroy mini planets → metal/crystal debris (never deut); cannot collect debris
    - **Swarm Drone** — tiny/fast/low dmg/low armor/high shields/no cargo/cheap; swarm numbers bonus; intercepts damage to mothership; must be carried by Swarm Mothership
    - **Swarm Harvester** — harvest debris + steal resources into mothership cargo; no weapons, high shields, medium armor; intercepts mothership damage; if mothership <30% armor, kamikaze for shield+armor damage; mothership-carried
    - **Swarm Mothership** — carry up to 2000 swarm ships; produce drones anywhere (no home planet); research Swarm Hold +15% of base (300) capacity per level; can occupy enemy planet/moon up to 2 days after defenses destroyed (occupation effects in contract)
@@ -111,7 +118,7 @@ Shared contract: **[design/round2-contract.md](./design/round2-contract.md)** (o
 | **H** | Build queues | Multi-item queues, cancel/reorder, countdowns, length growth hooks. |
 | **I** | Player levels / XP | XP sources, level bonuses, top-bar + highscore. Can parallel **G**/**H**. |
 | **J** | New ships | Voidforge Titan, World Eater, swarm line; combat + RF + unit tests. **Before** mini-planets & pirate full catalog. |
-| **K** | Mini planets | Expedition discovery, special buildings, colonize, capture/destroy. Needs **J** (World Eater). |
+| **K** | Mini planets | Contested drifting rich minis + specials + WE destroy + super-rares. Needs **J** (World Eater). |
 | **L** | Pirates upgrade | Base levels, 3h free ships, full player ship catalog. Needs **J** ship ids. |
 
 **Merge dependency order (suggested):**
@@ -185,16 +192,38 @@ Once per **merged batch**; no status-only wakes. After contract merge: short nam
 
 ---
 
-## Process (Micah-approved — adopt 2026-10-13)
+## Process (Micah-approved — adopt 2026-10-13; batch-merge rule 2026-10-14)
 
-1. **No status-only wakes/reports.** Do not schedule wakes just to note “waiting on CI” or rebase progress. Use CI completion / merge events. Report only on **merge**, **blocker**, or a **decision needed from Micah**.
+1. **No status-only wakes/reports.** Do not schedule wakes just to note “waiting on CI” or rebase progress. Use CI completion / merge events. Report only on a **batch merge to `main`**, a **blocker**, or a **decision needed from Micah**.
 2. **Max 3 concurrent build threads**, fixed lanes — apply after current H/J finish:
    - **(a) UI / routes**
    - **(b) Game engine / rules / persistence**
    - **(c) Content + balance data**
    Assign each thread to one lane; avoid cross-lane file edits (cuts rebase churn).
 3. **Single tuning source.** All ship/defense/building/research stats, costs, build times, XP awards, queue sizes, and level bonuses live in one module (e.g. `packages/game/src/data/tuning.ts` or JSON). Balance tweaks = edit that file only.
-4. **Fast lane.** Number tweaks, renames, copy/UI text → straight PR to `main` with auto-merge on green CI; **no** design doc. Design-contract-first **only** for new systems.
-5. **Staging + balance report.** Staging env (Vercel preview or second project on a `staging` branch, within Hobby deploy limits). Promote to production `main` about **once a day** in a batch. CI posts a PR comment diffing tuning values (stats/costs/requirements) vs `main`.
+4. **Fast lane.** Number tweaks, renames, copy/UI text → open a PR to `main`; **no** design doc. Design-contract-first **only** for new systems. **Turn off auto-merge** for fast-lane PRs. **Do not** merge small PRs to `main` one-at-a-time.
+5. **Protect Vercel Hobby deploy limit.** Each merge to `main` triggers a production deploy. Let all active lanes finish, then combine into **as few merges as possible** (ideally one batch PR) so production deploys once. No solo merges to `main`.
+6. **Staging + balance report.** Staging env (Vercel preview or second project on a `staging` branch, within Hobby deploy limits). Promote to production `main` about **once a day** in a batch. CI posts a PR comment diffing tuning values (stats/costs/requirements) vs `main`.
 
 Main-only production deploys stay; staging is the exception path for daily batch promote.
+
+### Micah approval gate (2026-10-14)
+
+1. **Nothing merges to `main` without Micah's explicit approval** (relayed by the coordinator). No auto-merge at all, including fast-lane. Finished work stays as open PRs or one integration branch until approved.
+2. **Deploys:** at most 3–4 production updates per day, each approved by Micah first. Keep Vercel usage minimal (spare deploys for urgent fixes). No PR preview deploys — `git.deploymentEnabled` main-only (or ignoreCommand).
+3. **Queue order:** Micah's send order, oldest first. Keep lanes busy continuously.
+4. **Reporting:** as soon as each item is done, report merge-ready (PR link + one-line plain summary) for Micah's approval list; also report blockers.
+
+### Quality gate (2026-10-14)
+
+An item only goes on Micah's merge list after it is proven against what's currently running:
+
+1. Rebase on latest `main` (includes #39 nested `/api/*`).
+2. Unit tests + typecheck + production build green.
+3. Playwright against a **local** production build (`npm run build:vercel` + local serve of `apps/web/dist` + API — not Next.js; Starhold is Vite/Hono). Env shape like prod: KV + `SESSION_SECRET`. Cover signup → login → cookie persistence **and** the new feature end-to-end.
+4. UI reviewer sign-off at desktop 1280×800 and phone 390×844.
+5. Save-format compatibility with existing Upstash KV player data (no resets; migrate if needed).
+6. Combines cleanly with other merge-ready items.
+7. **Do not** use Vercel preview deploys for this testing.
+
+Report to coordinator only when passed: PR link + one-line summary + what was tested.
