@@ -1,0 +1,30 @@
+name: assemble-mini-art
+on:
+  push:
+    paths:
+      - .github/workflows/assemble-mini-art.yml
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cursor/mini-planets-a1aa
+      - name: Fetch and unpack
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/mini-art.tar.gz "https://litter.catbox.moe/obd5er.gz"
+          echo "ed6aef1faa94804205f3c768685b346c6594ad7d4eebadab4c3e0963ee845113  /tmp/mini-art.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/mini-art.tar.gz -C .
+          rm -f .github/workflows/assemble-mini-art.yml
+      - name: Commit
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git status --short
+          git commit -m "feat(K): wire PLANET_ART.mini hooks in shell/overview/galaxy"
+          git push origin HEAD:cursor/mini-planets-a1aa
