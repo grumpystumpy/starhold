@@ -207,6 +207,7 @@ declare global {
         targetCoords?: Coordinates;
         asteroidId?: string;
         pirateBaseId?: string;
+  alienBaseId?: string;
         cargo?: Partial<import("@starhold/game").Resources>;
       }) => Promise<void>;
       refresh: () => Promise<void>;
