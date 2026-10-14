@@ -6,6 +6,7 @@ export {
   doRefresh,
   doGalaxyNav,
   doSelectPlanet,
+  doRenamePlanet,
   doRequestMagicLink,
   doClaimAnonymous,
   resumeFromCookie,

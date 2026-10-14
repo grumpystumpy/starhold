@@ -1,10 +1,9 @@
 import type { Resources } from "@starhold/game";
 
+/** Shared display formatter — always thousands separators (2,000 not 2000). */
 export function fmt(n: number): string {
   if (!Number.isFinite(n)) return "—";
-  if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
-  if (Math.abs(n) >= 10_000) return `${(n / 1000).toFixed(1)}k`;
-  return Math.floor(n).toLocaleString();
+  return Math.floor(n).toLocaleString("en-US");
 }
 
 export function fmtCost(cost: Resources): string {
@@ -24,8 +23,13 @@ export function remainingSeconds(completesAt: number, now: number): number {
 }
 
 export function fmtEta(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 60) return `${fmt(seconds)}s`;
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
-  return `${m}m ${s.toString().padStart(2, "0")}s`;
+  return `${fmt(m)}m ${s.toString().padStart(2, "0")}s`;
+}
+
+/** Skill / id labels: underscores → spaces for display. */
+export function fmtLabel(raw: string): string {
+  return raw.replace(/_/g, " ");
 }
