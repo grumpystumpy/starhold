@@ -21,6 +21,7 @@ import type {
 } from "./types.js";
 import { playerBoosts } from "./world-boosts.js";
 import { emptyCargo } from "./world-bootstrap.js";
+import { noteGoalProgress } from "./world-goals.js";
 import { tryFormMoon } from "./world-moons.js";
 import { clearOccupationIfRecaptured } from "./world-occupation.js";
 import { maybeDestroyMoonWithTitans } from "./world-round2.js";
@@ -106,6 +107,15 @@ export function resolveRaidArrival(
       grantPlayerXp(defenderOwner, xpForCombatLose());
     }
     universe.players[defenderOwner.id] = defenderOwner;
+  }
+
+  if (
+    combat.outcome === "attacker_win" &&
+    owner &&
+    defenderOwner &&
+    defenderOwner.id !== owner.id
+  ) {
+    noteGoalProgress(universe, owner.id, "raidWin", 1, now);
   }
 
   const reportId = `rpt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
