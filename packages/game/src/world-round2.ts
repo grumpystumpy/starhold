@@ -48,7 +48,7 @@ export function swarmProduce(
   }
   const motherships = fleet.ships.swarmMothership ?? 0;
   if (motherships < 1) {
-    return { ok: false, error: "Swarm produce requires a Swarm Mothership." };
+    return { ok: false, error: "Swarm produce requires a Mothership." };
   }
   const player = universe.players[playerId];
   if (!player) return { ok: false, error: "Unknown player." };
