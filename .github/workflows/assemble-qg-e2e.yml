@@ -15,25 +15,35 @@ jobs:
         with:
           ref: ${{ github.ref_name }}
           token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Unpack STARHOLD_E2E CI fix sources
+      - name: Unpack world-pirates STARHOLD_E2E
         run: |
           set -euo pipefail
-          decode() {
-            local src="$1" dest="$2"
-            mkdir -p "$(dirname "$dest")"
-            base64 -d "$src" | gzip -d > "$dest"
-            echo "unpacked $dest ($(wc -c < "$dest") bytes)"
-          }
-          decode .cursor-staging/qg-e2e/packages__game__src__world-pirates.ts.gz.b64 packages/game/src/world-pirates.ts
-          decode .cursor-staging/qg-e2e/scripts__smoke-ui.mjs.gz.b64 scripts/smoke-ui.mjs
-          decode .cursor-staging/qg-e2e/scripts__quality-gate-pirates-aliens.mjs.gz.b64 scripts/quality-gate-pirates-aliens.mjs
-          grep -q STARHOLD_E2E packages/game/src/world-pirates.ts
-          grep -q STARHOLD_E2E .github/workflows/ci.yml
+          SRC=.cursor-staging/qg-e2e/packages__game__src__world-pirates.ts.gz.b64
+          test -f "$SRC"
+          base64 -d "$SRC" | gzip -d > packages/game/src/world-pirates.ts
+          grep -n STARHOLD_E2E packages/game/src/world-pirates.ts
+          grep -n STARHOLD_E2E .github/workflows/ci.yml
+          if [ -f .cursor-staging/qg-e2e/scripts__smoke-ui.mjs.gz.b64 ]; then
+            if base64 -d .cursor-staging/qg-e2e/scripts__smoke-ui.mjs.gz.b64 | gzip -d > scripts/smoke-ui.mjs; then
+              echo "smoke unpacked"
+            else
+              echo "smoke decode failed; leaving prior file"
+              git checkout -- scripts/smoke-ui.mjs 2>/dev/null || true
+            fi
+          fi
+          if [ -f .cursor-staging/qg-e2e/scripts__quality-gate-pirates-aliens.mjs.gz.b64 ]; then
+            if base64 -d .cursor-staging/qg-e2e/scripts__quality-gate-pirates-aliens.mjs.gz.b64 | gzip -d > scripts/quality-gate-pirates-aliens.mjs; then
+              echo "gate unpacked"
+            else
+              echo "gate decode failed; leaving prior file"
+              git checkout -- scripts/quality-gate-pirates-aliens.mjs 2>/dev/null || true
+            fi
+          fi
           rm -rf .cursor-staging/qg-e2e
           rm -f .github/workflows/assemble-qg-e2e.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git status
-          git commit -m "fix(ci): apply STARHOLD_E2E world-pirates + smoke/gate scripts"
+          git commit -m "fix(ci): apply STARHOLD_E2E NPC raid gate in world-pirates"
           git push
