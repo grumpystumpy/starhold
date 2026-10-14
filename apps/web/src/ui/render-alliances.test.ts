@@ -45,6 +45,17 @@ describe("alliances panel", () => {
           pendingInvites: [],
           memberCount: 1,
           maxMembers: 16,
+          chat: [
+            {
+              id: "chat_1",
+              playerId: "p1",
+              displayName: "Alpha",
+              body: "Hold the lane",
+              createdAt: 1,
+            },
+          ],
+          intel: [],
+          markers: [],
         },
         allianceDirectory: [
           {
@@ -64,5 +75,9 @@ describe("alliances panel", () => {
     assert.match(html, /data-testid="alliance-roster"/);
     assert.match(html, /data-testid="alliance-leave-btn"/);
     assert.match(html, /data-testid="alliance-disband-btn"/);
+    assert.match(html, /data-testid="alliance-chat-form"/);
+    assert.match(html, /Hold the lane/);
+    assert.match(html, /data-testid="alliance-intel-empty"/);
+    assert.match(html, /data-testid="alliance-markers-empty"/);
   });
 });

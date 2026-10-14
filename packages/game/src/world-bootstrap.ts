@@ -149,6 +149,11 @@ export function ensureUniverseShape(universe: UniverseState): void {
   if (!universe.occupations) universe.occupations = {};
   if (!universe.miniPlanetIds) universe.miniPlanetIds = [];
   if (!universe.alliances) universe.alliances = {};
+  for (const alliance of Object.values(universe.alliances)) {
+    if (!Array.isArray(alliance.chat)) alliance.chat = [];
+    if (!Array.isArray(alliance.intel)) alliance.intel = [];
+    if (!Array.isArray(alliance.markers)) alliance.markers = [];
+  }
   if (!universe.fleetSpeed) universe.fleetSpeed = universe.speed || 1;
   if (!universe.seed) universe.seed = `seed_${universe.id}`;
   for (const player of Object.values(universe.players)) {

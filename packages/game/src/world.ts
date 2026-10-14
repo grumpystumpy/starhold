@@ -59,6 +59,23 @@ export {
   setAllianceJoinMode,
   setAllianceRole,
 } from "./world-alliances.js";
+export type { AllianceIntelResult, StrikeMission } from "./world-alliance-intel.js";
+export {
+  deleteAllianceIntel,
+  deleteAllianceMarker,
+  galaxyMarkerOverlay,
+  isStrikeMission,
+  jointStrikeHelpersAvailable,
+  listAllianceChat,
+  listAllianceIntel,
+  listAllianceMarkers,
+  parseAllianceCoords,
+  postAllianceChat,
+  proposeAllianceStrike,
+  resetAllianceChatRateLimit,
+  shareAllianceIntel,
+  upsertAllianceMarker,
+} from "./world-alliance-intel.js";
 export type { LaunchFleetOpts } from "./world-launch.js";
 export { launchFleet } from "./world-launch.js";
 export type {

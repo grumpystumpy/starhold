@@ -129,6 +129,53 @@ export interface AllianceMember {
   joinedAt: number;
 }
 
+export interface AllianceChatMessage {
+  id: string;
+  playerId: string;
+  displayName: string;
+  body: string;
+  createdAt: number;
+}
+
+/** Read-only copy of a spy outcome at the moment it was shared. */
+export interface AllianceIntelSnapshot {
+  detail: number;
+  summary: string;
+  resources: Resources | null;
+  ships: Partial<FleetShips> | null;
+  defenses: Partial<DefenseStock> | null;
+}
+
+export interface AllianceIntelStamp {
+  id: string;
+  sharedByPlayerId: string;
+  sharedByName: string;
+  spyReportId: string;
+  targetCoords: Coordinates;
+  targetLabel: string;
+  createdAt: number;
+  expiresAt: number | null;
+  snapshot: AllianceIntelSnapshot;
+}
+
+export interface AllianceGalaxyMarker {
+  id: string;
+  coords: Coordinates;
+  note: string;
+  createdByPlayerId: string;
+  createdByName: string;
+  createdAt: number;
+  expiresAt: number;
+}
+
+/** Fleet deep-link when Joint Strike helpers are present in this build. */
+export interface AcsPrefill {
+  coords: Coordinates;
+  mission: "raid" | "pirateRaid";
+  note: string;
+  openAcs: true;
+}
+
 export interface AllianceRecord {
   id: string;
   name: string;
@@ -140,6 +187,12 @@ export interface AllianceRecord {
   members: Record<string, AllianceMember>;
   /** Pending invite player ids (invite mode). */
   pendingInvites?: string[];
+  /** Ring buffer. Missing on older saves — treat as []. */
+  chat?: AllianceChatMessage[];
+  /** Shared spy stamps. Missing on older saves — treat as []. */
+  intel?: AllianceIntelStamp[];
+  /** Galaxy markers. Missing on older saves — treat as []. */
+  markers?: AllianceGalaxyMarker[];
 }
 
 export interface AllianceMemberView {
@@ -162,6 +215,9 @@ export interface AllianceView {
   pendingInvites: Array<{ playerId: string; name: string }>;
   memberCount: number;
   maxMembers: number;
+  chat: AllianceChatMessage[];
+  intel: AllianceIntelStamp[];
+  markers: AllianceGalaxyMarker[];
 }
 
 export interface AllianceListEntry {
@@ -254,6 +310,12 @@ export interface GalaxySlot {
   hasMoon: boolean;
   moonId: string | null;
   activity: "empty" | "planet" | "pirate" | null;
+  /** Set for alliance members when this slot has a live marker. */
+  allianceMarker?: {
+    id: string;
+    note: string;
+    markedBy: string;
+  } | null;
 }
 
 export interface GalaxyView {

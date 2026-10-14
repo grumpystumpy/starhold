@@ -93,7 +93,10 @@ export function sensorContactsHtml(
   `;
 }
 
-export function spyReportsHtml(reports: PlayerView["spyReports"]): string {
+export function spyReportsHtml(
+  reports: PlayerView["spyReports"],
+  inAlliance = false,
+): string {
   if (!reports?.length) {
     return `<p class="hint">No espionage reports yet.</p>`;
   }
@@ -114,7 +117,10 @@ export function spyReportsHtml(reports: PlayerView["spyReports"]): string {
               .join(", ");
             if (ships) bits.push(ships);
           }
-          return `<li data-testid="spy-${r.id}"><strong>Spy L${fmt(r.detail)}</strong> ${escapeHtml(r.targetName)} @ ${fmtCoords(r.targetCoords)}<br/><span class="meta">${escapeHtml(r.summary)}${bits.length ? ` · ${escapeHtml(bits.join(" · "))}` : ""}</span></li>`;
+          const share = inAlliance
+            ? `<button type="button" data-share-intel="${escapeAttr(r.id)}" data-testid="share-intel-${escapeAttr(r.id)}">Share with alliance</button>`
+            : "";
+          return `<li data-testid="spy-${r.id}"><strong>Spy L${fmt(r.detail)}</strong> ${escapeHtml(r.targetName)} @ ${fmtCoords(r.targetCoords)}<br/><span class="meta">${escapeHtml(r.summary)}${bits.length ? ` · ${escapeHtml(bits.join(" · "))}` : ""}</span>${share}</li>`;
         })
         .join("")}
     </ul>
@@ -151,6 +157,7 @@ export function galaxyPanel(
   busy: boolean,
 ): string {
   const { galaxy } = view;
+  const inAlliance = Boolean(view.alliance);
   const rows = galaxy.slots
     .map((s) => {
       const debris = s.debris
@@ -161,9 +168,24 @@ export function galaxyPanel(
       const who = s.playerName
         ? `${escapeHtml(s.playerName)}${tag}${s.isOwn ? " (you)" : ""} · ~${fmt(s.pointsHint)} pts${moon}`
         : "Empty";
-      return `<li data-testid="galaxy-slot-${s.coords.slot}"><span>${fmt(s.coords.slot)}. ${who}${debris}</span><span>${fmtCoords(s.coords)}</span></li>`;
+      const marker = s.allianceMarker;
+      const tip = marker
+        ? marker.note
+          ? `${marker.note} — marked by ${marker.markedBy}`
+          : `Marked by ${marker.markedBy}`
+        : "";
+      const pin = marker
+        ? `<span class="galaxy-marker-pin" data-testid="galaxy-marker-${s.coords.slot}" title="${escapeAttr(tip)}">◆</span>`
+        : "";
+      const actions = inAlliance
+        ? `<span class="galaxy-slot-actions"><button type="button" data-galaxy-mark="${s.coords.slot}" data-testid="galaxy-mark-${s.coords.slot}" ${busy ? "disabled" : ""}>Mark</button><button type="button" data-galaxy-propose="${s.coords.slot}" data-testid="galaxy-propose-${s.coords.slot}" ${busy ? "disabled" : ""}>Propose Joint Strike</button></span>`
+        : "";
+      return `<li class="galaxy-slot${marker ? " galaxy-slot-marked" : ""}" data-testid="galaxy-slot-${s.coords.slot}"><span>${pin}${fmt(s.coords.slot)}. ${who}${debris}</span><span class="galaxy-slot-side">${fmtCoords(s.coords)}${actions}</span></li>`;
     })
     .join("");
+  const markerTools = inAlliance
+    ? `<div class="galaxy-alliance-tools alliance-form" data-testid="galaxy-alliance-tools"><label>Marker note<input type="text" id="galaxy-marker-note" data-testid="galaxy-marker-note" maxlength="80" placeholder="Siege window" ${busy ? "disabled" : ""} /></label></div>`
+    : "";
   const asteroids =
     galaxy.asteroids?.length > 0
       ? `<ul class="roster" data-testid="galaxy-asteroids">${galaxy.asteroids
@@ -191,6 +213,7 @@ export function galaxyPanel(
         <button type="button" data-galaxy-scan-system data-testid="galaxy-scan-system" ${busy ? "disabled" : ""}>Scan system (probes)</button>
       </div>
       <p class="hint">Send max uses the Expedition preset and fills free expedition slots from ships in orbit on the selected colony. Scan probes every foreign-owned planet/moon in this system.</p>
+      ${markerTools}
       <ul class="roster" data-testid="galaxy-slots">${rows}</ul>
       <h3 class="subhead">Deep space</h3>
       ${deep}

@@ -32,6 +32,7 @@ import {
   allianceTagForPlayer,
   allianceViewFor,
 } from "./world-alliances.js";
+import { galaxyMarkerOverlay } from "./world-alliance-intel.js";
 import { advanceUniverse } from "./world-arrival.js";
 import { asteroidsInSystem } from "./world-asteroids.js";
 import {
@@ -112,6 +113,7 @@ export function galaxyViewFor(
   playerId: string,
   galaxy: number,
   system: number,
+  now = Date.now(),
 ): GalaxyView {
   ensureUniverseShape(universe);
   const g = Math.min(MAP_GALAXIES, Math.max(1, Math.floor(galaxy)));
@@ -153,6 +155,11 @@ export function galaxyViewFor(
     if (slot && slot.activity === "empty") {
       slot.activity = "pirate";
     }
+  }
+
+  const markerOverlay = galaxyMarkerOverlay(universe, playerId, g, s, now);
+  for (const slot of slots) {
+    slot.allianceMarker = markerOverlay.get(slot.coords.slot) ?? null;
   }
 
   return {
@@ -287,7 +294,7 @@ export function playerView(
     ),
     roster: publicRoster(universe),
     highscores: highscoresBoard(universe),
-    galaxy: galaxyViewFor(universe, playerId, g, s),
+    galaxy: galaxyViewFor(universe, playerId, g, s, now),
     fleets,
     reports,
     spyReports,
@@ -301,7 +308,7 @@ export function playerView(
     dailyLoginAvailable: canClaimDailyLogin(player, now),
     progress: playerProgressView(player),
     occupation: occupationForPlanet(universe, planet.id, now),
-    alliance: allianceViewFor(universe, playerId),
+    alliance: allianceViewFor(universe, playerId, now),
     allianceDirectory: allianceDirectory(universe),
   };
 }

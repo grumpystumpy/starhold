@@ -55,6 +55,7 @@ import {
   type AllianceRole,
 } from "@starhold/game";
 import { sessionSecretConfigured } from "./accounts.js";
+import { mountAllianceIntelRoutes } from "./alliance-intel-routes.js";
 import { mountAuthRoutes } from "./auth-routes.js";
 import { storageMode, withUniverse } from "./store.js";
 
@@ -85,7 +86,10 @@ async function simpleCors(c: Context, next: Next): Promise<Response | void> {
     const res = new Response(null, { status: 204 });
     if (origin && allow) {
       res.headers.set("Access-Control-Allow-Origin", origin);
-      res.headers.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+      res.headers.set(
+        "Access-Control-Allow-Methods",
+        "GET,POST,DELETE,OPTIONS",
+      );
       res.headers.set(
         "Access-Control-Allow-Headers",
         "Content-Type, Cookie",
@@ -804,6 +808,8 @@ export function createApp(): Hono {
       return c.json(playerView(universe, body.playerId!));
     });
   });
+
+  mountAllianceIntelRoutes(app);
 
   app.post("/api/alliance/disband", async (c) => {
     const body = (await c.req.json().catch(() => ({}))) as {

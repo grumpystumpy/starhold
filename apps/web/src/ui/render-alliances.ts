@@ -1,6 +1,142 @@
-import type { AllianceJoinMode, PlayerView } from "@starhold/game";
-import { fmt } from "./format";
+import {
+  DEFENSES,
+  SHIPS,
+  type AllianceGalaxyMarker,
+  type AllianceIntelStamp,
+  type AllianceJoinMode,
+  type AllianceRole,
+  type PlayerView,
+} from "@starhold/game";
+import { fmt, fmtCoords } from "./format";
 import { escapeAttr, escapeHtml } from "./render-escape";
+
+function canModerate(role: AllianceRole): boolean {
+  return role === "founder" || role === "officer";
+}
+
+function stockLine(
+  stock: Partial<Record<string, number>> | null,
+  names: Record<string, { name: string }>,
+): string {
+  if (!stock) return "";
+  return Object.entries(stock)
+    .filter(([, count]) => (count ?? 0) > 0)
+    .map(([id, count]) => `${fmt(count ?? 0)}× ${names[id]?.name ?? id}`)
+    .join(", ");
+}
+
+function intelSnapshotText(stamp: AllianceIntelStamp): string {
+  const snap = stamp.snapshot;
+  const bits: string[] = [snap.summary];
+  if (snap.resources) {
+    bits.push(
+      `resources ${fmt(snap.resources.metal)}/${fmt(snap.resources.crystal)}/${fmt(snap.resources.deuterium)}`,
+    );
+  }
+  const ships = stockLine(snap.ships, SHIPS);
+  if (ships) bits.push(ships);
+  const defenses = stockLine(snap.defenses, DEFENSES);
+  if (defenses) bits.push(defenses);
+  return bits.join(" · ");
+}
+
+function chatSection(view: PlayerView, busy: boolean): string {
+  const alliance = view.alliance;
+  if (!alliance) return "";
+  const chat = alliance.chat ?? [];
+  const lines = chat.length
+    ? chat
+        .map(
+          (m) =>
+            `<p class="alliance-chat-line" data-testid="alliance-chat-${escapeAttr(m.id)}"><strong>${escapeHtml(m.displayName)}</strong> ${escapeHtml(m.body)}</p>`,
+        )
+        .join("")
+    : `<p class="hint" data-testid="alliance-chat-empty">No messages yet.</p>`;
+  return `
+    <section class="alliance-section" data-testid="alliance-chat">
+      <h3>Chat</h3>
+      <div class="alliance-chat-log" data-testid="alliance-chat-log">${lines}</div>
+      <form id="alliance-chat-form" class="alliance-form alliance-chat-form" data-testid="alliance-chat-form">
+        <label>Message
+          <input type="text" name="alliance-chat-body" data-testid="alliance-chat-body" maxlength="500" required ${busy ? "disabled" : ""} />
+        </label>
+        <button type="submit" data-testid="alliance-chat-send" ${busy ? "disabled" : ""}>Send</button>
+      </form>
+    </section>`;
+}
+
+function intelSection(view: PlayerView, busy: boolean): string {
+  const alliance = view.alliance;
+  if (!alliance) return "";
+  const intel = alliance.intel ?? [];
+  const rows = intel.length
+    ? `<ul class="alliance-roster" data-testid="alliance-intel-list">
+        ${intel
+          .map((stamp) => {
+            const canRemove =
+              stamp.sharedByPlayerId === view.player.id ||
+              canModerate(alliance.myRole);
+            return `<li class="alliance-member" data-testid="alliance-intel-${escapeAttr(stamp.id)}">
+              <span><strong>${escapeHtml(stamp.targetLabel)}</strong> @ ${fmtCoords(stamp.targetCoords)} · ${escapeHtml(stamp.sharedByName)}</span>
+              <details>
+                <summary data-testid="alliance-intel-open-${escapeAttr(stamp.id)}">Open</summary>
+                <p class="meta">${escapeHtml(intelSnapshotText(stamp))}</p>
+              </details>
+              ${
+                canRemove
+                  ? `<button type="button" data-alliance-intel-delete="${escapeAttr(stamp.id)}" data-testid="alliance-intel-delete-${escapeAttr(stamp.id)}" ${busy ? "disabled" : ""}>Remove</button>`
+                  : ""
+              }
+            </li>`;
+          })
+          .join("")}
+      </ul>`
+    : `<p class="hint" data-testid="alliance-intel-empty">No shared intel yet. Share a spy report from Fleet.</p>`;
+  return `
+    <section class="alliance-section" data-testid="alliance-intel">
+      <h3>Intel</h3>
+      ${rows}
+    </section>`;
+}
+
+function markerRemoveAllowed(
+  marker: AllianceGalaxyMarker,
+  playerId: string,
+  role: AllianceRole,
+): boolean {
+  return marker.createdByPlayerId === playerId || canModerate(role);
+}
+
+function markersSection(view: PlayerView, busy: boolean): string {
+  const alliance = view.alliance;
+  if (!alliance) return "";
+  const markers = alliance.markers ?? [];
+  const rows = markers.length
+    ? `<ul class="alliance-roster" data-testid="alliance-marker-list">
+        ${markers
+          .map((marker) => {
+            const note = marker.note ? ` · ${escapeHtml(marker.note)}` : "";
+            const remove = markerRemoveAllowed(
+              marker,
+              view.player.id,
+              alliance.myRole,
+            )
+              ? `<button type="button" data-alliance-marker-remove="${escapeAttr(marker.id)}" data-testid="alliance-marker-remove-${escapeAttr(marker.id)}" ${busy ? "disabled" : ""}>Remove</button>`
+              : "";
+            return `<li class="alliance-member" data-testid="alliance-marker-${escapeAttr(marker.id)}">
+              <span>${fmtCoords(marker.coords)}${note} · ${escapeHtml(marker.createdByName)}</span>
+              ${remove}
+            </li>`;
+          })
+          .join("")}
+      </ul>`
+    : `<p class="hint" data-testid="alliance-markers-empty">No galaxy markers.</p>`;
+  return `
+    <section class="alliance-section" data-testid="alliance-markers">
+      <h3>Markers</h3>
+      ${rows}
+    </section>`;
+}
 
 function roleLabel(role: string): string {
   switch (role) {
@@ -110,7 +246,7 @@ export function alliancesPageHtml(view: PlayerView, busy: boolean): string {
     return `
       <section class="panel" data-testid="alliances-panel">
         <h2>Alliances</h2>
-        <p class="hint" data-testid="alliances-summary">Form a tag for galaxy and highscores. Chat and shared intel come later.</p>
+        <p class="hint" data-testid="alliances-summary">Form a tag for galaxy and highscores.</p>
         <h3>Create</h3>
         ${createFormHtml(busy)}
         <h3>Directory</h3>
@@ -158,6 +294,9 @@ export function alliancesPageHtml(view: PlayerView, busy: boolean): string {
         ${fmt(alliance.memberCount)}/${fmt(alliance.maxMembers)} · you are ${escapeHtml(roleLabel(alliance.myRole))}
       </p>
       ${rosterHtml(view, busy)}
+      ${chatSection(view, busy)}
+      ${intelSection(view, busy)}
+      ${markersSection(view, busy)}
       ${founderControls}
       <div class="alliance-leave-row">
         <button type="button" data-alliance-leave data-testid="alliance-leave-btn" ${busy ? "disabled" : ""}>Leave alliance</button>

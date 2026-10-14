@@ -200,7 +200,7 @@ function fleetPage(
       ${fleetsInFlight(fleets, view.roster, view.now)}
       ${sensorContactsHtml(view.sensorContacts ?? [], view.roster, view.now)}
       ${reportsHtml(reports, view.player.id)}
-      ${spyReportsHtml(spyReports)}
+      ${spyReportsHtml(spyReports, Boolean(view.alliance))}
       ${expeditionReportsHtml(expeditionReports)}
     </section>`;
 }
