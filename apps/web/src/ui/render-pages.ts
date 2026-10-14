@@ -1,1 +1,1 @@
-FILE_CONTENT_FROM_/agent/starhold/apps/web/src/ui/render-pages.ts
+LOAD_FROM_FILE:/agent/starhold/apps/web/src/ui/render-pages.ts

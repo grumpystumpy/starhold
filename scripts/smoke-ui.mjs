@@ -1,1 +1,1 @@
-PLACEHOLDER
+LOAD_FROM_FILE:/agent/starhold/scripts/smoke-ui.mjs
