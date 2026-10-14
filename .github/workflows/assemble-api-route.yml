@@ -1,0 +1,36 @@
+name: assemble-api-route
+on:
+  workflow_dispatch:
+  push:
+    branches: [cursor/round3-content-rebased-a540]
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cursor/round3-content-rebased-a540
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w @starhold/game
+      - run: node scripts/bundle-api.mjs
+      - name: Commit API bundle and remove one-shot workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/assemble-api-route.yml
+          git add -A api/ "[[...route]].js" 2>/dev/null || true
+          git add -A api/
+          git add -u .github/workflows/assemble-api-route.yml || true
+          if git diff --cached --quiet; then
+            echo "nothing to commit"
+          else
+            git commit -m "chore(R3): regenerate api route bundle + remove assemble workflow"
+            git push origin HEAD:cursor/round3-content-rebased-a540
+          fi
