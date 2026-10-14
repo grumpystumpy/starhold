@@ -262,6 +262,7 @@
   position: absolute;
   z-index: 40;
   left: 0;
+  right: auto;
   top: calc(100% + 0.4rem);
   min-width: 15rem;
   max-width: min(24rem, calc(100vw - 1.5rem));
@@ -276,6 +277,12 @@
   line-height: 1.45;
   white-space: normal;
   pointer-events: none;
+}
+
+/* Flip when JS detects the bubble would overflow the right viewport edge. */
+.has-tip.tip-align-end .tip-bubble {
+  left: auto;
+  right: 0;
 }
 
 .has-tip:hover .tip-bubble,

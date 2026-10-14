@@ -19,7 +19,7 @@ import {
   doResearch,
   doUpgrade,
 } from "./main-actions";
-import { collapseTips, toggleTip } from "./ui/render-tooltips";
+import { collapseTips, positionTip, toggleTip } from "./ui/render-tooltips";
 
 function dispatchArmedUpgrade(buildingId: BuildingId): void {
   session.suppressClickUntil = Date.now() + GESTURE_PAINT_GRACE_MS;
@@ -143,4 +143,26 @@ export function bindPointerHandlers(): void {
     session.armedResearch = null;
     armGestureGrace();
   });
+
+  // Desktop hover / keyboard focus — flip tip before CSS shows the bubble.
+  // pointerover bubbles (pointerenter does not).
+  root.addEventListener(
+    "pointerover",
+    (ev) => {
+      const tipEl = closestActionEl(ev.target, "[data-tip]");
+      if (!tipEl) return;
+      const related = (ev as PointerEvent).relatedTarget;
+      if (related instanceof Node && tipEl.contains(related)) return;
+      positionTip(tipEl);
+    },
+    true,
+  );
+  root.addEventListener(
+    "focusin",
+    (ev) => {
+      const tipEl = closestActionEl(ev.target, "[data-tip]");
+      if (tipEl) positionTip(tipEl);
+    },
+    true,
+  );
 }
