@@ -10,6 +10,33 @@
   gap: 0.25rem;
 }
 
+.fleet-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  align-items: end;
+  margin: 0.5rem 0 0.75rem;
+}
+
+.fleet-presets label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.fleet-presets select,
+.fleet-presets input[type="text"] {
+  min-width: 12rem;
+}
+
+.galaxy-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.5rem 0 0.75rem;
+}
+
 .galaxy-nav {
   display: flex;
   align-items: center;
@@ -149,14 +176,47 @@
 }
 
 .res .value {
+  display: inline-block;
+  min-width: 8ch;
   font-size: 1.15rem;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
+  font-feature-settings: "tnum" 1;
 }
 
 .res .sub {
+  display: block;
+  min-height: 1.2em;
   font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
   color: var(--muted);
+}
+
+.planet-rename {
+  margin: 0.75rem 0 1rem;
+  max-width: 22rem;
+}
+
+.planet-rename label {
+  display: block;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+}
+
+.planet-rename-row {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.planet-rename-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 .layout {
