@@ -28,17 +28,15 @@ import {
 } from "./render-chrome";
 import { escapeAttr, escapeHtml } from "./render-escape";
 import {
-  expeditionReportsHtml,
   fleetComposer,
   fleetsInFlight,
   galaxyPanel,
   hostileInboundHtml,
-  reportsHtml,
   sensorContactsHtml,
-  spyReportsHtml,
   type FleetDraft,
 } from "./render-fleets";
 import { recommendedNext } from "./render-helpers";
+import { messagesPageHtml } from "./render-messages";
 import {
   officersPanelHtml,
   skillsPanelHtml,
@@ -50,6 +48,7 @@ import {
   researchQueueHtml,
   shipQueueHtml,
 } from "./render-queues";
+import { hrefForPage } from "./router";
 
 const RESOURCE_BUILDINGS: BuildingId[] = [
   "metalMine",
@@ -83,14 +82,6 @@ const MINI_RESOURCE_BUILDINGS: BuildingId[] = [
 const MINI_FACILITY_BUILDINGS: BuildingId[] = MINI_BUILDING_ORDER.filter(
   (id) => !MINI_RESOURCE_BUILDINGS.includes(id),
 );
-
-function stubPanel(title: string, body: string, testId: string): string {
-  return `
-    <section class="panel" data-testid="${testId}">
-      <h2>${escapeHtml(title)}</h2>
-      <p class="hint">${escapeHtml(body)}</p>
-    </section>`;
-}
 
 function overviewPage(view: PlayerView, busy: boolean): string {
   const { planet, economy } = view;
@@ -266,9 +257,14 @@ function fleetPage(
   fleetDraft: FleetDraft | null,
 ): string {
   const fleets = view.fleets ?? [];
-  const reports = view.reports ?? [];
-  const spyReports = view.spyReports ?? [];
-  const expeditionReports = view.expeditionReports ?? [];
+  const mailHref = hrefForPage("messages", {
+    playerId: view.player.id,
+    planetId: view.planet.id,
+  });
+  const mailCount =
+    (view.reports?.length ?? 0) +
+    (view.spyReports?.length ?? 0) +
+    (view.expeditionReports?.length ?? 0);
   return `
     <section class="panel" data-testid="fleets-panel">
       <h2>Fleets &amp; missions</h2>
@@ -276,9 +272,7 @@ function fleetPage(
       ${fleetsInFlight(fleets, view.roster, view.now)}
       ${hostileInboundHtml(view.hostileInbound ?? [], view.roster, view.now)}
       ${sensorContactsHtml(view.sensorContacts ?? [], view.roster, view.now)}
-      ${reportsHtml(reports, view.player.id)}
-      ${spyReportsHtml(spyReports)}
-      ${expeditionReportsHtml(expeditionReports)}
+      <p class="hint" data-testid="fleet-messages-link">Combat, spy, and expedition reports (${fmt(mailCount)}) live in <a href="${escapeAttr(mailHref)}" data-nav="messages" data-testid="fleet-open-messages">Messages</a>.</p>
     </section>`;
 }
 
@@ -337,11 +331,7 @@ export function pageHtml(
     case "highscore":
       return highscorePage(view);
     case "messages":
-      return stubPanel(
-        "Messages",
-        "Combat, espionage, and empire mail will land here. Check Fleet for reports for now.",
-        "messages-stub",
-      );
+      return messagesPageHtml(view);
     default: {
       const _exhaustive: never = page;
       return _exhaustive;

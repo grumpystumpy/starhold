@@ -519,16 +519,21 @@ async function uiSmoke() {
 
   await page.waitForFunction(
     () => {
-      const reports = document.querySelector('[data-testid="combat-reports"]');
       const st = window.starhold?.getState();
-      return (
-        Boolean(reports) ||
-        (st?.reports?.length ?? 0) >= 1
-      );
+      return (st?.reports?.length ?? 0) >= 1;
     },
     undefined,
     { timeout: 120_000 },
   );
+  await goNav(page, "messages");
+  await page.waitForSelector('[data-testid="messages-panel"]', {
+    timeout: 10_000,
+  });
+  const inboxCombat = await page.locator('[data-testid^="message-combat-"]').count();
+  if (inboxCombat < 1) {
+    throw new Error("messages inbox missing combat report after raid");
+  }
+  logs.push("ui-messages-inbox");
   const missionState = await page.evaluate(() => {
     const st = window.starhold.getState();
     const r = st.reports?.[0];
