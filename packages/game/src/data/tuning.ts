@@ -1101,3 +1101,10 @@ export const FOUNDATION_ARK_BOOTSTRAP: Readonly<
   deutTank: 5,
   rigFoundry: 6,
 };
+
+/** Per-player ring buffer for synthetic empire alerts (builds, returns, raids, minis). */
+export const EVENT_LOG_MAX = 100;
+/** Same-galaxy system distance that counts as “nearby” for mini-planet sightings. */
+export const EVENT_LOG_MINI_NEARBY_SYSTEM_RADIUS = 5;
+/** Show an unread count on the Messages nav item. */
+export const EVENT_LOG_UNREAD_BADGE = true;

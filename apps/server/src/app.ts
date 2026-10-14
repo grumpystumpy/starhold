@@ -28,6 +28,7 @@ import {
   joinUniverse,
   launchFleet,
   launchMaxExpeditions,
+  markEventsRead,
   playerView,
   queueBuildingUpgrade,
   queueDefenseBuild,
@@ -738,6 +739,33 @@ export function createApp(): Hono {
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  app.post("/api/events/read", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      ids?: unknown;
+    };
+    const playerId = body.playerId?.trim();
+    if (!playerId) {
+      return c.json({ error: "playerId required." }, 400);
+    }
+    if (body.ids != null && !Array.isArray(body.ids)) {
+      return c.json({ error: "ids must be an array of event ids." }, 400);
+    }
+    const ids =
+      body.ids == null
+        ? undefined
+        : body.ids.filter(
+            (id): id is string => typeof id === "string" && id.length > 0,
+          );
+    return withUniverse((universe) => {
+      const now = Date.now();
+      advanceUniverse(universe, now);
+      const result = markEventsRead(universe, playerId, ids, now);
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, playerId, now));
     });
   });
 

@@ -123,6 +123,21 @@
   font-weight: 600;
 }
 
+.nav-badge {
+  display: inline-block;
+  margin-left: 0.35rem;
+  min-width: 1.15rem;
+  padding: 0 0.32rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #1a1208;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
+  vertical-align: 1px;
+}
+
 .shell-main {
   min-width: 0;
   /* No enter animation — poll re-renders would restart it and break click stability. */

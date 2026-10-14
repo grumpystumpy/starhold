@@ -120,6 +120,23 @@ export interface PlanetState {
   flags?: { mini?: boolean };
 }
 
+export type EventLogKind =
+  | "buildComplete"
+  | "fleetReturn"
+  | "raidAlert"
+  | "miniNearby";
+
+export interface EventLogEntry {
+  id: string;
+  kind: EventLogKind;
+  createdAt: number;
+  readAt: number | null;
+  title: string;
+  body: string;
+  href?: string;
+  meta?: Record<string, string | number | boolean | null>;
+}
+
 export interface PlayerState {
   id: string;
   name: string;
@@ -152,6 +169,8 @@ export interface PlayerState {
   fleetPresets?: FleetPreset[];
   /** Round 3 player class (Miner / Explorer / Fleeter / Expansionist). */
   playerClass?: PlayerClassState;
+  /** Synthetic empire alerts. Missing on old saves — migrate to []. */
+  eventLog?: EventLogEntry[];
 }
 
 export interface UniverseState {

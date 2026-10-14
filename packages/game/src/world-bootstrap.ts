@@ -24,6 +24,7 @@ import type {
 import { emptyPlayerClass } from "./formulas-round3.js";
 import { seedUniverseAsteroids } from "./world-asteroids.js";
 import { ensurePlayerFleetPresets } from "./world-fleet-presets.js";
+import { ensureEventLog } from "./world-event-log.js";
 import { seedUniversePirates } from "./world-pirates.js";
 
 export function emptyBuildings(): PlanetState["buildings"] {
@@ -177,6 +178,7 @@ export function ensureUniverseShape(universe: UniverseState): void {
     if (player.level == null || player.level < 1) player.level = 1;
     if (player.xp == null || player.xp < 0) player.xp = 0;
     if (player.xpTotal == null || player.xpTotal < 0) player.xpTotal = 0;
+    ensureEventLog(player);
     ensurePlayerFleetPresets(player);
   }
   const seed = universe.seed ?? universe.id;
@@ -296,6 +298,7 @@ export function joinUniverse(
     highscoreStarshardsClaimed: false,
     fleetPresets: [],
     playerClass: emptyPlayerClass(),
+    eventLog: [],
   };
   ensurePlayerFleetPresets(player);
 

@@ -124,6 +124,20 @@ export async function fetchState(
   return parse<PlayerView>(res);
 }
 
+export async function markEventsRead(
+  playerId: string,
+  ids?: string[],
+): Promise<PlayerView> {
+  const body: { playerId: string; ids?: string[] } = { playerId };
+  if (ids) body.ids = ids;
+  const res = await credFetch("/api/events/read", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return parse<PlayerView>(res);
+}
+
 export async function upgradeBuilding(
   playerId: string,
   buildingId: BuildingId,

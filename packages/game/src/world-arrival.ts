@@ -40,6 +40,7 @@ import {
   occupationMineShares,
   pruneExpiredOccupations,
 } from "./world-occupation.js";
+import { formatEventCount, pushEventLog } from "./world-event-log.js";
 import {
   addCargoToPlanet,
   addShipsToPlanet,
@@ -241,6 +242,27 @@ export function resolveFleetArrival(
   clearOccupationIfFleetGone(universe, fleet);
   addShipsToPlanet(origin, fleet.ships);
   addCargoToPlanet(origin, fleet.cargo);
+  if (owner) {
+    const hulls = SHIP_ORDER.filter((id) => (fleet.ships[id] ?? 0) > 0)
+      .map(
+        (id) =>
+          `${formatEventCount(fleet.ships[id] ?? 0)}× ${SHIPS[id].name}`,
+      )
+      .join(", ");
+    pushEventLog(owner, {
+      kind: "fleetReturn",
+      createdAt: fleet.arrivesAt,
+      title: `Fleet returned to ${origin.name}`,
+      body: hulls ? `${fleet.mission} · ${hulls}` : fleet.mission,
+      href: "#messages",
+      meta: {
+        mission: fleet.mission,
+        planetId: origin.id,
+        fleetId: fleet.id,
+      },
+    });
+    universe.players[owner.id] = owner;
+  }
   delete universe.fleets[fleet.id];
 }
 

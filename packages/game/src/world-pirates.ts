@@ -48,6 +48,7 @@ import {
   grantPirateFleetKillStarshards,
 } from "./world-boosts.js";
 import { emptyCargo, planetAtCoords } from "./world-bootstrap.js";
+import { pushEventLog } from "./world-event-log.js";
 import { subtractCargo } from "./world-tick.js";
 
 const PIRATE_NAMES = [
@@ -422,6 +423,17 @@ function applyPirateRaidOnPlanet(
   } else {
     grantPlayerXp(owner, xpForCombatLose());
   }
+  pushEventLog(owner, {
+    kind: "raidAlert",
+    createdAt: now,
+    title: `Hostile raid resolved at ${planet.name}`,
+    body: `${base.name}: ${combat.summary}`,
+    meta: {
+      pirateBaseId: base.id,
+      outcome: combat.outcome,
+      planetId: planet.id,
+    },
+  });
   universe.players[owner.id] = owner;
 
   if (fleetShipCount(base.ships) <= 0) {

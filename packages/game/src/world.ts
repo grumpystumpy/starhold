@@ -158,6 +158,14 @@ export {
   swarmProduce,
 } from "./world-round2.js";
 export {
+  ensureEventLog,
+  formatEventCount,
+  markEventsRead,
+  pushEventLog,
+  recordMiniPlanetSighting,
+  unreadEventCount,
+} from "./world-event-log.js";
+export {
   PLANET_NAME_MAX_LEN,
   PLANET_NAME_MIN_LEN,
   renamePlanet,

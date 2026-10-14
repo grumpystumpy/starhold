@@ -32,3 +32,4 @@ export {
   doActivateOfficer,
   doUnlockSkill,
 } from "./main-actions-starshards.js";
+export { doMarkEventsRead } from "./main-actions-events.js";
