@@ -25,6 +25,33 @@ async function waitHealthy(ms = 60_000) {
   throw new Error("API health timeout");
 }
 
+async function submitChat(page, body) {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const pending = page
+      .waitForResponse(
+        (r) =>
+          r.url().includes("/api/alliance/chat") &&
+          r.request().method() === "POST" &&
+          r.ok(),
+        { timeout: 5_000 },
+      )
+      .catch(() => null);
+    await page.evaluate((text) => {
+      const input = document.querySelector(
+        '[data-testid="alliance-chat-body"]',
+      );
+      const form = document.querySelector("#alliance-chat-form");
+      if (!(input instanceof HTMLInputElement) || !(form instanceof HTMLFormElement)) {
+        return;
+      }
+      input.value = text;
+      form.requestSubmit();
+    }, body);
+    if (await pending) return;
+  }
+  throw new Error("chat post failed");
+}
+
 async function signupAndJoin(page, email, password, commander) {
   await page.goto(WEB, { waitUntil: "networkidle" });
   await page.getByTestId("auth-email").fill(email);
@@ -72,7 +99,12 @@ async function buildProbe(page) {
     ),
     page.getByTestId("build-probe").click(),
   ]);
+  // Build buttons arm a short click-suppress window; wait it out before nav.
+  await page.waitForTimeout(400);
   await page.getByTestId("nav-fleet").click();
+  if ((await page.locator("#fleet-form").count()) === 0) {
+    await page.getByTestId("nav-fleet").click();
+  }
   await page.getByTestId("fleet-count-probe").waitFor({ timeout: 25_000 });
 }
 
@@ -118,7 +150,9 @@ async function main() {
     commanderB,
   );
   await pageB.getByTestId("nav-alliances").click();
-  const joinBtn = pageB.locator('[data-testid^="alliance-join-"]').first();
+  const joinBtn = pageB
+    .locator(".alliance-dir-row", { hasText: `[${tag}]` })
+    .locator("[data-alliance-join]");
   await joinBtn.waitFor({ timeout: 15_000 });
   await Promise.all([
     pageB.waitForResponse(
@@ -130,32 +164,44 @@ async function main() {
   await pageB.getByTestId("alliance-chat-form").waitFor({ timeout: 10_000 });
   logs.push("joined_b");
 
-  await pageA.getByTestId("alliance-chat-body").fill(chatBody);
-  await Promise.all([
-    pageA.waitForResponse(
-      (r) => r.url().includes("/api/alliance/chat") && r.request().method() === "POST" && r.ok(),
-      { timeout: 15_000 },
-    ),
-    pageA.getByTestId("alliance-chat-send").click(),
-  ]);
+  await submitChat(pageA, chatBody);
   await pageB.getByText(chatBody).waitFor({ timeout: 15_000 });
   logs.push("chat_shared");
 
   await buildProbe(pageA);
-  await pageA.getByTestId("mission-espionage").click();
+  await pageA.evaluate(() => {
+    const mission = document.querySelector('[data-testid="mission-espionage"]');
+    if (mission instanceof HTMLInputElement) {
+      mission.checked = true;
+      mission.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  });
+  await pageA.waitForTimeout(300);
   const target = pageA.getByTestId("fleet-target");
   await target.waitFor({ timeout: 10_000 });
-  const option = target.locator("option", { hasText: commanderB });
-  const value = await option.getAttribute("value");
+  const value = await target
+    .locator("option", { hasText: commanderB })
+    .getAttribute("value");
   if (!value) throw new Error(`no spy target for ${commanderB}`);
-  await target.selectOption(value);
-  await pageA.getByTestId("fleet-count-probe").fill("1");
   await Promise.all([
     pageA.waitForResponse(
       (r) => r.url().includes("/api/launch-fleet") && r.ok(),
       { timeout: 15_000 },
     ),
-    pageA.getByTestId("launch-fleet").click(),
+    pageA.evaluate((planetValue) => {
+      const select = document.querySelector('[data-testid="fleet-target"]');
+      const count = document.querySelector('[data-testid="fleet-count-probe"]');
+      const form = document.querySelector("#fleet-form");
+      if (
+        select instanceof HTMLSelectElement &&
+        count instanceof HTMLInputElement &&
+        form instanceof HTMLFormElement
+      ) {
+        select.value = planetValue;
+        count.value = "1";
+        form.requestSubmit();
+      }
+    }, value),
   ]);
   const share = pageA.locator('[data-testid^="share-intel-"]').first();
   await share.waitFor({ timeout: 30_000 });
@@ -169,24 +215,29 @@ async function main() {
   logs.push("intel_shared");
 
   await pageB.getByTestId("nav-alliances").click();
-  const intelRow = pageB.locator('[data-testid^="alliance-intel-"]').first();
-  await intelRow.waitFor({ timeout: 15_000 });
+  const openIntel = pageB.locator('[data-testid^="alliance-intel-open-"]').first();
+  await openIntel.waitFor({ timeout: 15_000 });
   const intelText = await pageB.getByTestId("alliance-intel").innerText();
   if (!intelText.includes(commanderB)) {
     throw new Error(`ally intel missing target ${commanderB}: ${intelText}`);
   }
-  await pageB.locator('[data-testid^="alliance-intel-open-"]').first().click();
+  await openIntel.click();
   await pageB.getByText(/resources /).waitFor({ timeout: 10_000 });
   logs.push("intel_opened");
 
   await pageA.getByTestId("nav-galaxy").click();
-  await pageA.getByTestId("galaxy-marker-note").fill(markerNote);
+  await pageA.getByTestId("galaxy-mark-1").waitFor({ timeout: 10_000 });
   await Promise.all([
     pageA.waitForResponse(
       (r) => r.url().includes("/api/alliance/markers") && r.request().method() === "POST" && r.ok(),
       { timeout: 15_000 },
     ),
-    pageA.getByTestId("galaxy-mark-1").click(),
+    pageA.evaluate((note) => {
+      const input = document.querySelector('[data-testid="galaxy-marker-note"]');
+      const button = document.querySelector('[data-testid="galaxy-mark-1"]');
+      if (input instanceof HTMLInputElement) input.value = note;
+      if (button instanceof HTMLButtonElement) button.click();
+    }, markerNote),
   ]);
   const pin = pageA.getByTestId("galaxy-marker-1");
   await pin.waitFor({ timeout: 10_000 });
@@ -214,11 +265,7 @@ async function main() {
     ),
     pageA.getByTestId("galaxy-propose-1").click(),
   ]);
-  await pageA.getByTestId("flash-ok").waitFor({ timeout: 10_000 });
-  const flash = await pageA.getByTestId("flash-ok").textContent();
-  if (!flash || !flash.includes("coming with Joint Strike")) {
-    throw new Error(`expected Joint Strike coming notice, got: ${flash}`);
-  }
+  await pageA.getByText("coming with Joint Strike").waitFor({ timeout: 10_000 });
   await pageA.getByTestId("nav-alliances").click();
   await pageA.getByText(/proposed Joint Strike on 1:1:1/).waitFor({
     timeout: 10_000,

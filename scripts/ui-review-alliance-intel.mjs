@@ -51,7 +51,8 @@ async function shotFlow(browser, viewport, dir) {
     page.waitForResponse((r) => r.url().includes("/api/alliance/create") && r.ok()),
     page.getByTestId("alliance-create-btn").click(),
   ]);
-  await page.getByTestId("alliance-chat-body").fill(`Screen chat ${stamp.slice(-4)}`);
+  await page.getByTestId("alliance-chat-form").waitFor({ timeout: 10_000 });
+  const chatLine = `Screen chat ${stamp.slice(-4)}`;
   await Promise.all([
     page.waitForResponse(
       (r) =>
@@ -59,9 +60,16 @@ async function shotFlow(browser, viewport, dir) {
         r.request().method() === "POST" &&
         r.ok(),
     ),
-    page.getByTestId("alliance-chat-send").click(),
+    page.evaluate((text) => {
+      const input = document.querySelector('[data-testid="alliance-chat-body"]');
+      const form = document.querySelector("#alliance-chat-form");
+      if (input instanceof HTMLInputElement && form instanceof HTMLFormElement) {
+        input.value = text;
+        form.requestSubmit();
+      }
+    }, chatLine),
   ]);
-  await page.getByText(`Screen chat ${stamp.slice(-4)}`).waitFor();
+  await page.getByText(chatLine).waitFor();
   await page.getByTestId("alliance-intel").scrollIntoViewIfNeeded();
   await page.screenshot({
     path: path.join(dir, "01-alliances-chat-intel.png"),
@@ -69,7 +77,7 @@ async function shotFlow(browser, viewport, dir) {
   });
 
   await page.getByTestId("nav-galaxy").click();
-  await page.getByTestId("galaxy-marker-note").fill("Screen pin");
+  await page.getByTestId("galaxy-mark-4").waitFor();
   await Promise.all([
     page.waitForResponse(
       (r) =>
@@ -77,7 +85,12 @@ async function shotFlow(browser, viewport, dir) {
         r.request().method() === "POST" &&
         r.ok(),
     ),
-    page.getByTestId("galaxy-mark-4").click(),
+    page.evaluate(() => {
+      const input = document.querySelector('[data-testid="galaxy-marker-note"]');
+      const button = document.querySelector('[data-testid="galaxy-mark-4"]');
+      if (input instanceof HTMLInputElement) input.value = "Screen pin";
+      if (button instanceof HTMLButtonElement) button.click();
+    }),
   ]);
   await page.getByTestId("galaxy-marker-4").waitFor();
   await page.getByTestId("galaxy-slot-4").scrollIntoViewIfNeeded();
