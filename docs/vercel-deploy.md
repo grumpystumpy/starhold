@@ -80,6 +80,8 @@ If `main` merge does not appear on production (Vercel Hobby monthly deploy cap):
 2. Confirm latest Production commit SHA matches `main`
 3. If stuck / rate-limited: wait for the Hobby quota reset, then **Redeploy** the latest Production deployment (or push an empty commit on `main` after the window clears)
 
+**2026-10-14:** Hobby deploy window reopened — this docs note kicks a production redeploy of latest `main` (includes Round 3 / #37).
+
 ---
 
 ## Build settings
