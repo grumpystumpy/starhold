@@ -1263,11 +1263,22 @@ function fireRaid(
   }
 }
 
+/**
+ * CI / local Playwright sets STARHOLD_E2E=1 so ~200 hourly pirate raids
+ * do not strip the lone smoke player's metal before the shipyard e2e bank.
+ * Schedule still advances so catch-up does not storm when the flag clears.
+ */
+function npcCombatEnabled(): boolean {
+  return process.env.STARHOLD_E2E !== "1";
+}
+
 function catchUpRaidsPirate(universe: UniverseState, base: PirateBase, now: number): void {
   let fired = 0;
   while (base.destroyedAt == null && base.nextRaidAt <= now && fired < NPC_RAID_CATCHUP_MAX) {
     const at = base.nextRaidAt;
-    fireRaid(universe, base, at, "pirate");
+    if (npcCombatEnabled()) {
+      fireRaid(universe, base, at, "pirate");
+    }
     base.nextRaidAt = rollNextRaidAt(base.id, at, PIRATE_RAID_PERIOD_MS);
     fired += 1;
   }
@@ -1279,7 +1290,9 @@ function catchUpRaidsAlien(universe: UniverseState, base: AlienBase, now: number
   while (base.destroyedAt == null && base.nextRaidAt <= now && fired < NPC_RAID_CATCHUP_MAX) {
     const at = Math.max(base.nextRaidAt, base.buildupEndsAt);
     if (at > now) break;
-    fireRaid(universe, base, at, "alien");
+    if (npcCombatEnabled()) {
+      fireRaid(universe, base, at, "alien");
+    }
     base.nextRaidAt = rollNextRaidAt(base.id, at, ALIEN_RAID_PERIOD_MS);
     fired += 1;
   }
