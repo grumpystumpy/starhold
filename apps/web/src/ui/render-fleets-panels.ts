@@ -187,6 +187,11 @@ export function galaxyPanel(
         <span data-testid="galaxy-label">${galaxy.galaxy}:${galaxy.system} / ${MAP_SYSTEMS}</span>
         <button type="button" data-galaxy-nav="next" data-testid="galaxy-next" ${busy ? "disabled" : ""}>System ▶</button>
       </div>
+      <div class="galaxy-actions" data-testid="galaxy-actions">
+        <button type="button" data-galaxy-max-expeditions data-testid="galaxy-max-expeditions" ${busy ? "disabled" : ""}>Send max expeditions</button>
+        <button type="button" data-galaxy-scan-system data-testid="galaxy-scan-system" ${busy ? "disabled" : ""}>Scan system (probes)</button>
+      </div>
+      <p class="hint">Send max uses the Expedition preset and fills free expedition slots from ships in orbit on the selected colony. Scan probes every foreign-owned planet/moon in this system.</p>
       <ul class="roster" data-testid="galaxy-slots">${rows}</ul>
       <h3 class="subhead">Deep space</h3>
       ${deep}
