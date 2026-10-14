@@ -83,9 +83,9 @@ NPC bases spawn randomly, grow slowly, raid players and each other. Successful p
 
 ---
 
-## Round 2 (next)
+## Round 2 (complete — keep as contract)
 
-Shared contract: **[design/round2-contract.md](./design/round2-contract.md)**. Design-only until that lands on `main`; then feature threads per the split below. **Do not start feature threads** until the contract PR is merged and Micah green-lights implementation.
+Shared contract: **[design/round2-contract.md](./design/round2-contract.md)** (on `main`). Threads F–L landed or superseded; balance continues via fast-lane tuning PRs.
 
 ### Round 2 goals
 
@@ -131,6 +131,57 @@ Coordinator owns integration: rebase dependents, keep `main` green, **ignore Ver
 ### Reporting
 
 Milestones only: Round 2 design ready (short summary), each merged area, blockers.
+
+---
+
+## Round 3 (current)
+
+Shared **addendum** for new systems: **[design/round3-contract.md](./design/round3-contract.md)**. Fast-lane UI/copy and fleet/galaxy items ship as small PRs **without** waiting on the addendum. **Content/engine for items 11–19** wait until the contract is on `main`. All names **ORIGINAL** (never Battleship / Battlecruiser / Destroyer / Bomber / Solar Satellite / Robotics Factory / Nanite / Terraformer / Graviton as-is). Report once per merged batch.
+
+### Round 3 goals (Micah)
+
+**Fast lane (UI/copy) — no contract:**
+
+1. Thousands separators everywhere numbers display (shared formatter).
+2. Skills tab: underscores → spaces in names.
+3. Top bar refresh: no flicker/layout jump; fixed widths / tabular numerals.
+4. Copy: “visiting another rival” → “attacking another rival”.
+5. Rename Outpost Cradle → **Colonizer**; “outpost” wording → “colony”; Swarm Mothership → **Mothership**.
+6. Players can rename planets (validated, length-limited, profanity-safe).
+
+**Fleet / galaxy:**
+
+7. Fleet tab: only ships in orbit on the selected planet.
+8. Fleet presets per player per universe (Expedition, Raid, Moon Destruction, Mini Planet Capture/Destruction, plus custom).
+9. Galaxy: “Send max expeditions” using Expedition preset.
+10. Galaxy: scan every owned planet in the current system (probes, batch).
+
+**New systems (contract addendum — items 11–19):**
+
+11. **15 new defenses** — distinct roles; **no** missiles / silos / ABM.
+12. **Player classes** — Miner, Explorer, Fleeter, Expansionist; Starshards-paid change rules.
+13. **Field-expansion building** — costs 1 field, +5 fields/level, very high energy (**Mantle Loom**).
+14. **Orbital energy ship** — solar-sat function, original name (**Helio Buoy**); output from temperature.
+15. **Temperature by slot** — hotter inward (more solar); colder outward (less solar, more deut); integrate with position production.
+16. **Four main warships** — backbone, fleet hunter (RF), mobile platform, anti-defense (**Keel Sovereign**, **Rake Corsair**, **Anvil Dread**, **Wardbreaker**).
+17. **Well Binding** (gravity research) — gate for Void Titan, Mothership, World Eater.
+18. **Rig Foundry** (construction building) — −15% build time/level; Chrono Lathe requires it at **L10**.
+19. **8 class-exclusive ships** (2 per class) — including designed “second” hulls per class.
+
+### Parallel lanes (Round 3)
+
+| Lane | Area | Notes |
+|------|------|--------|
+| **a** | UI / routes / copy | Fast-lane 1–6; fleet/galaxy chrome 7–10; class picker after contract |
+| **b** | Engine / rules / KV | Class system, temperature, Helio energy, gates, schema v4 |
+| **c** | Content + balance | Defenses, warships, class ships, Mantle Loom, Rig Foundry, Well Binding in `tuning.ts` |
+| **reviewer** | UI/UX | Standing visual + layout CI (not a builder) |
+
+Max **3 builders** + reviewer. Contract-first **only** for 11–19.
+
+### Reporting
+
+Once per **merged batch**; no status-only wakes. After contract merge: short name + class-bonus + ship/defense list for Micah balance review.
 
 ---
 
