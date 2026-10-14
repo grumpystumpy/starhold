@@ -1,0 +1,46 @@
+name: apply pirates-aliens redesign payload
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cursor/pirates-aliens-redesign-abde
+      - name: Unpack payload and commit batches
+        run: |
+          set -euo pipefail
+          cat .cursor-push/redesign-part-*.b64 | tr -d '\n' | base64 -d > /tmp/redesign.tar.gz
+          mkdir -p /tmp/extract
+          tar -xzf /tmp/redesign.tar.gz -C /tmp/extract
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          python3 <<'PY'
+          import json, os, shutil, subprocess
+          batches = json.load(open(".cursor-push/batches-meta.json"))
+          root = "/tmp/extract"
+          for b in batches:
+              for path in b["paths"]:
+                  src = os.path.join(root, path)
+                  dst = path
+                  parent = os.path.dirname(dst)
+                  if parent:
+                      os.makedirs(parent, exist_ok=True)
+                  shutil.copyfile(src, dst)
+                  subprocess.check_call(["git", "add", "--", dst])
+              st = subprocess.run(["git", "diff", "--cached", "--quiet"])
+              if st.returncode != 0:
+                  subprocess.check_call(["git", "commit", "-m", b["message"]])
+          subprocess.check_call(["git", "rm", "-r", "--ignore-unmatch", ".cursor-push"])
+          # also remove this workflow after success
+          wf = ".github/workflows/apply-redesign-payload.yml"
+          if os.path.exists(wf):
+              subprocess.check_call(["git", "rm", "-f", wf])
+          st = subprocess.run(["git", "diff", "--cached", "--quiet"])
+          if st.returncode != 0:
+              subprocess.check_call(["git", "commit", "-m", "chore: remove redesign upload payload"])
+          PY
+          git push origin HEAD:cursor/pirates-aliens-redesign-abde
