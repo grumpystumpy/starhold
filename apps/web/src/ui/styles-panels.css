@@ -100,6 +100,57 @@
   padding-top: 0;
 }
 
+.battle-report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.35rem 0 0.2rem;
+}
+
+.battle-report-details {
+  margin-top: 0.35rem;
+}
+
+.battle-report-details > summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 0.85rem;
+}
+
+.battle-replay {
+  margin-top: 0.45rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  background: color-mix(in srgb, var(--bg2) 55%, transparent);
+}
+
+.battle-round-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-bottom: 0.4rem;
+}
+
+.battle-round-tab {
+  min-width: 2.2rem;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+.battle-round-tab.is-active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.battle-round .meta {
+  margin: 0.15rem 0;
+}
+
 @media (max-width: 560px) {
   .item-thumb {
     grid-template-columns: auto 1fr;
