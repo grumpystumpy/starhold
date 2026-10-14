@@ -17,18 +17,23 @@ import {
 } from "./session";
 import {
   doActivateOfficer,
+  doApplyFleetPreset,
   doBuild,
   doBuildDefense,
   doCancelQueue,
   doClaimDaily,
+  doDeleteFleetPreset,
   doGalaxyNav,
   doClaimAnonymous,
   doJoin,
   doLaunchFleet,
+  doLaunchMaxExpeditions,
   doRefresh,
   doRenamePlanet,
   doRequestMagicLink,
   doResearch,
+  doSaveFleetPreset,
+  doScanSystem,
   doSelectPlanet,
   doUnlockSkill,
   doUpgrade,
@@ -75,6 +80,36 @@ export function bindClickHandlers(): void {
         ev.preventDefault();
         const dir = galaxyNav.getAttribute("data-galaxy-nav");
         if (dir === "prev" || dir === "next") void doGalaxyNav(dir);
+        return;
+      }
+
+      if (closestActionEl(target, "[data-galaxy-max-expeditions]")) {
+        ev.preventDefault();
+        void doLaunchMaxExpeditions();
+        return;
+      }
+
+      if (closestActionEl(target, "[data-galaxy-scan-system]")) {
+        ev.preventDefault();
+        void doScanSystem();
+        return;
+      }
+
+      if (closestActionEl(target, "[data-fleet-preset-apply]")) {
+        ev.preventDefault();
+        doApplyFleetPreset();
+        return;
+      }
+
+      if (closestActionEl(target, "[data-fleet-preset-save]")) {
+        ev.preventDefault();
+        void doSaveFleetPreset();
+        return;
+      }
+
+      if (closestActionEl(target, "[data-fleet-preset-delete]")) {
+        ev.preventDefault();
+        void doDeleteFleetPreset();
         return;
       }
 
