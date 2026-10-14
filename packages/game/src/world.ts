@@ -148,3 +148,9 @@ export {
   resolveMiniPlanetChoice,
   swarmProduce,
 } from "./world-round2.js";
+export {
+  PLANET_NAME_MAX_LEN,
+  PLANET_NAME_MIN_LEN,
+  renamePlanet,
+  validatePlanetName,
+} from "./world-planet-name.js";
