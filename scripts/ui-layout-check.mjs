@@ -99,7 +99,7 @@ function rectsOverlap(a, b, slack = 1) {
   return !(
     a.right <= b.left + slack ||
     a.left >= b.right - slack ||
-    a.bottom <= b.top - slack ||
+    a.bottom <= b.top + slack ||
     a.top >= b.bottom - slack
   );
 }
