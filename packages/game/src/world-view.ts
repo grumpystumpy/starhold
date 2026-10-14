@@ -301,6 +301,7 @@ export function playerView(
           isHome: p.id === player.homePlanetId,
           isActive: p.id === player.activePlanetId,
           isMoon: p.kind === "moon",
+          isMini: Boolean(p.flags?.mini),
           jumpGateLevel: p.buildings.jumpGate ?? 0,
         };
       })

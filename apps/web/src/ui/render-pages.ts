@@ -9,7 +9,7 @@ import {
   type BuildingId,
   type PlayerView,
 } from "@starhold/game";
-import { PLANET_ART, SHIP_ART, UI_ART } from "./assets";
+import { PLANET_ART, SHIP_ART, UI_ART, planetArtFor } from "./assets";
 import { fmt, fmtCoords } from "./format";
 import type { NavPage } from "./nav";
 import {
@@ -87,9 +87,9 @@ function overviewPage(view: PlayerView, busy: boolean): string {
     <section class="panel" data-testid="overview-panel">
       <h2>Overview</h2>
       <div class="overview-hero">
-        <img class="thumb thumb-lg" src="${planet.kind === "moon" ? PLANET_ART.moon : PLANET_ART.outpost}" alt="" width="72" height="72" />
+        <img class="thumb thumb-lg" src="${planetArtFor({ kind: planet.kind, flags: planet.flags, variant: "hero" })}" alt="" width="72" height="72" data-testid="overview-planet-art" />
         <div>
-          <p class="overview-name" data-testid="overview-planet-name">${escapeHtml(planet.name)}${planet.kind === "moon" ? " · Moon" : ""}</p>
+          <p class="overview-name" data-testid="overview-planet-name">${escapeHtml(planet.name)}${planet.flags?.mini ? " · Mini" : planet.kind === "moon" ? " · Moon" : ""}</p>
           <p class="coords">${fmtCoords(planet.coords)}</p>
           <p class="hint" data-testid="planet-fields">Fields ${fmt(economy.fields.used)} / ${fmt(economy.fields.cap)} · ${fmt(economy.fields.remaining)} free</p>
         </div>

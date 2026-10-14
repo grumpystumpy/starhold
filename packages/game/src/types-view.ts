@@ -239,6 +239,8 @@ export interface PlayerView {
     isHome: boolean;
     isActive: boolean;
     isMoon: boolean;
+    /** Round 2 mini planet — art hook for PLANET_ART.mini. */
+    isMini?: boolean;
     jumpGateLevel: number;
   }>;
   economy: EconomySnapshot;

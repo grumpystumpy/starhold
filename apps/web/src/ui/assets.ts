@@ -83,7 +83,21 @@ export const PLANET_ART = {
   outpost: "/assets/planets/outpost.svg",
   rocky: "/assets/planets/rocky.svg",
   moon: "/assets/planets/moon.svg",
+  /** Mini planet — placeholder until PLANET ART lane ships dedicated plates. */
+  mini: "/assets/planets/mini.svg",
 } as const;
+
+/** Resolve body art; prefers mini → moon → outpost/rocky. */
+export function planetArtFor(opts: {
+  kind?: string | null;
+  isMini?: boolean;
+  flags?: { mini?: boolean } | null;
+  variant?: "hero" | "chip";
+}): string {
+  if (opts.isMini || opts.flags?.mini) return PLANET_ART.mini;
+  if (opts.kind === "moon") return PLANET_ART.moon;
+  return opts.variant === "chip" ? PLANET_ART.rocky : PLANET_ART.outpost;
+}
 
 export const UI_ART = {
   emptyHangar: "/assets/ui/empty-hangar.svg",

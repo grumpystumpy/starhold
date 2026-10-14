@@ -2,7 +2,7 @@ import {
   PRODUCTION_MULT,
   type PlayerView,
 } from "@starhold/game";
-import { PLANET_ART, RESOURCE_ART } from "./assets";
+import { RESOURCE_ART, planetArtFor } from "./assets";
 import { fmt, fmtCoords } from "./format";
 import { NAV_LABELS, NAV_PAGES, type NavPage } from "./nav";
 import { flashHtml, resBlock } from "./render-chrome";
@@ -75,8 +75,12 @@ function planetSwitcher(
       <ul class="planet-list">
         ${bodies
           .map((p) => {
-            const art = p.isMoon ? PLANET_ART.moon : PLANET_ART.rocky;
-            const label = `${escapeHtml(p.name)}${p.isMoon ? " · Moon" : ""}${p.isHome ? " ★" : ""}`;
+            const art = planetArtFor({
+              kind: p.isMoon ? "moon" : "planet",
+              isMini: p.isMini,
+              variant: "chip",
+            });
+            const label = `${escapeHtml(p.name)}${p.isMini ? " · Mini" : p.isMoon ? " · Moon" : ""}${p.isHome ? " ★" : ""}`;
             return `<li>
               <button type="button" data-select-planet="${escapeAttr(p.id)}" data-testid="select-planet-${p.id}" class="planet-chip${p.isActive ? " active" : ""}" ${busy ? "disabled" : ""} title="${escapeAttr(fmtCoords(p.coords))}">
                 <img class="thumb" src="${art}" alt="" width="36" height="36" />
@@ -99,8 +103,11 @@ export function shellHtml(
   mainHtml: string,
 ): string {
   const { planet, universe } = view;
-  const heroArt =
-    planet.kind === "moon" ? PLANET_ART.moon : PLANET_ART.outpost;
+  const heroArt = planetArtFor({
+    kind: planet.kind,
+    flags: planet.flags,
+    variant: "hero",
+  });
 
   // Enrich resource blocks with storage titles via patch after — resBlock is shared.
   // Inject title attributes by wrapping amounts in the bar already.
@@ -124,7 +131,7 @@ export function shellHtml(
           <img class="thumb thumb-lg" src="${heroArt}" alt="" width="56" height="56" />
           <div>
             <h1 class="brand">Starhold</h1>
-            <div class="coords" data-testid="planet-coords">${escapeHtml(planet.name)}${planet.kind === "moon" ? " · Moon" : ""} · ${fmtCoords(planet.coords)} · ${escapeHtml(universe.name)} @ ${universe.speed}×${Number(PRODUCTION_MULT) > 1 ? ` · income ×${PRODUCTION_MULT} (test)` : ""}</div>
+            <div class="coords" data-testid="planet-coords">${escapeHtml(planet.name)}${planet.flags?.mini ? " · Mini" : planet.kind === "moon" ? " · Moon" : ""} · ${fmtCoords(planet.coords)} · ${escapeHtml(universe.name)} @ ${universe.speed}×${Number(PRODUCTION_MULT) > 1 ? ` · income ×${PRODUCTION_MULT} (test)` : ""}</div>
           </div>
         </div>
         <div class="topbar-progress" data-testid="player-level" title="Lifetime XP ${fmt(progress.xpTotal)}">

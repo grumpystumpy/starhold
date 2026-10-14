@@ -4,7 +4,7 @@ import {
   SHIPS,
   type PlayerView,
 } from "@starhold/game";
-import { SHIP_ART } from "./assets";
+import { PLANET_ART, SHIP_ART } from "./assets";
 import { fmt, fmtCoords, fmtEta, remainingSeconds } from "./format";
 import { escapeAttr, escapeHtml } from "./render-escape";
 
@@ -174,7 +174,7 @@ export function galaxyPanel(
             const who = s.playerName
               ? `${escapeHtml(s.playerName)}${s.isOwn ? " (you)" : ""}`
               : "Unclaimed";
-            return `<li data-testid="galaxy-mini-${s.coords.slot}"><span>Mini ${fmt(s.coords.slot)}. ${who}${debris}</span><span>${fmtCoords(s.coords)}</span></li>`;
+            return `<li data-testid="galaxy-mini-${s.coords.slot}"><span class="row-with-thumb"><img class="thumb" src="${PLANET_ART.mini}" alt="" width="28" height="28" />Mini ${fmt(s.coords.slot)}. ${who}${debris}</span><span>${fmtCoords(s.coords)}</span></li>`;
           })
           .join("")
       : "";
