@@ -3,6 +3,8 @@ import {
   MAP_GALAXIES,
   MAP_SLOTS,
   MAP_SYSTEMS,
+  MINI_SLOT_MAX,
+  MINI_SLOT_MIN,
 } from "./catalog.js";
 import {
   empireColonyCap,
@@ -21,6 +23,12 @@ import type {
   UniverseState,
 } from "./types.js";
 import { planetAtCoords } from "./world-bootstrap.js";
+import {
+  empireDriftBeaconExpeditionBonus,
+  isMiniPlanet,
+  isUnclaimedMini,
+  playerKnowsMini,
+} from "./world-mini.js";
 import { pirateBaseAtCoords } from "./world-pirates.js";
 import { getDebris } from "./world-tick.js";
 
@@ -72,7 +80,9 @@ export function resolveLaunchTarget(
     const activeExpeditions = Object.values(universe.fleets).filter(
       (f) => f.ownerPlayerId === player.id && f.mission === "expedition",
     ).length;
-    const cap = empireExpeditionCap(player, maxExpeditions);
+    const cap =
+      empireExpeditionCap(player, maxExpeditions) +
+      empireDriftBeaconExpeditionBonus(universe, player.id);
     if (activeExpeditions >= cap) {
       return {
         ok: false,
@@ -142,24 +152,21 @@ export function resolveLaunchTarget(
       };
     }
     targetCoords = { ...targetCoordsOpt };
+    const isMiniSlot =
+      targetCoords.slot >= MINI_SLOT_MIN &&
+      targetCoords.slot <= MINI_SLOT_MAX;
     if (
       targetCoords.galaxy < 1 ||
       targetCoords.galaxy > MAP_GALAXIES ||
       targetCoords.system < 1 ||
       targetCoords.system > MAP_SYSTEMS ||
       targetCoords.slot < 1 ||
-      targetCoords.slot > MAP_SLOTS
+      (targetCoords.slot > MAP_SLOTS && !isMiniSlot)
     ) {
       return { ok: false, error: "Coordinates out of map bounds." };
     }
     targetPlanet = planetAtCoords(universe, targetCoords);
     if (mission === "colonize") {
-      if (targetPlanet) {
-        return { ok: false, error: "Slot is already occupied." };
-      }
-      if (pirateBaseAtCoords(universe, targetCoords)) {
-        return { ok: false, error: "Pirate base occupies that slot." };
-      }
       const hasCradle = (ships.colonyShip ?? 0) >= 1;
       const hasArk = (ships.foundationArk ?? 0) >= 1;
       if (!hasCradle && !hasArk) {
@@ -167,6 +174,24 @@ export function resolveLaunchTarget(
           ok: false,
           error: "Colonize requires a Colonizer or Foundation Ark.",
         };
+      }
+      if (targetPlanet && isMiniPlanet(targetPlanet)) {
+        if (!isUnclaimedMini(targetPlanet)) {
+          return { ok: false, error: "Mini planet is already colonized." };
+        }
+        if (!playerKnowsMini(universe, player.id, targetPlanet.id)) {
+          return {
+            ok: false,
+            error: "You have not discovered that mini planet yet.",
+          };
+        }
+      } else if (targetPlanet) {
+        return { ok: false, error: "Slot is already occupied." };
+      } else if (isMiniSlot) {
+        return { ok: false, error: "No mini planet at those coordinates." };
+      }
+      if (!isMiniSlot && pirateBaseAtCoords(universe, targetCoords)) {
+        return { ok: false, error: "Pirate base occupies that slot." };
       }
       const colonyCap = empireColonyCap(player, universe, maxColonies);
       if (ownedPlanetCount(universe, player.id) >= colonyCap) {
