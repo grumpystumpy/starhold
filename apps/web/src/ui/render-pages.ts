@@ -28,6 +28,7 @@ import {
   spyReportsHtml,
   type FleetDraft,
 } from "./render-fleets";
+import { alliancesPageHtml } from "./render-alliances";
 import { recommendedNext } from "./render-helpers";
 import {
   officersPanelHtml,
@@ -213,7 +214,7 @@ function highscorePage(view: PlayerView): string {
         ${(view.highscores ?? [])
           .map(
             (h) =>
-              `<li data-testid="highscore-${h.rank}" data-player-id="${escapeAttr(h.playerId)}"><span class="row-with-thumb"><span class="hs-rank">#${fmt(h.rank)}</span><img class="thumb" src="${PLANET_ART.rocky}" alt="" width="32" height="32" />${escapeHtml(h.name)}${h.playerId === view.player.id ? " (you)" : ""}</span><span>${fmt(h.points)} pts · Lv ${fmt(h.level ?? 1)} · ${fmt(h.xpTotal ?? 0)} XP · ${fmtCoords(h.coords)} · ${fmt(h.planetCount)} world${h.planetCount === 1 ? "" : "s"}</span></li>`,
+              `<li data-testid="highscore-${h.rank}" data-player-id="${escapeAttr(h.playerId)}"><span class="row-with-thumb"><span class="hs-rank">#${fmt(h.rank)}</span><img class="thumb" src="${PLANET_ART.rocky}" alt="" width="32" height="32" />${h.allianceTag ? `[${escapeHtml(h.allianceTag)}] ` : ""}${escapeHtml(h.name)}${h.playerId === view.player.id ? " (you)" : ""}</span><span>${fmt(h.points)} pts · Lv ${fmt(h.level ?? 1)} · ${fmt(h.xpTotal ?? 0)} XP · ${fmtCoords(h.coords)} · ${fmt(h.planetCount)} world${h.planetCount === 1 ? "" : "s"}</span></li>`,
           )
           .join("")}
       </ol>
@@ -258,6 +259,8 @@ export function pageHtml(
       return skillsPanelHtml(view, busy);
     case "highscore":
       return highscorePage(view);
+    case "alliances":
+      return alliancesPageHtml(view, busy);
     case "messages":
       return stubPanel(
         "Messages",
