@@ -304,6 +304,18 @@ export async function claimDaily(playerId: string): Promise<PlayerView> {
   return parse<PlayerView>(res);
 }
 
+export async function claimGoal(
+  playerId: string,
+  goalId: string,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/claim-goal", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, goalId }),
+  });
+  return parse<PlayerView>(res);
+}
+
 export async function activateOfficerHire(
   playerId: string,
   officerId: OfficerId,
