@@ -7,5 +7,6 @@ export {
   spyReportsHtml,
   expeditionReportsHtml,
   sensorContactsHtml,
+  hostileInboundHtml,
   galaxyPanel,
 } from "./render-fleets-panels.js";
