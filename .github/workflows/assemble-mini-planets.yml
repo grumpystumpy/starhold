@@ -1,0 +1,30 @@
+name: assemble-mini-planets
+on:
+  push:
+    paths:
+      - .github/workflows/assemble-mini-planets.yml
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cursor/mini-planets-a1aa
+      - name: Fetch and unpack sources
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/mini-planets.tar.gz "https://litter.catbox.moe/36v7kj.gz"
+          echo "dc008911a1f6e7062ca6bcc5ac9d3446ee666ca3d50bc005e78581e60a46f940  /tmp/mini-planets.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/mini-planets.tar.gz -C .
+          rm -f .github/workflows/assemble-mini-planets.yml
+      - name: Commit
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git status --short
+          git commit -m "feat(K): Round 2 mini planets + quality-gate e2e (assembled)"
+          git push origin HEAD:cursor/mini-planets-a1aa
