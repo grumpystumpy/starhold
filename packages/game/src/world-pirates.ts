@@ -15,6 +15,7 @@ import {
   PIRATE_TIER_CAP,
   SHIP_ORDER,
 } from "./catalog.js";
+import { mintCombatShareCode } from "./combat-share.js";
 import {
   computeRaidLoot,
   defenseCombatPower,
@@ -528,6 +529,7 @@ export function resolvePirateRaidArrival(
   );
 
   let loot = emptyCargo();
+  let attackerXp = 0;
   if (combat.outcome === "attacker_win") {
     loot = computeRaidLoot(base.resources, combat.attackerAfter);
     base.resources = {
@@ -538,16 +540,16 @@ export function resolvePirateRaidArrival(
     markPirateDestroyed(base, now);
     if (owner) {
       grantPirateDestroyStarshards(owner, tierAtFight);
-      grantPlayerXp(
-        owner,
+      attackerXp =
         xpForCombatWin(killed) +
-          xpForPirateBaseDestroy(tierAtFight) +
-          xpForPirateShipKills(killed),
-      );
+        xpForPirateBaseDestroy(tierAtFight) +
+        xpForPirateShipKills(killed);
+      grantPlayerXp(owner, attackerXp);
       universe.players[owner.id] = owner;
     }
   } else if (owner) {
-    grantPlayerXp(owner, xpForCombatLose());
+    attackerXp = xpForCombatLose();
+    grantPlayerXp(owner, attackerXp);
     universe.players[owner.id] = owner;
   }
 
@@ -576,6 +578,9 @@ export function resolvePirateRaidArrival(
         ? `${combat.summary} Pirate base destroyed (+${pirateDestroyStarshards(tierAtFight)} Starshards).`
         : combat.summary,
     moonFormed: false,
+    roundLog: combat.roundLog.length ? combat.roundLog : undefined,
+    xpAwarded: { attacker: attackerXp, defender: 0 },
+    shareCode: mintCombatShareCode(universe),
   };
 
   fleet.ships = combat.attackerAfter;
