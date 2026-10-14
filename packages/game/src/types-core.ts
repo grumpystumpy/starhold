@@ -17,7 +17,11 @@ export type BuildingId =
   | "jumpGate"
   | "chronoLathe"
   | "mantleLoom"
-  | "rigFoundry";
+  | "rigFoundry"
+  | "riftSiphon"
+  | "echoVault"
+  | "anomalyForge"
+  | "driftBeacon";
 
 export type BodyKind = "planet" | "moon";
 
@@ -163,6 +167,8 @@ export interface BuildingDef {
   energyProdFormula?: "solar";
   /** Resource this mine produces */
   produces?: ResourceId;
+  /** Soft/hard max level (mini specials). */
+  maxLevel?: number;
 }
 
 export interface ShipDef {
@@ -348,7 +354,7 @@ export interface OccupationState {
   endsAt: number;
 }
 
-/** Post-battle choice when ≥5 World Eaters win on a mini planet (K wires full flow). */
+/** Post-battle choice after winning on a colonized mini (destroy needs ≥1 World Eater). */
 export type MiniPlanetResolveChoice = "capture" | "destroy";
 
 export interface SlotProductionMult {
