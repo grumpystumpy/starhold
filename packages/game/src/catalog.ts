@@ -91,6 +91,8 @@ export const BUILDING_ORDER: BuildingId[] = [
   "sensorArray",
   "jumpGate",
   "chronoLathe",
+  "mantleLoom",
+  "rigFoundry",
 ];
 
 /** Buildings shown / allowed on normal planets. */
@@ -104,6 +106,8 @@ export const PLANET_BUILDING_ORDER: BuildingId[] = [
   "deutTank",
   "shipyard",
   "researchLab",
+  "rigFoundry",
+  "mantleLoom",
   "chronoLathe",
 ];
 
@@ -128,6 +132,19 @@ export const SHIP_ORDER: ShipId[] = [
   "probe",
   "recycler",
   "colonyShip",
+  "helioBuoy",
+  "keelSovereign",
+  "rakeCorsair",
+  "anvilDread",
+  "wardbreaker",
+  "vaultScout",
+  "astrolabeWing",
+  "spoilSkimmer",
+  "lineDrummer",
+  "veinAnchor",
+  "gridStake",
+  "foundationArk",
+  "frontierBeacon",
   "voidforgeTitan",
   "worldEater",
   "swarmDrone",
@@ -135,7 +152,25 @@ export const SHIP_ORDER: ShipId[] = [
   "swarmMothership",
 ];
 
-export const DEFENSE_ORDER: DefenseId[] = ["laserBattery", "shieldDome"];
+export const DEFENSE_ORDER: DefenseId[] = [
+  "laserBattery",
+  "shieldDome",
+  "needleTurret",
+  "arcLattice",
+  "pulseBastion",
+  "gaussRail",
+  "ionSheath",
+  "plasmaSpire",
+  "flakCurtain",
+  "kineticFence",
+  "emberMortar",
+  "rippleArray",
+  "haloProjector",
+  "crownAegis",
+  "siegeBlockade",
+  "frostLance",
+  "voidWard",
+];
 
 export const RESEARCH_ORDER: ResearchId[] = [
   "energyTech",
@@ -148,6 +183,7 @@ export const RESEARCH_ORDER: ResearchId[] = [
   "computerTech",
   "queueLogistics",
   "swarmHold",
+  "gravityWell",
 ];
 
 /** Hard cap per queue kind (Round 2 contract v1). */
@@ -169,6 +205,34 @@ export {
   SWARM_CAPACITY_HARD_CAP,
   CHRONO_LATHE_TIME_BASE,
   CHRONO_LATHE_SHIPYARD_REQ,
+  CHRONO_LATHE_RIG_FOUNDRY_REQ,
+  RIG_FOUNDRY_TIME_PER_LEVEL,
+  RIG_FOUNDRY_TIME_FLOOR,
+  RIG_FOUNDRY_SHIPYARD_REQ,
+  MANTLE_LOOM_FIELDS_PER_LEVEL,
+  MANTLE_LOOM_FIELDS_USED,
+  MANTLE_LOOM_SOLAR_REQ,
+  MANTLE_LOOM_LAB_REQ,
+  SLOT_TEMPERATURE_K,
+  SOLAR_TEMP_BASELINE_K,
+  CLASS_CHANGE_BASE_COST,
+  CLASS_CHANGE_COST_PER_PRIOR,
+  CLASS_CHANGE_COOLDOWN_MS,
+  PLAYER_CLASS_ORDER,
+  PLAYER_CLASS_BONUSES,
+  JUMP_GATE_BASE_COOLDOWN_MS,
+  VAULT_SCOUT_YIELD_PER,
+  VAULT_SCOUT_YIELD_CAP,
+  ASTROLABE_RESEARCH_TIME,
+  SPOIL_SKIMMER_DEBRIS_FRAC,
+  LINE_DRUMMER_SPEED_PER,
+  LINE_DRUMMER_SPEED_CAP,
+  VEIN_ANCHOR_MINE_PER,
+  VEIN_ANCHOR_MINE_CAP,
+  GRID_STAKE_ENERGY_PER,
+  GRID_STAKE_ENERGY_CAP,
+  FRONTIER_BEACON_JUMP_CD,
+  FOUNDATION_ARK_BOOTSTRAP,
   SWARM_NUMBERS_THRESHOLD,
   SWARM_NUMBERS_BONUS_PER,
   SWARM_NUMBERS_BONUS_CAP_COUNT,
@@ -220,8 +284,9 @@ export const EXPEDITION_SLOT = DEEP_SPACE_SLOT;
  * Contract map resize (1×9×8 → 10×399×15) requires reset at `2`.
  * Round 2 (queues / levels / ships / mini / pirates) bumps to `3` via
  * additive migrator — no map reset.
+ * Round 3 (classes / catalog / temp) bumps to `4` via additive migrator.
  */
-export const UNIVERSE_SCHEMA_VERSION = 3;
+export const UNIVERSE_SCHEMA_VERSION = 4;
 
 /** Homeworld join: prefer mid slots, then fall outward. */
 export const HOME_SLOT_PREFERENCE: readonly number[] = [
