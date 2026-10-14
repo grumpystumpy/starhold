@@ -159,8 +159,9 @@ describe("goal hooks", () => {
     });
     assert.equal(launch.ok, true);
     if (!launch.ok) return;
-    advanceUniverse(universe, launch.fleet.arrivesAt);
-    const view = playerView(universe, joined.player.id, launch.fleet.arrivesAt);
+    const outboundAt = launch.fleet.arrivesAt;
+    advanceUniverse(universe, outboundAt);
+    const view = playerView(universe, joined.player.id, outboundAt);
     const daily = view.goals.find((goal) => goal.id === "dailyExpeditions");
     const weekly = view.goals.find((goal) => goal.id === "weeklyExpeditions");
     assert.equal(daily?.progress, 1);
@@ -188,8 +189,9 @@ describe("goal hooks", () => {
     });
     assert.equal(launch.ok, true);
     if (!launch.ok) return;
-    advanceUniverse(universe, launch.fleet.arrivesAt);
-    const view = playerView(universe, player.id, launch.fleet.arrivesAt);
+    const outboundAt = launch.fleet.arrivesAt;
+    advanceUniverse(universe, outboundAt);
+    const view = playerView(universe, player.id, outboundAt);
     assert.equal(
       view.goals.find((goal) => goal.id === "dailyPirateWins")?.progress,
       1,
