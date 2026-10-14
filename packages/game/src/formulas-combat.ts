@@ -101,6 +101,7 @@ export function destroyedShipResources(
   for (const id of SHIP_ORDER) {
     const lost = Math.max(0, (before[id] ?? 0) - (after[id] ?? 0));
     if (lost <= 0) continue;
+    if (SHIPS[id].noDebris) continue;
     const c = SHIPS[id].cost;
     metal += c.metal * lost;
     crystal += c.crystal * lost;
@@ -266,7 +267,7 @@ function mothershipHullFraction(
 }
 
 /**
- * When mothership hull fraction &lt; 30%, each harvester suicides:
+ * When mothership hull fraction < 30%, each harvester suicides:
  * shieldDmg + hullDmg to a focus enemy combatant.
  */
 export function applyHarvesterKamikaze(
@@ -313,14 +314,17 @@ function collectFire(
   targetShips: FleetShips,
   targetDefenses: DefenseStock,
   firerResearch: ResearchLevels | undefined,
+  opts?: { attackMult?: number; defenseSlot?: number },
 ): Array<{ target: CombatUnitId; damage: number }> {
   const shots: Array<{ target: CombatUnitId; damage: number }> = [];
   const focus = pickFocusTarget(targetShips, targetDefenses);
   if (!focus) return shots;
+  const attackMult = Math.max(0.01, opts?.attackMult ?? 1);
+  const slot = opts?.defenseSlot;
 
   for (const id of livingShipIds(firerShips)) {
     const def = SHIPS[id];
-    let atk = unitAtk(def.attack, firerResearch);
+    let atk = unitAtk(def.attack, firerResearch) * attackMult;
     if (id === "swarmDrone") {
       atk *= swarmDroneAttackMult(firerShips.swarmDrone ?? 0);
     }
@@ -332,7 +336,14 @@ function collectFire(
   if (firerDefenses) {
     for (const id of livingDefenseIds(firerDefenses)) {
       const def = DEFENSES[id];
-      const atk = unitAtk(def.attack, firerResearch);
+      let atk = unitAtk(def.attack, firerResearch) * attackMult;
+      if (
+        slot != null &&
+        def.slotAttackBonus &&
+        def.slotAttackBonus.slots.includes(slot)
+      ) {
+        atk *= def.slotAttackBonus.factor;
+      }
       if (atk <= 0) continue;
       const n = firerDefenses[id] ?? 0;
       const rf = rapidFireFactor(id, focus);
@@ -345,6 +356,10 @@ function collectFire(
 export interface CombatMods {
   /** Multiplies defender ship/defense firepower and effective HP (officer/skill). */
   defensePower?: number;
+  /** Multiplies attacker ship firepower (Fleeter class). */
+  attackMult?: number;
+  /** Defender planet slot (Frost Lance cold-slot bonus). */
+  defenseSlot?: number;
 }
 
 /**
@@ -359,6 +374,8 @@ export function resolveCombat(
   mods?: CombatMods,
 ): CombatResolution {
   const defensePowerMult = Math.max(0.01, mods?.defensePower ?? 1);
+  const attackMult = Math.max(0.01, mods?.attackMult ?? 1);
+  const defenseSlot = mods?.defenseSlot;
   const atkSide: SidePools = {
     ships: normalizeFleetShips(attacker),
     defenses: emptyDefenses(),
@@ -401,6 +418,7 @@ export function resolveCombat(
       defSide.ships,
       defSide.defenses,
       attackerResearch,
+      { attackMult },
     );
     const defShots = collectFire(
       defSide.ships,
@@ -408,6 +426,7 @@ export function resolveCombat(
       atkSide.ships,
       emptyDefenses(),
       defenderResearch,
+      { defenseSlot },
     );
 
     for (const shot of atkShots) {
