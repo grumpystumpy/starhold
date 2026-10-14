@@ -1,0 +1,56 @@
+name: assemble-auth-finish
+on:
+  push:
+    paths:
+      - ".github/workflows/assemble-auth-finish.yml"
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: assemble-auth-finish-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  finish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Land password-auth sources + API
+        run: |
+          set -euo pipefail
+          EXPECT=cf196fc85583adfb084453660543c9d4cb8127049599019cd9e6210ace74c0f5
+          URL=https://litter.catbox.moe/gk3twr.gz
+          echo "Downloading $URL"
+          curl -fsSL --retry 5 --retry-delay 2 "$URL" -o /tmp/auth-full.tar.gz
+          ACTUAL=$(sha256sum /tmp/auth-full.tar.gz | awk '{print $1}')
+          echo "expect=$EXPECT actual=$ACTUAL"
+          test "$EXPECT" = "$ACTUAL"
+          tar -xzf /tmp/auth-full.tar.gz -C .
+          rm -f apps/server/src/email.ts
+          npm ci
+          npm run build:vercel
+          test -f "api/[[...route]].js"
+          grep -q passwordAuth "api/[[...route]].js"
+          if grep -q RESEND "api/[[...route]].js"; then echo "RESEND still in bundle" >&2; exit 1; fi
+          grep -q hashPassword apps/server/src/accounts.ts
+          grep -q createAccountWithPassword apps/server/src/accounts.ts
+          grep -q passwordAuth apps/server/src/app.ts
+          if grep -q createMagicLink apps/server/src/accounts.ts; then echo "magic-link still present" >&2; exit 1; fi
+          rm -rf .cursor-staging || true
+          rm -f .github/workflows/assemble-auth-finish.yml
+          rm -f .github/workflows/assemble-auth-sources.yml
+          rm -f .github/workflows/assemble-auth-api.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git status
+          git commit -m "feat(auth): email+password sources + api bundle (finish)"
+          git pull --rebase origin "${{ github.ref_name }}"
+          git push origin "HEAD:${{ github.ref_name }}"
