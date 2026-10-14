@@ -165,7 +165,7 @@ export function resolveLaunchTarget(
       if (!hasCradle && !hasArk) {
         return {
           ok: false,
-          error: "Colonize requires an Outpost Cradle or Foundation Ark.",
+          error: "Colonize requires a Colonizer or Foundation Ark.",
         };
       }
       const colonyCap = empireColonyCap(player, universe, maxColonies);
@@ -183,7 +183,7 @@ export function resolveLaunchTarget(
       if (!canCollectDebris(ships)) {
         return {
           ok: false,
-          error: "Harvest requires a Salvage Trawler or Swarm Mothership.",
+          error: "Harvest requires a Salvage Trawler or Mothership.",
         };
       }
     }

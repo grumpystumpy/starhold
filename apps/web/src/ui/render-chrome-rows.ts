@@ -55,7 +55,7 @@ export function shipRow(
       <div>
         <h3>${escapeHtml(def.name)} ${tip.html}</h3>
         <p>${escapeHtml(def.description)}</p>
-        <div class="meta">${fmtCost(def.cost)} each · yard L${def.shipyardLevel}+ · cargo ${def.cargo} · atk ${def.attack}${
+        <div class="meta">${fmtCost(def.cost)} each · yard L${fmt(def.shipyardLevel)}+ · cargo ${fmt(def.cargo)} · atk ${fmt(def.attack)}${
           locked ? ` · ${escapeHtml(lockMsg)}` : ""
         }</div>
       </div>
@@ -100,9 +100,9 @@ export function defenseRow(
     <article class="item item-thumb" data-testid="defense-${id}">
       <img class="thumb" src="${DEFENSE_ART[id]}" alt="" width="48" height="48" />
       <div>
-        <h3>${escapeHtml(def.name)} <span class="meta">×${have}</span> ${tip.html}</h3>
+        <h3>${escapeHtml(def.name)} <span class="meta">×${fmt(have)}</span> ${tip.html}</h3>
         <p>${escapeHtml(def.description)}</p>
-        <div class="meta">${fmtCost(cost)} each · yard L${def.shipyardLevel}+ · atk ${def.attack}</div>
+        <div class="meta">${fmtCost(cost)} each · yard L${fmt(def.shipyardLevel)}+ · atk ${fmt(def.attack)}</div>
       </div>
       <div class="actions">
         <input type="number" min="1" max="50" value="1" data-defense-count="${id}" data-testid="defense-count-${id}" ${locked ? "disabled" : ""} style="min-width:4rem;width:4.5rem" />

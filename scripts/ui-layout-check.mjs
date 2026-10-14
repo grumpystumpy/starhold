@@ -56,6 +56,8 @@ const FORBIDDEN_LABELS = [
   "Jump Gate",
   "Death Star",
   "Colony Ship",
+  "Outpost Cradle",
+  "Swarm Mothership",
   "Spy Probe",
   "Laser Battery",
   "Shield Dome",

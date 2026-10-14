@@ -90,7 +90,7 @@ export function startOccupation(
     return { ok: false, error: "Fleet not found." };
   }
   if ((fleet.ships.swarmMothership ?? 0) < 1) {
-    return { ok: false, error: "Occupation requires a Swarm Mothership." };
+    return { ok: false, error: "Occupation requires a Mothership." };
   }
   const planetId = fleet.targetPlanetId;
   if (!planetId) {

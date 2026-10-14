@@ -5,7 +5,7 @@ import {
   SHIPS,
   type PlayerView,
 } from "@starhold/game";
-import { fmtEta, remainingSeconds } from "./format";
+import { fmt, fmtEta, remainingSeconds } from "./format";
 import { escapeHtml } from "./render-escape";
 
 function etaSpan(completesAt: number, now: number): string {
@@ -42,7 +42,7 @@ export function buildQueueHtml(
     .map((q, i) => {
       const name = BUILDINGS[q.buildingId]?.name ?? q.buildingId;
       return `<li class="queue-item" data-testid="build-queue-item" data-queue-id="${escapeHtml(q.id)}">
-        <span>${i === 0 ? "Building" : "Queued"} ${escapeHtml(name)} → L${q.targetLevel} · ${queueItemEta(q, i, now, cursor)} left</span>
+        <span>${i === 0 ? "Building" : "Queued"} ${escapeHtml(name)} → L${fmt(q.targetLevel)} · ${queueItemEta(q, i, now, cursor)} left</span>
         <button type="button" class="btn ghost queue-cancel" data-queue-cancel="building" data-queue-item="${escapeHtml(q.id)}" data-testid="cancel-build-${escapeHtml(q.id)}">Cancel</button>
       </li>`;
     })
@@ -61,7 +61,7 @@ export function shipQueueHtml(
     .map((q, i) => {
       const name = SHIPS[q.shipId]?.name ?? q.shipId;
       return `<li class="queue-item" data-testid="ship-queue-item" data-queue-id="${escapeHtml(q.id)}">
-        <span>${i === 0 ? "Assembling" : "Queued"} ${q.count}× ${escapeHtml(name)} · ${queueItemEta(q, i, now, cursor)} left</span>
+        <span>${i === 0 ? "Assembling" : "Queued"} ${fmt(q.count)}× ${escapeHtml(name)} · ${queueItemEta(q, i, now, cursor)} left</span>
         <button type="button" class="btn ghost queue-cancel" data-queue-cancel="ship" data-queue-item="${escapeHtml(q.id)}" data-testid="cancel-ship-${escapeHtml(q.id)}">Cancel</button>
       </li>`;
     })
@@ -80,7 +80,7 @@ export function defenseQueueHtml(
     .map((q, i) => {
       const name = DEFENSES[q.defenseId]?.name ?? q.defenseId;
       return `<li class="queue-item" data-testid="defense-queue-item" data-queue-id="${escapeHtml(q.id)}">
-        <span>${i === 0 ? "Building" : "Queued"} ${q.count}× ${escapeHtml(name)} · ${queueItemEta(q, i, now, cursor)} left</span>
+        <span>${i === 0 ? "Building" : "Queued"} ${fmt(q.count)}× ${escapeHtml(name)} · ${queueItemEta(q, i, now, cursor)} left</span>
         <button type="button" class="btn ghost queue-cancel" data-queue-cancel="defense" data-queue-item="${escapeHtml(q.id)}" data-testid="cancel-defense-${escapeHtml(q.id)}">Cancel</button>
       </li>`;
     })
@@ -99,7 +99,7 @@ export function researchQueueHtml(
     .map((q, i) => {
       const name = RESEARCH[q.researchId]?.name ?? q.researchId;
       return `<li class="queue-item" data-testid="research-queue-item" data-queue-id="${escapeHtml(q.id)}">
-        <span>${i === 0 ? "Researching" : "Queued"} ${escapeHtml(name)} → L${q.targetLevel} · ${queueItemEta(q, i, now, cursor)} left</span>
+        <span>${i === 0 ? "Researching" : "Queued"} ${escapeHtml(name)} → L${fmt(q.targetLevel)} · ${queueItemEta(q, i, now, cursor)} left</span>
         <button type="button" class="btn ghost queue-cancel" data-queue-cancel="research" data-queue-item="${escapeHtml(q.id)}" data-testid="cancel-research-${escapeHtml(q.id)}">Cancel</button>
       </li>`;
     })

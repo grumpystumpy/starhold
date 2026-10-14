@@ -1,14 +1,17 @@
 import type { PlayerView } from "@starhold/game";
 import { startCountdownTick } from "./countdown";
 import type { NavPage } from "./nav";
+import { canPatchShell, patchLiveChrome } from "./patch-chrome";
 import { renderJoin } from "./render-chrome";
 import { salvageFleetForm } from "./render-fleets";
 import { dashboardHtml } from "./render-dashboard";
 import type { UiHandlers } from "./render-helpers";
+import { pageHtml } from "./render-pages";
 
 /**
  * Render UI. Interactive actions are handled by event delegation in main.ts
  * so 1s poll re-renders do not drop click listeners mid-gesture.
+ * Poll refreshes patch the top bar / resource bar in place (no remount).
  */
 export function renderApp(
   root: HTMLElement,
@@ -32,6 +35,22 @@ export function renderApp(
   }
 
   const fleetDraft = salvageFleetForm(root);
+
+  if (canPatchShell(root, state.view, state.activePage)) {
+    patchLiveChrome(root, state.view, state);
+    const main = root.querySelector<HTMLElement>("#page-main");
+    if (main) {
+      main.innerHTML = pageHtml(
+        state.activePage,
+        state.view,
+        state.busy,
+        fleetDraft,
+      );
+    }
+    startCountdownTick();
+    return;
+  }
+
   root.innerHTML = dashboardHtml(
     state.view,
     state,
