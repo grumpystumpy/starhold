@@ -276,7 +276,8 @@ export interface UniverseState {
   /** Lazy AI catch-up cursor (Hobby bounded batch). */
   lastAiSimAt?: number;
   aiCatchUpCursor?: string | null;
-  /** Active Swarm Mothership occupations keyed by planetId. */
+  /** Active Mothership occupations keyed by planetId. */
+
   occupations?: Record<string, OccupationState>;
   /** Mini planet ids (thread K fills discovery). */
   miniPlanetIds?: string[];

@@ -52,7 +52,7 @@ Already original (keep): Ore Extractor, Crystal Lattice, Deut Still, Solar Array
 
 | Id | Old display | **New display** |
 |----|-------------|-----------------|
-| `colonyShip` | Colony Ship | **Outpost Cradle** |
+| `colonyShip` | Colony Ship | **Colonizer** (was Outpost Cradle) |
 | `recycler` | Recycler | **Salvage Trawler** |
 | `probe` | Spy Probe | **Whisper Probe** |
 
@@ -82,7 +82,7 @@ Already original (keep): Scout Skiff, Ore Hauler, Interceptor, Aegis Cruiser, Br
 
 | Id | Display | Effect |
 |----|---------|--------|
-| `swarmHold` | **Swarm Hold** | +15% of base (**2000**) Swarm Mothership capacity per level |
+| `swarmHold` | **Swarm Hold** | +15% of base (**2,000**) Mothership capacity per level |
 | `queueLogistics` | **Yard Logistics** | +1 building/ship/defense queue slot per 2 levels (see §2) |
 
 ### New building (Round 2)
@@ -598,7 +598,7 @@ Can **destroy** mini planets (≥1 survived on win); capture no longer gates on 
 | Speed | `20_000` |
 | Fuel / distance | `0` (carried) |
 
-- **Must be carried** by Swarm Mothership (not free-flying between systems alone).
+- **Must be carried** by Mothership (not free-flying between systems alone).
 - **Swarm numbers bonus:** when drones in battle ≥ 50, attack `× (1 + 0.002 * min(count, 2000))` (cap +400%).
 - **Intercept:** 70% of damage targeted at mothership is redirected to drones (distributed).
 
@@ -620,7 +620,7 @@ Can **destroy** mini planets (≥1 survived on win); capture no longer gates on 
 - Intercepts mothership damage (50% share with drones if both present; drones priority first).
 - **Kamikaze:** if mothership hull < 30% of max during combat, each harvester may suicide: deal `shieldDmg = 80`, `hullDmg = 40` to a random enemy combatant; harvester destroyed.
 
-### 7.5 Swarm Mothership (`swarmMothership`) — 2nd largest
+### 7.5 Mothership (`swarmMothership`) — 2nd largest
 
 **Role:** very high shields; very low attack; okay armor. Carries **2,000** swarms (base). Can occupy **mini planets** (same occupation rules) and **harvest debris** (Salvage Trawler–equivalent for debris fields; asteroid harvest still requires a Trawler).
 
@@ -655,9 +655,9 @@ Can **destroy** mini planets (≥1 survived on win); capture no longer gates on 
 
 If per-unit build time < 1s: each tick produces `batch = floor(elapsed / unitTime)` units (never floor unit time at 1s). When unit time ≥ 1s, complete-at semantics unchanged.
 
-### 7.6 Occupation (Swarm Mothership)
+### 7.6 Occupation (Mothership)
 
-After attacker destroys **all defenses** on enemy planet/moon and at least one Swarm Mothership remains on-site:
+After attacker destroys **all defenses** on enemy planet/moon and at least one Mothership remains on-site:
 
 ```ts
 interface OccupationState {

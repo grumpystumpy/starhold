@@ -17,7 +17,7 @@ UI: Deploy mission target list = own other planets **plus** rivals (labeled).
 ## Transport (unchanged rules + UX)
 
 - Still requires cargo load + own other planet.
-- Empty state: explain colonize path (Stellar Cartography → Outpost Cradle → empty galaxy slot).
+- Empty state: explain colonize path (Stellar Cartography → Colonizer → empty galaxy slot).
 
 ## Espionage intel decay
 

@@ -75,7 +75,7 @@ export function fleetComposer(
   } else if (mission === "harvestAsteroid") {
     for (const a of view.galaxy.asteroids ?? []) {
       options.push(
-        `<option value="asteroid:${escapeAttr(a.id)}">Asteroid ${escapeHtml(a.id)} (${fmt(a.metal)}/${fmt(a.crystal)}/${fmt(a.deuterium)} · ${a.richness} left)</option>`,
+        `<option value="asteroid:${escapeAttr(a.id)}">Asteroid ${escapeHtml(a.id)} (${fmt(a.metal)}/${fmt(a.crystal)}/${fmt(a.deuterium)} · ${fmt(a.richness)} left)</option>`,
       );
     }
   } else if (mission === "expedition") {
@@ -231,7 +231,7 @@ export function fleetComposer(
   const presetOptions = presets
     .map((p) => {
       const ships = SHIP_ORDER.filter((id) => (p.ships[id] ?? 0) > 0)
-        .map((id) => `${p.ships[id]}×${SHIPS[id].name}`)
+        .map((id) => `${fmt(p.ships[id] ?? 0)}×${SHIPS[id].name}`)
         .join(", ");
       return `<option value="${escapeAttr(p.id)}">${escapeHtml(p.name)}${ships ? ` — ${escapeHtml(ships)}` : ""}</option>`;
     })

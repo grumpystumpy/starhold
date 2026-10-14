@@ -1,8 +1,11 @@
-import type {
-  BuildingId,
-  DefenseId,
-  ResearchId,
-  ShipId,
+import {
+  DEFENSES,
+  RESEARCH,
+  SHIPS,
+  type BuildingId,
+  type DefenseId,
+  type ResearchId,
+  type ShipId,
 } from "@starhold/game";
 import {
   buildDefense,
@@ -17,6 +20,7 @@ import {
   session,
   setFlash,
 } from "./session";
+import { fmt } from "./ui/format";
 
 export async function doUpgrade(buildingId: BuildingId): Promise<void> {
   if (!session.view) return;
@@ -35,7 +39,7 @@ export async function doUpgrade(buildingId: BuildingId): Promise<void> {
     setFlash(
       "notice",
       last
-        ? `Queued upgrade → level ${last.targetLevel} (${q!.length} in queue).`
+        ? `Queued upgrade → level ${fmt(last.targetLevel)} (${fmt(q!.length)} in queue).`
         : "Upgrade complete.",
     );
   } catch (err) {
@@ -64,11 +68,12 @@ export async function doBuild(shipId: ShipId, count: number): Promise<void> {
     const q = session.view.planet.shipQueue;
     const last = q?.length ? q[q.length - 1] : null;
     const hangar = session.view.planet.ships[shipId] ?? 0;
+    const shipName = SHIPS[shipId]?.name ?? shipId;
     setFlash(
       "notice",
       last
-        ? `Queued ${last.count}× ${shipId} · hangar will update when done.`
-        : `Hangar: ${shipId} ×${hangar}.`,
+        ? `Queued ${fmt(last.count)}× ${shipName} · hangar will update when done.`
+        : `Hangar: ${shipName} ×${fmt(hangar)}.`,
     );
   } catch (err) {
     setFlash(
@@ -98,11 +103,12 @@ export async function doBuildDefense(
     session.view = await buildDefense(session.view.player.id, defenseId, count);
     const q = session.view.planet.defenseQueue;
     const last = q?.length ? q[q.length - 1] : null;
+    const defenseName = DEFENSES[defenseId]?.name ?? defenseId;
     setFlash(
       "notice",
       last
-        ? `Queued ${last.count}× ${defenseId}.`
-        : `Defense built: ${defenseId}.`,
+        ? `Queued ${fmt(last.count)}× ${defenseName}.`
+        : `Defense built: ${defenseName}.`,
     );
   } catch (err) {
     setFlash(
@@ -129,11 +135,12 @@ export async function doResearch(researchId: ResearchId): Promise<void> {
     session.view = await researchTech(session.view.player.id, researchId);
     const q = session.view.player.researchQueue;
     const last = q?.length ? q[q.length - 1] : null;
+    const researchName = RESEARCH[researchId]?.name ?? researchId;
     setFlash(
       "notice",
       last
-        ? `Researching → level ${last.targetLevel}.`
-        : `Research complete: ${researchId}.`,
+        ? `Researching → level ${fmt(last.targetLevel)}.`
+        : `Research complete: ${researchName}.`,
     );
   } catch (err) {
     setFlash(

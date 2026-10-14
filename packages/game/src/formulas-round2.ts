@@ -28,7 +28,7 @@ export function voidforgeMoonKillChancePct(
   );
 }
 
-/** Swarm Mothership carry capacity for one mothership at a Swarm Hold level. */
+/** Mothership carry capacity for one mothership at a Swarm Hold level. */
 export function swarmCapacityForLevel(swarmHoldLevel: number): number {
   const level = Math.max(0, Math.floor(swarmHoldLevel));
   const raw = Math.floor(
@@ -62,7 +62,7 @@ export function swarmDroneAttackMult(droneCount: number): number {
 
 /**
  * True when fleet can scoop debris fields.
- * Salvage Trawler or Swarm Mothership (World Eater cargo is always 0).
+ * Salvage Trawler or Mothership (World Eater cargo is always 0).
  */
 export function canCollectDebris(ships: FleetShips): boolean {
   return (ships.recycler ?? 0) >= 1 || (ships.swarmMothership ?? 0) >= 1;
@@ -74,7 +74,7 @@ export function canDestroyMiniPlanet(ships: FleetShips): boolean {
 }
 
 /**
- * Direct capture on win: Void Titan, Swarm Mothership, or World Eater.
+ * Direct capture on win: Void Titan, Mothership, or World Eater.
  * Ordinary fleets only vacate the owner (unoccupied).
  */
 export function canDirectCaptureMini(ships: FleetShips): boolean {

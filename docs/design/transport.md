@@ -2,7 +2,7 @@
 
 ## Goal
 
-Move cargo (and ships) between **own** planets. Full value requires colonies (Stellar Cartography + Outpost Cradle) — also landed as vertical slice.
+Move cargo (and ships) between **own** planets. Full value requires colonies (Stellar Cartography + Colonizer) — also landed as vertical slice.
 
 ## Rules
 

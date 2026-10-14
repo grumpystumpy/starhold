@@ -93,7 +93,7 @@ Shared contract: **[design/round2-contract.md](./design/round2-contract.md)** (o
 2. **Navigation** — Top-left dropdown; separate pages with real routes/URLs for Buildings, Defenses, Shipyard, Research, Galaxy, Officers, Skills, plus Overview, Fleet, Highscore, Messages.
 3. **Player levels** — No max level. XP from building, research, combat, expeditions, pirate kills (design amounts in contract). Each level grants: +0.5% resource production, time reduction on build/research/fleet, shielding tech, weapons tech, and ship build speed. Level + XP bar in the top bar and on highscores.
 4. **Pirates upgrade** — Historical Round 2 intent (levels, 3h free ships). **Operational rules now follow [Pirates + Aliens redesign](#pirates--aliens-redesign-2026-10-14)** (cap 100, defenses accumulate, ship exclusions, 200-base density, once-per-hour random raids, split/coalition).
-5. **Rename audit** — OGame-identical labels → Starhold flavor (Crater Hab, Horizon Scanner, Fold Bridge, Voidforge Titan, Outpost Cradle, Salvage Trawler, Whisper Probe, Beam Emplacement, Aegis Cupola, Power Discipline, Pulse Drive, Ordnance Doctrine, Hull Weave, Aegis Lattice, Shadow Optics, Stellar Cartography, Fleet OS). Audit entire catalogs.
+5. **Rename audit** — OGame-identical labels → Starhold flavor (Crater Hab, Horizon Scanner, Fold Bridge, Voidforge Titan, Colonizer, Salvage Trawler, Whisper Probe, Beam Emplacement, Aegis Cupola, Power Discipline, Pulse Drive, Ordnance Doctrine, Hull Weave, Aegis Lattice, Shadow Optics, Stellar Cartography, Fleet OS). Audit entire catalogs.
 6. **Mini planets** (Micah revision — latest overrides):
    - Spawn ~**1 per 5 systems** (multiple minis OK in same system); outside slots 1–16; **rich** output; drift over time; normal buildings + four specials.
    - Expedition discovery = finder-only until **8h after colonized**, then galaxy-visible to all.
@@ -105,9 +105,9 @@ Shared contract: **[design/round2-contract.md](./design/round2-contract.md)** (o
 7. **New ships** (combat + rapid fire + tests; friend-group balance):
    - **Voidforge Titan** — moon-killer flagship; Deathstar-class balance reference only; moon destruction chance formula
    - **World Eater** — destroy mini planets → metal/crystal debris (never deut); cannot collect debris
-   - **Swarm Drone** — tiny/fast/low dmg/low armor/high shields/no cargo/cheap; swarm numbers bonus; intercepts damage to mothership; must be carried by Swarm Mothership
+   - **Swarm Drone** — tiny/fast/low dmg/low armor/high shields/no cargo/cheap; swarm numbers bonus; intercepts damage to mothership; must be carried by Mothership
    - **Swarm Harvester** — harvest debris + steal resources into mothership cargo; no weapons, high shields, medium armor; intercepts mothership damage; if mothership <30% armor, kamikaze for shield+armor damage; mothership-carried
-   - **Swarm Mothership** — carry up to 2000 swarm ships; produce drones anywhere (no home planet); research Swarm Hold +15% of base (300) capacity per level; can occupy enemy planet/moon up to 2 days after defenses destroyed (occupation effects in contract)
+   - **Mothership** — carry up to 2,000 swarm ships; produce drones anywhere (no home planet); research Swarm Hold +15% of base (300) capacity per level; can occupy enemy planet/moon up to 2 days after defenses destroyed (occupation effects in contract)
 
 ### Parallel workstreams (Round 2)
 
