@@ -2555,6 +2555,44 @@ var BUILDINGS = {
     costGrowth: 2,
     baseBuildSeconds: 40,
     energyUsePerLevel: 15
+  },
+  riftSiphon: {
+    id: "riftSiphon",
+    name: "Rift Siphon",
+    description: "Mini-planet special \u2014 +15% all mine output on this body per level (max 5).",
+    baseCost: { metal: 800, crystal: 400, deuterium: 200 },
+    costGrowth: 1.8,
+    baseBuildSeconds: 45,
+    energyUsePerLevel: 25,
+    maxLevel: 5
+  },
+  echoVault: {
+    id: "echoVault",
+    name: "Echo Vault",
+    description: "Mini-planet special \u2014 +25% storage caps per level (max 5).",
+    baseCost: { metal: 1200, crystal: 800, deuterium: 0 },
+    costGrowth: 1.9,
+    baseBuildSeconds: 40,
+    maxLevel: 5
+  },
+  anomalyForge: {
+    id: "anomalyForge",
+    name: "Anomaly Forge",
+    description: "Mini-planet special \u2014 \u22128% ship build time per level (max 5).",
+    baseCost: { metal: 1e3, crystal: 1e3, deuterium: 400 },
+    costGrowth: 1.9,
+    baseBuildSeconds: 50,
+    energyUsePerLevel: 30,
+    maxLevel: 5
+  },
+  driftBeacon: {
+    id: "driftBeacon",
+    name: "Drift Beacon",
+    description: "Mini-planet special \u2014 +1 expedition slot at level 1 (higher levels reserved).",
+    baseCost: { metal: 2e3, crystal: 1500, deuterium: 1e3 },
+    costGrowth: 2,
+    baseBuildSeconds: 60,
+    maxLevel: 5
   }
 };
 var RESEARCH = {
@@ -2673,7 +2711,36 @@ var SWARM_KAMIKAZE_HULL_DMG = 40;
 var OCCUPATION_DURATION_MS = 2 * 24 * 60 * 60 * 1e3;
 var OCCUPATION_OCCUPIER_SHARE = 0.3;
 var OCCUPATION_OWNER_SHARE = 0.7;
-var MINI_WORLD_EATER_MIN = 5;
+var MINI_WORLD_EATER_MIN = 1;
+var MINI_SLOT_MIN = 20;
+var MINI_SLOT_MAX = 29;
+var MINI_SYSTEMS_PER = 5;
+var MINI_FIELDS_MIN = 80;
+var MINI_FIELDS_MAX = 140;
+var MINI_RICH_MINE_MULT = 1.75;
+var MINI_DESTROY_RESOURCE_MULT = 5;
+var MINI_DESTROY_DEBRIS_FRAC = 0.75;
+var MINI_GALAXY_VISIBLE_AFTER_MS = 8 * 60 * 60 * 1e3;
+var MINI_DRIFT_INTERVAL_MS = 6 * 60 * 60 * 1e3;
+var MINI_DRIFT_SYSTEM_STEP = 2;
+var MINI_IRONWATER_SYSTEMS_PER = 2e3;
+var MINI_FORTRESS_SYSTEMS_PER = 2500;
+var MINI_RELIC_SYSTEMS_PER = 2500;
+var MINI_IRONWATER_DEUT_MULT = 13;
+var MINI_FORTRESS_RELOCATE_GALAXY_RANGE = 1;
+var MINI_FORTRESS_RELOCATE_ACCURACY = 10;
+var MINI_FORTRESS_RELOCATE_DEUT_BASE = 1e4;
+var MINI_FORTRESS_RELOCATE_DEUT_PER_GALAXY = 25e3;
+var MINI_FORTRESS_RELOCATE_DEUT_PER_SYSTEM = 200;
+var MINI_FORTRESS_SHIELD_MULT = 3;
+var MINI_FORTRESS_ATTACK_MULT = 2;
+var MINI_FORTRESS_ARMOR_MULT = 0.25;
+var MINI_RELIC_RESEARCH_TIME = 0.7;
+var MINI_RELIC_EXPEDITION_FIND = 1.25;
+var MINI_RELIC_PIRATE_WEIGHT = 4;
+var RIFT_SIPHON_MINE_PER = 0.15;
+var ECHO_VAULT_STORAGE_PER = 0.25;
+var ANOMALY_FORGE_SHIP_TIME_PER = 0.08;
 var RIG_FOUNDRY_TIME_PER_LEVEL = 0.15;
 var RIG_FOUNDRY_TIME_FLOOR = 0.1;
 var CHRONO_LATHE_RIG_FOUNDRY_REQ = 10;
@@ -3104,6 +3171,27 @@ var MOON_FIELDS_PER_LUNAR_BASE = 3;
 var MOON_DEBRIS_MIN = 5e3;
 var MOON_CHANCE_CAP = 20;
 var SPY_REPORT_TTL_MS = 20 * 60 * 1e3;
+var BUILDING_ORDER = [
+  "metalMine",
+  "crystalMine",
+  "deutSynth",
+  "solarPlant",
+  "metalStorage",
+  "crystalStorage",
+  "deutTank",
+  "shipyard",
+  "researchLab",
+  "lunarBase",
+  "sensorArray",
+  "jumpGate",
+  "chronoLathe",
+  "mantleLoom",
+  "rigFoundry",
+  "riftSiphon",
+  "echoVault",
+  "anomalyForge",
+  "driftBeacon"
+];
 var PLANET_BUILDING_ORDER = [
   "metalMine",
   "crystalMine",
@@ -3127,6 +3215,16 @@ var MOON_BUILDING_ORDER = [
   "crystalStorage",
   "deutTank",
   "shipyard"
+];
+var MINI_SPECIAL_BUILDINGS = [
+  "riftSiphon",
+  "echoVault",
+  "anomalyForge",
+  "driftBeacon"
+];
+var MINI_BUILDING_ORDER = [
+  ...PLANET_BUILDING_ORDER,
+  ...MINI_SPECIAL_BUILDINGS
 ];
 var SHIP_ORDER = [
   "scout",
@@ -3435,9 +3533,21 @@ function empireExpeditionCap(player, baseMaxExpeditions) {
 function isMoon(planet) {
   return planet.kind === "moon";
 }
+function isMiniBody(planet) {
+  return Boolean(planet.flags?.mini);
+}
 function buildingAllowedOn(planet, buildingId) {
+  if (isMiniBody(planet)) return MINI_BUILDING_ORDER.includes(buildingId);
   const order2 = isMoon(planet) ? MOON_BUILDING_ORDER : PLANET_BUILDING_ORDER;
   return order2.includes(buildingId);
+}
+function riftSiphonMineMult(planet) {
+  const level = Math.min(5, Math.max(0, planet.buildings.riftSiphon ?? 0));
+  return 1 + RIFT_SIPHON_MINE_PER * level;
+}
+function echoVaultStorageMult(planet) {
+  const level = Math.min(5, Math.max(0, planet.buildings.echoVault ?? 0));
+  return 1 + ECHO_VAULT_STORAGE_PER * level;
 }
 function fieldsCap(planet) {
   if (isMoon(planet)) {
@@ -3490,10 +3600,15 @@ function shipCost(shipId, count) {
     deuterium: def.cost.deuterium * count
   };
 }
-function shipUnitBuildSeconds(shipId, shipyardLevel, naniteLevel = 0, rigFoundryLevel = 0) {
+function shipUnitBuildSeconds(shipId, shipyardLevel, naniteLevel = 0, rigFoundryLevel = 0, anomalyForgeLevel = 0) {
   const def = SHIPS[shipId];
   const speedFactor = 1 + Math.max(0, shipyardLevel - 1) * 0.1;
-  const raw2 = def.buildSeconds / speedFactor * constructionSpeedFactor(rigFoundryLevel, naniteLevel);
+  const anomaly = Math.min(5, Math.max(0, Math.floor(anomalyForgeLevel)));
+  const anomalyFactor = Math.max(
+    0.2,
+    1 - ANOMALY_FORGE_SHIP_TIME_PER * anomaly
+  );
+  const raw2 = def.buildSeconds / speedFactor * constructionSpeedFactor(rigFoundryLevel, naniteLevel) * anomalyFactor;
   return Math.max(MIN_UNIT_SECONDS, raw2);
 }
 function defenseCost(defenseId, count) {
@@ -3567,10 +3682,13 @@ function energyFactor(planet, energyOutputMult = 1) {
   return Math.min(1, produced / used);
 }
 function storageFor(planet) {
+  const vault = echoVaultStorageMult(planet);
   return {
-    metal: storageCap(planet.buildings.metalStorage ?? 0),
-    crystal: storageCap(planet.buildings.crystalStorage ?? 0),
-    deuterium: storageCap(planet.buildings.deutTank ?? 0)
+    metal: Math.floor(storageCap(planet.buildings.metalStorage ?? 0) * vault),
+    crystal: Math.floor(
+      storageCap(planet.buildings.crystalStorage ?? 0) * vault
+    ),
+    deuterium: Math.floor(storageCap(planet.buildings.deutTank ?? 0) * vault)
   };
 }
 function fieldsUsed(planet) {
@@ -3593,12 +3711,15 @@ function productionPerHour(planet, universeSpeed = 1, energyTechLevel = 0, boost
   const factor = energyFactor(planet, energyMult);
   const techBonus = 1 + energyTechLevel * 0.02;
   const vein = veinAnchorMineMult(planet);
-  const incomeScale = universeSpeed * PRODUCTION_MULT * techBonus * mineMult * vein;
+  const rift = riftSiphonMineMult(planet);
+  const rich = isMiniBody(planet) ? MINI_RICH_MINE_MULT : 1;
+  const incomeScale = universeSpeed * PRODUCTION_MULT * techBonus * mineMult * vein * rift * rich;
   const pos = productionMultForSlot(planet.coords.slot);
+  const ironwaterDeut = isMiniBody(planet) && planet.flags?.miniKind === "ironwater" ? MINI_IRONWATER_DEUT_MULT : 1;
   return {
     metal: mineOutputPerHour("metal", planet.buildings.metalMine ?? 0) * factor * incomeScale * pos.metal,
     crystal: mineOutputPerHour("crystal", planet.buildings.crystalMine ?? 0) * factor * incomeScale * pos.crystal,
-    deuterium: mineOutputPerHour("deuterium", planet.buildings.deutSynth ?? 0) * factor * incomeScale * pos.deuterium
+    deuterium: mineOutputPerHour("deuterium", planet.buildings.deutSynth ?? 0) * factor * incomeScale * pos.deuterium * ironwaterDeut
   };
 }
 function canAfford(have, cost) {
@@ -3792,8 +3913,11 @@ function swarmDroneAttackMult(droneCount) {
 function canCollectDebris(ships) {
   return (ships.recycler ?? 0) >= 1 || (ships.swarmMothership ?? 0) >= 1;
 }
-function canResolveMiniPlanet(ships) {
+function canDestroyMiniPlanet(ships) {
   return (ships.worldEater ?? 0) >= MINI_WORLD_EATER_MIN;
+}
+function canDirectCaptureMini(ships) {
+  return (ships.worldEater ?? 0) >= 1 || (ships.voidforgeTitan ?? 0) >= 1 || (ships.swarmMothership ?? 0) >= 1;
 }
 function shipResearchReqMet(shipId, research) {
   const req = SHIPS[shipId].researchReq;
@@ -3900,17 +4024,19 @@ function pickFocusTarget(ships, defenses) {
   }
   return best;
 }
-function targetHp(id, research) {
+function targetHp(id, research, battlefield) {
+  const sMult = battlefield?.shieldMult ?? 1;
+  const aMult = battlefield?.armorMult ?? 1;
   if (SHIP_ORDER.includes(id)) {
     const d2 = SHIPS[id];
-    return unitHp(d2.shield, d2.hull, research);
+    return unitHp(d2.shield * sMult, d2.hull * aMult, research);
   }
   const d = DEFENSES[id];
-  return unitHp(d.shield, d.hull, research);
+  return unitHp(d.shield * sMult, d.hull * aMult, research);
 }
-function applyDamageToTarget(side, id, damage, research) {
+function applyDamageToTarget(side, id, damage, research, battlefield) {
   if (damage <= 0) return;
-  const hp = targetHp(id, research);
+  const hp = targetHp(id, research, battlefield);
   const pool = (side.residual[id] ?? 0) + damage;
   const kills = Math.floor(pool / hp);
   const rem = pool - kills * hp;
@@ -3951,18 +4077,18 @@ function redistributeSwarmIntercept(target, damage, side) {
   }
   return out;
 }
-function mothershipHullFraction(side, research) {
+function mothershipHullFraction(side, research, battlefield) {
   const count = side.ships.swarmMothership ?? 0;
   if (count <= 0) return 0;
-  const hp = targetHp("swarmMothership", research);
+  const hp = targetHp("swarmMothership", research, battlefield);
   const residual = side.residual.swarmMothership ?? 0;
   return Math.max(0, Math.min(1, 1 - residual / hp));
 }
-function applyHarvesterKamikaze(own, enemy, ownResearch, enemyResearch) {
+function applyHarvesterKamikaze(own, enemy, ownResearch, enemyResearch, battlefield) {
   const harvesters = own.ships.swarmHarvester ?? 0;
   if (harvesters <= 0) return 0;
   if ((own.ships.swarmMothership ?? 0) <= 0) return 0;
-  if (mothershipHullFraction(own, ownResearch) >= SWARM_KAMIKAZE_HULL_FRAC) {
+  if (mothershipHullFraction(own, ownResearch, battlefield) >= SWARM_KAMIKAZE_HULL_FRAC) {
     return 0;
   }
   const focus = pickFocusTarget(enemy.ships, enemy.defenses);
@@ -3972,14 +4098,20 @@ function applyHarvesterKamikaze(own, enemy, ownResearch, enemyResearch) {
     return harvesters;
   }
   const dmgPer = SWARM_KAMIKAZE_SHIELD_DMG + SWARM_KAMIKAZE_HULL_DMG;
-  applyDamageToTarget(enemy, focus, harvesters * dmgPer, enemyResearch);
+  applyDamageToTarget(
+    enemy,
+    focus,
+    harvesters * dmgPer,
+    enemyResearch,
+    battlefield
+  );
   own.ships.swarmHarvester = 0;
   own.residual.swarmHarvester = 0;
   return harvesters;
 }
-function applyShotWithIntercept(side, target, damage, research) {
+function applyShotWithIntercept(side, target, damage, research, battlefield) {
   for (const part of redistributeSwarmIntercept(target, damage, side)) {
-    applyDamageToTarget(side, part.target, part.damage, research);
+    applyDamageToTarget(side, part.target, part.damage, research, battlefield);
   }
 }
 function collectFire(firerShips, firerDefenses, targetShips, targetDefenses, firerResearch, opts) {
@@ -3987,10 +4119,11 @@ function collectFire(firerShips, firerDefenses, targetShips, targetDefenses, fir
   const focus = pickFocusTarget(targetShips, targetDefenses);
   if (!focus) return shots;
   const attackMult = Math.max(0.01, opts?.attackMult ?? 1);
+  const battlefieldAtk = Math.max(0.01, opts?.battlefield?.attackMult ?? 1);
   const slot = opts?.defenseSlot;
   for (const id of livingShipIds(firerShips)) {
     const def = SHIPS[id];
-    let atk = unitAtk(def.attack, firerResearch) * attackMult;
+    let atk = unitAtk(def.attack, firerResearch) * attackMult * battlefieldAtk;
     if (id === "swarmDrone") {
       atk *= swarmDroneAttackMult(firerShips.swarmDrone ?? 0);
     }
@@ -4002,7 +4135,7 @@ function collectFire(firerShips, firerDefenses, targetShips, targetDefenses, fir
   if (firerDefenses) {
     for (const id of livingDefenseIds(firerDefenses)) {
       const def = DEFENSES[id];
-      let atk = unitAtk(def.attack, firerResearch) * attackMult;
+      let atk = unitAtk(def.attack, firerResearch) * attackMult * battlefieldAtk;
       if (slot != null && def.slotAttackBonus && def.slotAttackBonus.slots.includes(slot)) {
         atk *= def.slotAttackBonus.factor;
       }
@@ -4018,6 +4151,7 @@ function resolveCombat(attacker, defender, defenses = emptyDefenses(), attackerR
   const defensePowerMult = Math.max(0.01, mods?.defensePower ?? 1);
   const attackMult = Math.max(0.01, mods?.attackMult ?? 1);
   const defenseSlot = mods?.defenseSlot;
+  const battlefield = mods?.battlefield;
   const atkSide = {
     ships: normalizeFleetShips(attacker),
     defenses: emptyDefenses(),
@@ -4057,7 +4191,7 @@ function resolveCombat(attacker, defender, defenses = emptyDefenses(), attackerR
       defSide.ships,
       defSide.defenses,
       attackerResearch,
-      { attackMult }
+      { attackMult, battlefield }
     );
     const defShots = collectFire(
       defSide.ships,
@@ -4065,14 +4199,15 @@ function resolveCombat(attacker, defender, defenses = emptyDefenses(), attackerR
       atkSide.ships,
       emptyDefenses(),
       defenderResearch,
-      { defenseSlot }
+      { defenseSlot, battlefield }
     );
     for (const shot of atkShots) {
       applyShotWithIntercept(
         defSide,
         shot.target,
         shot.damage / defensePowerMult,
-        defenderResearch
+        defenderResearch,
+        battlefield
       );
     }
     for (const shot of defShots) {
@@ -4080,20 +4215,23 @@ function resolveCombat(attacker, defender, defenses = emptyDefenses(), attackerR
         atkSide,
         shot.target,
         shot.damage * defensePowerMult,
-        attackerResearch
+        attackerResearch,
+        battlefield
       );
     }
     applyHarvesterKamikaze(
       atkSide,
       defSide,
       attackerResearch,
-      defenderResearch
+      defenderResearch,
+      battlefield
     );
     applyHarvesterKamikaze(
       defSide,
       atkSide,
       defenderResearch,
-      attackerResearch
+      attackerResearch,
+      battlefield
     );
     const atkAlive2 = shipCount(atkSide.ships) > 0;
     const defAlive2 = shipCount(defSide.ships) + defenseCount(defSide.defenses) > 0;
@@ -4209,6 +4347,9 @@ function xpForCombatLose() {
 }
 function xpForExpedition() {
   return 4;
+}
+function xpForMiniPlanetDiscovery() {
+  return 10;
 }
 function xpForPirateBaseDestroy(baseLevel) {
   return 4 + Math.max(0, Math.floor(baseLevel));
@@ -4356,12 +4497,12 @@ var BUILTIN_META = {
   miniPlanetCapture: {
     name: "Mini Planet Capture",
     intent: "miniCapture",
-    ships: { worldEater: 5 }
+    ships: { cruiser: 10, hauler: 20 }
   },
   miniPlanetDestruction: {
     name: "Mini Planet Destruction",
     intent: "miniDestroy",
-    ships: { worldEater: 5 }
+    ships: { worldEater: 1, hauler: 20 }
   }
 };
 function clampShips(ships) {
@@ -4477,83 +4618,6 @@ function deleteFleetPreset(universe, playerId, presetId) {
   }
   player.fleetPresets = next;
   return { ok: true, presets: next };
-}
-
-// packages/game/src/world-boosts.ts
-function emptyBoosts() {
-  return {
-    mineOutput: 1,
-    researchSpeed: 1,
-    fleetSpeed: 1,
-    fleetSlots: 0,
-    defensePower: 1,
-    energyOutput: 1,
-    espionageLevel: 0
-  };
-}
-function applyEffect(boosts, effect) {
-  switch (effect.kind) {
-    case "mineOutput":
-    case "researchSpeed":
-    case "fleetSpeed":
-    case "defensePower":
-    case "energyOutput":
-      boosts[effect.kind] *= effect.value;
-      break;
-    case "fleetSlots":
-    case "espionageLevel":
-      boosts[effect.kind] += effect.value;
-      break;
-    default: {
-      const _exhaustive = effect.kind;
-      throw new Error(`Unhandled effect kind: ${_exhaustive}`);
-    }
-  }
-}
-function pruneExpiredOfficers(player, now) {
-  const live = (player.officers ?? []).filter((o) => o.expiresAt > now);
-  player.officers = live;
-  return live;
-}
-function playerBoosts(player, now) {
-  const boosts = emptyBoosts();
-  if (!player) return boosts;
-  const officers = pruneExpiredOfficers(player, now);
-  for (const o of officers) {
-    const def = OFFICERS[o.officerId];
-    if (!def) continue;
-    for (const effect of def.effects) applyEffect(boosts, effect);
-  }
-  for (const id of player.skillsUnlocked ?? []) {
-    const def = SKILLS[id];
-    if (!def) continue;
-    for (const effect of def.effects) applyEffect(boosts, effect);
-  }
-  return boosts;
-}
-function grantStarshards(player, amount) {
-  const add = Math.max(0, Math.floor(amount));
-  player.starshards = Math.max(0, Math.floor(player.starshards ?? 0) + add);
-  return player.starshards;
-}
-function utcDayKey(now) {
-  return new Date(now).toISOString().slice(0, 10);
-}
-function canClaimDailyLogin(player, now) {
-  return player.lastDailyLoginUtc !== utcDayKey(now);
-}
-function grantPirateDestroyStarshards(player, tier) {
-  const t = Math.max(0, Math.floor(tier));
-  const amount = PIRATE_DESTROY_STARSHARDS_BASE + PIRATE_DESTROY_STARSHARDS_PER_TIER * t;
-  grantStarshards(player, amount);
-  return amount;
-}
-function grantPirateFleetKillStarshards(player) {
-  grantStarshards(player, PIRATE_DEFENSE_WIN_STARSHARDS);
-  return PIRATE_DEFENSE_WIN_STARSHARDS;
-}
-function expeditionStarshardsAmount(roll) {
-  return 5 + roll % 21;
 }
 
 // packages/game/src/world-queue-normalize.ts
@@ -4845,6 +4909,758 @@ function getDebris(universe, coords) {
   return universe.debris[coordsKey(coords)] ?? null;
 }
 
+// packages/game/src/world-mini.ts
+function emptyCargo() {
+  return { metal: 0, crystal: 0, deuterium: 0 };
+}
+function emptyMiniBuildings() {
+  return {
+    metalMine: 0,
+    crystalMine: 0,
+    deutSynth: 0,
+    solarPlant: 0,
+    metalStorage: 0,
+    crystalStorage: 0,
+    deutTank: 0,
+    shipyard: 0,
+    researchLab: 0,
+    lunarBase: 0,
+    sensorArray: 0,
+    jumpGate: 0,
+    chronoLathe: 0,
+    mantleLoom: 0,
+    rigFoundry: 0,
+    riftSiphon: 0,
+    echoVault: 0,
+    anomalyForge: 0,
+    driftBeacon: 0
+  };
+}
+function planetAtCoords(universe, coords) {
+  const key = coordsKey(coords);
+  return Object.values(universe.planets).find(
+    (p) => p.kind !== "moon" && coordsKey(p.coords) === key
+  ) ?? null;
+}
+function isMiniPlanet(planet) {
+  return Boolean(planet?.flags?.mini);
+}
+function miniKindOf(planet) {
+  const k = planet?.flags?.miniKind;
+  if (k === "ironwater" || k === "fortress" || k === "relic") return k;
+  return "standard";
+}
+function isUnclaimedMini(planet) {
+  return isMiniPlanet(planet) && !planet.ownerPlayerId;
+}
+function isMovingFortress(planet) {
+  return isMiniPlanet(planet) && miniKindOf(planet) === "fortress";
+}
+function miniPlanetId(galaxy, system, slot) {
+  return `mini:${galaxy}:${system}:${slot}`;
+}
+function rollMiniFields(seed) {
+  const span = MINI_FIELDS_MAX - MINI_FIELDS_MIN + 1;
+  return MINI_FIELDS_MIN + hashSeed(seed) % span;
+}
+function displayNameForKind(kind, galaxy, system, slot) {
+  switch (kind) {
+    case "ironwater":
+      return `Ironwater Rock ${galaxy}:${system}:${slot}`;
+    case "fortress":
+      return `Moving Fortress ${galaxy}:${system}:${slot}`;
+    case "relic":
+      return `Relic World ${galaxy}:${system}:${slot}`;
+    case "standard":
+      return `Drift Body ${galaxy}:${system}:${slot}`;
+    default: {
+      const _exhaustive = kind;
+      return _exhaustive;
+    }
+  }
+}
+function rollMiniKindsForSystem(seed, galaxy, system) {
+  const key = `${seed}:mini-kind:${galaxy}:${system}`;
+  const kinds = [];
+  if (hashSeed(`${key}:ironwater`) % MINI_IRONWATER_SYSTEMS_PER === 0) {
+    kinds.push("ironwater");
+  }
+  if (hashSeed(`${key}:fortress`) % MINI_FORTRESS_SYSTEMS_PER === 0) {
+    kinds.push("fortress");
+  }
+  if (hashSeed(`${key}:relic`) % MINI_RELIC_SYSTEMS_PER === 0) {
+    kinds.push("relic");
+  }
+  if (hashSeed(`${seed}:mini-spawn:${galaxy}:${system}`) % MINI_SYSTEMS_PER === 0) {
+    kinds.push("standard");
+  }
+  return kinds;
+}
+function freeMiniSlots(universe, galaxy, system) {
+  const free = [];
+  for (let slot = MINI_SLOT_MIN; slot <= MINI_SLOT_MAX; slot++) {
+    if (!planetAtCoords(universe, { galaxy, system, slot })) free.push(slot);
+  }
+  return free;
+}
+function pickFreeMiniSlot(universe, galaxy, system, salt) {
+  const free = freeMiniSlots(universe, galaxy, system);
+  if (free.length === 0) return null;
+  return free[hashSeed(salt) % free.length];
+}
+function createMiniPlanet(universeSeed, galaxy, system, slot, now, kind = "standard") {
+  const id = miniPlanetId(galaxy, system, slot);
+  const coords = { galaxy, system, slot };
+  return {
+    id,
+    ownerPlayerId: "",
+    name: displayNameForKind(kind, galaxy, system, slot),
+    coords,
+    kind: "planet",
+    parentPlanetId: null,
+    moonId: null,
+    fieldsCap: rollMiniFields(`${universeSeed}:mini-fields:${id}`),
+    resources: { metal: 400, crystal: 400, deuterium: 100 },
+    lastTickAt: now,
+    buildings: emptyMiniBuildings(),
+    ships: emptyFleetShips(),
+    defenses: emptyDefenses(),
+    buildQueue: [],
+    shipQueue: [],
+    defenseQueue: [],
+    flags: { mini: true, miniKind: kind },
+    discoveredBy: [],
+    lastDriftAt: now
+  };
+}
+function seedUniverseMinis(universe, now = Date.now()) {
+  const seed = universe.seed ?? universe.id;
+  if (!universe.miniPlanetIds) universe.miniPlanetIds = [];
+  const existing = new Set(universe.miniPlanetIds);
+  for (const id of existing) {
+    const p = universe.planets[id];
+    if (p?.flags?.mini && !p.flags.miniKind) p.flags.miniKind = "standard";
+  }
+  for (let galaxy = 1; galaxy <= MAP_GALAXIES; galaxy++) {
+    for (let system = 1; system <= MAP_SYSTEMS; system++) {
+      const kinds = rollMiniKindsForSystem(seed, galaxy, system);
+      let i = 0;
+      for (const kind of kinds) {
+        const slot = pickFreeMiniSlot(
+          universe,
+          galaxy,
+          system,
+          `${seed}:mini-slot:${galaxy}:${system}:${kind}:${i}`
+        );
+        i += 1;
+        if (slot == null) continue;
+        const id = miniPlanetId(galaxy, system, slot);
+        if (existing.has(id) || universe.planets[id]) {
+          if (!existing.has(id)) {
+            universe.miniPlanetIds.push(id);
+            existing.add(id);
+          }
+          continue;
+        }
+        universe.planets[id] = createMiniPlanet(
+          seed,
+          galaxy,
+          system,
+          slot,
+          now,
+          kind
+        );
+        universe.miniPlanetIds.push(id);
+        existing.add(id);
+      }
+    }
+  }
+}
+function seedMiniNearExpedition(universe, fleetId, coords, now) {
+  const seed = universe.seed ?? universe.id;
+  const slot = MINI_SLOT_MIN + hashSeed(`${seed}:mini-exp-slot:${fleetId}:${now}`) % (MINI_SLOT_MAX - MINI_SLOT_MIN + 1);
+  const g = coords.galaxy;
+  const s = Math.min(
+    MAP_SYSTEMS,
+    Math.max(
+      1,
+      coords.system + (hashSeed(`${seed}:mini-exp-sys:${fleetId}`) % 5 - 2)
+    )
+  );
+  const id = miniPlanetId(g, s, slot);
+  if (universe.planets[id]) return universe.planets[id];
+  if (planetAtCoords(universe, { galaxy: g, system: s, slot })) return null;
+  const planet = createMiniPlanet(seed, g, s, slot, now, "standard");
+  universe.planets[id] = planet;
+  if (!universe.miniPlanetIds) universe.miniPlanetIds = [];
+  if (!universe.miniPlanetIds.includes(id)) universe.miniPlanetIds.push(id);
+  return planet;
+}
+function isMiniGalaxyPublic(planet, now = Date.now()) {
+  if (!isMiniPlanet(planet) || planet.colonizedAt == null) return false;
+  return now >= planet.colonizedAt + MINI_GALAXY_VISIBLE_AFTER_MS;
+}
+function playerKnowsMini(universe, playerId, planetId, now = Date.now()) {
+  const planet = universe.planets[planetId];
+  if (!planet || !isMiniPlanet(planet)) return false;
+  if (planet.ownerPlayerId === playerId) return true;
+  if (isMiniGalaxyPublic(planet, now)) return true;
+  if (planet.discoveredBy?.includes(playerId)) return true;
+  const player = universe.players[playerId];
+  return Boolean(player?.discoveredMiniIds?.includes(planetId));
+}
+function discoverMiniPlanet(universe, playerId, planetId) {
+  const planet = universe.planets[planetId];
+  const player = universe.players[playerId];
+  if (!planet || !player || !isMiniPlanet(planet)) return null;
+  if (!planet.discoveredBy) planet.discoveredBy = [];
+  if (!planet.discoveredBy.includes(playerId)) {
+    planet.discoveredBy.push(playerId);
+  }
+  if (!player.discoveredMiniIds) player.discoveredMiniIds = [];
+  if (!player.discoveredMiniIds.includes(planetId)) {
+    player.discoveredMiniIds.push(planetId);
+  }
+  universe.planets[planetId] = planet;
+  universe.players[playerId] = player;
+  return planet;
+}
+function pickOrSeedMiniForDiscovery(universe, playerId, near, fleetId, now) {
+  const ids = universe.miniPlanetIds ?? [];
+  const unknown = ids.map((id) => universe.planets[id]).filter(
+    (p) => Boolean(p) && isMiniPlanet(p) && !playerKnowsMini(universe, playerId, p.id)
+  );
+  if (unknown.length > 0) {
+    const idx = hashSeed(`${fleetId}:mini-pick:${now}`) % unknown.length;
+    return unknown[idx];
+  }
+  return seedMiniNearExpedition(universe, fleetId, near, now);
+}
+function playerOwnsMiniKind(universe, playerId, kind) {
+  if (kind === "standard" || kind === "ironwater") return false;
+  const player = universe.players[playerId];
+  if (!player) return false;
+  for (const id of player.planetIds) {
+    const p = universe.planets[id];
+    if (p && isMiniPlanet(p) && miniKindOf(p) === kind) return true;
+  }
+  return false;
+}
+function buildingResidualCost(planet) {
+  let metal = 0;
+  let crystal = 0;
+  let deuterium = 0;
+  for (const id of BUILDING_ORDER) {
+    const level = planet.buildings[id] ?? 0;
+    for (let L = 0; L < level; L++) {
+      const c = buildingUpgradeCost(id, L);
+      metal += c.metal;
+      crystal += c.crystal;
+      deuterium += c.deuterium;
+    }
+  }
+  return { metal, crystal, deuterium };
+}
+function addCargoOverflowLost(current, ships, add) {
+  const cap = fleetCargoCapacity(ships);
+  const used = current.metal + current.crystal + current.deuterium;
+  let free = Math.max(0, Math.floor(cap - used));
+  const out = { ...current };
+  for (const key of ["metal", "crystal", "deuterium"]) {
+    const take = Math.min(Math.floor(add[key]), free);
+    out[key] += take;
+    free -= take;
+  }
+  return out;
+}
+function retreatDefenderShips(universe, planet) {
+  if (fleetShipCount(planet.ships) <= 0) {
+    planet.ships = emptyFleetShips();
+    return;
+  }
+  const owner = universe.players[planet.ownerPlayerId];
+  const home = owner && (universe.planets[owner.homePlanetId] ?? (owner.planetIds.map((id) => universe.planets[id]).find((p) => p && p.id !== planet.id && p.kind !== "moon") ?? null));
+  if (home) {
+    addShipsToPlanet(home, planet.ships);
+  }
+  planet.ships = emptyFleetShips();
+}
+function vacateMiniPlanet(universe, planet) {
+  const prevOwnerId = planet.ownerPlayerId;
+  if (prevOwnerId) {
+    retreatDefenderShips(universe, planet);
+    const prev = universe.players[prevOwnerId];
+    if (prev) {
+      prev.planetIds = prev.planetIds.filter((id) => id !== planet.id);
+      if (prev.activePlanetId === planet.id) {
+        prev.activePlanetId = prev.homePlanetId;
+      }
+      universe.players[prev.id] = prev;
+    }
+  }
+  planet.ownerPlayerId = "";
+  planet.buildQueue = [];
+  planet.shipQueue = [];
+  planet.defenseQueue = [];
+  universe.planets[planet.id] = planet;
+}
+function captureMiniPlanet(universe, attackerPlayerId, planet) {
+  const kind = miniKindOf(planet);
+  if ((kind === "fortress" || kind === "relic") && playerOwnsMiniKind(universe, attackerPlayerId, kind)) {
+    return {
+      ok: false,
+      error: kind === "fortress" ? "You already hold a Moving Fortress \u2014 cannot capture another." : "You already hold a Relic World \u2014 cannot capture another."
+    };
+  }
+  const prevOwnerId = planet.ownerPlayerId;
+  if (prevOwnerId && prevOwnerId !== attackerPlayerId) {
+    retreatDefenderShips(universe, planet);
+    const prev = universe.players[prevOwnerId];
+    if (prev) {
+      prev.planetIds = prev.planetIds.filter((id) => id !== planet.id);
+      if (prev.activePlanetId === planet.id) {
+        prev.activePlanetId = prev.homePlanetId;
+      }
+      universe.players[prev.id] = prev;
+    }
+  }
+  const attacker = universe.players[attackerPlayerId];
+  if (attacker) {
+    if (!attacker.planetIds.includes(planet.id)) {
+      attacker.planetIds.push(planet.id);
+    }
+    if (!attacker.discoveredMiniIds) attacker.discoveredMiniIds = [];
+    if (!attacker.discoveredMiniIds.includes(planet.id)) {
+      attacker.discoveredMiniIds.push(planet.id);
+    }
+    universe.players[attacker.id] = attacker;
+  }
+  planet.ownerPlayerId = attackerPlayerId;
+  if (!planet.discoveredBy) planet.discoveredBy = [];
+  if (!planet.discoveredBy.includes(attackerPlayerId)) {
+    planet.discoveredBy.push(attackerPlayerId);
+  }
+  if (planet.colonizedAt == null) planet.colonizedAt = Date.now();
+  planet.buildQueue = [];
+  planet.shipQueue = [];
+  planet.defenseQueue = [];
+  universe.planets[planet.id] = planet;
+  return { ok: true };
+}
+function reseedMiniAfterDestroy(universe, near, kind, now, salt) {
+  const seed = universe.seed ?? universe.id;
+  for (let attempt = 0; attempt < 24; attempt++) {
+    const sys = Math.min(
+      MAP_SYSTEMS,
+      Math.max(
+        1,
+        near.system + (hashSeed(`${salt}:sys:${attempt}`) % 9 - 4)
+      )
+    );
+    const slot = pickFreeMiniSlot(
+      universe,
+      near.galaxy,
+      sys,
+      `${salt}:slot:${attempt}`
+    );
+    if (slot == null) continue;
+    const planet = createMiniPlanet(
+      seed,
+      near.galaxy,
+      sys,
+      slot,
+      now,
+      kind
+    );
+    universe.planets[planet.id] = planet;
+    if (!universe.miniPlanetIds) universe.miniPlanetIds = [];
+    if (!universe.miniPlanetIds.includes(planet.id)) {
+      universe.miniPlanetIds.push(planet.id);
+    }
+    return planet;
+  }
+  return null;
+}
+function destroyMiniPlanet(universe, attackerFleetShips, attackerCargo, planet, keepFleetId) {
+  const payout = {
+    metal: Math.floor(planet.resources.metal * MINI_DESTROY_RESOURCE_MULT),
+    crystal: Math.floor(planet.resources.crystal * MINI_DESTROY_RESOURCE_MULT),
+    deuterium: 0
+  };
+  const newCargo = addCargoOverflowLost(
+    attackerCargo,
+    attackerFleetShips,
+    payout
+  );
+  const residual = buildingResidualCost(planet);
+  addDebris(universe, planet.coords, {
+    metal: Math.floor(residual.metal * MINI_DESTROY_DEBRIS_FRAC),
+    crystal: Math.floor(residual.crystal * MINI_DESTROY_DEBRIS_FRAC),
+    deuterium: 0
+  });
+  const owner = universe.players[planet.ownerPlayerId];
+  if (owner) {
+    owner.planetIds = owner.planetIds.filter((id) => id !== planet.id);
+    if (owner.activePlanetId === planet.id) {
+      owner.activePlanetId = owner.homePlanetId;
+    }
+    universe.players[owner.id] = owner;
+  }
+  for (const [fid, fleet] of Object.entries(universe.fleets)) {
+    if (keepFleetId && fid === keepFleetId) continue;
+    if (fleet.originPlanetId === planet.id || fleet.targetPlanetId === planet.id) {
+      delete universe.fleets[fid];
+    }
+  }
+  if (universe.occupations?.[planet.id]) {
+    delete universe.occupations[planet.id];
+  }
+  if (universe.miniPlanetIds) {
+    universe.miniPlanetIds = universe.miniPlanetIds.filter(
+      (id) => id !== planet.id
+    );
+  }
+  for (const player of Object.values(universe.players)) {
+    if (player.discoveredMiniIds?.includes(planet.id)) {
+      player.discoveredMiniIds = player.discoveredMiniIds.filter(
+        (id) => id !== planet.id
+      );
+    }
+  }
+  delete universe.planets[planet.id];
+  return newCargo;
+}
+function applyMiniPlanetResolve(universe, playerId, fleetId, choice) {
+  const fleet = universe.fleets[fleetId];
+  if (!fleet || fleet.ownerPlayerId !== playerId) {
+    return { ok: false, error: "Fleet not found." };
+  }
+  const report = fleet.reportId ? universe.reports[fleet.reportId] : null;
+  if (!report || report.outcome !== "attacker_win") {
+    return { ok: false, error: "No winning raid report on this fleet." };
+  }
+  if (report.miniResolved) {
+    return { ok: false, error: "Mini planet already resolved." };
+  }
+  if (!report.miniResolveAvailable && !report.miniPlanetId) {
+    return { ok: false, error: "No mini-planet resolve pending." };
+  }
+  const planetId = report.miniPlanetId ?? fleet.targetPlanetId;
+  if (!planetId) return { ok: false, error: "Fleet has no target." };
+  const planet = universe.planets[planetId];
+  if (!planet || !isMiniPlanet(planet)) {
+    return { ok: false, error: "Target is not a mini planet." };
+  }
+  if (planet.ownerPlayerId === playerId) {
+    return { ok: false, error: "You already own this mini planet." };
+  }
+  const resolved = choice === "destroy" ? "destroy" : "capture";
+  if (resolved === "destroy") {
+    if (!canDestroyMiniPlanet(fleet.ships)) {
+      return {
+        ok: false,
+        error: `Need at least ${MINI_WORLD_EATER_MIN} World Eater to destroy.`
+      };
+    }
+    if (!planet.ownerPlayerId) {
+      return { ok: false, error: "Mini already unoccupied \u2014 nothing to destroy." };
+    }
+    const kind = miniKindOf(planet);
+    const coords = { ...planet.coords };
+    fleet.cargo = destroyMiniPlanet(
+      universe,
+      fleet.ships,
+      fleet.cargo ?? emptyCargo(),
+      planet,
+      fleet.id
+    );
+    reseedMiniAfterDestroy(
+      universe,
+      coords,
+      kind,
+      report.at,
+      `${fleet.id}:reseed`
+    );
+    report.miniResolved = "destroy";
+    report.miniResolveAvailable = false;
+    report.summary = `${report.summary} Mini planet destroyed \u2014 metal/crystal salvage loaded; body returns to discoverable pool.`;
+    universe.reports[report.id] = report;
+    universe.fleets[fleet.id] = fleet;
+    return { ok: true, planet: null, choice: "destroy" };
+  }
+  if (!canDirectCaptureMini(fleet.ships)) {
+    return {
+      ok: false,
+      error: "Ordinary fleets only clear the owner \u2014 reclaim with a Colonizer mission."
+    };
+  }
+  if (!planet.ownerPlayerId) {
+    return {
+      ok: false,
+      error: "Mini is unoccupied \u2014 send a Colonizer to claim it."
+    };
+  }
+  const cap = captureMiniPlanet(universe, playerId, planet);
+  if (!cap.ok) {
+    return { ok: false, error: cap.error };
+  }
+  report.miniResolved = "capture";
+  report.miniResolveAvailable = false;
+  report.summary = `${report.summary} Mini planet captured.`;
+  universe.reports[report.id] = report;
+  return { ok: true, planet, choice: "capture" };
+}
+function empireDriftBeaconExpeditionBonus(universe, playerId) {
+  const player = universe.players[playerId];
+  if (!player) return 0;
+  for (const id of player.planetIds) {
+    const p = universe.planets[id];
+    if (p && isMiniPlanet(p) && (p.buildings.driftBeacon ?? 0) >= 1) {
+      return 1;
+    }
+  }
+  return 0;
+}
+function empireRelicResearchTimeFactor(universe, playerId) {
+  if (playerOwnsMiniKind(universe, playerId, "relic")) {
+    return MINI_RELIC_RESEARCH_TIME;
+  }
+  return 1;
+}
+function empireRelicExpeditionFindMult(universe, playerId) {
+  if (playerOwnsMiniKind(universe, playerId, "relic")) {
+    return MINI_RELIC_EXPEDITION_FIND;
+  }
+  return 1;
+}
+function tickMiniDrift(universe, now) {
+  const seed = universe.seed ?? universe.id;
+  for (const id of universe.miniPlanetIds ?? []) {
+    const planet = universe.planets[id];
+    if (!planet || !isMiniPlanet(planet)) continue;
+    const last = planet.lastDriftAt ?? planet.lastTickAt ?? now;
+    if (now - last < MINI_DRIFT_INTERVAL_MS) continue;
+    const steps = Math.floor((now - last) / MINI_DRIFT_INTERVAL_MS);
+    let system = planet.coords.system;
+    let drifted = false;
+    for (let i = 0; i < steps; i++) {
+      const delta = hashSeed(`${seed}:drift:${id}:${last}:${i}`) % (MINI_DRIFT_SYSTEM_STEP * 2 + 1) - MINI_DRIFT_SYSTEM_STEP;
+      if (delta === 0) continue;
+      const next = Math.min(MAP_SYSTEMS, Math.max(1, system + delta));
+      if (next === system) continue;
+      const nextCoords2 = {
+        galaxy: planet.coords.galaxy,
+        system: next,
+        slot: planet.coords.slot
+      };
+      const blocker = planetAtCoords(universe, nextCoords2);
+      if (blocker && blocker.id !== planet.id) continue;
+      system = next;
+      drifted = true;
+    }
+    planet.lastDriftAt = last + steps * MINI_DRIFT_INTERVAL_MS;
+    if (drifted) {
+      planet.coords = {
+        galaxy: planet.coords.galaxy,
+        system,
+        slot: planet.coords.slot
+      };
+      planet.name = displayNameForKind(
+        miniKindOf(planet),
+        planet.coords.galaxy,
+        planet.coords.system,
+        planet.coords.slot
+      );
+    }
+    universe.planets[id] = planet;
+  }
+}
+function fortressRelocateLandingWindow(chosenGalaxy, chosenSystem) {
+  const g = Math.min(MAP_GALAXIES, Math.max(1, Math.floor(chosenGalaxy)));
+  const s = Math.min(MAP_SYSTEMS, Math.max(1, Math.floor(chosenSystem)));
+  return {
+    galaxy: g,
+    systemMin: Math.max(1, s - MINI_FORTRESS_RELOCATE_ACCURACY),
+    systemMax: Math.min(MAP_SYSTEMS, s + MINI_FORTRESS_RELOCATE_ACCURACY)
+  };
+}
+function fortressRelocateDeutCost(from, chosenGalaxy, chosenSystem) {
+  const dg = Math.abs(Math.floor(chosenGalaxy) - from.galaxy);
+  const ds = Math.abs(Math.floor(chosenSystem) - from.system);
+  return MINI_FORTRESS_RELOCATE_DEUT_BASE + dg * MINI_FORTRESS_RELOCATE_DEUT_PER_GALAXY + ds * MINI_FORTRESS_RELOCATE_DEUT_PER_SYSTEM;
+}
+function relocateMovingFortress(universe, playerId, planetId, targetGalaxy, targetSystem, now) {
+  const planet = universe.planets[planetId];
+  const player = universe.players[playerId];
+  if (!planet || !player || !isMovingFortress(planet)) {
+    return { ok: false, error: "Not a Moving Fortress you can relocate." };
+  }
+  if (planet.ownerPlayerId !== playerId) {
+    return { ok: false, error: "You do not own this fortress." };
+  }
+  const aimG = Math.floor(targetGalaxy);
+  const aimS = Math.floor(targetSystem);
+  if (aimG < 1 || aimG > MAP_GALAXIES || aimS < 1 || aimS > MAP_SYSTEMS) {
+    return { ok: false, error: "Invalid target galaxy/system." };
+  }
+  const galaxyDelta = Math.abs(aimG - planet.coords.galaxy);
+  if (galaxyDelta > MINI_FORTRESS_RELOCATE_GALAXY_RANGE) {
+    return {
+      ok: false,
+      error: `Jump limited to current galaxy or \xB1${MINI_FORTRESS_RELOCATE_GALAXY_RANGE} galaxy.`
+    };
+  }
+  if (galaxyDelta === 0 && aimS === planet.coords.system) {
+    return { ok: false, error: "Already in that system." };
+  }
+  const cost = fortressRelocateDeutCost(planet.coords, aimG, aimS);
+  if (Math.floor(planet.resources.deuterium) < cost) {
+    return { ok: false, error: `Need ${cost} deuterium on the fortress.` };
+  }
+  const window = fortressRelocateLandingWindow(aimG, aimS);
+  const span = window.systemMax - window.systemMin + 1;
+  const landedSystem = window.systemMin + hashSeed(
+    `${universe.seed ?? universe.id}:fort-land:${planet.id}:${now}:${aimG}:${aimS}`
+  ) % span;
+  let landedSlot = null;
+  for (let attempt = 0; attempt < MINI_SLOT_MAX - MINI_SLOT_MIN + 1; attempt++) {
+    const slot = pickFreeMiniSlot(
+      universe,
+      aimG,
+      landedSystem,
+      `${planet.id}:fort-slot:${now}:${attempt}`
+    );
+    if (slot == null) break;
+    landedSlot = slot;
+    break;
+  }
+  if (landedSlot == null) {
+    for (let s = window.systemMin; s <= window.systemMax; s++) {
+      const slot = pickFreeMiniSlot(
+        universe,
+        aimG,
+        s,
+        `${planet.id}:fort-slot-scan:${now}:${s}`
+      );
+      if (slot != null) {
+        const nextCoords3 = {
+          galaxy: aimG,
+          system: s,
+          slot
+        };
+        planet.resources.deuterium -= cost;
+        planet.coords = nextCoords3;
+        planet.name = displayNameForKind(
+          "fortress",
+          nextCoords3.galaxy,
+          nextCoords3.system,
+          nextCoords3.slot
+        );
+        planet.lastDriftAt = now;
+        universe.planets[planet.id] = planet;
+        return { ok: true, planet, landed: nextCoords3, cost };
+      }
+    }
+    return {
+      ok: false,
+      error: "No free mini slot in the landing window."
+    };
+  }
+  const nextCoords2 = {
+    galaxy: aimG,
+    system: landedSystem,
+    slot: landedSlot
+  };
+  planet.resources.deuterium -= cost;
+  planet.coords = nextCoords2;
+  planet.name = displayNameForKind(
+    "fortress",
+    nextCoords2.galaxy,
+    nextCoords2.system,
+    nextCoords2.slot
+  );
+  planet.lastDriftAt = now;
+  universe.planets[planet.id] = planet;
+  return { ok: true, planet, landed: nextCoords2, cost };
+}
+
+// packages/game/src/world-boosts.ts
+function emptyBoosts() {
+  return {
+    mineOutput: 1,
+    researchSpeed: 1,
+    fleetSpeed: 1,
+    fleetSlots: 0,
+    defensePower: 1,
+    energyOutput: 1,
+    espionageLevel: 0
+  };
+}
+function applyEffect(boosts, effect) {
+  switch (effect.kind) {
+    case "mineOutput":
+    case "researchSpeed":
+    case "fleetSpeed":
+    case "defensePower":
+    case "energyOutput":
+      boosts[effect.kind] *= effect.value;
+      break;
+    case "fleetSlots":
+    case "espionageLevel":
+      boosts[effect.kind] += effect.value;
+      break;
+    default: {
+      const _exhaustive = effect.kind;
+      throw new Error(`Unhandled effect kind: ${_exhaustive}`);
+    }
+  }
+}
+function pruneExpiredOfficers(player, now) {
+  const live = (player.officers ?? []).filter((o) => o.expiresAt > now);
+  player.officers = live;
+  return live;
+}
+function playerBoosts(player, now) {
+  const boosts = emptyBoosts();
+  if (!player) return boosts;
+  const officers = pruneExpiredOfficers(player, now);
+  for (const o of officers) {
+    const def = OFFICERS[o.officerId];
+    if (!def) continue;
+    for (const effect of def.effects) applyEffect(boosts, effect);
+  }
+  for (const id of player.skillsUnlocked ?? []) {
+    const def = SKILLS[id];
+    if (!def) continue;
+    for (const effect of def.effects) applyEffect(boosts, effect);
+  }
+  return boosts;
+}
+function grantStarshards(player, amount) {
+  const add = Math.max(0, Math.floor(amount));
+  player.starshards = Math.max(0, Math.floor(player.starshards ?? 0) + add);
+  return player.starshards;
+}
+function utcDayKey(now) {
+  return new Date(now).toISOString().slice(0, 10);
+}
+function canClaimDailyLogin(player, now) {
+  return player.lastDailyLoginUtc !== utcDayKey(now);
+}
+function grantPirateDestroyStarshards(player, tier) {
+  const t = Math.max(0, Math.floor(tier));
+  const amount = PIRATE_DESTROY_STARSHARDS_BASE + PIRATE_DESTROY_STARSHARDS_PER_TIER * t;
+  grantStarshards(player, amount);
+  return amount;
+}
+function grantPirateFleetKillStarshards(player) {
+  grantStarshards(player, PIRATE_DEFENSE_WIN_STARSHARDS);
+  return PIRATE_DEFENSE_WIN_STARSHARDS;
+}
+function expeditionStarshardsAmount(roll) {
+  return 5 + roll % 21;
+}
+
 // packages/game/src/world-pirates.ts
 var PIRATE_NAMES = [
   "Black Comet Hold",
@@ -4923,7 +5739,7 @@ function pickEmptySlot(universe, galaxy, system, seedKey) {
   for (let i = 0; i < MAP_SLOTS; i++) {
     const slot = (start - 1 + i) % MAP_SLOTS + 1;
     const coords = { galaxy, system, slot };
-    if (planetAtCoords(universe, coords)) continue;
+    if (planetAtCoords2(universe, coords)) continue;
     if (pirateBaseAtCoords(universe, coords)) continue;
     return slot;
   }
@@ -5010,7 +5826,7 @@ function growPirateBase(base, now) {
 function markPirateDestroyed(base, now) {
   base.destroyedAt = now;
   base.ships = emptyFleetShips();
-  base.resources = emptyCargo();
+  base.resources = emptyCargo2();
 }
 function findRespawnSite(universe, seedKey) {
   const startG = 1 + hashSeed(`${seedKey}:g`) % MAP_GALAXIES;
@@ -5063,7 +5879,12 @@ function pickRaidTarget(universe, base, now) {
     (p) => p.kind !== "moon"
   );
   if (planets.length > 0 && (others.length === 0 || roll % 10 < 7)) {
-    const planet = planets[roll % planets.length];
+    const weighted = [];
+    for (const p of planets) {
+      const w = p.flags?.mini && p.flags.miniKind === "relic" ? MINI_RELIC_PIRATE_WEIGHT : 1;
+      for (let i = 0; i < w; i++) weighted.push(p);
+    }
+    const planet = weighted[roll % weighted.length];
     return { kind: "planet", planet };
   }
   if (others.length > 0) {
@@ -5194,7 +6015,7 @@ function resolvePirateRaidArrival(universe, fleet, now) {
   const killed = resourcesCostTotal(
     destroyedShipResources(defenderBefore, combat.defenderAfter)
   );
-  let loot = emptyCargo();
+  let loot = emptyCargo2();
   if (combat.outcome === "attacker_win") {
     loot = computeRaidLoot(base.resources, combat.attackerAfter);
     base.resources = {
@@ -5232,7 +6053,7 @@ function resolvePirateRaidArrival(universe, fleet, now) {
     defensesBefore: emptyDefenses(),
     defensesAfter: emptyDefenses(),
     loot,
-    debrisCreated: emptyCargo(),
+    debrisCreated: emptyCargo2(),
     outcome: combat.outcome,
     rounds: combat.rounds,
     summary: combat.outcome === "attacker_win" ? `${combat.summary} Pirate base destroyed (+${pirateDestroyStarshards(tierAtFight)} Starshards).` : combat.summary,
@@ -5260,13 +6081,17 @@ function emptyBuildings() {
     jumpGate: 0,
     chronoLathe: 0,
     mantleLoom: 0,
-    rigFoundry: 0
+    rigFoundry: 0,
+    riftSiphon: 0,
+    echoVault: 0,
+    anomalyForge: 0,
+    driftBeacon: 0
   };
 }
 function emptyShips() {
   return emptyFleetShips();
 }
-function emptyCargo() {
+function emptyCargo2() {
   return { metal: 0, crystal: 0, deuterium: 0 };
 }
 function fieldsSeedForCoords(universeSeed, coords) {
@@ -5297,6 +6122,7 @@ function createUniverse(name = "Alpha Drift", speed = 1, fleetSpeed = speed) {
   };
   seedUniverseAsteroids(universe);
   seedUniversePirates(universe, now);
+  seedUniverseMinis(universe, now);
   return universe;
 }
 function nextCoords(universe) {
@@ -5316,7 +6142,7 @@ function nextCoords(universe) {
   }
   throw new Error("Universe planet slots are full.");
 }
-function planetAtCoords(universe, coords) {
+function planetAtCoords2(universe, coords) {
   const key = coordsKey(coords);
   return Object.values(universe.planets).find(
     (p) => p.kind !== "moon" && coordsKey(p.coords) === key
@@ -5340,7 +6166,11 @@ function ensureUniverseShape(universe) {
   if (!universe.miniPlanetIds) universe.miniPlanetIds = [];
   if (!universe.fleetSpeed) universe.fleetSpeed = universe.speed || 1;
   if (!universe.seed) universe.seed = `seed_${universe.id}`;
+  if (universe.miniPlanetIds.length === 0) {
+    seedUniverseMinis(universe);
+  }
   for (const player of Object.values(universe.players)) {
+    if (!player.discoveredMiniIds) player.discoveredMiniIds = [];
     if (!player.planetIds?.length) {
       player.planetIds = [player.homePlanetId];
     }
@@ -5390,6 +6220,11 @@ function ensureUniverseShape(universe) {
     if (!planet.buildings.chronoLathe) planet.buildings.chronoLathe = 0;
     if (!planet.buildings.mantleLoom) planet.buildings.mantleLoom = 0;
     if (!planet.buildings.rigFoundry) planet.buildings.rigFoundry = 0;
+    if (!planet.buildings.riftSiphon) planet.buildings.riftSiphon = 0;
+    if (!planet.buildings.echoVault) planet.buildings.echoVault = 0;
+    if (!planet.buildings.anomalyForge) planet.buildings.anomalyForge = 0;
+    if (!planet.buildings.driftBeacon) planet.buildings.driftBeacon = 0;
+    if (planet.flags?.mini && !planet.discoveredBy) planet.discoveredBy = [];
     if (planet.kind !== "moon" && (typeof planet.fieldsCap !== "number" || planet.fieldsCap <= 0)) {
       planet.fieldsCap = rollPlanetFields(
         planet.coords.slot,
@@ -5467,7 +6302,8 @@ function joinUniverse(universe, playerName, now = Date.now()) {
     skillsUnlocked: [],
     highscoreStarshardsClaimed: false,
     fleetPresets: [],
-    playerClass: emptyPlayerClass()
+    playerClass: emptyPlayerClass(),
+    discoveredMiniIds: []
   };
   ensurePlayerFleetPresets(player);
   universe.players[playerId] = player;
@@ -5744,30 +6580,14 @@ function swarmProduce(universe, playerId, fleetId, count, now = Date.now()) {
   universe.fleets[fleet.id] = fleet;
   return { ok: true, planet: origin };
 }
-function resolveMiniPlanetChoice(universe, playerId, fleetId, choice) {
+function resolveMiniPlanetChoice(universe, playerId, fleetId, choice = "capture") {
+  const result = applyMiniPlanetResolve(universe, playerId, fleetId, choice);
+  if (!result.ok) return { ok: false, error: result.error };
+  if (result.planet) return { ok: true, planet: result.planet };
   const fleet = universe.fleets[fleetId];
-  if (!fleet || fleet.ownerPlayerId !== playerId) {
-    return { ok: false, error: "Fleet not found." };
-  }
-  if (!canResolveMiniPlanet(fleet.ships)) {
-    return {
-      ok: false,
-      error: `Need at least ${MINI_WORLD_EATER_MIN} World Eaters.`
-    };
-  }
-  const planetId = fleet.targetPlanetId;
-  if (!planetId) return { ok: false, error: "Fleet has no target." };
-  const planet = universe.planets[planetId];
-  if (!planet) return { ok: false, error: "Planet missing." };
-  const isMini = Boolean(planet.flags?.mini) || (universe.miniPlanetIds ?? []).includes(planetId);
-  if (!isMini) {
-    return {
-      ok: false,
-      error: "Target is not a mini planet (discovery lands in thread K)."
-    };
-  }
-  void choice;
-  return { ok: true, planet };
+  const origin = fleet ? universe.planets[fleet.originPlanetId] : universe.planets[universe.players[playerId]?.activePlanetId ?? ""];
+  if (!origin) return { ok: false, error: "Planet missing after destroy." };
+  return { ok: true, planet: origin };
 }
 function maybeDestroyMoonWithTitans(universe, moon, survivingAttacker, reportId) {
   const killers = (survivingAttacker.voidforgeTitan ?? 0) + (survivingAttacker.worldEater ?? 0);
@@ -5819,6 +6639,11 @@ function resolveRaidArrival(universe, fleet, target, now) {
   const atkCls = classBonuses(owner?.playerClass?.classId);
   const defCls = classBonuses(defenderOwner?.playerClass?.classId);
   const defensePower = playerBoosts(defenderOwner, now).defensePower * defCls.defensePower;
+  const fortressField = isMovingFortress(target) ? {
+    shieldMult: MINI_FORTRESS_SHIELD_MULT,
+    attackMult: MINI_FORTRESS_ATTACK_MULT,
+    armorMult: MINI_FORTRESS_ARMOR_MULT
+  } : void 0;
   const combat = resolveCombat(
     fleet.ships,
     defenderBefore,
@@ -5828,7 +6653,8 @@ function resolveRaidArrival(universe, fleet, target, now) {
     {
       defensePower,
       attackMult: atkCls.attack,
-      defenseSlot: target.coords.slot
+      defenseSlot: target.coords.slot,
+      battlefield: fortressField
     }
   );
   target.ships = combat.defenderAfter;
@@ -5844,7 +6670,7 @@ function resolveRaidArrival(universe, fleet, target, now) {
     crystal: debrisAtk.crystal + debrisDef.crystal,
     deuterium: 0
   };
-  let loot = emptyCargo();
+  let loot = emptyCargo2();
   if (combat.outcome === "attacker_win") {
     loot = computeRaidLoot(target.resources, combat.attackerAfter);
     subtractCargo(target, loot);
@@ -5910,6 +6736,18 @@ function resolveRaidArrival(universe, fleet, target, now) {
   } else if (combat.outcome === "defender_win") {
     clearOccupationIfRecaptured(universe, target.id, target.ownerPlayerId);
   }
+  let miniResolveAvailable = false;
+  let miniPlanetId2;
+  if (combat.outcome === "attacker_win" && isMiniPlanet(target) && Boolean(target.ownerPlayerId) && target.ownerPlayerId !== fleet.ownerPlayerId) {
+    miniPlanetId2 = target.id;
+    if (canDirectCaptureMini(combat.attackerAfter)) {
+      miniResolveAvailable = true;
+      summary = canDestroyMiniPlanet(combat.attackerAfter) ? `${summary} Mini contested \u2014 capture directly or destroy with World Eater.` : `${summary} Mini contested \u2014 capital ships can capture on resolve.`;
+    } else {
+      vacateMiniPlanet(universe, target);
+      summary = `${summary} Owner cleared \u2014 mini unoccupied. Reclaim with a Colonizer (this fleet cannot capture).`;
+    }
+  }
   const report = {
     id: reportId,
     at: now,
@@ -5932,7 +6770,9 @@ function resolveRaidArrival(universe, fleet, target, now) {
     summary,
     moonFormed,
     moonDestroyed: moonDestroyed || void 0,
-    moonKillChancePct
+    moonKillChancePct,
+    miniResolveAvailable: miniResolveAvailable || void 0,
+    miniPlanetId: miniPlanetId2
   };
   universe.reports[reportId] = report;
   fleet.ships = combat.attackerAfter;
@@ -5945,6 +6785,28 @@ function resolveEspionage(universe, fleet, target, now) {
   const spy = universe.players[fleet.ownerPlayerId];
   const targetOwner = universe.players[target.ownerPlayerId];
   if (!spy || !targetOwner) return;
+  const reportId = `spy_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  if (isMovingFortress(target)) {
+    const blank = {
+      id: reportId,
+      at: now,
+      missionId: fleet.id,
+      spyPlayerId: spy.id,
+      targetPlayerId: targetOwner.id,
+      targetName: targetOwner.name,
+      targetCoords: { ...target.coords },
+      detail: 0,
+      resources: null,
+      ships: null,
+      defenses: null,
+      buildings: null,
+      research: null,
+      summary: `Moving Fortress at ${target.coords.galaxy}:${target.coords.system}:${target.coords.slot} \u2014 sensors return nothing.`
+    };
+    universe.spyReports[reportId] = blank;
+    fleet.reportId = reportId;
+    return;
+  }
   const spyBoost = playerBoosts(spy, now).espionageLevel;
   const wingBonus = (fleet.ships.astrolabeWing ?? 0) >= 1 ? 1 : 0;
   const detail = Math.min(
@@ -5954,7 +6816,6 @@ function resolveEspionage(universe, fleet, target, now) {
       target.buildings.researchLab ?? 0
     ) + wingBonus
   );
-  const reportId = `spy_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
   const report = {
     id: reportId,
     at: now,
@@ -5986,7 +6847,8 @@ function expeditionRoll(fleetId, at) {
 function expeditionKindFromRoll(roll) {
   if (roll < 40) return "resources";
   if (roll < 55) return "ships";
-  if (roll < 70) return "nothing";
+  if (roll < 68) return "nothing";
+  if (roll < 70) return "miniPlanet";
   if (roll < 75) return "starshards";
   return "pirates";
 }
@@ -6024,9 +6886,11 @@ function resolveExpeditionArrival(universe, fleet, now) {
   let cargoGained = { metal: 0, crystal: 0, deuterium: 0 };
   const shipsDelta = {};
   let starshardsGained = 0;
+  let miniPlanetId2;
+  let miniCoords;
   let summary;
   const ownerForYield = universe.players[fleet.ownerPlayerId];
-  const yieldMult = classBonuses(ownerForYield?.playerClass?.classId).expeditionYield * vaultScoutExpeditionMult(before);
+  const yieldMult = classBonuses(ownerForYield?.playerClass?.classId).expeditionYield * vaultScoutExpeditionMult(before) * empireRelicExpeditionFindMult(universe, fleet.ownerPlayerId);
   switch (kind) {
     case "resources": {
       cargoGained = resourceFind(before, roll);
@@ -6089,6 +6953,25 @@ function resolveExpeditionArrival(universe, fleet, now) {
       summary = `Pirate ambush \u2014 ~30% hulls lost. Scrap salvage ${cargoGained.metal}m/${cargoGained.crystal}c/${cargoGained.deuterium}d.`;
       break;
     }
+    case "miniPlanet": {
+      fleet.cargo = { metal: 0, crystal: 0, deuterium: 0 };
+      const found = pickOrSeedMiniForDiscovery(
+        universe,
+        fleet.ownerPlayerId,
+        fleet.targetCoords,
+        fleet.id,
+        now
+      );
+      if (found) {
+        discoverMiniPlanet(universe, fleet.ownerPlayerId, found.id);
+        miniPlanetId2 = found.id;
+        miniCoords = { ...found.coords };
+        summary = `Anomalous gravity well charted \u2014 mini planet at ${found.coords.galaxy}:${found.coords.system}:${found.coords.slot} (coords to you only).`;
+      } else {
+        summary = "Sensors brushed a ghost mass, but the drift signature faded before coords locked.";
+      }
+      break;
+    }
     default: {
       const _exhaustive = kind;
       throw new Error(`Unhandled expedition kind: ${_exhaustive}`);
@@ -6098,6 +6981,9 @@ function resolveExpeditionArrival(universe, fleet, now) {
     const owner = universe.players[fleet.ownerPlayerId];
     if (owner) {
       grantPlayerXp(owner, xpForExpedition());
+      if (kind === "miniPlanet" && miniPlanetId2) {
+        grantPlayerXp(owner, xpForMiniPlanetDiscovery());
+      }
       universe.players[owner.id] = owner;
     }
   }
@@ -6112,6 +6998,8 @@ function resolveExpeditionArrival(universe, fleet, now) {
     cargoGained,
     shipsDelta,
     starshardsGained: starshardsGained || void 0,
+    miniPlanetId: miniPlanetId2,
+    miniCoords,
     summary
   };
   universe.expeditionReports[reportId] = report;
@@ -6168,7 +7056,7 @@ function resolveFleetArrival(universe, fleet, now) {
         return;
       }
       addCargoToPlanet(target, fleet.cargo);
-      fleet.cargo = emptyCargo();
+      fleet.cargo = emptyCargo2();
       addShipsToPlanet(target, fleet.ships);
       delete universe.fleets[fleet.id];
       return;
@@ -6189,14 +7077,40 @@ function resolveFleetArrival(universe, fleet, now) {
       delete universe.fleets[fleet.id];
       return;
     } else if (fleet.mission === "colonize") {
-      const occupied = planetAtCoords(universe, fleet.targetCoords);
+      const occupied = planetAtCoords2(universe, fleet.targetCoords);
       const hasCradle = (fleet.ships.colonyShip ?? 0) >= 1;
       const hasArk = (fleet.ships.foundationArk ?? 0) >= 1;
-      if (occupied) {
-      } else if (!hasCradle && !hasArk) {
-      } else if (!owner) {
+      if (!owner) {
         delete universe.fleets[fleet.id];
         return;
+      } else if (occupied && isUnclaimedMini(occupied) && playerKnowsMini(universe, owner.id, occupied.id, now) && hasCradle && ownedPlanetCount(universe, owner.id) < empireColonyCap(owner, universe, maxColonies) && !((miniKindOf(occupied) === "fortress" || miniKindOf(occupied) === "relic") && playerOwnsMiniKind(universe, owner.id, miniKindOf(occupied)))) {
+        const remaining = normalizeFleetShips(fleet.ships);
+        remaining.colonyShip = Math.max(0, remaining.colonyShip - 1);
+        occupied.buildings.solarPlant = Math.max(
+          occupied.buildings.solarPlant ?? 0,
+          1
+        );
+        occupied.ownerPlayerId = owner.id;
+        occupied.name = `${owner.name}'s Colony`;
+        if (occupied.colonizedAt == null) occupied.colonizedAt = now;
+        if (!occupied.discoveredBy) occupied.discoveredBy = [];
+        if (!occupied.discoveredBy.includes(owner.id)) {
+          occupied.discoveredBy.push(owner.id);
+        }
+        if (!owner.discoveredMiniIds) owner.discoveredMiniIds = [];
+        if (!owner.discoveredMiniIds.includes(occupied.id)) {
+          owner.discoveredMiniIds.push(occupied.id);
+        }
+        addShipsToPlanet(occupied, remaining);
+        universe.planets[occupied.id] = occupied;
+        if (!owner.planetIds.includes(occupied.id)) {
+          owner.planetIds.push(occupied.id);
+        }
+        universe.players[owner.id] = owner;
+        delete universe.fleets[fleet.id];
+        return;
+      } else if (occupied) {
+      } else if (!hasCradle && !hasArk) {
       } else if (ownedPlanetCount(universe, owner.id) >= empireColonyCap(owner, universe, maxColonies)) {
       } else {
         const planetId = `plnt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
@@ -6285,10 +7199,23 @@ function resolveFleetArrival(universe, fleet, now) {
     universe.fleets[fleet.id] = fleet;
     return;
   }
+  if (fleet.reportId && fleet.mission === "raid") {
+    const report = universe.reports[fleet.reportId];
+    if (report?.miniResolveAvailable && !report.miniResolved && report.outcome === "attacker_win") {
+      resolveMiniPlanetChoice(
+        universe,
+        fleet.ownerPlayerId,
+        fleet.id,
+        "capture"
+      );
+    }
+  }
   clearOccupationIfFleetGone(universe, fleet);
-  addShipsToPlanet(origin, fleet.ships);
-  addCargoToPlanet(origin, fleet.cargo);
-  delete universe.fleets[fleet.id];
+  const live = universe.fleets[fleet.id];
+  if (!live) return;
+  addShipsToPlanet(origin, live.ships);
+  addCargoToPlanet(origin, live.cargo);
+  delete universe.fleets[live.id];
 }
 function fleetCargoCapacityForHarvest(ships) {
   let cap = 0;
@@ -6362,6 +7289,7 @@ function advanceUniverse(universe, now = Date.now()) {
     advanceFleetSwarmProduce(fleet, now);
   }
   advanceFleets(universe, now);
+  tickMiniDrift(universe, now);
   tickPirates(universe, now);
   pruneSpyReports(universe, now);
 }
@@ -6419,8 +7347,21 @@ function queueBuildingUpgrade(universe, playerId, buildingId, now = Date.now(), 
   if (!buildingAllowedOn(planet, buildingId)) {
     return {
       ok: false,
-      error: planet.kind === "moon" ? "That structure cannot be built on a moon." : "That structure can only be built on a moon."
+      error: planet.flags?.mini ? "That structure cannot be built on a mini planet." : planet.kind === "moon" ? "That structure cannot be built on a moon." : "That structure can only be built on a moon."
     };
+  }
+  const maxLevel = BUILDINGS[buildingId]?.maxLevel;
+  if (typeof maxLevel === "number") {
+    const pendingSame2 = planet.buildQueue.filter(
+      (q) => q.buildingId === buildingId
+    ).length;
+    const current2 = (planet.buildings[buildingId] ?? 0) + pendingSame2;
+    if (current2 >= maxLevel) {
+      return {
+        ok: false,
+        error: `${BUILDINGS[buildingId].name} is maxed at level ${maxLevel}.`
+      };
+    }
   }
   if (buildingId === "sensorArray" && (planet.buildings.lunarBase ?? 0) < 1) {
     return { ok: false, error: "Horizon Scanner needs Crater Hab level 1." };
@@ -6569,7 +7510,8 @@ function queueShipBuild(universe, playerId, shipId, count, now = Date.now(), pla
   const cls = classBonuses(player.playerClass?.classId);
   const naniteLevel = naniteFactoryLevel(planet);
   const rigLevel = planet.buildings.rigFoundry ?? 0;
-  const unitSeconds = shipUnitBuildSeconds(shipId, yard, naniteLevel, rigLevel) * lb.shipBuild * cls.shipBuildTime / universe.speed;
+  const anomalyLevel = planet.buildings.anomalyForge ?? 0;
+  const unitSeconds = shipUnitBuildSeconds(shipId, yard, naniteLevel, rigLevel, anomalyLevel) * lb.shipBuild * cls.shipBuildTime / universe.speed;
   const seconds = unitSeconds * qty;
   planet.resources = spend(planet.resources, cost);
   const startNow = planet.shipQueue.length === 0;
@@ -6688,10 +7630,11 @@ function queueResearch(universe, playerId, researchId, now = Date.now()) {
   const lb = levelBonuses(player.level ?? 1);
   const cls = classBonuses(player.playerClass?.classId);
   const astrolabe = astrolabeResearchTimeMult(universe, player.id);
+  const relic = empireRelicResearchTimeFactor(universe, player.id);
   const seconds = Math.max(
     1,
     Math.ceil(
-      researchUpgradeSeconds(researchId, current, lab) * lb.researchTime * cls.researchTime * astrolabe / universe.speed / Math.max(0.01, researchSpeed)
+      researchUpgradeSeconds(researchId, current, lab) * lb.researchTime * cls.researchTime * astrolabe * relic / universe.speed / Math.max(0.01, researchSpeed)
     )
   );
   planet.resources = spend(planet.resources, cost);
@@ -6940,6 +7883,16 @@ function migrateUniverseV3ToV4(universe) {
   for (const planet of Object.values(universe.planets)) {
     if (planet.buildings.mantleLoom == null) planet.buildings.mantleLoom = 0;
     if (planet.buildings.rigFoundry == null) planet.buildings.rigFoundry = 0;
+    if (planet.buildings.riftSiphon == null) planet.buildings.riftSiphon = 0;
+    if (planet.buildings.echoVault == null) planet.buildings.echoVault = 0;
+    if (planet.buildings.anomalyForge == null) planet.buildings.anomalyForge = 0;
+    if (planet.buildings.driftBeacon == null) planet.buildings.driftBeacon = 0;
+    if (planet.flags?.mini && !planet.flags.miniKind) {
+      planet.flags.miniKind = "standard";
+    }
+    if (planet.flags?.mini && planet.lastDriftAt == null) {
+      planet.lastDriftAt = planet.lastTickAt ?? Date.now();
+    }
   }
   universe.schemaVersion = 4;
   ensureUniverseShape(universe);
@@ -7074,7 +8027,7 @@ function resolveLaunchTarget(universe, player, origin, mission, ships, targetPla
     const activeExpeditions = Object.values(universe.fleets).filter(
       (f) => f.ownerPlayerId === player.id && f.mission === "expedition"
     ).length;
-    const cap = empireExpeditionCap(player, maxExpeditions);
+    const cap = empireExpeditionCap(player, maxExpeditions) + empireDriftBeaconExpeditionBonus(universe, player.id);
     if (activeExpeditions >= cap) {
       return {
         ok: false,
@@ -7141,17 +8094,12 @@ function resolveLaunchTarget(universe, player, origin, mission, ships, targetPla
       };
     }
     targetCoords = { ...targetCoordsOpt };
-    if (targetCoords.galaxy < 1 || targetCoords.galaxy > MAP_GALAXIES || targetCoords.system < 1 || targetCoords.system > MAP_SYSTEMS || targetCoords.slot < 1 || targetCoords.slot > MAP_SLOTS) {
+    const isMiniSlot = targetCoords.slot >= MINI_SLOT_MIN && targetCoords.slot <= MINI_SLOT_MAX;
+    if (targetCoords.galaxy < 1 || targetCoords.galaxy > MAP_GALAXIES || targetCoords.system < 1 || targetCoords.system > MAP_SYSTEMS || targetCoords.slot < 1 || targetCoords.slot > MAP_SLOTS && !isMiniSlot) {
       return { ok: false, error: "Coordinates out of map bounds." };
     }
-    targetPlanet = planetAtCoords(universe, targetCoords);
+    targetPlanet = planetAtCoords2(universe, targetCoords);
     if (mission === "colonize") {
-      if (targetPlanet) {
-        return { ok: false, error: "Slot is already occupied." };
-      }
-      if (pirateBaseAtCoords(universe, targetCoords)) {
-        return { ok: false, error: "Pirate base occupies that slot." };
-      }
       const hasCradle = (ships.colonyShip ?? 0) >= 1;
       const hasArk = (ships.foundationArk ?? 0) >= 1;
       if (!hasCradle && !hasArk) {
@@ -7159,6 +8107,24 @@ function resolveLaunchTarget(universe, player, origin, mission, ships, targetPla
           ok: false,
           error: "Colonize requires a Colonizer or Foundation Ark."
         };
+      }
+      if (targetPlanet && isMiniPlanet(targetPlanet)) {
+        if (!isUnclaimedMini(targetPlanet)) {
+          return { ok: false, error: "Mini planet is already colonized." };
+        }
+        if (!playerKnowsMini(universe, player.id, targetPlanet.id)) {
+          return {
+            ok: false,
+            error: "You have not discovered that mini planet yet."
+          };
+        }
+      } else if (targetPlanet) {
+        return { ok: false, error: "Slot is already occupied." };
+      } else if (isMiniSlot) {
+        return { ok: false, error: "No mini planet at those coordinates." };
+      }
+      if (!isMiniSlot && pirateBaseAtCoords(universe, targetCoords)) {
+        return { ok: false, error: "Pirate base occupies that slot." };
       }
       const colonyCap = empireColonyCap(player, universe, maxColonies);
       if (ownedPlanetCount(universe, player.id) >= colonyCap) {
@@ -7330,7 +8296,7 @@ function launchFleet(universe, playerIdOrOpts, targetPlanetId, mission, shipsInp
       };
     }
   }
-  let cargo = emptyCargo();
+  let cargo = emptyCargo2();
   if (opts.mission === "transport") {
     const want = {
       metal: Math.max(0, Math.floor(opts.cargo?.metal ?? 0)),
@@ -7593,7 +8559,7 @@ function galaxyViewFor(universe, playerId, galaxy, system) {
   const slots = [];
   for (let slot = 1; slot <= MAP_SLOTS; slot++) {
     const coords = { galaxy: g, system: s, slot };
-    const planet = planetAtCoords(universe, coords);
+    const planet = planetAtCoords2(universe, coords);
     const moon = moonAtCoords(universe, coords);
     const debris = getDebris(universe, coords);
     const owner = planet ? universe.players[planet.ownerPlayerId] : void 0;
@@ -7620,10 +8586,35 @@ function galaxyViewFor(universe, playerId, galaxy, system) {
       slot.activity = "pirate";
     }
   }
+  const minis = [];
+  for (const miniId of universe.miniPlanetIds ?? []) {
+    const mini = universe.planets[miniId];
+    if (!mini?.flags?.mini || mini.coords.galaxy !== g || mini.coords.system !== s) {
+      continue;
+    }
+    const known = playerKnowsMini(universe, playerId, miniId);
+    if (!known) continue;
+    const owner = mini.ownerPlayerId ? universe.players[mini.ownerPlayerId] : void 0;
+    const debris = getDebris(universe, mini.coords);
+    minis.push({
+      coords: { ...mini.coords },
+      planetId: mini.id,
+      playerId: owner?.id ?? null,
+      playerName: owner?.name ?? (mini.ownerPlayerId ? null : "Unclaimed"),
+      allianceTag: null,
+      pointsHint: Math.floor(planetPoints(mini)),
+      debris: debris ? { metal: debris.metal, crystal: debris.crystal } : null,
+      isOwn: owner?.id === playerId,
+      hasMoon: false,
+      moonId: null,
+      activity: "planet"
+    });
+  }
   return {
     galaxy: g,
     system: s,
     slots,
+    minis,
     deepSpace: { coords: { galaxy: g, system: s, slot: DEEP_SPACE_SLOT } },
     asteroids: asteroidsInSystem(universe, g, s),
     pirateBase: pirate ? {
@@ -7671,6 +8662,20 @@ function playerView(universe, playerId, now = Date.now(), galaxy, system) {
   const sensorContacts = planet.kind === "moon" && sensorLevel >= 1 ? Object.values(universe.fleets).filter(
     (f) => f.phase === "outbound" && inSensorPhalanxRange(planet.coords, f.targetCoords, sensorLevel)
   ).sort((a, b) => a.arrivesAt - b.arrivesAt).slice(0, 20) : [];
+  const hostileInbound = Object.values(universe.fleets).filter((f) => {
+    if (f.ownerPlayerId === playerId) return false;
+    if (f.phase !== "outbound") return false;
+    if (f.targetPlayerId !== playerId) return false;
+    const mission = f.mission;
+    if (mission !== "raid" && mission !== "espionage") {
+      return false;
+    }
+    const target = f.targetPlanetId ? universe.planets[f.targetPlanetId] : null;
+    if (target?.flags?.mini && target.flags.miniKind === "fortress") {
+      return false;
+    }
+    return true;
+  }).sort((a, b) => a.arrivesAt - b.arrivesAt).slice(0, 20);
   return {
     now,
     universe: {
@@ -7691,6 +8696,7 @@ function playerView(universe, playerId, now = Date.now(), galaxy, system) {
         isHome: p.id === player.homePlanetId,
         isActive: p.id === player.activePlanetId,
         isMoon: p.kind === "moon",
+        isMini: Boolean(p.flags?.mini),
         jumpGateLevel: p.buildings.jumpGate ?? 0
       };
     }).filter((x) => x !== null),
@@ -7711,6 +8717,7 @@ function playerView(universe, playerId, now = Date.now(), galaxy, system) {
     spyReports,
     expeditionReports,
     sensorContacts,
+    hostileInbound,
     starshards: player.starshards ?? 0,
     officers: player.officers ?? [],
     skillsUnlocked: player.skillsUnlocked ?? [],
@@ -14948,6 +15955,50 @@ function createApp() {
         body.choice ?? "capture"
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId));
+    });
+  });
+  app2.post("/api/mini-relocate", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    if (!body.playerId || !body.planetId || body.galaxy == null || body.system == null) {
+      return c.json(
+        { error: "playerId, planetId, galaxy, and system required." },
+        400
+      );
+    }
+    return withUniverse((universe) => {
+      advanceUniverse(universe);
+      const result = relocateMovingFortress(
+        universe,
+        body.playerId,
+        body.planetId,
+        Number(body.galaxy),
+        Number(body.system),
+        Date.now()
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId));
+    });
+  });
+  app2.post("/api/e2e/discover-mini", async (c) => {
+    if (process.env.STARHOLD_E2E !== "1") {
+      return c.json({ error: "Not found." }, 404);
+    }
+    const body = await c.req.json().catch(() => ({}));
+    if (!body.playerId) {
+      return c.json({ error: "playerId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      advanceUniverse(universe);
+      const ids = universe.miniPlanetIds ?? [];
+      const targetId = ids.find((id) => universe.planets[id]?.flags?.mini);
+      if (!targetId) {
+        return c.json({ error: "No mini planets seeded." }, 500);
+      }
+      const planet = discoverMiniPlanet(universe, body.playerId, targetId);
+      if (!planet) {
+        return c.json({ error: "Discover failed." }, 400);
+      }
       return c.json(playerView(universe, body.playerId));
     });
   });

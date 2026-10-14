@@ -109,6 +109,16 @@ export function migrateUniverseV3ToV4(universe: UniverseState): UniverseState {
   for (const planet of Object.values(universe.planets)) {
     if (planet.buildings.mantleLoom == null) planet.buildings.mantleLoom = 0;
     if (planet.buildings.rigFoundry == null) planet.buildings.rigFoundry = 0;
+    if (planet.buildings.riftSiphon == null) planet.buildings.riftSiphon = 0;
+    if (planet.buildings.echoVault == null) planet.buildings.echoVault = 0;
+    if (planet.buildings.anomalyForge == null) planet.buildings.anomalyForge = 0;
+    if (planet.buildings.driftBeacon == null) planet.buildings.driftBeacon = 0;
+    if (planet.flags?.mini && !planet.flags.miniKind) {
+      planet.flags.miniKind = "standard";
+    }
+    if (planet.flags?.mini && planet.lastDriftAt == null) {
+      planet.lastDriftAt = planet.lastTickAt ?? Date.now();
+    }
   }
 
   universe.schemaVersion = 4;

@@ -7,6 +7,7 @@ export {
   doGalaxyNav,
   doSelectPlanet,
   doRenamePlanet,
+  doRelocateFortress,
   doSignup,
   doLogin,
   doClaimAnonymous,
@@ -31,4 +32,6 @@ export {
   doClaimDaily,
   doActivateOfficer,
   doUnlockSkill,
+  doChooseClass,
+  doChangeClass,
 } from "./main-actions-starshards.js";

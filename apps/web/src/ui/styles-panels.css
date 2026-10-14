@@ -430,14 +430,16 @@ code {
 }
 
 .officer-list,
-.skill-list {
+.skill-list,
+.class-list {
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
 .officer-row,
-.skill-row {
+.skill-row,
+.class-card {
   display: flex;
   justify-content: space-between;
   gap: 0.75rem;
@@ -447,13 +449,19 @@ code {
 }
 
 .officer-row:last-child,
-.skill-row:last-child {
+.skill-row:last-child,
+.class-card:last-child {
   border-bottom: none;
 }
 
 .officer-row .hint,
-.skill-row .hint {
+.skill-row .hint,
+.class-card .hint {
   display: block;
+}
+
+.class-panel .class-list {
+  margin-top: 0.35rem;
 }
 
 .skill-branch h3 {
