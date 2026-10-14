@@ -5,12 +5,14 @@ import {
   RESEARCH_ORDER,
   SHIP_ORDER,
   SHIPS,
+  shipClassAllowed,
   type BuildingId,
   type PlayerView,
 } from "@starhold/game";
 import { PLANET_ART, SHIP_ART, UI_ART } from "./assets";
 import { fmt, fmtCoords } from "./format";
 import type { NavPage } from "./nav";
+import { classPanelHtml } from "./render-class";
 import {
   buildingRow,
   defenseRow,
@@ -73,6 +75,10 @@ function stubPanel(title: string, body: string, testId: string): string {
 function overviewPage(view: PlayerView, busy: boolean): string {
   const { planet, economy } = view;
   const pm = economy.positionMult;
+  const loomBonus = economy.fields.mantleLoomBonus ?? 0;
+  const tempK = economy.temperatureK ?? 0;
+  const helio = economy.energy.helioBuoy ?? 0;
+  const solarTemp = economy.energy.solarTempFactor ?? 1;
   return `
     <section class="panel" data-testid="overview-panel">
       <h2>Overview</h2>
@@ -81,7 +87,8 @@ function overviewPage(view: PlayerView, busy: boolean): string {
         <div>
           <p class="overview-name" data-testid="overview-planet-name">${escapeHtml(planet.name)}${planet.kind === "moon" ? " · Moon" : ""}</p>
           <p class="coords">${fmtCoords(planet.coords)}</p>
-          <p class="hint" data-testid="planet-fields">Fields ${fmt(economy.fields.used)} / ${fmt(economy.fields.cap)} · ${fmt(economy.fields.remaining)} free</p>
+          <p class="hint" data-testid="planet-fields">Fields ${fmt(economy.fields.used)} / ${fmt(economy.fields.cap)} · ${fmt(economy.fields.remaining)} free${loomBonus > 0 ? ` · Mantle Loom +${fmt(loomBonus)}` : ""}</p>
+          <p class="hint" data-testid="planet-temperature">Temp ${fmt(tempK)} K · solar ×${solarTemp.toFixed(2)}${helio > 0 ? ` · Helio Buoy +${fmt(helio)}` : ""}</p>
         </div>
       </div>
       <form class="planet-rename" id="planet-rename-form" data-testid="planet-rename-form">
@@ -98,7 +105,8 @@ function overviewPage(view: PlayerView, busy: boolean): string {
       <h3 class="subhead">Build queues</h3>
       ${overviewQueuesHtml(view)}
       <p class="hint" data-testid="recommended-next">${escapeHtml(recommendedNext(view))}</p>
-    </section>`;
+    </section>
+    ${classPanelHtml(view, busy)}`;
 }
 
 function buildingsPage(view: PlayerView, busy: boolean): string {
@@ -145,11 +153,18 @@ function researchPage(view: PlayerView, busy: boolean): string {
 
 function shipyardPage(view: PlayerView, busy: boolean): string {
   const { planet, now } = view;
+  const classId = view.player.playerClass?.classId ?? null;
+  const buildable = SHIP_ORDER.filter((id) => shipClassAllowed(id, classId));
   const hangarEmpty = SHIP_ORDER.every((id) => (planet.ships[id] ?? 0) <= 0);
   return `
     <section class="panel" data-testid="hull-bay-panel">
       <h2>Shipyard</h2>
-      ${SHIP_ORDER.map((id) => shipRow(id, planet, busy)).join("")}
+      ${
+        classId == null
+          ? `<p class="hint" data-testid="shipyard-need-class">Choose a class on Overview to unlock class-exclusive hulls.</p>`
+          : ""
+      }
+      ${buildable.map((id) => shipRow(id, planet, busy)).join("")}
       ${
         shipQueueHtml(planet, now) ||
         `<p class="hint">Raise the Shipyard facility to unlock hulls.</p>`
