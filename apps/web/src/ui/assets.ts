@@ -15,6 +15,8 @@ export const BUILDING_ART: Record<BuildingId, string> = {
   sensorArray: "/assets/buildings/sensor-array.svg",
   jumpGate: "/assets/buildings/jump-gate.svg",
   chronoLathe: "/assets/buildings/chrono-lathe.svg",
+  mantleLoom: "/assets/buildings/mantle-loom.svg",
+  rigFoundry: "/assets/buildings/rig-foundry.svg",
 };
 
 export const SHIP_ART: Record<ShipId, string> = {
@@ -26,6 +28,19 @@ export const SHIP_ART: Record<ShipId, string> = {
   probe: "/assets/ships/probe.svg",
   recycler: "/assets/ships/recycler.svg",
   colonyShip: "/assets/ships/colony-ship.svg",
+  helioBuoy: "/assets/ships/helio-buoy.svg",
+  keelSovereign: "/assets/ships/keel-sovereign.svg",
+  rakeCorsair: "/assets/ships/rake-corsair.svg",
+  anvilDread: "/assets/ships/anvil-dread.svg",
+  wardbreaker: "/assets/ships/wardbreaker.svg",
+  vaultScout: "/assets/ships/vault-scout.svg",
+  astrolabeWing: "/assets/ships/astrolabe-wing.svg",
+  spoilSkimmer: "/assets/ships/spoil-skimmer.svg",
+  lineDrummer: "/assets/ships/line-drummer.svg",
+  veinAnchor: "/assets/ships/vein-anchor.svg",
+  gridStake: "/assets/ships/grid-stake.svg",
+  foundationArk: "/assets/ships/foundation-ark.svg",
+  frontierBeacon: "/assets/ships/frontier-beacon.svg",
   voidforgeTitan: "/assets/ships/voidforge-titan.svg",
   worldEater: "/assets/ships/world-eater.svg",
   swarmDrone: "/assets/ships/swarm-drone.svg",
@@ -36,6 +51,21 @@ export const SHIP_ART: Record<ShipId, string> = {
 export const DEFENSE_ART: Record<DefenseId, string> = {
   laserBattery: "/assets/defenses/laser-battery.svg",
   shieldDome: "/assets/defenses/shield-dome.svg",
+  needleTurret: "/assets/defenses/needle-turret.svg",
+  arcLattice: "/assets/defenses/arc-lattice.svg",
+  pulseBastion: "/assets/defenses/pulse-bastion.svg",
+  gaussRail: "/assets/defenses/gauss-rail.svg",
+  ionSheath: "/assets/defenses/ion-sheath.svg",
+  plasmaSpire: "/assets/defenses/plasma-spire.svg",
+  flakCurtain: "/assets/defenses/flak-curtain.svg",
+  kineticFence: "/assets/defenses/kinetic-fence.svg",
+  emberMortar: "/assets/defenses/ember-mortar.svg",
+  rippleArray: "/assets/defenses/ripple-array.svg",
+  haloProjector: "/assets/defenses/halo-projector.svg",
+  crownAegis: "/assets/defenses/crown-aegis.svg",
+  siegeBlockade: "/assets/defenses/siege-blockade.svg",
+  frostLance: "/assets/defenses/frost-lance.svg",
+  voidWard: "/assets/defenses/void-ward.svg",
 };
 
 export const RESOURCE_ART = {

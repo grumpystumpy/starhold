@@ -10,6 +10,7 @@ import {
   STARSHARDS_HIGHSCORE_TOP3,
 } from "./catalog.js";
 import {
+  classBonuses,
   economySnapshot,
   levelBonuses,
   planetPoints,
@@ -271,7 +272,9 @@ export function playerView(
       player.research.energyTech ?? 0,
       {
         mineOutput:
-          levelBonuses(player.level ?? 1).production * boosts.mineOutput,
+          levelBonuses(player.level ?? 1).production *
+          boosts.mineOutput *
+          classBonuses(player.playerClass?.classId).mineOutput,
         energyOutput: boosts.energyOutput,
       },
     ),

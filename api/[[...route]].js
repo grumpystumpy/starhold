@@ -1938,7 +1938,8 @@ var SHIPS = {
     researchReq: {
       weaponsTech: 10,
       shieldingTech: 10,
-      armourTech: 10
+      armourTech: 10,
+      gravityWell: 1
     }
   },
   worldEater: {
@@ -1957,7 +1958,8 @@ var SHIPS = {
     researchReq: {
       weaponsTech: 14,
       shieldingTech: 14,
-      armourTech: 14
+      armourTech: 14,
+      gravityWell: 1
     }
   },
   swarmDrone: {
@@ -2006,8 +2008,228 @@ var SHIPS = {
     researchReq: {
       weaponsTech: 11,
       shieldingTech: 11,
-      armourTech: 11
+      armourTech: 11,
+      gravityWell: 1
     }
+  },
+  helioBuoy: {
+    id: "helioBuoy",
+    name: "Helio Buoy",
+    description: "Orbital energy platform. Parks in hangar; does not fly missions. Energy scales with planet temperature.",
+    cost: { metal: 0, crystal: 2e3, deuterium: 500 },
+    buildSeconds: 30,
+    shipyardLevel: 3,
+    cargo: 0,
+    attack: 0,
+    shield: 1,
+    hull: 10,
+    speed: 0,
+    fuelPerDistance: 0,
+    stationary: true,
+    orbitalEnergy: true,
+    noDebris: true
+  },
+  keelSovereign: {
+    id: "keelSovereign",
+    name: "Keel Sovereign",
+    description: "Fleet backbone \u2014 heavy line ship above Aegis Cruiser.",
+    cost: { metal: 4e4, crystal: 2e4, deuterium: 1e4 },
+    buildSeconds: 1800,
+    shipyardLevel: 7,
+    cargo: 1500,
+    attack: 1e3,
+    shield: 400,
+    hull: 2500,
+    speed: 2500,
+    fuelPerDistance: 3,
+    researchReq: {
+      weaponsTech: 6,
+      armourTech: 5,
+      shieldingTech: 5,
+      combustionDrive: 4
+    }
+  },
+  rakeCorsair: {
+    id: "rakeCorsair",
+    name: "Rake Corsair",
+    description: "Fleet hunter \u2014 rapid fire vs light hulls.",
+    cost: { metal: 3e4, crystal: 4e4, deuterium: 15e3 },
+    buildSeconds: 1600,
+    shipyardLevel: 7,
+    cargo: 750,
+    attack: 700,
+    shield: 250,
+    hull: 1200,
+    speed: 6e3,
+    fuelPerDistance: 2.5,
+    researchReq: {
+      weaponsTech: 6,
+      armourTech: 5,
+      shieldingTech: 5,
+      combustionDrive: 4
+    }
+  },
+  anvilDread: {
+    id: "anvilDread",
+    name: "Anvil Dread",
+    description: "Mobile battle platform \u2014 heavy shields and hull.",
+    cost: { metal: 6e4, crystal: 25e3, deuterium: 2e4 },
+    buildSeconds: 2200,
+    shipyardLevel: 8,
+    cargo: 2e3,
+    attack: 500,
+    shield: 800,
+    hull: 3e3,
+    speed: 2e3,
+    fuelPerDistance: 4,
+    researchReq: {
+      weaponsTech: 6,
+      armourTech: 5,
+      shieldingTech: 5,
+      combustionDrive: 4
+    }
+  },
+  wardbreaker: {
+    id: "wardbreaker",
+    name: "Wardbreaker",
+    description: "Anti-defense strike hull \u2014 shreds static guns.",
+    cost: { metal: 5e4, crystal: 35e3, deuterium: 2e4 },
+    buildSeconds: 2e3,
+    shipyardLevel: 8,
+    cargo: 400,
+    attack: 1200,
+    shield: 150,
+    hull: 900,
+    speed: 3e3,
+    fuelPerDistance: 3.5,
+    researchReq: {
+      weaponsTech: 6,
+      armourTech: 5,
+      shieldingTech: 5,
+      combustionDrive: 4
+    }
+  },
+  vaultScout: {
+    id: "vaultScout",
+    name: "Vault Scout",
+    description: "Explorer exclusive \u2014 boosts expedition yield when in the fleet.",
+    cost: { metal: 2e3, crystal: 4e3, deuterium: 1e3 },
+    buildSeconds: 120,
+    shipyardLevel: 5,
+    cargo: 200,
+    attack: 20,
+    shield: 40,
+    hull: 80,
+    speed: 18e3,
+    fuelPerDistance: 1,
+    classExclusive: "explorer"
+  },
+  astrolabeWing: {
+    id: "astrolabeWing",
+    name: "Astrolabe Wing",
+    description: "Explorer exclusive \u2014 parked: \u22128% empire research time; spy escort +1 detail.",
+    cost: { metal: 3e3, crystal: 5e3, deuterium: 1500 },
+    buildSeconds: 150,
+    shipyardLevel: 6,
+    cargo: 100,
+    attack: 10,
+    shield: 60,
+    hull: 100,
+    speed: 14e3,
+    fuelPerDistance: 1.2,
+    classExclusive: "explorer"
+  },
+  spoilSkimmer: {
+    id: "spoilSkimmer",
+    name: "Spoil Skimmer",
+    description: "Fleeter exclusive \u2014 on attacker victory, skims 15% of the debris field into cargo.",
+    cost: { metal: 4e3, crystal: 2e3, deuterium: 2e3 },
+    buildSeconds: 140,
+    shipyardLevel: 6,
+    cargo: 25e3,
+    attack: 5,
+    shield: 30,
+    hull: 120,
+    speed: 5e3,
+    fuelPerDistance: 1.5,
+    classExclusive: "fleeter"
+  },
+  lineDrummer: {
+    id: "lineDrummer",
+    name: "Line Drummer",
+    description: "Fleeter exclusive \u2014 fleet-speed aura (+2%/hull, cap +20%) and light RF support.",
+    cost: { metal: 5e3, crystal: 4e3, deuterium: 1e3 },
+    buildSeconds: 160,
+    shipyardLevel: 6,
+    cargo: 500,
+    attack: 80,
+    shield: 40,
+    hull: 200,
+    speed: 8e3,
+    fuelPerDistance: 2,
+    classExclusive: "fleeter"
+  },
+  veinAnchor: {
+    id: "veinAnchor",
+    name: "Vein Anchor",
+    description: "Miner exclusive \u2014 stationary mine booster (+3%/hull on that planet, cap +30%).",
+    cost: { metal: 5e3, crystal: 2500, deuterium: 0 },
+    buildSeconds: 200,
+    shipyardLevel: 4,
+    cargo: 0,
+    attack: 0,
+    shield: 50,
+    hull: 200,
+    speed: 0,
+    fuelPerDistance: 0,
+    stationary: true,
+    classExclusive: "miner"
+  },
+  gridStake: {
+    id: "gridStake",
+    name: "Grid Stake",
+    description: "Miner exclusive \u2014 stationary energy booster (+4%/hull, cap +40%) and light defense.",
+    cost: { metal: 4e3, crystal: 4e3, deuterium: 500 },
+    buildSeconds: 180,
+    shipyardLevel: 5,
+    cargo: 0,
+    attack: 40,
+    shield: 80,
+    hull: 250,
+    speed: 0,
+    fuelPerDistance: 0,
+    stationary: true,
+    classExclusive: "miner"
+  },
+  foundationArk: {
+    id: "foundationArk",
+    name: "Foundation Ark",
+    description: "Expansionist exclusive \u2014 colonizer that bootstraps starting buildings (consumed on landing).",
+    cost: { metal: 1e4, crystal: 1e4, deuterium: 5e3 },
+    buildSeconds: 600,
+    shipyardLevel: 5,
+    cargo: 2e3,
+    attack: 0,
+    shield: 80,
+    hull: 400,
+    speed: 2500,
+    fuelPerDistance: 2,
+    classExclusive: "expansionist"
+  },
+  frontierBeacon: {
+    id: "frontierBeacon",
+    name: "Frontier Beacon",
+    description: "Expansionist exclusive \u2014 +1 colony slot empire-wide; Fold Bridge cooldown \xD70.75.",
+    cost: { metal: 8e3, crystal: 6e3, deuterium: 4e3 },
+    buildSeconds: 400,
+    shipyardLevel: 6,
+    cargo: 1e3,
+    attack: 30,
+    shield: 100,
+    hull: 300,
+    speed: 4e3,
+    fuelPerDistance: 1.5,
+    classExclusive: "expansionist"
   }
 };
 var DEFENSES = {
@@ -2032,6 +2254,174 @@ var DEFENSES = {
     attack: 2,
     shield: 80,
     hull: 100
+  },
+  needleTurret: {
+    id: "needleTurret",
+    name: "Needle Turret",
+    description: "Cheap mass DPS turret.",
+    cost: { metal: 200, crystal: 0, deuterium: 0 },
+    buildSeconds: 8,
+    shipyardLevel: 1,
+    attack: 12,
+    shield: 2,
+    hull: 25
+  },
+  arcLattice: {
+    id: "arcLattice",
+    name: "Arc Lattice",
+    description: "Light beam lattice.",
+    cost: { metal: 150, crystal: 50, deuterium: 0 },
+    buildSeconds: 10,
+    shipyardLevel: 2,
+    attack: 20,
+    shield: 4,
+    hull: 35
+  },
+  pulseBastion: {
+    id: "pulseBastion",
+    name: "Pulse Bastion",
+    description: "Mid-weight beam bastion.",
+    cost: { metal: 600, crystal: 200, deuterium: 0 },
+    buildSeconds: 25,
+    shipyardLevel: 4,
+    attack: 80,
+    shield: 20,
+    hull: 100
+  },
+  gaussRail: {
+    id: "gaussRail",
+    name: "Gauss Rail",
+    description: "Crystal-heavy pierce rail.",
+    cost: { metal: 2e3, crystal: 1500, deuterium: 0 },
+    buildSeconds: 50,
+    shipyardLevel: 6,
+    attack: 180,
+    shield: 30,
+    hull: 180
+  },
+  ionSheath: {
+    id: "ionSheath",
+    name: "Ion Sheath",
+    description: "Shield-breaker ion wall.",
+    cost: { metal: 1e3, crystal: 500, deuterium: 200 },
+    buildSeconds: 45,
+    shipyardLevel: 6,
+    attack: 120,
+    shield: 80,
+    hull: 150
+  },
+  plasmaSpire: {
+    id: "plasmaSpire",
+    name: "Plasma Spire",
+    description: "Late heavy DPS spire.",
+    cost: { metal: 5e3, crystal: 3e3, deuterium: 1e3 },
+    buildSeconds: 90,
+    shipyardLevel: 8,
+    attack: 450,
+    shield: 60,
+    hull: 400
+  },
+  flakCurtain: {
+    id: "flakCurtain",
+    name: "Flak Curtain",
+    description: "Anti-fighter flak with rapid fire vs light hulls.",
+    cost: { metal: 400, crystal: 200, deuterium: 50 },
+    buildSeconds: 18,
+    shipyardLevel: 3,
+    attack: 30,
+    shield: 10,
+    hull: 60
+  },
+  kineticFence: {
+    id: "kineticFence",
+    name: "Kinetic Fence",
+    description: "Cheap hull wall.",
+    cost: { metal: 400, crystal: 100, deuterium: 0 },
+    buildSeconds: 12,
+    shipyardLevel: 2,
+    attack: 5,
+    shield: 5,
+    hull: 120
+  },
+  emberMortar: {
+    id: "emberMortar",
+    name: "Ember Mortar",
+    description: "Deut-hungry punch mortar.",
+    cost: { metal: 800, crystal: 400, deuterium: 400 },
+    buildSeconds: 35,
+    shipyardLevel: 5,
+    attack: 140,
+    shield: 15,
+    hull: 90
+  },
+  rippleArray: {
+    id: "rippleArray",
+    name: "Ripple Array",
+    description: "Mid soak shield array.",
+    cost: { metal: 800, crystal: 600, deuterium: 0 },
+    buildSeconds: 30,
+    shipyardLevel: 4,
+    attack: 4,
+    shield: 120,
+    hull: 150
+  },
+  haloProjector: {
+    id: "haloProjector",
+    name: "Halo Projector",
+    description: "Small cupola \u2014 soft-cap 1 per planet.",
+    cost: { metal: 6e3, crystal: 4e3, deuterium: 0 },
+    buildSeconds: 120,
+    shipyardLevel: 5,
+    attack: 1,
+    shield: 400,
+    hull: 200,
+    uniqueHint: true
+  },
+  crownAegis: {
+    id: "crownAegis",
+    name: "Crown Aegis",
+    description: "Large cupola \u2014 soft-cap 1 per planet.",
+    cost: { metal: 5e4, crystal: 4e4, deuterium: 1e4 },
+    buildSeconds: 600,
+    shipyardLevel: 8,
+    attack: 1,
+    shield: 5e3,
+    hull: 2e3,
+    uniqueHint: true
+  },
+  siegeBlockade: {
+    id: "siegeBlockade",
+    name: "Siege Blockade",
+    description: "Anti-capital soak wall.",
+    cost: { metal: 3e3, crystal: 2e3, deuterium: 500 },
+    buildSeconds: 70,
+    shipyardLevel: 7,
+    attack: 40,
+    shield: 200,
+    hull: 500
+  },
+  frostLance: {
+    id: "frostLance",
+    name: "Frost Lance",
+    description: "Cold-slot preferential (+10% attack on slots 12\u201315).",
+    cost: { metal: 900, crystal: 300, deuterium: 300 },
+    buildSeconds: 40,
+    shipyardLevel: 5,
+    attack: 100,
+    shield: 25,
+    hull: 110,
+    slotAttackBonus: { slots: [12, 13, 14, 15], factor: 1.1 }
+  },
+  voidWard: {
+    id: "voidWard",
+    name: "Void Ward",
+    description: "Elite late defense.",
+    cost: { metal: 2e4, crystal: 15e3, deuterium: 5e3 },
+    buildSeconds: 300,
+    shipyardLevel: 10,
+    attack: 600,
+    shield: 300,
+    hull: 800
   }
 };
 var BUILDINGS = {
@@ -2147,6 +2537,24 @@ var BUILDINGS = {
     baseCost: { metal: 1e6, crystal: 5e5, deuterium: 2e5 },
     costGrowth: 2.5,
     baseBuildSeconds: 3600
+  },
+  mantleLoom: {
+    id: "mantleLoom",
+    name: "Mantle Loom",
+    description: "Field expansion \u2014 occupies 1 field; +5 fieldsCap per level. Very high energy use. Planet only.",
+    baseCost: { metal: 5e4, crystal: 1e5, deuterium: 3e4 },
+    costGrowth: 2,
+    baseBuildSeconds: 120,
+    energyUsePerLevel: 80
+  },
+  rigFoundry: {
+    id: "rigFoundry",
+    name: "Rig Foundry",
+    description: "Construction plant \u2014 \u221215% build time per level for buildings/ships/defenses (floor \xD70.10). Required for Chrono Lathe.",
+    baseCost: { metal: 400, crystal: 200, deuterium: 100 },
+    costGrowth: 2,
+    baseBuildSeconds: 40,
+    energyUsePerLevel: 15
   }
 };
 var RESEARCH = {
@@ -2239,6 +2647,15 @@ var RESEARCH = {
     costGrowth: 2,
     baseResearchSeconds: 40,
     labLevel: 4
+  },
+  gravityWell: {
+    id: "gravityWell",
+    name: "Well Binding",
+    description: "Gravity doctrine \u2014 required for Void Titan, Swarm Mothership, and World Eater.",
+    baseCost: { metal: 0, crystal: 4e3, deuterium: 2e3 },
+    costGrowth: 2,
+    baseResearchSeconds: 120,
+    labLevel: 6
   }
 };
 var SWARM_CAPACITY_BASE = 2e3;
@@ -2257,6 +2674,137 @@ var OCCUPATION_DURATION_MS = 2 * 24 * 60 * 60 * 1e3;
 var OCCUPATION_OCCUPIER_SHARE = 0.3;
 var OCCUPATION_OWNER_SHARE = 0.7;
 var MINI_WORLD_EATER_MIN = 5;
+var RIG_FOUNDRY_TIME_PER_LEVEL = 0.15;
+var RIG_FOUNDRY_TIME_FLOOR = 0.1;
+var CHRONO_LATHE_RIG_FOUNDRY_REQ = 10;
+var MANTLE_LOOM_FIELDS_PER_LEVEL = 5;
+var MANTLE_LOOM_FIELDS_USED = 1;
+var MANTLE_LOOM_SOLAR_REQ = 5;
+var MANTLE_LOOM_LAB_REQ = 3;
+var RIG_FOUNDRY_SHIPYARD_REQ = 2;
+var SLOT_TEMPERATURE_K = {
+  1: 220,
+  2: 200,
+  3: 180,
+  4: 160,
+  5: 140,
+  6: 120,
+  7: 100,
+  8: 90,
+  9: 80,
+  10: 70,
+  11: 60,
+  12: 50,
+  13: 40,
+  14: 30,
+  15: 20
+};
+var SOLAR_TEMP_BASELINE_K = 90;
+var CLASS_CHANGE_BASE_COST = 200;
+var CLASS_CHANGE_COST_PER_PRIOR = 100;
+var CLASS_CHANGE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1e3;
+var PLAYER_CLASS_ORDER = [
+  "miner",
+  "explorer",
+  "fleeter",
+  "expansionist"
+];
+var PLAYER_CLASS_BONUSES = {
+  miner: {
+    name: "Miner",
+    mineOutput: 1.12,
+    defensePower: 1.1,
+    defenseBuildTime: 0.9,
+    expeditionYield: 1,
+    researchTime: 1,
+    probeSpeed: 1,
+    expeditionSlots: 0,
+    attack: 1,
+    fleetSpeed: 1,
+    shipBuildTime: 1,
+    fleetSlots: 0,
+    colonySlots: 0,
+    colonyShipSpeed: 1,
+    buildingBuildTime: 1,
+    jumpGateCooldown: 1
+  },
+  explorer: {
+    name: "Explorer",
+    mineOutput: 1,
+    defensePower: 1,
+    defenseBuildTime: 1,
+    expeditionYield: 1.2,
+    researchTime: 0.9,
+    probeSpeed: 1.25,
+    expeditionSlots: 1,
+    attack: 1,
+    fleetSpeed: 1,
+    shipBuildTime: 1,
+    fleetSlots: 0,
+    colonySlots: 0,
+    colonyShipSpeed: 1,
+    buildingBuildTime: 1,
+    jumpGateCooldown: 1
+  },
+  fleeter: {
+    name: "Fleeter",
+    mineOutput: 1,
+    defensePower: 1,
+    defenseBuildTime: 1,
+    expeditionYield: 1,
+    researchTime: 1,
+    probeSpeed: 1,
+    expeditionSlots: 0,
+    attack: 1.08,
+    fleetSpeed: 1.1,
+    shipBuildTime: 0.9,
+    fleetSlots: 1,
+    colonySlots: 0,
+    colonyShipSpeed: 1,
+    buildingBuildTime: 1,
+    jumpGateCooldown: 1
+  },
+  expansionist: {
+    name: "Expansionist",
+    mineOutput: 1,
+    defensePower: 1,
+    defenseBuildTime: 1,
+    expeditionYield: 1,
+    researchTime: 1,
+    probeSpeed: 1,
+    expeditionSlots: 0,
+    attack: 1,
+    fleetSpeed: 1,
+    shipBuildTime: 1,
+    fleetSlots: 0,
+    colonySlots: 2,
+    colonyShipSpeed: 1.15,
+    buildingBuildTime: 0.95,
+    jumpGateCooldown: 0.85
+  }
+};
+var JUMP_GATE_BASE_COOLDOWN_MS = 3e5;
+var VAULT_SCOUT_YIELD_PER = 0.05;
+var VAULT_SCOUT_YIELD_CAP = 10;
+var ASTROLABE_RESEARCH_TIME = 0.92;
+var SPOIL_SKIMMER_DEBRIS_FRAC = 0.15;
+var LINE_DRUMMER_SPEED_PER = 0.02;
+var LINE_DRUMMER_SPEED_CAP = 10;
+var VEIN_ANCHOR_MINE_PER = 0.03;
+var VEIN_ANCHOR_MINE_CAP = 10;
+var GRID_STAKE_ENERGY_PER = 0.04;
+var GRID_STAKE_ENERGY_CAP = 10;
+var FRONTIER_BEACON_JUMP_CD = 0.75;
+var FOUNDATION_ARK_BOOTSTRAP = {
+  metalMine: 5,
+  crystalMine: 5,
+  deutSynth: 5,
+  solarPlant: 5,
+  metalStorage: 5,
+  crystalStorage: 5,
+  deutTank: 5,
+  rigFoundry: 6
+};
 
 // packages/game/src/catalog-rapid-fire.ts
 var RAPID_FIRE = {
@@ -2274,7 +2822,44 @@ var RAPID_FIRE = {
     laserBattery: 20,
     shieldDome: 10
   },
-  swarmDrone: { probe: 3 }
+  swarmDrone: { probe: 3 },
+  // Round 3 warships / defenses / class hulls (§16.5 + Line Drummer).
+  rakeCorsair: {
+    scout: 6,
+    interceptor: 4,
+    cruiser: 3,
+    swarmDrone: 8,
+    probe: 12
+  },
+  wardbreaker: {
+    laserBattery: 10,
+    needleTurret: 10,
+    arcLattice: 8,
+    pulseBastion: 6,
+    gaussRail: 4,
+    ionSheath: 4,
+    plasmaSpire: 3,
+    shieldDome: 5,
+    haloProjector: 5,
+    crownAegis: 3,
+    rippleArray: 6
+  },
+  flakCurtain: {
+    scout: 5,
+    interceptor: 4,
+    swarmDrone: 8,
+    probe: 10
+  },
+  anvilDread: {
+    bomber: 2
+  },
+  keelSovereign: {
+    cruiser: 2
+  },
+  lineDrummer: {
+    scout: 3,
+    interceptor: 3
+  }
 };
 function rapidFireFactor(firer, target) {
   const n = RAPID_FIRE[firer]?.[target] ?? 1;
@@ -2529,6 +3114,8 @@ var PLANET_BUILDING_ORDER = [
   "deutTank",
   "shipyard",
   "researchLab",
+  "rigFoundry",
+  "mantleLoom",
   "chronoLathe"
 ];
 var MOON_BUILDING_ORDER = [
@@ -2550,13 +3137,44 @@ var SHIP_ORDER = [
   "probe",
   "recycler",
   "colonyShip",
+  "helioBuoy",
+  "keelSovereign",
+  "rakeCorsair",
+  "anvilDread",
+  "wardbreaker",
+  "vaultScout",
+  "astrolabeWing",
+  "spoilSkimmer",
+  "lineDrummer",
+  "veinAnchor",
+  "gridStake",
+  "foundationArk",
+  "frontierBeacon",
   "voidforgeTitan",
   "worldEater",
   "swarmDrone",
   "swarmHarvester",
   "swarmMothership"
 ];
-var DEFENSE_ORDER = ["laserBattery", "shieldDome"];
+var DEFENSE_ORDER = [
+  "laserBattery",
+  "shieldDome",
+  "needleTurret",
+  "arcLattice",
+  "pulseBastion",
+  "gaussRail",
+  "ionSheath",
+  "plasmaSpire",
+  "flakCurtain",
+  "kineticFence",
+  "emberMortar",
+  "rippleArray",
+  "haloProjector",
+  "crownAegis",
+  "siegeBlockade",
+  "frostLance",
+  "voidWard"
+];
 var QUEUE_HARD_CAP = 8;
 var QUEUE_BASE_LENGTH = {
   building: 2,
@@ -2582,7 +3200,7 @@ var MAP_SYSTEMS = 399;
 var MAP_SLOTS = 15;
 var DEEP_SPACE_SLOT = 16;
 var EXPEDITION_SLOT = DEEP_SPACE_SLOT;
-var UNIVERSE_SCHEMA_VERSION = 3;
+var UNIVERSE_SCHEMA_VERSION = 4;
 var HOME_SLOT_PREFERENCE = [
   4,
   5,
@@ -2663,6 +3281,156 @@ function rollPlanetFields(slot, seed) {
   return Math.max(FIELD_MIN, center + offset);
 }
 
+// packages/game/src/formulas-round3.ts
+function emptyPlayerClass() {
+  return {
+    classId: null,
+    chosenAt: null,
+    changeCount: 0,
+    lastChangeAt: null
+  };
+}
+function ensurePlayerClass(player) {
+  if (!player.playerClass) {
+    player.playerClass = emptyPlayerClass();
+  }
+  return player.playerClass;
+}
+function planetTemperatureK(slot) {
+  return SLOT_TEMPERATURE_K[slot] ?? SOLAR_TEMP_BASELINE_K;
+}
+function solarTempFactor(slot) {
+  return planetTemperatureK(slot) / SOLAR_TEMP_BASELINE_K;
+}
+function helioBuoyEnergy(planet) {
+  const count = planet.ships.helioBuoy ?? 0;
+  if (count <= 0) return 0;
+  return count * Math.floor(planetTemperatureK(planet.coords.slot) / 4);
+}
+function mantleLoomFieldsBonus(planet) {
+  const level = planet.buildings.mantleLoom ?? 0;
+  return MANTLE_LOOM_FIELDS_PER_LEVEL * Math.max(0, level);
+}
+function rigFoundryTimeFactor(rigFoundryLevel) {
+  const level = Math.max(0, Math.floor(rigFoundryLevel));
+  if (level <= 0) return 1;
+  return Math.max(
+    RIG_FOUNDRY_TIME_FLOOR,
+    1 - RIG_FOUNDRY_TIME_PER_LEVEL * level
+  );
+}
+function classBonuses(classId) {
+  if (!classId) {
+    return {
+      name: "Unassigned",
+      mineOutput: 1,
+      defensePower: 1,
+      defenseBuildTime: 1,
+      expeditionYield: 1,
+      researchTime: 1,
+      probeSpeed: 1,
+      expeditionSlots: 0,
+      attack: 1,
+      fleetSpeed: 1,
+      shipBuildTime: 1,
+      fleetSlots: 0,
+      colonySlots: 0,
+      colonyShipSpeed: 1,
+      buildingBuildTime: 1,
+      jumpGateCooldown: 1
+    };
+  }
+  return PLAYER_CLASS_BONUSES[classId];
+}
+function empireOwnsShip(universe, playerId, shipId) {
+  const player = universe.players[playerId];
+  if (!player) return false;
+  for (const pid of player.planetIds) {
+    const planet = universe.planets[pid];
+    if ((planet?.ships[shipId] ?? 0) >= 1) return true;
+  }
+  for (const fleet of Object.values(universe.fleets)) {
+    if (fleet.ownerPlayerId !== playerId) continue;
+    if ((fleet.ships[shipId] ?? 0) >= 1) return true;
+  }
+  return false;
+}
+function veinAnchorMineMult(planet) {
+  const n = Math.min(VEIN_ANCHOR_MINE_CAP, planet.ships.veinAnchor ?? 0);
+  return 1 + VEIN_ANCHOR_MINE_PER * n;
+}
+function gridStakeEnergyMult(planet) {
+  const n = Math.min(GRID_STAKE_ENERGY_CAP, planet.ships.gridStake ?? 0);
+  return 1 + GRID_STAKE_ENERGY_PER * n;
+}
+function vaultScoutExpeditionMult(ships) {
+  const n = Math.min(VAULT_SCOUT_YIELD_CAP, ships.vaultScout ?? 0);
+  return 1 + VAULT_SCOUT_YIELD_PER * n;
+}
+function lineDrummerFleetSpeedMult(ships) {
+  const n = Math.min(LINE_DRUMMER_SPEED_CAP, ships.lineDrummer ?? 0);
+  return 1 + LINE_DRUMMER_SPEED_PER * n;
+}
+function astrolabeResearchTimeMult(universe, playerId) {
+  return empireOwnsShip(universe, playerId, "astrolabeWing") ? ASTROLABE_RESEARCH_TIME : 1;
+}
+function spoilSkimmerDebris(debris, ships) {
+  const count = ships.spoilSkimmer ?? 0;
+  if (count <= 0) {
+    return {
+      skimmed: { metal: 0, crystal: 0, deuterium: 0 },
+      remaining: { ...debris }
+    };
+  }
+  const cargoFree = count * (SHIPS.spoilSkimmer?.cargo ?? 0);
+  const fieldTotal = Math.max(0, debris.metal + debris.crystal);
+  const want = Math.floor(fieldTotal * SPOIL_SKIMMER_DEBRIS_FRAC);
+  const take = Math.min(cargoFree, want);
+  if (take <= 0) {
+    return {
+      skimmed: { metal: 0, crystal: 0, deuterium: 0 },
+      remaining: { ...debris }
+    };
+  }
+  const metal = Math.min(debris.metal, take);
+  const crystal = Math.min(debris.crystal, take - metal);
+  return {
+    skimmed: { metal, crystal, deuterium: 0 },
+    remaining: {
+      metal: debris.metal - metal,
+      crystal: debris.crystal - crystal,
+      deuterium: 0
+    }
+  };
+}
+function jumpGateCooldownMs(player, universe) {
+  const cls = classBonuses(player.playerClass?.classId);
+  let mult = cls.jumpGateCooldown;
+  if (empireOwnsShip(universe, player.id, "frontierBeacon")) {
+    mult *= FRONTIER_BEACON_JUMP_CD;
+  }
+  return Math.max(0, Math.floor(JUMP_GATE_BASE_COOLDOWN_MS * mult));
+}
+function isStationaryShip(shipId) {
+  return Boolean(SHIPS[shipId]?.stationary);
+}
+function shipClassAllowed(shipId, classId) {
+  const need = SHIPS[shipId]?.classExclusive;
+  if (!need) return true;
+  return classId === need;
+}
+function empireColonyCap(player, universe, baseMaxColonies) {
+  const cls = classBonuses(player.playerClass?.classId);
+  let cap = baseMaxColonies(player.research.astrophysics ?? 0);
+  cap += cls.colonySlots;
+  if (empireOwnsShip(universe, player.id, "frontierBeacon")) cap += 1;
+  return cap;
+}
+function empireExpeditionCap(player, baseMaxExpeditions) {
+  const cls = classBonuses(player.playerClass?.classId);
+  return baseMaxExpeditions(player.research.astrophysics ?? 0) + cls.expeditionSlots;
+}
+
 // packages/game/src/formulas-build.ts
 function isMoon(planet) {
   return planet.kind === "moon";
@@ -2676,13 +3444,11 @@ function fieldsCap(planet) {
     const lunar = planet.buildings.lunarBase ?? 0;
     return MOON_FIELDS_BASE + lunar * MOON_FIELDS_PER_LUNAR_BASE;
   }
-  if (typeof planet.fieldsCap === "number" && planet.fieldsCap > 0) {
-    return planet.fieldsCap;
-  }
-  return rollPlanetFields(
+  let rolled = typeof planet.fieldsCap === "number" && planet.fieldsCap > 0 ? planet.fieldsCap : rollPlanetFields(
     planet.coords.slot,
     `${planet.id}:${planet.coords.galaxy}:${planet.coords.system}:${planet.coords.slot}`
   );
+  return rolled + mantleLoomFieldsBonus(planet);
 }
 function buildingUpgradeCost(buildingId, currentLevel) {
   const def = BUILDINGS[buildingId];
@@ -2698,6 +3464,12 @@ function constructionTimeMultiplier(naniteLevel = 0) {
   if (level <= 0) return 1;
   return Math.pow(0.1, level);
 }
+function chronoLatheTimeFactor(chronoLatheLevel) {
+  return constructionTimeMultiplier(chronoLatheLevel);
+}
+function constructionSpeedFactor(rigFoundryLevel = 0, chronoLatheLevel = 0) {
+  return rigFoundryTimeFactor(rigFoundryLevel) * chronoLatheTimeFactor(chronoLatheLevel);
+}
 function batchUnitsProduced(elapsedSec, unitSeconds, remaining) {
   if (unitSeconds >= 1) return 0;
   if (elapsedSec <= 0 || remaining <= 0) return 0;
@@ -2705,9 +3477,9 @@ function batchUnitsProduced(elapsedSec, unitSeconds, remaining) {
   return Math.min(remaining, Math.floor(elapsedSec / unit + 1e-12));
 }
 var MIN_UNIT_SECONDS = 1e-9;
-function buildingUpgradeSeconds(buildingId, currentLevel, naniteLevel = 0) {
+function buildingUpgradeSeconds(buildingId, currentLevel, naniteLevel = 0, rigFoundryLevel = 0) {
   const def = BUILDINGS[buildingId];
-  const raw2 = def.baseBuildSeconds * Math.pow(def.costGrowth, currentLevel) * constructionTimeMultiplier(naniteLevel);
+  const raw2 = def.baseBuildSeconds * Math.pow(def.costGrowth, currentLevel) * constructionSpeedFactor(rigFoundryLevel, naniteLevel);
   return Math.max(MIN_UNIT_SECONDS, raw2);
 }
 function shipCost(shipId, count) {
@@ -2718,10 +3490,10 @@ function shipCost(shipId, count) {
     deuterium: def.cost.deuterium * count
   };
 }
-function shipUnitBuildSeconds(shipId, shipyardLevel, naniteLevel = 0) {
+function shipUnitBuildSeconds(shipId, shipyardLevel, naniteLevel = 0, rigFoundryLevel = 0) {
   const def = SHIPS[shipId];
   const speedFactor = 1 + Math.max(0, shipyardLevel - 1) * 0.1;
-  const raw2 = def.buildSeconds / speedFactor * constructionTimeMultiplier(naniteLevel);
+  const raw2 = def.buildSeconds / speedFactor * constructionSpeedFactor(rigFoundryLevel, naniteLevel);
   return Math.max(MIN_UNIT_SECONDS, raw2);
 }
 function defenseCost(defenseId, count) {
@@ -2732,10 +3504,10 @@ function defenseCost(defenseId, count) {
     deuterium: def.cost.deuterium * count
   };
 }
-function defenseUnitBuildSeconds(defenseId, shipyardLevel, naniteLevel = 0) {
+function defenseUnitBuildSeconds(defenseId, shipyardLevel, naniteLevel = 0, rigFoundryLevel = 0) {
   const def = DEFENSES[defenseId];
   const speedFactor = 1 + Math.max(0, shipyardLevel - 1) * 0.1;
-  const raw2 = def.buildSeconds / speedFactor * constructionTimeMultiplier(naniteLevel);
+  const raw2 = def.buildSeconds / speedFactor * constructionSpeedFactor(rigFoundryLevel, naniteLevel);
   return Math.max(MIN_UNIT_SECONDS, raw2);
 }
 function researchUpgradeCost(researchId, currentLevel) {
@@ -2780,9 +3552,13 @@ function energyUsed(planet) {
   return used;
 }
 function energyProduced(planet, energyOutputMult = 1) {
+  const slot = planet.coords.slot;
   const base = solarEnergy(planet.buildings.solarPlant ?? 0);
-  const mult = productionMultForSlot(planet.coords.slot).energy;
-  return Math.floor(base * mult * Math.max(0, energyOutputMult));
+  const posMult = productionMultForSlot(slot).energy;
+  const temp = solarTempFactor(slot);
+  const solar = base * posMult * temp * Math.max(0, energyOutputMult) * gridStakeEnergyMult(planet);
+  const buoy = helioBuoyEnergy(planet) * Math.max(0, energyOutputMult);
+  return Math.floor(solar + buoy);
 }
 function energyFactor(planet, energyOutputMult = 1) {
   const used = energyUsed(planet);
@@ -2799,8 +3575,12 @@ function storageFor(planet) {
 }
 function fieldsUsed(planet) {
   let used = 0;
-  for (const level of Object.values(planet.buildings)) {
-    used += level;
+  for (const [id, level] of Object.entries(planet.buildings)) {
+    if (id === "mantleLoom") {
+      if ((level ?? 0) > 0) used += MANTLE_LOOM_FIELDS_USED;
+      continue;
+    }
+    used += level ?? 0;
   }
   return used;
 }
@@ -2812,7 +3592,8 @@ function productionPerHour(planet, universeSpeed = 1, energyTechLevel = 0, boost
   const mineMult = boosts?.mineOutput ?? 1;
   const factor = energyFactor(planet, energyMult);
   const techBonus = 1 + energyTechLevel * 0.02;
-  const incomeScale = universeSpeed * PRODUCTION_MULT * techBonus * mineMult;
+  const vein = veinAnchorMineMult(planet);
+  const incomeScale = universeSpeed * PRODUCTION_MULT * techBonus * mineMult * vein;
   const pos = productionMultForSlot(planet.coords.slot);
   return {
     metal: mineOutputPerHour("metal", planet.buildings.metalMine ?? 0) * factor * incomeScale * pos.metal,
@@ -2850,7 +3631,8 @@ function emptyResearch() {
     astrophysics: 0,
     computerTech: 0,
     queueLogistics: 0,
-    swarmHold: 0
+    swarmHold: 0,
+    gravityWell: 0
   };
 }
 function emptyDefenses() {
@@ -2895,6 +3677,7 @@ function researchPoints(research) {
 function economySnapshot(planet, universeSpeed = 1, energyTechLevel = 0, boosts) {
   const used = fieldsUsed(planet);
   const energyMult = boosts?.energyOutput ?? 1;
+  const slot = planet.coords.slot;
   return {
     productionPerHour: productionPerHour(
       planet,
@@ -2902,18 +3685,22 @@ function economySnapshot(planet, universeSpeed = 1, energyTechLevel = 0, boosts)
       energyTechLevel,
       boosts
     ),
+    temperatureK: planetTemperatureK(slot),
     energy: {
       produced: energyProduced(planet, energyMult),
       used: energyUsed(planet),
-      factor: energyFactor(planet, energyMult)
+      factor: energyFactor(planet, energyMult),
+      helioBuoy: helioBuoyEnergy(planet),
+      solarTempFactor: solarTempFactor(slot)
     },
     storage: storageFor(planet),
     fields: {
       used,
       cap: fieldsCap(planet),
-      remaining: fieldsRemaining(planet)
+      remaining: fieldsRemaining(planet),
+      mantleLoomBonus: mantleLoomFieldsBonus(planet)
     },
-    positionMult: productionMultForSlot(planet.coords.slot)
+    positionMult: productionMultForSlot(slot)
   };
 }
 function emptyFleetShips() {
@@ -3064,6 +3851,7 @@ function destroyedShipResources(before, after) {
   for (const id of SHIP_ORDER) {
     const lost = Math.max(0, (before[id] ?? 0) - (after[id] ?? 0));
     if (lost <= 0) continue;
+    if (SHIPS[id].noDebris) continue;
     const c = SHIPS[id].cost;
     metal += c.metal * lost;
     crystal += c.crystal * lost;
@@ -3194,13 +3982,15 @@ function applyShotWithIntercept(side, target, damage, research) {
     applyDamageToTarget(side, part.target, part.damage, research);
   }
 }
-function collectFire(firerShips, firerDefenses, targetShips, targetDefenses, firerResearch) {
+function collectFire(firerShips, firerDefenses, targetShips, targetDefenses, firerResearch, opts) {
   const shots = [];
   const focus = pickFocusTarget(targetShips, targetDefenses);
   if (!focus) return shots;
+  const attackMult = Math.max(0.01, opts?.attackMult ?? 1);
+  const slot = opts?.defenseSlot;
   for (const id of livingShipIds(firerShips)) {
     const def = SHIPS[id];
-    let atk = unitAtk(def.attack, firerResearch);
+    let atk = unitAtk(def.attack, firerResearch) * attackMult;
     if (id === "swarmDrone") {
       atk *= swarmDroneAttackMult(firerShips.swarmDrone ?? 0);
     }
@@ -3212,7 +4002,10 @@ function collectFire(firerShips, firerDefenses, targetShips, targetDefenses, fir
   if (firerDefenses) {
     for (const id of livingDefenseIds(firerDefenses)) {
       const def = DEFENSES[id];
-      const atk = unitAtk(def.attack, firerResearch);
+      let atk = unitAtk(def.attack, firerResearch) * attackMult;
+      if (slot != null && def.slotAttackBonus && def.slotAttackBonus.slots.includes(slot)) {
+        atk *= def.slotAttackBonus.factor;
+      }
       if (atk <= 0) continue;
       const n = firerDefenses[id] ?? 0;
       const rf = rapidFireFactor(id, focus);
@@ -3223,6 +4016,8 @@ function collectFire(firerShips, firerDefenses, targetShips, targetDefenses, fir
 }
 function resolveCombat(attacker, defender, defenses = emptyDefenses(), attackerResearch, defenderResearch, mods) {
   const defensePowerMult = Math.max(0.01, mods?.defensePower ?? 1);
+  const attackMult = Math.max(0.01, mods?.attackMult ?? 1);
+  const defenseSlot = mods?.defenseSlot;
   const atkSide = {
     ships: normalizeFleetShips(attacker),
     defenses: emptyDefenses(),
@@ -3261,14 +4056,16 @@ function resolveCombat(attacker, defender, defenses = emptyDefenses(), attackerR
       null,
       defSide.ships,
       defSide.defenses,
-      attackerResearch
+      attackerResearch,
+      { attackMult }
     );
     const defShots = collectFire(
       defSide.ships,
       defSide.defenses,
       atkSide.ships,
       emptyDefenses(),
-      defenderResearch
+      defenderResearch,
+      { defenseSlot }
     );
     for (const shot of atkShots) {
       applyShotWithIntercept(
@@ -3530,6 +4327,156 @@ function harvestAsteroidField(universe, asteroidId2, cargoCap) {
     universe.asteroids[asteroidId2] = field;
   }
   return { metal: takeMetal, crystal: takeCrystal, deuterium: takeDeut };
+}
+
+// packages/game/src/world-fleet-presets.ts
+var BUILTIN_PRESET_IDS = [
+  "expedition",
+  "raid",
+  "moonDestruction",
+  "miniPlanetCapture",
+  "miniPlanetDestruction"
+];
+var BUILTIN_META = {
+  expedition: {
+    name: "Expedition",
+    intent: "expedition",
+    ships: { scout: 2, hauler: 1 }
+  },
+  raid: {
+    name: "Raid",
+    intent: "raid",
+    ships: { interceptor: 10, cruiser: 2 }
+  },
+  moonDestruction: {
+    name: "Moon Destruction",
+    intent: "moonDestruction",
+    ships: { voidforgeTitan: 1 }
+  },
+  miniPlanetCapture: {
+    name: "Mini Planet Capture",
+    intent: "miniCapture",
+    ships: { worldEater: 5 }
+  },
+  miniPlanetDestruction: {
+    name: "Mini Planet Destruction",
+    intent: "miniDestroy",
+    ships: { worldEater: 5 }
+  }
+};
+function clampShips(ships) {
+  const out = {};
+  for (const id of SHIP_ORDER) {
+    const n = Math.max(0, Math.floor(ships[id] ?? 0));
+    if (n > 0) out[id] = n;
+  }
+  return out;
+}
+function ensurePlayerFleetPresets(player) {
+  const existing = Array.isArray(player.fleetPresets) ? player.fleetPresets : [];
+  const byId = /* @__PURE__ */ new Map();
+  for (const p of existing) {
+    if (!p || typeof p.id !== "string" || !p.id) continue;
+    byId.set(p.id, {
+      id: p.id,
+      name: String(p.name ?? "Custom").slice(0, 48),
+      intent: p.intent ?? "custom",
+      builtIn: Boolean(p.builtIn),
+      ships: clampShips(p.ships ?? {})
+    });
+  }
+  const merged = [];
+  for (const id of BUILTIN_PRESET_IDS) {
+    const meta = BUILTIN_META[id];
+    const prev = byId.get(id);
+    merged.push({
+      id,
+      name: meta.name,
+      intent: meta.intent,
+      builtIn: true,
+      ships: prev?.ships && Object.keys(prev.ships).length > 0 ? clampShips(prev.ships) : { ...meta.ships }
+    });
+    byId.delete(id);
+  }
+  for (const p of byId.values()) {
+    if (p.builtIn) continue;
+    merged.push({
+      ...p,
+      builtIn: false,
+      intent: "custom"
+    });
+  }
+  player.fleetPresets = merged;
+  return merged;
+}
+function listFleetPresets(player) {
+  return ensurePlayerFleetPresets(player);
+}
+function getFleetPreset(player, presetId) {
+  return listFleetPresets(player).find((p) => p.id === presetId) ?? null;
+}
+function expeditionPresetShips(player) {
+  const preset = getFleetPreset(player, "expedition");
+  return normalizeFleetShips(preset?.ships ?? BUILTIN_META.expedition.ships);
+}
+function saveFleetPreset(universe, playerId, opts) {
+  const player = universe.players[playerId];
+  if (!player) return { ok: false, error: "Unknown player." };
+  const name = opts.name.trim().slice(0, 48);
+  if (!name) return { ok: false, error: "Preset name is required." };
+  const ships = clampShips(opts.ships);
+  if (Object.keys(ships).length < 1) {
+    return { ok: false, error: "Select at least one ship type." };
+  }
+  const presets = ensurePlayerFleetPresets(player);
+  const id = opts.id?.trim();
+  if (id && BUILTIN_PRESET_IDS.includes(id)) {
+    const idx = presets.findIndex((p) => p.id === id);
+    if (idx < 0) return { ok: false, error: "Unknown preset." };
+    presets[idx] = {
+      ...presets[idx],
+      ships
+    };
+    player.fleetPresets = presets;
+    return { ok: true, presets };
+  }
+  if (id) {
+    const idx = presets.findIndex((p) => p.id === id && !p.builtIn);
+    if (idx < 0) return { ok: false, error: "Unknown custom preset." };
+    presets[idx] = {
+      id,
+      name,
+      intent: "custom",
+      builtIn: false,
+      ships
+    };
+    player.fleetPresets = presets;
+    return { ok: true, presets };
+  }
+  const customId = `custom_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  presets.push({
+    id: customId,
+    name,
+    intent: "custom",
+    builtIn: false,
+    ships
+  });
+  player.fleetPresets = presets;
+  return { ok: true, presets };
+}
+function deleteFleetPreset(universe, playerId, presetId) {
+  const player = universe.players[playerId];
+  if (!player) return { ok: false, error: "Unknown player." };
+  if (BUILTIN_PRESET_IDS.includes(presetId)) {
+    return { ok: false, error: "Cannot delete a built-in preset." };
+  }
+  const presets = ensurePlayerFleetPresets(player);
+  const next = presets.filter((p) => p.id !== presetId);
+  if (next.length === presets.length) {
+    return { ok: false, error: "Unknown custom preset." };
+  }
+  player.fleetPresets = next;
+  return { ok: true, presets: next };
 }
 
 // packages/game/src/world-boosts.ts
@@ -4311,7 +5258,9 @@ function emptyBuildings() {
     lunarBase: 0,
     sensorArray: 0,
     jumpGate: 0,
-    chronoLathe: 0
+    chronoLathe: 0,
+    mantleLoom: 0,
+    rigFoundry: 0
   };
 }
 function emptyShips() {
@@ -4403,6 +5352,8 @@ function ensureUniverseShape(universe) {
     if (player.research.queueLogistics === void 0) player.research.queueLogistics = 0;
     if (player.research.queueLogistics == null) player.research.queueLogistics = 0;
     if (player.research.swarmHold == null) player.research.swarmHold = 0;
+    if (player.research.gravityWell == null) player.research.gravityWell = 0;
+    if (!player.playerClass) player.playerClass = emptyPlayerClass();
     if (!Array.isArray(player.researchQueue)) {
       player.researchQueue = player.researchQueue ? [player.researchQueue] : [];
     }
@@ -4415,6 +5366,7 @@ function ensureUniverseShape(universe) {
     if (player.level == null || player.level < 1) player.level = 1;
     if (player.xp == null || player.xp < 0) player.xp = 0;
     if (player.xpTotal == null || player.xpTotal < 0) player.xpTotal = 0;
+    ensurePlayerFleetPresets(player);
   }
   const seed = universe.seed ?? universe.id;
   for (const planet of Object.values(universe.planets)) {
@@ -4436,6 +5388,8 @@ function ensureUniverseShape(universe) {
     if (!planet.buildings.sensorArray) planet.buildings.sensorArray = 0;
     if (!planet.buildings.jumpGate) planet.buildings.jumpGate = 0;
     if (!planet.buildings.chronoLathe) planet.buildings.chronoLathe = 0;
+    if (!planet.buildings.mantleLoom) planet.buildings.mantleLoom = 0;
+    if (!planet.buildings.rigFoundry) planet.buildings.rigFoundry = 0;
     if (planet.kind !== "moon" && (typeof planet.fieldsCap !== "number" || planet.fieldsCap <= 0)) {
       planet.fieldsCap = rollPlanetFields(
         planet.coords.slot,
@@ -4511,8 +5465,11 @@ function joinUniverse(universe, playerName, now = Date.now()) {
     starshards: 0,
     officers: [],
     skillsUnlocked: [],
-    highscoreStarshardsClaimed: false
+    highscoreStarshardsClaimed: false,
+    fleetPresets: [],
+    playerClass: emptyPlayerClass()
   };
+  ensurePlayerFleetPresets(player);
   universe.players[playerId] = player;
   universe.planets[planetId] = planet;
   return { player, planet };
@@ -4859,14 +5816,20 @@ function resolveRaidArrival(universe, fleet, target, now) {
   const defenderOwner = universe.players[target.ownerPlayerId];
   const defenderBefore = { ...target.ships };
   const defensesBefore = { ...target.defenses ?? emptyDefenses() };
-  const defensePower = playerBoosts(defenderOwner, now).defensePower;
+  const atkCls = classBonuses(owner?.playerClass?.classId);
+  const defCls = classBonuses(defenderOwner?.playerClass?.classId);
+  const defensePower = playerBoosts(defenderOwner, now).defensePower * defCls.defensePower;
   const combat = resolveCombat(
     fleet.ships,
     defenderBefore,
     defensesBefore,
     effectiveCombatResearch(owner),
     effectiveCombatResearch(defenderOwner),
-    { defensePower }
+    {
+      defensePower,
+      attackMult: atkCls.attack,
+      defenseSlot: target.coords.slot
+    }
   );
   target.ships = combat.defenderAfter;
   target.defenses = combat.defensesAfter;
@@ -4876,17 +5839,24 @@ function resolveRaidArrival(universe, fleet, target, now) {
   const debrisDef = debrisFromDestroyed(
     destroyedShipResources(defenderBefore, combat.defenderAfter)
   );
-  const debrisCreated = {
+  let debrisCreated = {
     metal: debrisAtk.metal + debrisDef.metal,
     crystal: debrisAtk.crystal + debrisDef.crystal,
     deuterium: 0
   };
-  addDebris(universe, target.coords, debrisCreated);
   let loot = emptyCargo();
   if (combat.outcome === "attacker_win") {
     loot = computeRaidLoot(target.resources, combat.attackerAfter);
     subtractCargo(target, loot);
+    const skim = spoilSkimmerDebris(debrisCreated, combat.attackerAfter);
+    debrisCreated = skim.remaining;
+    loot = {
+      metal: loot.metal + skim.skimmed.metal,
+      crystal: loot.crystal + skim.skimmed.crystal,
+      deuterium: loot.deuterium
+    };
   }
+  addDebris(universe, target.coords, debrisCreated);
   const atkDestroyed = resourcesCostTotal(
     destroyedShipResources(defenderBefore, combat.defenderAfter)
   );
@@ -4976,9 +5946,13 @@ function resolveEspionage(universe, fleet, target, now) {
   const targetOwner = universe.players[target.ownerPlayerId];
   if (!spy || !targetOwner) return;
   const spyBoost = playerBoosts(spy, now).espionageLevel;
-  const detail = espionageDetail(
-    (spy.research.espionageTech ?? 0) + spyBoost,
-    target.buildings.researchLab ?? 0
+  const wingBonus = (fleet.ships.astrolabeWing ?? 0) >= 1 ? 1 : 0;
+  const detail = Math.min(
+    3,
+    espionageDetail(
+      (spy.research.espionageTech ?? 0) + spyBoost,
+      target.buildings.researchLab ?? 0
+    ) + wingBonus
   );
   const reportId = `spy_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
   const report = {
@@ -5051,9 +6025,16 @@ function resolveExpeditionArrival(universe, fleet, now) {
   const shipsDelta = {};
   let starshardsGained = 0;
   let summary;
+  const ownerForYield = universe.players[fleet.ownerPlayerId];
+  const yieldMult = classBonuses(ownerForYield?.playerClass?.classId).expeditionYield * vaultScoutExpeditionMult(before);
   switch (kind) {
     case "resources": {
       cargoGained = resourceFind(before, roll);
+      cargoGained = {
+        metal: Math.floor(cargoGained.metal * yieldMult),
+        crystal: Math.floor(cargoGained.crystal * yieldMult),
+        deuterium: Math.floor(cargoGained.deuterium * yieldMult)
+      };
       fleet.cargo = { ...cargoGained };
       summary = `Anomaly yield: ${cargoGained.metal}m / ${cargoGained.crystal}c / ${cargoGained.deuterium}d.`;
       break;
@@ -5079,7 +6060,10 @@ function resolveExpeditionArrival(universe, fleet, now) {
     }
     case "starshards": {
       fleet.cargo = { metal: 0, crystal: 0, deuterium: 0 };
-      starshardsGained = expeditionStarshardsAmount(roll);
+      starshardsGained = Math.max(
+        1,
+        Math.floor(expeditionStarshardsAmount(roll) * yieldMult)
+      );
       const owner = universe.players[fleet.ownerPlayerId];
       if (owner) {
         grantStarshards(owner, starshardsGained);
@@ -5206,12 +6190,14 @@ function resolveFleetArrival(universe, fleet, now) {
       return;
     } else if (fleet.mission === "colonize") {
       const occupied = planetAtCoords(universe, fleet.targetCoords);
+      const hasCradle = (fleet.ships.colonyShip ?? 0) >= 1;
+      const hasArk = (fleet.ships.foundationArk ?? 0) >= 1;
       if (occupied) {
-      } else if ((fleet.ships.colonyShip ?? 0) < 1) {
+      } else if (!hasCradle && !hasArk) {
       } else if (!owner) {
         delete universe.fleets[fleet.id];
         return;
-      } else if (ownedPlanetCount(universe, owner.id) >= maxColonies(owner.research.astrophysics)) {
+      } else if (ownedPlanetCount(universe, owner.id) >= empireColonyCap(owner, universe, maxColonies)) {
       } else {
         const planetId = `plnt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
         const colonyCoords = { ...fleet.targetCoords };
@@ -5236,9 +6222,16 @@ function resolveFleetArrival(universe, fleet, now) {
           shipQueue: [],
           defenseQueue: []
         };
-        colony.buildings.solarPlant = 1;
         const remaining = normalizeFleetShips(fleet.ships);
-        remaining.colonyShip = Math.max(0, remaining.colonyShip - 1);
+        if (hasArk) {
+          remaining.foundationArk = Math.max(0, remaining.foundationArk - 1);
+          for (const [bid, level] of Object.entries(FOUNDATION_ARK_BOOTSTRAP)) {
+            colony.buildings[bid] = level ?? 0;
+          }
+        } else {
+          remaining.colonyShip = Math.max(0, remaining.colonyShip - 1);
+          colony.buildings.solarPlant = 1;
+        }
         addShipsToPlanet(colony, remaining);
         universe.planets[planetId] = colony;
         owner.planetIds.push(planetId);
@@ -5335,7 +6328,7 @@ function advanceUniverse(universe, now = Date.now()) {
       now,
       energyTech,
       {
-        mineOutput: lb.production * boosts.mineOutput,
+        mineOutput: lb.production * boosts.mineOutput * classBonuses(owner?.playerClass?.classId).mineOutput,
         energyOutput: boosts.energyOutput
       },
       owner
@@ -5435,12 +6428,47 @@ function queueBuildingUpgrade(universe, playerId, buildingId, now = Date.now(), 
   if (buildingId === "jumpGate" && (planet.buildings.lunarBase ?? 0) < 1) {
     return { ok: false, error: "Fold Bridge needs Crater Hab level 1." };
   }
+  if (buildingId === "rigFoundry") {
+    const yard = planet.buildings.shipyard ?? 0;
+    if (yard < RIG_FOUNDRY_SHIPYARD_REQ) {
+      return {
+        ok: false,
+        error: `Rig Foundry needs Shipyard level ${RIG_FOUNDRY_SHIPYARD_REQ} (you have ${yard}).`
+      };
+    }
+  }
+  if (buildingId === "mantleLoom") {
+    if (planet.kind === "moon") {
+      return { ok: false, error: "Mantle Loom cannot be built on moons." };
+    }
+    const solar = planet.buildings.solarPlant ?? 0;
+    const lab = planet.buildings.researchLab ?? 0;
+    if (solar < MANTLE_LOOM_SOLAR_REQ) {
+      return {
+        ok: false,
+        error: `Mantle Loom needs Solar Array level ${MANTLE_LOOM_SOLAR_REQ} (you have ${solar}).`
+      };
+    }
+    if (lab < MANTLE_LOOM_LAB_REQ) {
+      return {
+        ok: false,
+        error: `Mantle Loom needs Research Lab level ${MANTLE_LOOM_LAB_REQ} (you have ${lab}).`
+      };
+    }
+  }
   if (buildingId === "chronoLathe") {
     const yard = planet.buildings.shipyard ?? 0;
+    const foundry = planet.buildings.rigFoundry ?? 0;
     if (yard < CHRONO_LATHE_SHIPYARD_REQ) {
       return {
         ok: false,
         error: `Chrono Lathe needs Shipyard level ${CHRONO_LATHE_SHIPYARD_REQ} (you have ${yard}).`
+      };
+    }
+    if (foundry < CHRONO_LATHE_RIG_FOUNDRY_REQ) {
+      return {
+        ok: false,
+        error: `Chrono Lathe needs Rig Foundry level ${CHRONO_LATHE_RIG_FOUNDRY_REQ} (you have ${foundry}).`
       };
     }
   }
@@ -5474,8 +6502,10 @@ function queueBuildingUpgrade(universe, playerId, buildingId, now = Date.now(), 
     return { ok: false, error: "Not enough resources." };
   }
   const lb = levelBonuses(player.level ?? 1);
+  const cls = classBonuses(player.playerClass?.classId);
   const naniteLevel = buildingId === "chronoLathe" ? 0 : naniteFactoryLevel(planet);
-  const seconds = buildingUpgradeSeconds(buildingId, current, naniteLevel) * lb.buildTime / universe.speed;
+  const rigLevel = buildingId === "chronoLathe" || buildingId === "rigFoundry" ? 0 : planet.buildings.rigFoundry ?? 0;
+  const seconds = buildingUpgradeSeconds(buildingId, current, naniteLevel, rigLevel) * lb.buildTime * cls.buildingBuildTime / universe.speed;
   planet.resources = spend(planet.resources, cost);
   const startNow = planet.buildQueue.length === 0;
   planet.buildQueue.push({
@@ -5522,6 +6552,13 @@ function queueShipBuild(universe, playerId, shipId, count, now = Date.now(), pla
       error: `Needs Shipyard level ${def.shipyardLevel} (you have ${yard}).`
     };
   }
+  if (!shipClassAllowed(shipId, player.playerClass?.classId ?? null)) {
+    const need = def.classExclusive;
+    return {
+      ok: false,
+      error: need ? `Requires ${need} class (exclusive hull).` : "Class exclusive hull."
+    };
+  }
   const researchOk = shipResearchReqMet(shipId, player.research);
   if (!researchOk.ok) return researchOk;
   const cost = shipCost(shipId, qty);
@@ -5529,8 +6566,10 @@ function queueShipBuild(universe, playerId, shipId, count, now = Date.now(), pla
     return { ok: false, error: "Not enough resources." };
   }
   const lb = levelBonuses(player.level ?? 1);
+  const cls = classBonuses(player.playerClass?.classId);
   const naniteLevel = naniteFactoryLevel(planet);
-  const unitSeconds = shipUnitBuildSeconds(shipId, yard, naniteLevel) * lb.shipBuild / universe.speed;
+  const rigLevel = planet.buildings.rigFoundry ?? 0;
+  const unitSeconds = shipUnitBuildSeconds(shipId, yard, naniteLevel, rigLevel) * lb.shipBuild * cls.shipBuildTime / universe.speed;
   const seconds = unitSeconds * qty;
   planet.resources = spend(planet.resources, cost);
   const startNow = planet.shipQueue.length === 0;
@@ -5584,8 +6623,10 @@ function queueDefenseBuild(universe, playerId, defenseId, count, now = Date.now(
     return { ok: false, error: "Not enough resources." };
   }
   const lb = levelBonuses(player.level ?? 1);
+  const cls = classBonuses(player.playerClass?.classId);
   const naniteLevel = naniteFactoryLevel(planet);
-  const unitSeconds = defenseUnitBuildSeconds(defenseId, yard, naniteLevel) * lb.shipBuild / universe.speed;
+  const rigLevel = planet.buildings.rigFoundry ?? 0;
+  const unitSeconds = defenseUnitBuildSeconds(defenseId, yard, naniteLevel, rigLevel) * lb.shipBuild * cls.defenseBuildTime / universe.speed;
   const seconds = unitSeconds * qty;
   planet.resources = spend(planet.resources, cost);
   const startNow = planet.defenseQueue.length === 0;
@@ -5645,10 +6686,12 @@ function queueResearch(universe, playerId, researchId, now = Date.now()) {
   }
   const researchSpeed = playerBoosts(player, now).researchSpeed;
   const lb = levelBonuses(player.level ?? 1);
+  const cls = classBonuses(player.playerClass?.classId);
+  const astrolabe = astrolabeResearchTimeMult(universe, player.id);
   const seconds = Math.max(
     1,
     Math.ceil(
-      researchUpgradeSeconds(researchId, current, lab) * lb.researchTime / universe.speed / Math.max(0.01, researchSpeed)
+      researchUpgradeSeconds(researchId, current, lab) * lb.researchTime * cls.researchTime * astrolabe / universe.speed / Math.max(0.01, researchSpeed)
     )
   );
   planet.resources = spend(planet.resources, cost);
@@ -5880,14 +6923,41 @@ function migrateUniverseV2ToV3(universe, now = Date.now()) {
   ensureUniverseShape(universe);
   return universe;
 }
+function migrateUniverseV3ToV4(universe) {
+  if ((universe.schemaVersion ?? 0) >= 4) {
+    ensureUniverseShape(universe);
+    return universe;
+  }
+  if ((universe.schemaVersion ?? 0) < 3) {
+    migrateUniverseV2ToV3(universe);
+  }
+  for (const player of Object.values(universe.players)) {
+    if (!player.playerClass) player.playerClass = emptyPlayerClass();
+    if (player.research && player.research.gravityWell == null) {
+      player.research.gravityWell = 0;
+    }
+  }
+  for (const planet of Object.values(universe.planets)) {
+    if (planet.buildings.mantleLoom == null) planet.buildings.mantleLoom = 0;
+    if (planet.buildings.rigFoundry == null) planet.buildings.rigFoundry = 0;
+  }
+  universe.schemaVersion = 4;
+  ensureUniverseShape(universe);
+  return universe;
+}
 function migrateOrResetUniverse(data, opts) {
   const version = universeSchemaVersion(data);
   if (version >= UNIVERSE_SCHEMA_VERSION && data.id) {
     ensureUniverseShape(data);
     return { universe: data, didReset: false, archived: null };
   }
+  if (version === 3 && data.id) {
+    migrateUniverseV3ToV4(data);
+    return { universe: data, didReset: false, archived: null };
+  }
   if (version === 2 && data.id) {
     migrateUniverseV2ToV3(data);
+    migrateUniverseV3ToV4(data);
     return { universe: data, didReset: false, archived: null };
   }
   const fresh = createUniverse(
@@ -5900,6 +6970,87 @@ function migrateOrResetUniverse(data, opts) {
 }
 function archiveUniverseKey(universeId, ts = Date.now()) {
   return `starhold:universe:archive:${universeId}:${ts}`;
+}
+
+// packages/game/src/world-class.ts
+function isPlayerClassId(id) {
+  return PLAYER_CLASS_ORDER.includes(id);
+}
+function classChangeCost(priorChangeCount) {
+  return CLASS_CHANGE_BASE_COST + CLASS_CHANGE_COST_PER_PRIOR * Math.max(0, Math.floor(priorChangeCount));
+}
+function choosePlayerClass(universe, playerId, classId, now = Date.now()) {
+  const player = universe.players[playerId];
+  if (!player) return { ok: false, error: "Unknown player." };
+  if (!isPlayerClassId(classId)) {
+    return { ok: false, error: "Unknown class." };
+  }
+  advanceUniverse(universe, now);
+  const state = ensurePlayerClass(player);
+  if (state.classId != null) {
+    return {
+      ok: false,
+      error: "Class already chosen \u2014 use change (Starshards)."
+    };
+  }
+  state.classId = classId;
+  state.chosenAt = now;
+  universe.players[playerId] = player;
+  return { ok: true };
+}
+function changePlayerClass(universe, playerId, classId, now = Date.now()) {
+  const player = universe.players[playerId];
+  if (!player) return { ok: false, error: "Unknown player." };
+  if (!isPlayerClassId(classId)) {
+    return { ok: false, error: "Unknown class." };
+  }
+  advanceUniverse(universe, now);
+  const state = ensurePlayerClass(player);
+  if (state.classId == null) {
+    return { ok: false, error: "Choose a class first (free)." };
+  }
+  if (state.classId === classId) {
+    return { ok: false, error: "Already that class." };
+  }
+  if (state.lastChangeAt != null && now - state.lastChangeAt < CLASS_CHANGE_COOLDOWN_MS) {
+    const left = CLASS_CHANGE_COOLDOWN_MS - (now - state.lastChangeAt);
+    const days = Math.ceil(left / (24 * 60 * 60 * 1e3));
+    return {
+      ok: false,
+      error: `Class change on cooldown (${days}d remaining).`
+    };
+  }
+  const cost = classChangeCost(state.changeCount);
+  const balance = Math.floor(player.starshards ?? 0);
+  if (balance < cost) {
+    return {
+      ok: false,
+      error: `Need ${cost} Starshards (have ${balance}).`
+    };
+  }
+  player.starshards = balance - cost;
+  state.classId = classId;
+  state.changeCount += 1;
+  state.lastChangeAt = now;
+  universe.players[playerId] = player;
+  return { ok: true };
+}
+function classCatalog() {
+  return PLAYER_CLASS_ORDER.map((id) => {
+    const bonuses = classBonuses(id);
+    const exclusiveShips = SHIP_ORDER.filter(
+      (sid) => SHIPS[sid].classExclusive === id
+    );
+    return {
+      id,
+      name: PLAYER_CLASS_BONUSES[id].name,
+      bonuses,
+      exclusiveShipIds: exclusiveShips,
+      changeCostBase: CLASS_CHANGE_BASE_COST,
+      changeCostPerPrior: CLASS_CHANGE_COST_PER_PRIOR,
+      changeCooldownMs: CLASS_CHANGE_COOLDOWN_MS
+    };
+  });
 }
 
 // packages/game/src/world-launch-target.ts
@@ -5923,7 +7074,7 @@ function resolveLaunchTarget(universe, player, origin, mission, ships, targetPla
     const activeExpeditions = Object.values(universe.fleets).filter(
       (f) => f.ownerPlayerId === player.id && f.mission === "expedition"
     ).length;
-    const cap = maxExpeditions(player.research.astrophysics);
+    const cap = empireExpeditionCap(player, maxExpeditions);
     if (activeExpeditions >= cap) {
       return {
         ok: false,
@@ -6001,13 +7152,19 @@ function resolveLaunchTarget(universe, player, origin, mission, ships, targetPla
       if (pirateBaseAtCoords(universe, targetCoords)) {
         return { ok: false, error: "Pirate base occupies that slot." };
       }
-      if ((ships.colonyShip ?? 0) < 1) {
-        return { ok: false, error: "Colonize requires an Outpost Cradle." };
-      }
-      if (ownedPlanetCount(universe, player.id) >= maxColonies(player.research.astrophysics)) {
+      const hasCradle = (ships.colonyShip ?? 0) >= 1;
+      const hasArk = (ships.foundationArk ?? 0) >= 1;
+      if (!hasCradle && !hasArk) {
         return {
           ok: false,
-          error: `Colony limit reached (Stellar Cartography \u2192 ${maxColonies(player.research.astrophysics)} worlds).`
+          error: "Colonize requires an Outpost Cradle or Foundation Ark."
+        };
+      }
+      const colonyCap = empireColonyCap(player, universe, maxColonies);
+      if (ownedPlanetCount(universe, player.id) >= colonyCap) {
+        return {
+          ok: false,
+          error: `Colony limit reached (Stellar Cartography \u2192 ${colonyCap} worlds).`
         };
       }
     } else {
@@ -6121,11 +7278,20 @@ function launchFleet(universe, playerIdOrOpts, targetPlanetId, mission, shipsInp
   if (fleetShipCount(ships) < 1) {
     return { ok: false, error: "Select at least one ship." };
   }
+  for (const id of SHIP_ORDER) {
+    if ((ships[id] ?? 0) > 0 && isStationaryShip(id)) {
+      return {
+        ok: false,
+        error: `${SHIPS[id].name} cannot join fleets (stationary).`
+      };
+    }
+  }
   advanceUniverse(universe, now);
   const origin = resolveActionPlanet(universe, player, opts.originPlanetId);
   if (!origin) return { ok: false, error: "Planet missing." };
   const boosts = playerBoosts(player, now);
-  const slotCap = maxFleetSlots(player.research.computerTech) + boosts.fleetSlots;
+  const cls = classBonuses(player.playerClass?.classId);
+  const slotCap = maxFleetSlots(player.research.computerTech) + boosts.fleetSlots + cls.fleetSlots;
   const activeFleets = Object.values(universe.fleets).filter(
     (f) => f.ownerPlayerId === player.id
   ).length;
@@ -6202,13 +7368,29 @@ function launchFleet(universe, playerIdOrOpts, targetPlanetId, mission, shipsInp
     crystal: 0,
     deuterium: fuel
   });
+  if (opts.mission === "jump") {
+    if ((origin.jumpReadyAt ?? 0) > now) {
+      const wait = Math.ceil(((origin.jumpReadyAt ?? 0) - now) / 1e3);
+      return {
+        ok: false,
+        error: `Fold Bridge cooling down (${wait}s remaining).`
+      };
+    }
+  }
   const lb = levelBonuses(player.level ?? 1);
+  let fleetSpeedMult = Math.max(0.01, boosts.fleetSpeed) * cls.fleetSpeed * lineDrummerFleetSpeedMult(ships);
+  const onlyProbes = (ships.probe ?? 0) > 0 && !SHIP_ORDER.some((id) => id !== "probe" && (ships[id] ?? 0) > 0);
+  if (onlyProbes) fleetSpeedMult *= cls.probeSpeed;
+  const onlyColony = ((ships.colonyShip ?? 0) > 0 || (ships.foundationArk ?? 0) > 0) && !SHIP_ORDER.some(
+    (id) => id !== "colonyShip" && id !== "foundationArk" && (ships[id] ?? 0) > 0
+  );
+  if (onlyColony) fleetSpeedMult *= cls.colonyShipSpeed;
   const oneWay = opts.mission === "jump" ? 1 : flightSecondsOneWay(
     origin.coords,
     targetCoords,
     ships,
-    // Stack: base → combustion → level time → officers/skills fleetSpeed.
-    universe.fleetSpeed * Math.max(0.01, boosts.fleetSpeed) / Math.max(0.01, lb.fleetTime),
+    // Stack: base → combustion → level → officers/skills → class → Line Drummer.
+    universe.fleetSpeed * fleetSpeedMult / Math.max(0.01, lb.fleetTime),
     player.research.combustionDrive ?? 0
   );
   const fleetId = `flt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
@@ -6229,9 +7411,135 @@ function launchFleet(universe, playerIdOrOpts, targetPlanetId, mission, shipsInp
     phase: "outbound",
     reportId: null
   };
+  if (opts.mission === "jump") {
+    origin.jumpReadyAt = now + jumpGateCooldownMs(player, universe);
+  }
   universe.fleets[fleetId] = fleet;
   universe.planets[origin.id] = origin;
   return { ok: true, fleet, planet: origin };
+}
+
+// packages/game/src/world-fleet-batch.ts
+function hangarHasComposition(hangar, ships) {
+  for (const [id, need] of Object.entries(ships)) {
+    if ((need ?? 0) > 0 && (hangar[id] ?? 0) < (need ?? 0)) return false;
+  }
+  return fleetShipCount(ships) >= 1;
+}
+function launchMaxExpeditions(universe, opts) {
+  ensureUniverseShape(universe);
+  const player = universe.players[opts.playerId];
+  if (!player) return { ok: false, error: "Unknown player." };
+  const now = opts.now ?? Date.now();
+  const presetId = opts.presetId ?? "expedition";
+  const fromPreset = getFleetPreset(player, presetId);
+  const ships = normalizeFleetShips(
+    opts.ships ?? fromPreset?.ships ?? expeditionPresetShips(player)
+  );
+  if (fleetShipCount(ships) < 1) {
+    return { ok: false, error: "Expedition preset has no ships." };
+  }
+  const origin = (opts.originPlanetId ? universe.planets[opts.originPlanetId] : universe.planets[player.activePlanetId]) ?? universe.planets[player.homePlanetId];
+  if (!origin || origin.ownerPlayerId !== player.id) {
+    return { ok: false, error: "Planet missing." };
+  }
+  const galaxy = Math.min(
+    MAP_GALAXIES,
+    Math.max(1, Math.floor(opts.galaxy ?? origin.coords.galaxy))
+  );
+  const system = Math.min(
+    MAP_SYSTEMS,
+    Math.max(1, Math.floor(opts.system ?? origin.coords.system))
+  );
+  const launched = [];
+  let stoppedReason;
+  for (let i = 0; i < 64; i++) {
+    if (!hangarHasComposition(origin.ships, ships)) {
+      stoppedReason = launched.length ? "Not enough ships in orbit for another expedition." : "Not enough ships in orbit for the Expedition preset.";
+      break;
+    }
+    const result = launchFleet(universe, {
+      playerId: player.id,
+      mission: "expedition",
+      ships,
+      targetCoords: { galaxy, system, slot: EXPEDITION_SLOT },
+      originPlanetId: origin.id,
+      now: now + i
+    });
+    if (!result.ok) {
+      stoppedReason = result.error;
+      break;
+    }
+    launched.push(result.fleet);
+  }
+  if (launched.length < 1) {
+    return {
+      ok: false,
+      error: stoppedReason ?? "Could not launch any expeditions."
+    };
+  }
+  return { ok: true, launched, stoppedReason };
+}
+function batchScanSystem(universe, opts) {
+  ensureUniverseShape(universe);
+  const player = universe.players[opts.playerId];
+  if (!player) return { ok: false, error: "Unknown player." };
+  const galaxy = Math.min(
+    MAP_GALAXIES,
+    Math.max(1, Math.floor(opts.galaxy))
+  );
+  const system = Math.min(
+    MAP_SYSTEMS,
+    Math.max(1, Math.floor(opts.system))
+  );
+  const probesPerTarget = Math.max(
+    1,
+    Math.floor(opts.probesPerTarget ?? 1)
+  );
+  const now = opts.now ?? Date.now();
+  const origin = (opts.originPlanetId ? universe.planets[opts.originPlanetId] : universe.planets[player.activePlanetId]) ?? universe.planets[player.homePlanetId];
+  if (!origin || origin.ownerPlayerId !== player.id) {
+    return { ok: false, error: "Planet missing." };
+  }
+  const targets = Object.values(universe.planets).filter(
+    (p) => p.coords.galaxy === galaxy && p.coords.system === system && p.ownerPlayerId && p.ownerPlayerId !== player.id
+  );
+  if (targets.length < 1) {
+    return {
+      ok: false,
+      error: "No foreign-owned planets in this system to scan."
+    };
+  }
+  const ships = normalizeFleetShips({ probe: probesPerTarget });
+  const launched = [];
+  let stoppedReason;
+  for (let i = 0; i < targets.length; i++) {
+    const target = targets[i];
+    if (!hangarHasComposition(origin.ships, ships)) {
+      stoppedReason = launched.length ? "Out of Whisper Probes in orbit." : "Need Whisper Probes in orbit to scan.";
+      break;
+    }
+    const result = launchFleet(universe, {
+      playerId: player.id,
+      mission: "espionage",
+      ships,
+      targetPlanetId: target.id,
+      originPlanetId: origin.id,
+      now: now + i
+    });
+    if (!result.ok) {
+      stoppedReason = result.error;
+      break;
+    }
+    launched.push(result.fleet);
+  }
+  if (launched.length < 1) {
+    return {
+      ok: false,
+      error: stoppedReason ?? "Could not launch any scans."
+    };
+  }
+  return { ok: true, launched, stoppedReason };
 }
 
 // packages/game/src/world-view.ts
@@ -6391,7 +7699,7 @@ function playerView(universe, playerId, now = Date.now(), galaxy, system) {
       universe.speed,
       player.research.energyTech ?? 0,
       {
-        mineOutput: levelBonuses(player.level ?? 1).production * boosts.mineOutput,
+        mineOutput: levelBonuses(player.level ?? 1).production * boosts.mineOutput * classBonuses(player.playerClass?.classId).mineOutput,
         energyOutput: boosts.energyOutput
       }
     ),
@@ -13278,6 +14586,71 @@ function createApp() {
       return c.json(playerView(universe, body.playerId));
     });
   });
+  app2.post("/api/fleet-preset", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    if (!body.playerId) {
+      return c.json({ error: "playerId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      ensureUniverseShape(universe);
+      if (body.delete) {
+        if (!body.id) {
+          return c.json({ error: "id required to delete preset." }, 400);
+        }
+        const result2 = deleteFleetPreset(universe, body.playerId, body.id);
+        if (!result2.ok) return c.json({ error: result2.error }, 400);
+        return c.json(playerView(universe, body.playerId));
+      }
+      if (!body.name || !body.ships) {
+        return c.json({ error: "name and ships required." }, 400);
+      }
+      const result = saveFleetPreset(universe, body.playerId, {
+        id: body.id,
+        name: body.name,
+        ships: body.ships
+      });
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId));
+    });
+  });
+  app2.post("/api/launch-max-expeditions", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    if (!body.playerId) {
+      return c.json({ error: "playerId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = launchMaxExpeditions(universe, {
+        playerId: body.playerId,
+        originPlanetId: body.originPlanetId,
+        galaxy: body.galaxy,
+        system: body.system,
+        ships: body.ships,
+        presetId: body.presetId
+      });
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId));
+    });
+  });
+  app2.post("/api/scan-system", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    if (!body.playerId || body.galaxy == null || body.system == null) {
+      return c.json(
+        { error: "playerId, galaxy, and system required." },
+        400
+      );
+    }
+    return withUniverse((universe) => {
+      const result = batchScanSystem(universe, {
+        playerId: body.playerId,
+        galaxy: body.galaxy,
+        system: body.system,
+        probesPerTarget: body.probesPerTarget,
+        originPlanetId: body.originPlanetId
+      });
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId));
+    });
+  });
   app2.post("/api/claim-daily", async (c) => {
     const body = await c.req.json().catch(() => ({}));
     if (!body.playerId) {
@@ -13311,6 +14684,45 @@ function createApp() {
     }
     return withUniverse((universe) => {
       const result = unlockSkill(universe, body.playerId, body.skillId);
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId));
+    });
+  });
+  app2.get("/api/class/catalog", async (c) => {
+    return c.json({ classes: classCatalog() });
+  });
+  app2.post("/api/class/choose", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    if (!body.playerId || !body.classId) {
+      return c.json({ error: "playerId and classId required." }, 400);
+    }
+    if (!isPlayerClassId(body.classId)) {
+      return c.json({ error: "Unknown class." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = choosePlayerClass(
+        universe,
+        body.playerId,
+        body.classId
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId));
+    });
+  });
+  app2.post("/api/class/change", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    if (!body.playerId || !body.classId) {
+      return c.json({ error: "playerId and classId required." }, 400);
+    }
+    if (!isPlayerClassId(body.classId)) {
+      return c.json({ error: "Unknown class." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = changePlayerClass(
+        universe,
+        body.playerId,
+        body.classId
+      );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId));
     });

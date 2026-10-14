@@ -59,6 +59,7 @@ describe("Round 2 ship catalog fixtures (Micah amendments)", () => {
       weaponsTech: 10,
       shieldingTech: 10,
       armourTech: 10,
+      gravityWell: 1,
     });
   });
 

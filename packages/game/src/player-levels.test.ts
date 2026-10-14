@@ -333,9 +333,9 @@ describe("Thread I level bonuses wired", () => {
   });
 });
 
-describe("Thread I schema migrate 2→3", () => {
-  it("stamps schema 3 and backfills level/xp without reset", () => {
-    assert.equal(UNIVERSE_SCHEMA_VERSION, 3);
+describe("Thread I schema migrate 2→4", () => {
+  it("stamps schema 4 and backfills level/xp without reset", () => {
+    assert.equal(UNIVERSE_SCHEMA_VERSION, 4);
     const universe = createUniverse("Legacy Lvl", 8);
     const a = joinUniverse(universe, "OldHand", 306_000_000);
     universe.schemaVersion = 2;
@@ -345,11 +345,12 @@ describe("Thread I schema migrate 2→3", () => {
 
     const result = migrateOrResetUniverse(universe);
     assert.equal(result.didReset, false);
-    assert.equal(result.universe.schemaVersion, 3);
+    assert.equal(result.universe.schemaVersion, 4);
     assert.equal(result.universe.players[a.player.id].level, 1);
     assert.equal(result.universe.players[a.player.id].xp, 0);
     assert.equal(result.universe.players[a.player.id].xpTotal, 0);
     assert.equal(Object.keys(result.universe.players).length, 1);
+    assert.ok(result.universe.players[a.player.id].playerClass);
   });
 
   it("playerView exposes progress", () => {

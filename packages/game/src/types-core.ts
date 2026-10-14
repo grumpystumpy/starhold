@@ -15,9 +15,25 @@ export type BuildingId =
   | "lunarBase"
   | "sensorArray"
   | "jumpGate"
-  | "chronoLathe";
+  | "chronoLathe"
+  | "mantleLoom"
+  | "rigFoundry";
 
 export type BodyKind = "planet" | "moon";
+
+export type PlayerClassId =
+  | "miner"
+  | "explorer"
+  | "fleeter"
+  | "expansionist";
+
+export interface PlayerClassState {
+  classId: PlayerClassId | null;
+  chosenAt: number | null;
+  /** Increments on each paid change (not first pick). */
+  changeCount: number;
+  lastChangeAt: number | null;
+}
 
 export type ShipId =
   | "scout"
@@ -32,9 +48,39 @@ export type ShipId =
   | "worldEater"
   | "swarmDrone"
   | "swarmHarvester"
-  | "swarmMothership";
+  | "swarmMothership"
+  | "helioBuoy"
+  | "keelSovereign"
+  | "rakeCorsair"
+  | "anvilDread"
+  | "wardbreaker"
+  | "vaultScout"
+  | "astrolabeWing"
+  | "spoilSkimmer"
+  | "lineDrummer"
+  | "veinAnchor"
+  | "gridStake"
+  | "foundationArk"
+  | "frontierBeacon";
 
-export type DefenseId = "laserBattery" | "shieldDome";
+export type DefenseId =
+  | "laserBattery"
+  | "shieldDome"
+  | "needleTurret"
+  | "arcLattice"
+  | "pulseBastion"
+  | "gaussRail"
+  | "ionSheath"
+  | "plasmaSpire"
+  | "flakCurtain"
+  | "kineticFence"
+  | "emberMortar"
+  | "rippleArray"
+  | "haloProjector"
+  | "crownAegis"
+  | "siegeBlockade"
+  | "frostLance"
+  | "voidWard";
 
 export type ResearchId =
   | "energyTech"
@@ -46,7 +92,8 @@ export type ResearchId =
   | "astrophysics"
   | "computerTech"
   | "queueLogistics"
-  | "swarmHold";
+  | "swarmHold"
+  | "gravityWell";
 
 export type QueueKind = "building" | "ship" | "defense" | "research";
 
@@ -142,6 +189,14 @@ export interface ShipDef {
    * Count toward mothership swarm capacity.
    */
   swarmCarried?: boolean;
+  /** Cannot join fleets / launch (Helio Buoy, Vein Anchor, Grid Stake). */
+  stationary?: boolean;
+  /** Buildable only when playerClass.classId matches. */
+  classExclusive?: PlayerClassId;
+  /** Orbital energy platform — contributes energy, no missions. */
+  orbitalEnergy?: boolean;
+  /** Destroyed units do not create debris (Helio Buoy v1). */
+  noDebris?: boolean;
 }
 
 export interface DefenseDef {
@@ -155,6 +210,10 @@ export interface DefenseDef {
   attack: number;
   shield: number;
   hull: number;
+  /** Soft UI hint: recommend ≤1 of this id per planet (Halo / Crown). */
+  uniqueHint?: boolean;
+  /** Slot-band attack multiplier when planet.coords.slot in range. */
+  slotAttackBonus?: { slots: number[]; factor: number };
 }
 
 export interface ResearchDef {

@@ -31,7 +31,16 @@ export {
 } from "./world-queue-caps.js";
 export {
   migrateUniverseV2ToV3,
+  migrateUniverseV3ToV4,
 } from "./world-migrate.js";
+export {
+  changePlayerClass,
+  choosePlayerClass,
+  classCatalog,
+  classChangeCost,
+  isPlayerClassId,
+} from "./world-class.js";
+export type { ClassActionResult } from "./world-class.js";
 export type { LaunchFleetOpts } from "./world-launch.js";
 export { launchFleet } from "./world-launch.js";
 export type {

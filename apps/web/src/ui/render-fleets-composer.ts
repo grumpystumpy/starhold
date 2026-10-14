@@ -131,7 +131,7 @@ export function fleetComposer(
   }
 
   const orbitShipIds = SHIP_ORDER.filter(
-    (id) => (view.planet.ships[id] ?? 0) > 0,
+    (id) => (view.planet.ships[id] ?? 0) > 0 && !SHIPS[id].stationary,
   );
   const shipInputs = orbitShipIds.length
     ? orbitShipIds

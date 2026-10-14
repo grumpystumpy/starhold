@@ -4,3 +4,4 @@ export * from "./formulas-combat.js";
 export * from "./formulas-position.js";
 export * from "./formulas-progress.js";
 export * from "./formulas-round2.js";
+export * from "./formulas-round3.js";

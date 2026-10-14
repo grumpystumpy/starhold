@@ -1,10 +1,12 @@
 import { SHIP_ORDER } from "./catalog.js";
 import {
+  classBonuses,
   emptyFleetShips,
   fleetCargoCapacity,
   fleetCombatPower,
   grantPlayerXp,
   normalizeFleetShips,
+  vaultScoutExpeditionMult,
   xpForExpedition,
 } from "./formulas.js";
 import type {
@@ -87,9 +89,19 @@ export function resolveExpeditionArrival(
   let starshardsGained = 0;
   let summary: string;
 
+  const ownerForYield = universe.players[fleet.ownerPlayerId];
+  const yieldMult =
+    classBonuses(ownerForYield?.playerClass?.classId).expeditionYield *
+    vaultScoutExpeditionMult(before);
+
   switch (kind) {
     case "resources": {
       cargoGained = resourceFind(before, roll);
+      cargoGained = {
+        metal: Math.floor(cargoGained.metal * yieldMult),
+        crystal: Math.floor(cargoGained.crystal * yieldMult),
+        deuterium: Math.floor(cargoGained.deuterium * yieldMult),
+      };
       fleet.cargo = { ...cargoGained };
       summary = `Anomaly yield: ${cargoGained.metal}m / ${cargoGained.crystal}c / ${cargoGained.deuterium}d.`;
       break;
@@ -115,7 +127,10 @@ export function resolveExpeditionArrival(
     }
     case "starshards": {
       fleet.cargo = { metal: 0, crystal: 0, deuterium: 0 };
-      starshardsGained = expeditionStarshardsAmount(roll);
+      starshardsGained = Math.max(
+        1,
+        Math.floor(expeditionStarshardsAmount(roll) * yieldMult),
+      );
       const owner = universe.players[fleet.ownerPlayerId];
       if (owner) {
         grantStarshards(owner, starshardsGained);

@@ -8,6 +8,7 @@ import {
   type MiniPlanetResolveChoice,
   type MissionType,
   type OfficerId,
+  type PlayerClassId,
   type QueueKind,
   type ResearchId,
   type Resources,
@@ -17,9 +18,13 @@ import {
   advanceUniverse,
   batchScanSystem,
   cancelQueueItem,
+  changePlayerClass,
+  choosePlayerClass,
   claimDailyLogin,
+  classCatalog,
   deleteFleetPreset,
   ensureUniverseShape,
+  isPlayerClassId,
   joinUniverse,
   launchFleet,
   launchMaxExpeditions,
@@ -596,6 +601,54 @@ export function createApp(): Hono {
     });
   });
 
+  // Round 3 player class.
+  app.get("/api/class/catalog", async (c) => {
+    return c.json({ classes: classCatalog() });
+  });
+
+  app.post("/api/class/choose", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      classId?: string;
+    };
+    if (!body.playerId || !body.classId) {
+      return c.json({ error: "playerId and classId required." }, 400);
+    }
+    if (!isPlayerClassId(body.classId)) {
+      return c.json({ error: "Unknown class." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = choosePlayerClass(
+        universe,
+        body.playerId!,
+        body.classId as PlayerClassId,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  app.post("/api/class/change", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      classId?: string;
+    };
+    if (!body.playerId || !body.classId) {
+      return c.json({ error: "playerId and classId required." }, 400);
+    }
+    if (!isPlayerClassId(body.classId)) {
+      return c.json({ error: "Unknown class." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = changePlayerClass(
+        universe,
+        body.playerId!,
+        body.classId as PlayerClassId,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
 
   // Round 2 fleet hooks (single-segment paths for Vercel catch-all).
   app.post("/api/occupy", async (c) => {

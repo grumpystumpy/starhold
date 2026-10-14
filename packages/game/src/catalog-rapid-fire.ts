@@ -25,6 +25,43 @@ export const RAPID_FIRE: Partial<
     shieldDome: 10,
   },
   swarmDrone: { probe: 3 },
+  // Round 3 warships / defenses / class hulls (§16.5 + Line Drummer).
+  rakeCorsair: {
+    scout: 6,
+    interceptor: 4,
+    cruiser: 3,
+    swarmDrone: 8,
+    probe: 12,
+  },
+  wardbreaker: {
+    laserBattery: 10,
+    needleTurret: 10,
+    arcLattice: 8,
+    pulseBastion: 6,
+    gaussRail: 4,
+    ionSheath: 4,
+    plasmaSpire: 3,
+    shieldDome: 5,
+    haloProjector: 5,
+    crownAegis: 3,
+    rippleArray: 6,
+  },
+  flakCurtain: {
+    scout: 5,
+    interceptor: 4,
+    swarmDrone: 8,
+    probe: 10,
+  },
+  anvilDread: {
+    bomber: 2,
+  },
+  keelSovereign: {
+    cruiser: 2,
+  },
+  lineDrummer: {
+    scout: 3,
+    interceptor: 3,
+  },
 };
 
 export function rapidFireFactor(

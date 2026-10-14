@@ -21,6 +21,7 @@ import type {
   Resources,
   UniverseState,
 } from "./types.js";
+import { emptyPlayerClass } from "./formulas-round3.js";
 import { seedUniverseAsteroids } from "./world-asteroids.js";
 import { ensurePlayerFleetPresets } from "./world-fleet-presets.js";
 import { seedUniversePirates } from "./world-pirates.js";
@@ -40,6 +41,8 @@ export function emptyBuildings(): PlanetState["buildings"] {
     sensorArray: 0,
     jumpGate: 0,
     chronoLathe: 0,
+    mantleLoom: 0,
+    rigFoundry: 0,
   };
 }
 
@@ -158,6 +161,8 @@ export function ensureUniverseShape(universe: UniverseState): void {
     if (player.research.queueLogistics === undefined) player.research.queueLogistics = 0;
     if (player.research.queueLogistics == null) player.research.queueLogistics = 0;
     if (player.research.swarmHold == null) player.research.swarmHold = 0;
+    if (player.research.gravityWell == null) player.research.gravityWell = 0;
+    if (!player.playerClass) player.playerClass = emptyPlayerClass();
     if (!Array.isArray(player.researchQueue)) {
       player.researchQueue = player.researchQueue
         ? [player.researchQueue as never]
@@ -196,6 +201,8 @@ export function ensureUniverseShape(universe: UniverseState): void {
     if (!planet.buildings.sensorArray) planet.buildings.sensorArray = 0;
     if (!planet.buildings.jumpGate) planet.buildings.jumpGate = 0;
     if (!planet.buildings.chronoLathe) planet.buildings.chronoLathe = 0;
+    if (!planet.buildings.mantleLoom) planet.buildings.mantleLoom = 0;
+    if (!planet.buildings.rigFoundry) planet.buildings.rigFoundry = 0;
     if (
       planet.kind !== "moon" &&
       (typeof planet.fieldsCap !== "number" || planet.fieldsCap <= 0)
@@ -288,6 +295,7 @@ export function joinUniverse(
     skillsUnlocked: [],
     highscoreStarshardsClaimed: false,
     fleetPresets: [],
+    playerClass: emptyPlayerClass(),
   };
   ensurePlayerFleetPresets(player);
 
