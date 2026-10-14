@@ -18,6 +18,7 @@ import {
   ensureQueueFrontStarted,
   newQueueItemId,
 } from "./world-queue-normalize.js";
+import { empireRelicResearchTimeFactor } from "./world-mini.js";
 
 export function queueResearch(
   universe: UniverseState,
@@ -70,14 +71,16 @@ export function queueResearch(
   const lb = levelBonuses(player.level ?? 1);
   const cls = classBonuses(player.playerClass?.classId);
   const astrolabe = astrolabeResearchTimeMult(universe, player.id);
-  // Stack: base → lab → level → officers/skills → class → Astrolabe Wing.
+  const relic = empireRelicResearchTimeFactor(universe, player.id);
+  // Stack: base → lab → level → officers/skills → class → Astrolabe → Relic.
   const seconds = Math.max(
     1,
     Math.ceil(
       (researchUpgradeSeconds(researchId, current, lab) *
         lb.researchTime *
         cls.researchTime *
-        astrolabe) /
+        astrolabe *
+        relic) /
         universe.speed /
         Math.max(0.01, researchSpeed),
     ),

@@ -1,7 +1,5 @@
-import { MINI_WORLD_EATER_MIN } from "./catalog.js";
 import {
   canAfford,
-  canResolveMiniPlanet,
   debrisFromDestroyed,
   destroyedShipResources,
   fieldsCap,
@@ -20,6 +18,7 @@ import type {
 } from "./types.js";
 import { emptyShips } from "./world-bootstrap.js";
 import { moonRoll } from "./world-moons.js";
+import { applyMiniPlanetResolve } from "./world-mini.js";
 import { addDebris } from "./world-tick.js";
 
 type ActionResult =
@@ -84,41 +83,25 @@ export function swarmProduce(
 }
 
 /**
- * Hook for mini-planet post-battle resolve (full discovery/spawn is thread K).
- * Validates World Eater gate; body mutations deferred to K.
+ * Post-battle mini capture/destroy. Default choice is capture when omitted by API.
  * Caller should `advanceUniverse` first.
  */
 export function resolveMiniPlanetChoice(
   universe: UniverseState,
   playerId: string,
   fleetId: string,
-  choice: MiniPlanetResolveChoice,
+  choice: MiniPlanetResolveChoice = "capture",
 ): ActionResult {
+  const result = applyMiniPlanetResolve(universe, playerId, fleetId, choice);
+  if (!result.ok) return { ok: false, error: result.error };
+  if (result.planet) return { ok: true, planet: result.planet };
+  // Destroy removes the planet — return attacker's origin as view anchor.
   const fleet = universe.fleets[fleetId];
-  if (!fleet || fleet.ownerPlayerId !== playerId) {
-    return { ok: false, error: "Fleet not found." };
-  }
-  if (!canResolveMiniPlanet(fleet.ships)) {
-    return {
-      ok: false,
-      error: `Need at least ${MINI_WORLD_EATER_MIN} World Eaters.`,
-    };
-  }
-  const planetId = fleet.targetPlanetId;
-  if (!planetId) return { ok: false, error: "Fleet has no target." };
-  const planet = universe.planets[planetId];
-  if (!planet) return { ok: false, error: "Planet missing." };
-  const isMini =
-    Boolean(planet.flags?.mini) ||
-    (universe.miniPlanetIds ?? []).includes(planetId);
-  if (!isMini) {
-    return {
-      ok: false,
-      error: "Target is not a mini planet (discovery lands in thread K).",
-    };
-  }
-  void choice;
-  return { ok: true, planet };
+  const origin = fleet
+    ? universe.planets[fleet.originPlanetId]
+    : universe.planets[universe.players[playerId]?.activePlanetId ?? ""];
+  if (!origin) return { ok: false, error: "Planet missing after destroy." };
+  return { ok: true, planet: origin };
 }
 
 /**
