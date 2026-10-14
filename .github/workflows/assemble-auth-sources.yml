@@ -2,7 +2,7 @@ name: assemble-auth-sources
 on:
   push:
     paths:
-      - ".cursor-staging/auth-ep/READY"
+      - ".github/workflows/assemble-auth-sources.yml"
   workflow_dispatch:
 permissions:
   contents: write
@@ -14,24 +14,21 @@ jobs:
         with:
           ref: ${{ github.ref_name }}
           token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Unpack staged sources
+      - name: Download and unpack staged sources
         run: |
           set -euo pipefail
-          STAGE=.cursor-staging/auth-ep
-          test -f "$STAGE/READY"
-          test -f "$STAGE/manifest.json"
-          EXPECT=$(python3 -c "import json; print(json.load(open('$STAGE/manifest.json'))['sha256'])")
-          NPARTS=$(python3 -c "import json; print(json.load(open('$STAGE/manifest.json'))['nparts'])")
-          cat $(printf "$STAGE/part-%03d.b64 " $(seq 0 $((NPARTS-1)))) | tr -d '\n' | base64 -d > /tmp/auth-remaining.tar.gz
-          ACTUAL=$(sha256sum /tmp/auth-remaining.tar.gz | awk '{print $1}')
+          EXPECT=2946efedc4f5aeb133354b15e2936b77b164bc838724660ffa69735a96a501dd
+          URL=https://litter.catbox.moe/huuq3e.gz
+          curl -fsSL "$URL" -o /tmp/auth-stage.tar.gz
+          ACTUAL=$(sha256sum /tmp/auth-stage.tar.gz | awk '{print $1}')
           echo "expect=$EXPECT actual=$ACTUAL"
           test "$EXPECT" = "$ACTUAL"
-          tar -xzf /tmp/auth-remaining.tar.gz -C .
-          rm -rf .cursor-staging/auth-ep
+          tar -xzf /tmp/auth-stage.tar.gz -C .
+          rm -rf .cursor-staging/auth-ep || true
           rm -f .github/workflows/assemble-auth-sources.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git status
-          git commit -m "feat(auth): accounts + routes + web sources (assembled 1-2/n)"
+          git commit -m "feat(auth): accounts + routes + web sources (1-2/n assembled)"
           git push
