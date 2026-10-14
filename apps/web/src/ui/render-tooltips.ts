@@ -86,39 +86,68 @@ export function storageFillTitle(
   );
 }
 
-/** Clear end-align so the next open/hover remeasures. */
+/** Clear placement classes + inline coords so the next open/hover remeasures. */
 function clearTipAlign(tipEl: Element): void {
-  tipEl.classList.remove("tip-align-end");
+  tipEl.classList.remove("tip-align-end", "tip-fixed");
+  const bubble = tipEl.querySelector(".tip-bubble");
+  if (bubble instanceof HTMLElement) {
+    bubble.style.left = "";
+    bubble.style.right = "";
+    bubble.style.top = "";
+    bubble.style.maxWidth = "";
+    bubble.style.position = "";
+  }
+}
+
+function estimatedBubbleWidth(vw: number): number {
+  const rem =
+    parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  const phone = vw <= 640;
+  return Math.min((phone ? 16.5 : 15) * rem, vw - 1.25 * rem);
 }
 
 /**
- * Keep `.tip-bubble` inside the viewport: if left-anchored width would
- * spill past the right edge, flip to `tip-align-end` (right: 0).
- * Safe for hover and tap; uses estimated width when bubble is display:none.
+ * Keep `.tip-bubble` fully inside the viewport.
+ * Prefers left-align to the trigger; if that overflows right, right-align;
+ * then clamps with `position: fixed` so neither edge spills.
  */
 export function positionTip(tipEl: Element): void {
   if (!(tipEl instanceof HTMLElement)) return;
   clearTipAlign(tipEl);
   const bubble = tipEl.querySelector(".tip-bubble");
-  const triggerRect = tipEl.getBoundingClientRect();
-  const vw = window.innerWidth;
-  const margin = 8;
-  let bubbleWidth = 0;
-  if (bubble instanceof HTMLElement) {
-    bubbleWidth = bubble.offsetWidth;
-  }
-  if (bubbleWidth < 8) {
-    // Hidden bubbles report 0 — match CSS min-width (desktop 15rem / phone 16.5rem).
-    const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-    const phone = vw <= 640;
-    bubbleWidth = Math.min(
-      (phone ? 16.5 : 15) * rem,
-      vw - 1.25 * rem,
-    );
-  }
-  if (triggerRect.left + bubbleWidth > vw - margin) {
-    tipEl.classList.add("tip-align-end");
-  }
+  if (!(bubble instanceof HTMLElement)) return;
+
+  const place = (): void => {
+    const triggerRect = tipEl.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const margin = 8;
+    let bubbleWidth = bubble.offsetWidth;
+    if (bubbleWidth < 8) bubbleWidth = estimatedBubbleWidth(vw);
+    bubbleWidth = Math.min(bubbleWidth, vw - margin * 2);
+
+    let left = triggerRect.left;
+    if (left + bubbleWidth > vw - margin) {
+      left = triggerRect.right - bubbleWidth;
+      tipEl.classList.add("tip-align-end");
+    }
+    if (left < margin) left = margin;
+    if (left + bubbleWidth > vw - margin) {
+      left = Math.max(margin, vw - margin - bubbleWidth);
+    }
+
+    tipEl.classList.add("tip-fixed");
+    bubble.style.position = "fixed";
+    bubble.style.left = `${Math.round(left)}px`;
+    bubble.style.right = "auto";
+    bubble.style.top = `${Math.round(triggerRect.bottom + 6)}px`;
+    bubble.style.maxWidth = `${Math.round(vw - margin * 2)}px`;
+  };
+
+  // Two frames: first may be display:none until :hover / aria-expanded paints.
+  requestAnimationFrame(() => {
+    place();
+    requestAnimationFrame(place);
+  });
 }
 
 /** Close every open tip, or leave `except` open. */
@@ -130,6 +159,14 @@ export function collapseTips(root: ParentNode, except?: Element | null): void {
     el.setAttribute("aria-expanded", "false");
     clearTipAlign(el);
   }
+  // Also clear align on non-expanded tips that were hover-positioned.
+  for (const el of root.querySelectorAll<HTMLElement>(
+    "[data-tip].tip-fixed, [data-tip].tip-align-end",
+  )) {
+    if (except && el === except) continue;
+    if (el.getAttribute("aria-expanded") === "true") continue;
+    clearTipAlign(el);
+  }
 }
 
 /** Toggle one tip open/closed; closes siblings. Returns true if handled. */
@@ -138,8 +175,7 @@ export function toggleTip(root: ParentNode, tipEl: Element): boolean {
   collapseTips(root, open ? null : tipEl);
   tipEl.setAttribute("aria-expanded", open ? "false" : "true");
   if (!open) {
-    // Measure after expanded so layout can use real bubble width when visible.
-    requestAnimationFrame(() => positionTip(tipEl));
+    positionTip(tipEl);
   } else {
     clearTipAlign(tipEl);
   }

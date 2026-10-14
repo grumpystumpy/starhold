@@ -285,6 +285,13 @@
   right: 0;
 }
 
+/* Viewport-clamped placement (inline left/top/width from positionTip). */
+.has-tip.tip-fixed .tip-bubble {
+  position: fixed;
+  right: auto;
+  max-width: calc(100vw - 1rem);
+}
+
 .has-tip:hover .tip-bubble,
 .has-tip:focus-within .tip-bubble,
 .has-tip[aria-expanded="true"] .tip-bubble {
@@ -378,7 +385,7 @@
   }
 
   .tip-bubble {
-    min-width: 16.5rem;
+    min-width: min(16.5rem, calc(100vw - 1.25rem));
     max-width: calc(100vw - 1.25rem);
     padding: 0.95rem 1.05rem;
     font-size: 1.05rem;
