@@ -14,6 +14,7 @@ import {
   queueShipBuild,
   setActivePlanet,
 } from "./world.js";
+import { graduateNewbieProtection } from "./test-graduate.js";
 
 describe("P0/P1 parity — fleets & galaxy", () => {
   it("galaxy view lists empty and occupied slots", () => {
@@ -91,6 +92,7 @@ describe("P0/P1 parity — fleets & galaxy", () => {
     const universe = createUniverse("Debris Drift", 8);
     const a = joinUniverse(universe, "Harvester", 90_000_000);
     const b = joinUniverse(universe, "Wreck", 90_000_001);
+    graduateNewbieProtection(universe, universe.players[b.player.id]!);
     universe.planets[a.planet.id].ships.interceptor = 5;
     universe.planets[a.planet.id].ships.recycler = 1;
     universe.planets[a.planet.id].resources.deuterium = 2_000;
