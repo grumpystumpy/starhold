@@ -34,6 +34,10 @@ import {
   xpForPirateShipKills,
 } from "./formulas.js";
 import { hashSeed } from "./formulas-position.js";
+import {
+  awardSeasonPirateKill,
+  awardSeasonPveWin,
+} from "./world-seasons.js";
 import type {
   Coordinates,
   FleetMission,
@@ -411,6 +415,7 @@ function applyPirateRaidOnPlanet(
     };
     grantPlayerXp(owner, xpForCombatLose());
   } else if (combat.outcome === "defender_win") {
+    awardSeasonPveWin(universe, owner, now);
     grantPirateFleetKillStarshards(owner);
     const killed = resourcesCostTotal(
       destroyedShipResources(raidFleet, combat.attackerAfter),
@@ -537,6 +542,8 @@ export function resolvePirateRaidArrival(
     };
     markPirateDestroyed(base, now);
     if (owner) {
+      awardSeasonPveWin(universe, owner, now);
+      awardSeasonPirateKill(universe, owner, now);
       grantPirateDestroyStarshards(owner, tierAtFight);
       grantPlayerXp(
         owner,

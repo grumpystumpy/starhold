@@ -10,6 +10,7 @@ export const NAV_PAGES = [
   "officers",
   "skills",
   "highscore",
+  "seasons",
   "messages",
 ] as const;
 
@@ -26,6 +27,7 @@ export const NAV_LABELS: Record<NavPage, string> = {
   officers: "Officers",
   skills: "Skills",
   highscore: "Highscore",
+  seasons: "Seasons",
   messages: "Messages",
 };
 
@@ -41,6 +43,7 @@ export const NAV_PATHS: Record<NavPage, string> = {
   officers: "/officers",
   skills: "/skills",
   highscore: "/highscore",
+  seasons: "/seasons",
   messages: "/messages",
 };
 

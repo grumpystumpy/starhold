@@ -32,3 +32,8 @@ export {
   doActivateOfficer,
   doUnlockSkill,
 } from "./main-actions-starshards.js";
+export {
+  doClaimSeason,
+  doSetSeasonSkin,
+  doSetSeasonTitle,
+} from "./main-actions-seasons.js";

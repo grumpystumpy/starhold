@@ -40,6 +40,7 @@ import {
   researchQueueHtml,
   shipQueueHtml,
 } from "./render-queues";
+import { seasonsPage } from "./render-seasons";
 
 const RESOURCE_BUILDINGS: BuildingId[] = [
   "metalMine",
@@ -73,12 +74,19 @@ function stubPanel(title: string, body: string, testId: string): string {
 function overviewPage(view: PlayerView, busy: boolean): string {
   const { planet, economy } = view;
   const pm = economy.positionMult;
+  const title = view.player.cosmetics?.activeTitle?.trim() ?? "";
+  const skin = view.player.cosmetics?.activePlanetSkinId ?? "";
+  const art = planet.kind === "moon" ? PLANET_ART.moon : PLANET_ART.outpost;
   return `
     <section class="panel" data-testid="overview-panel">
       <h2>Overview</h2>
       <div class="overview-hero">
-        <img class="thumb thumb-lg" src="${planet.kind === "moon" ? PLANET_ART.moon : PLANET_ART.outpost}" alt="" width="72" height="72" />
+        <div class="planet-frame" data-testid="planet-skin-frame" data-planet-skin="${escapeAttr(skin)}">
+          <img class="thumb thumb-lg" src="${art}" alt="" width="72" height="72" />
+        </div>
         <div>
+          <p class="overview-commander" data-testid="commander-name">${escapeHtml(view.player.name)}</p>
+          <p class="active-title" data-testid="active-title"${title ? "" : " hidden"}>${escapeHtml(title)}</p>
           <p class="overview-name" data-testid="overview-planet-name">${escapeHtml(planet.name)}${planet.kind === "moon" ? " · Moon" : ""}</p>
           <p class="coords">${fmtCoords(planet.coords)}</p>
           <p class="hint" data-testid="planet-fields">Fields ${fmt(economy.fields.used)} / ${fmt(economy.fields.cap)} · ${fmt(economy.fields.remaining)} free</p>
@@ -258,6 +266,8 @@ export function pageHtml(
       return skillsPanelHtml(view, busy);
     case "highscore":
       return highscorePage(view);
+    case "seasons":
+      return seasonsPage(view, busy);
     case "messages":
       return stubPanel(
         "Messages",

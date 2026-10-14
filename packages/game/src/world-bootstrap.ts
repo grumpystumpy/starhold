@@ -25,6 +25,7 @@ import { emptyPlayerClass } from "./formulas-round3.js";
 import { seedUniverseAsteroids } from "./world-asteroids.js";
 import { ensurePlayerFleetPresets } from "./world-fleet-presets.js";
 import { seedUniversePirates } from "./world-pirates.js";
+import { rollSeasons } from "./world-seasons.js";
 
 export function emptyBuildings(): PlanetState["buildings"] {
   return {
@@ -147,6 +148,7 @@ export function ensureUniverseShape(universe: UniverseState): void {
   if (!universe.pirateBases) universe.pirateBases = {};
   if (!universe.occupations) universe.occupations = {};
   if (!universe.miniPlanetIds) universe.miniPlanetIds = [];
+  if (!universe.seasons) universe.seasons = {};
   if (!universe.fleetSpeed) universe.fleetSpeed = universe.speed || 1;
   if (!universe.seed) universe.seed = `seed_${universe.id}`;
   for (const player of Object.values(universe.players)) {
@@ -301,6 +303,7 @@ export function joinUniverse(
 
   universe.players[playerId] = player;
   universe.planets[planetId] = planet;
+  rollSeasons(universe, now);
   return { player, planet };
 }
 

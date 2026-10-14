@@ -35,7 +35,10 @@ import {
   doResearch,
   doSaveFleetPreset,
   doScanSystem,
+  doClaimSeason,
   doSelectPlanet,
+  doSetSeasonSkin,
+  doSetSeasonTitle,
   doUnlockSkill,
   doUpgrade,
 } from "./main-actions";
@@ -134,6 +137,15 @@ export function bindClickHandlers(): void {
           | null;
         const itemId = cancelBtn.getAttribute("data-queue-item");
         if (kind && itemId) void doCancelQueue(kind, itemId);
+        return;
+      }
+
+      const seasonClaim = closestActionEl(target, "[data-season-claim]");
+      if (seasonClaim) {
+        ev.preventDefault();
+        const board = seasonClaim.getAttribute("data-season-claim");
+        const seasonId = seasonClaim.getAttribute("data-season-id");
+        if (board) void doClaimSeason(board, seasonId);
         return;
       }
 
@@ -302,6 +314,18 @@ export function bindClickHandlers(): void {
         "#planet-rename-input",
       );
       void doRenamePlanet(input?.value ?? "");
+    }
+  });
+
+  root.addEventListener("change", (ev) => {
+    const el = ev.target;
+    if (!(el instanceof HTMLSelectElement)) return;
+    if (el.hasAttribute("data-season-title")) {
+      void doSetSeasonTitle(el.value);
+      return;
+    }
+    if (el.hasAttribute("data-season-skin")) {
+      void doSetSeasonSkin(el.value);
     }
   });
 

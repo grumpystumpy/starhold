@@ -24,6 +24,7 @@ import type {
   UniverseState,
 } from "./types.js";
 import { ensureQueueFrontStarted } from "./world-queue-normalize.js";
+import { addSeasonEconomySpend } from "./world-seasons.js";
 
 const MIN_UNIT_SECONDS = 1e-9;
 
@@ -122,6 +123,7 @@ export function advancePlanet(
   // Buildings grant no XP (Micah amendment / Round 2 rebalance).
   advanceBuildingQueue(state.buildQueue, now, (item) => {
     state.buildings[item.buildingId] = item.targetLevel;
+    if (_owner) addSeasonEconomySpend(_owner, item.paidCost, now);
   });
 
   advanceCountableQueue(state.shipQueue, now, (item, batch) => {
@@ -205,10 +207,12 @@ export function advanceResearch(
     player.researchQueue[0]!.completesAt <= now
   ) {
     const freedAt = player.researchQueue[0]!.completesAt;
-    const { researchId, targetLevel } = player.researchQueue[0]!;
+    const done = player.researchQueue[0]!;
+    const { researchId, targetLevel } = done;
     player.research[researchId] = targetLevel;
     player.researchQueue.shift();
     grantPlayerXp(player, xpForResearch(targetLevel));
+    addSeasonEconomySpend(player, done.paidCost, now);
     ensureQueueFrontStarted(player.researchQueue, now, freedAt);
   }
   universe.players[player.id] = player;
