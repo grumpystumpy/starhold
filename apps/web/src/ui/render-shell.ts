@@ -178,7 +178,7 @@ export function enrichResourceTitles(view: PlayerView, html: string): string {
     const title = storageFillTitle(amount, cap, perHour);
     out = out.replace(
       `class="res ${cls}" data-testid="res-${cls}"`,
-      `class="res ${cls}" title="${title}"`,
+      `class="res ${cls}" data-testid="res-${cls}" title="${title}"`,
     );
   }
   return out;
