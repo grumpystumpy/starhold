@@ -50,13 +50,13 @@ export function fleetComposer(
     }
     for (const r of rivals) {
       options.push(
-        `<option value="planet:${escapeAttr(r.planetId)}">Visit ${escapeHtml(r.name)} · ${fmtCoords(r.coords)}</option>`,
+        `<option value="planet:${escapeAttr(r.planetId)}">Attack ${escapeHtml(r.name)} · ${fmtCoords(r.coords)}</option>`,
       );
     }
     for (const s of view.galaxy.slots) {
       if (s.moonId && s.playerId && s.playerId !== view.player.id) {
         options.push(
-          `<option value="planet:${escapeAttr(s.moonId)}">Visit moon @ ${fmtCoords(s.coords)}</option>`,
+          `<option value="planet:${escapeAttr(s.moonId)}">Attack moon @ ${fmtCoords(s.coords)}</option>`,
         );
       }
     }
@@ -142,7 +142,7 @@ export function fleetComposer(
           return `
       <label class="fleet-ship">
         <img class="thumb" src="${SHIP_ART[id]}" alt="" width="36" height="36" />
-        <span>${escapeHtml(SHIPS[id].name)} <span class="meta">(in orbit ${have})</span></span>
+        <span>${escapeHtml(SHIPS[id].name)} <span class="meta">(in orbit ${fmt(have)})</span></span>
         <input type="number" min="0" max="${have}" value="${value}" data-fleet-count="${id}" data-testid="fleet-count-${id}" ${busy ? "disabled" : ""} />
       </label>`;
         })
@@ -163,14 +163,14 @@ export function fleetComposer(
     .length;
   const needHint =
     mission === "expedition" && expeditionActive >= expeditionCap
-      ? `<p class="hint" data-testid="fleet-need-expedition-slot">Expedition slots full (${expeditionActive}/${expeditionCap}). Research Stellar Cartography for more.</p>`
+      ? `<p class="hint" data-testid="fleet-need-expedition-slot">Expedition slots full (${fmt(expeditionActive)}/${fmt(expeditionCap)}). Research Stellar Cartography for more.</p>`
       : options.length === 0
         ? mission === "transport"
-          ? `<p class="hint" data-testid="fleet-need-colony">Need a second world: research Stellar Cartography, build an Outpost Cradle, colonize an empty galaxy slot — then transport cargo there.</p>`
+          ? `<p class="hint" data-testid="fleet-need-colony">Need a second world: research Stellar Cartography, build a Colonizer, colonize an empty galaxy slot — then transport cargo there.</p>`
           : mission === "jump"
             ? `<p class="hint" data-testid="fleet-need-jump-moon">Need another of your moons with a Fold Bridge (form moons from large debris, then build Crater Hab + Fold Bridge on both).</p>`
             : mission === "deploy"
-              ? `<p class="hint" data-testid="fleet-need-deploy-target">Colonize for park targets, or join a second commander to visit rivals.</p>`
+              ? `<p class="hint" data-testid="fleet-need-deploy-target">Colonize for park targets, or join a second commander for attacking another rival.</p>`
               : mission === "colonize"
                 ? `<p class="hint">Browse the galaxy for an empty slot in this system (or change system).</p>`
                 : mission === "harvest"
@@ -179,7 +179,7 @@ export function fleetComposer(
                     ? `<p class="hint">No asteroids in this system — browse another system.</p>`
                     : mission === "pirateRaid"
                       ? `<p class="hint">No pirate base in this system — browse the galaxy for NPC activity.</p>`
-                      : `<p class="hint" data-testid="fleet-need-rival">Join a second commander (another tab) to unlock raid / spy targets.</p>`
+                      : `<p class="hint" data-testid="fleet-need-rival">Join a second commander (another tab) for attacking another rival / spy targets.</p>`
         : "";
   const launchBlocked =
     busy ||
@@ -203,7 +203,7 @@ export function fleetComposer(
 
   const missionRadios = MISSIONS.map((m) => {
     const labels: Record<MissionType, string> = {
-      deploy: "Deploy (park own / visit rival)",
+      deploy: "Deploy (park own / attack rival)",
       raid: "Raid / attack",
       espionage: "Spy (Whisper Probe)",
       transport: "Transport cargo (own worlds)",
@@ -260,7 +260,7 @@ export function fleetComposer(
       ${cargoBlock}
       <div class="fleet-ships" data-testid="fleet-orbit-ships">${shipInputs}</div>
       ${needHint}
-      <p class="hint">Ships shown are in orbit on the selected colony. Example one-way ETA ~${fmtEta(sampleEta)} · fuel ~${sampleFuel} deut (1 scout). Fleet slots: ${1 + (view.player.research.computerTech ?? 0)}${mission === "expedition" ? ` · expeditions ${expeditionActive}/${expeditionCap}` : ""}.</p>
+      <p class="hint">Ships shown are in orbit on the selected colony. Example one-way ETA ~${fmtEta(sampleEta)} · fuel ~${fmt(sampleFuel)} deut (1 scout). Fleet slots: ${fmt(1 + (view.player.research.computerTech ?? 0))}${mission === "expedition" ? ` · expeditions ${fmt(expeditionActive)}/${fmt(expeditionCap)}` : ""}.</p>
       <button type="submit" data-testid="launch-fleet" ${launchBlocked || orbitShipIds.length === 0 ? "disabled" : ""}>Launch fleet</button>
     </form>
   `;
