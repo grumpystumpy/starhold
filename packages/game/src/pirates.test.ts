@@ -473,6 +473,30 @@ describe("NPC soft raids", () => {
     );
     assert.ok(fleetCombatPower(capped) < fleetCombatPower(base.ships));
   });
+
+  it("STARHOLD_E2E=1 advances raid schedule without looting players", () => {
+    const prev = process.env.STARHOLD_E2E;
+    process.env.STARHOLD_E2E = "1";
+    try {
+      const universe = createUniverse("E2E Quiet", 8);
+      const { planet } = joinUniverse(universe, "Banker", 421_000_000);
+      const body = universe.planets[planet.id]!;
+      body.resources = { metal: 500, crystal: 500, deuterium: 100 };
+      for (const base of activePirateBases(universe)) {
+        base.nextRaidAt = 0;
+      }
+      const now = PIRATE_RAID_PERIOD_MS * 2;
+      tickPirates(universe, now);
+      assert.equal(body.resources.metal, 500);
+      assert.equal(body.resources.crystal, 500);
+      for (const base of activePirateBases(universe).slice(0, 20)) {
+        assert.ok(base.nextRaidAt > now - PIRATE_RAID_PERIOD_MS);
+      }
+    } finally {
+      if (prev == null) delete process.env.STARHOLD_E2E;
+      else process.env.STARHOLD_E2E = prev;
+    }
+  });
 });
 
 // silence unused in case of tree shake
