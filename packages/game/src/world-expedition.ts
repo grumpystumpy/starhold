@@ -8,8 +8,10 @@ import {
   normalizeFleetShips,
   vaultScoutExpeditionMult,
   xpForExpedition,
+  xpForMiniPlanetDiscovery,
 } from "./formulas.js";
 import type {
+  Coordinates,
   ExpeditionKind,
   ExpeditionReport,
   FleetMission,
@@ -22,6 +24,11 @@ import {
   expeditionStarshardsAmount,
   grantStarshards,
 } from "./world-boosts.js";
+import {
+  discoverMiniPlanet,
+  empireRelicExpeditionFindMult,
+  pickOrSeedMiniForDiscovery,
+} from "./world-mini.js";
 
 /** Deterministic 0..99 roll from fleet id + arrival time. */
 export function expeditionRoll(fleetId: string, at: number): number {
@@ -33,13 +40,15 @@ export function expeditionRoll(fleetId: string, at: number): number {
 }
 
 /**
- * Expedition outcome table (v1):
- * 0–39 resources, 40–54 ships, 55–69 nothing, 70–74 starshards (5%), 75–99 pirates.
+ * Expedition outcome table (v1 + mini):
+ * 0–39 resources, 40–54 ships, 55–67 nothing, 68–69 miniPlanet (2%),
+ * 70–74 starshards (5%), 75–99 pirates.
  */
 export function expeditionKindFromRoll(roll: number): ExpeditionKind {
   if (roll < 40) return "resources";
   if (roll < 55) return "ships";
-  if (roll < 70) return "nothing";
+  if (roll < 68) return "nothing";
+  if (roll < 70) return "miniPlanet";
   if (roll < 75) return "starshards";
   return "pirates";
 }
@@ -87,12 +96,15 @@ export function resolveExpeditionArrival(
   let cargoGained: Resources = { metal: 0, crystal: 0, deuterium: 0 };
   const shipsDelta: Partial<FleetShips> = {};
   let starshardsGained = 0;
+  let miniPlanetId: string | undefined;
+  let miniCoords: Coordinates | undefined;
   let summary: string;
 
   const ownerForYield = universe.players[fleet.ownerPlayerId];
   const yieldMult =
     classBonuses(ownerForYield?.playerClass?.classId).expeditionYield *
-    vaultScoutExpeditionMult(before);
+    vaultScoutExpeditionMult(before) *
+    empireRelicExpeditionFindMult(universe, fleet.ownerPlayerId);
 
   switch (kind) {
     case "resources": {
@@ -156,6 +168,26 @@ export function resolveExpeditionArrival(
       summary = `Pirate ambush — ~30% hulls lost. Scrap salvage ${cargoGained.metal}m/${cargoGained.crystal}c/${cargoGained.deuterium}d.`;
       break;
     }
+    case "miniPlanet": {
+      fleet.cargo = { metal: 0, crystal: 0, deuterium: 0 };
+      const found = pickOrSeedMiniForDiscovery(
+        universe,
+        fleet.ownerPlayerId,
+        fleet.targetCoords,
+        fleet.id,
+        now,
+      );
+      if (found) {
+        discoverMiniPlanet(universe, fleet.ownerPlayerId, found.id);
+        miniPlanetId = found.id;
+        miniCoords = { ...found.coords };
+        summary = `Anomalous gravity well charted — mini planet at ${found.coords.galaxy}:${found.coords.system}:${found.coords.slot} (coords to you only).`;
+      } else {
+        summary =
+          "Sensors brushed a ghost mass, but the drift signature faded before coords locked.";
+      }
+      break;
+    }
     default: {
       const _exhaustive: never = kind;
       throw new Error(`Unhandled expedition kind: ${_exhaustive}`);
@@ -167,6 +199,9 @@ export function resolveExpeditionArrival(
     const owner = universe.players[fleet.ownerPlayerId];
     if (owner) {
       grantPlayerXp(owner, xpForExpedition());
+      if (kind === "miniPlanet" && miniPlanetId) {
+        grantPlayerXp(owner, xpForMiniPlanetDiscovery());
+      }
       universe.players[owner.id] = owner;
     }
   }
@@ -182,6 +217,8 @@ export function resolveExpeditionArrival(
     cargoGained,
     shipsDelta,
     starshardsGained: starshardsGained || undefined,
+    miniPlanetId,
+    miniCoords,
     summary,
   };
   universe.expeditionReports[reportId] = report;
