@@ -232,6 +232,7 @@ Micah redesign. **Supersedes** Round 1 density/raid cadence, Round 2 pirate cap-
 - Each **weak-ship spawn** (every **3h**) **also** adds defenses. Defenses **accumulate forever**; amount scales with level.
 - Ship catalog: every ship **except the three biggest** — **World Eater**, **Mothership**, **Void Titan**.
 - **Raid once per hour** at a **random time within that hour** (players and other pirates). Pirate-vs-pirate slightly less often than pirate-vs-player. Same **split family** (original + descendants) never attack each other (**coalition**).
+- **Fairness (queued 2026-10-14):** vs players under **100k** points, each pirate raid that day reduces that day’s remaining raid chance by **−1% of the original** chance (does **not** apply to aliens). See [Feature queue](#feature-queue-micah-2026-10-14--after-current-backlog-planet-art-last).
 - Universe target: **200 pirate bases** across all galaxies. New universes seed to 200; migration **tops up** existing universes to 200 **without wiping player data**.
 - **Split once at exactly level 25:** original unchanged + **2** new level-1 bases in nearby systems. No other split levels.
 
@@ -248,7 +249,33 @@ Micah redesign. **Supersedes** Round 1 density/raid cadence, Round 2 pirate cap-
 
 200 pirate bases (+ rare aliens) × hourly random raids must not blow KV / serverless. Simulate with **lazy catch-up on read** (or a rare batched tick) — not per-base writes. **Recommendation:** do **not** rely on Vercel Hobby cron for hourly cadence (Hobby cron is daily-only); prefer player-driven lazy AI ticks. Flag Upstash free-tier command budget if every tick rewrites the whole universe document. Details in the implementer note.
 
-### Queue addendum — PLANET ART (after mini / pirates / backlog)
+### Feature queue (Micah 2026-10-14) — after current backlog; PLANET ART last
+
+Canonical ordered list: store [internal/backlog-queue.md](../internal/backlog-queue.md) (§A current · §B ADD · §C CHANGE · §D PLANET ART). Detail: [internal/backlog-micah-add-change-2026-10-14.md](../internal/backlog-micah-add-change-2026-10-14.md).
+
+**Do not start ADD/CHANGE until in-flight work ahead is clear** (Messages inbox, etc.). All numeric knobs → `tuning.ts`. New systems need a design-contract addendum before content/engine work. Quality gate + **no merge without Micah** still apply. Free-tier: **lazy catch-up, minimal KV writes** (same Hobby constraints as pirates/aliens).
+
+#### ADD (new systems — backlog #10–#14)
+
+1. **Replayable battle reports** — round-by-round losses / debris / XP; shareable in chat.
+2. **Daily + weekly goals** — e.g. win 3 pirate fights, run 5 expeditions → Starshards or resources.
+3. **Alliance chat + shared intel** — shared spy reports, galaxy target markers, joint attack planning (builds on alliances).
+4. **Event log + alerts** — one feed: raids, finished builds, fleet returns, nearby minis found while away.
+5. **Monthly seasons + leaderboards** (combat, economy, pirate kills) + cosmetic rewards (planet skins, titles). No real-money.
+
+#### CHANGE (balance / UX — backlog #15–#19)
+
+6. **New-player protection** — from players **and** pirates; ends permanently at **2,500 points**.
+7. **Naming consistency** — every screen/tooltip/report/doc uses current original names (colony not outpost, Colonizer, Mothership, etc.); no underscores; numbers with commas.
+8. **Tooltips everywhere** — hover/tap ship/building/research/stat → function, cost, requirements; phones too.
+9. **Pirate raid fairness** — players under **100,000** points only: each successful pirate raid on that player that day lowers pick chance by **1% of original** (additive, daily reset). Does **not** apply to aliens.
+10. **World Eater speed −50%** — cruise speed halved vs current (`tuning.ts`).
+
+#### PLANET ART (always last — backlog #20)
+
+After all ADD/CHANGE items above. Spec unchanged (see below).
+
+### Queue addendum — PLANET ART (last after Oct 14 queue)
 
 60–75 distinct planet images: hot slots 1–5, habitable 6–10, cold 11–15 (track temperature mechanic). Mini planets: 30–40 varied. Deterministic seed `galaxy:system:slot`; no duplicates in-system or adjacent. Original art only; webp/lazy-load; overview + galaxy + lists; desktop+phone; quality gate; report merge-ready with preview screenshots.
 
@@ -273,4 +300,3 @@ Micah redesign. **Supersedes** Round 1 density/raid cadence, Round 2 pirate cap-
 3. **Relic World** — +30% research speed empire-wide, +25% expedition finds; draws more pirate raids; **one per player**.
 
 Revise open PR #42; quality gate again before merge list.
-

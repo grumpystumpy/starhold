@@ -340,6 +340,7 @@ interface PirateBase {
 | Split | **Once**, at exactly **level 25**: original unchanged + **2** new L1 bases nearby | `PIRATE_SPLIT_LEVEL`, `PIRATE_SPLIT_CHILD_COUNT`, `PIRATE_SPLIT_CHILD_LEVEL`, `PIRATE_SPLIT_NEARBY_SYSTEM_RADIUS` |
 | Coalition | Same `coalitionId` (split family) **never** attack each other | schema field; no numeric knob |
 | Player destroy | Starshards + destroy/respawn behavior retained unless Micah says otherwise | existing Starshard keys |
+| **Fairness (queued 2026-10-14)** | Targets under **100k** points: each pirate raid that calendar day reduces remaining raid chance by **−1% of the original** chance (stacks per raid/day). **Pirates only — not aliens.** | `PIRATE_FAIRNESS_POINTS_THRESHOLD`, `PIRATE_FAIRNESS_CHANCE_DECAY_PER_RAID` |
 
 **Raid scheduling:** each period of `PIRATE_RAID_PERIOD_MS` (1h), assign `nextRaidAt = periodStart + floor(rng × period)`. After firing, advance to the next period and roll a new offset. Pirate-vs-pirate uses the same model with period stretched by `PIRATE_VS_PIRATE_RAID_PERIOD_MULT` (or equivalent skip chance).
 
@@ -369,6 +370,9 @@ export const PIRATE_EXCLUDED_SHIP_IDS = [
   "swarmMothership",
   "voidforgeTitan",
 ] as const;
+// Queued Micah 2026-10-14 (not implemented until backlog reaches CHANGE #9):
+export const PIRATE_FAIRNESS_POINTS_THRESHOLD = 100_000;
+export const PIRATE_FAIRNESS_CHANCE_DECAY_PER_RAID = 0.01; // −1% of original chance per raid/day
 ```
 
 Composition maps (`PIRATE_FREE_SHIP_COMPOSITION`, `PIRATE_FREE_DEFENSE_COMPOSITION`, `PIRATE_LEVEL_DEFENSE_COMPOSITION`) are also tuning-owned. **Do not** use a fixed 30‑minute `PIRATE_RAID_INTERVAL_MS` — superseded by `PIRATE_RAID_PERIOD_MS`.
@@ -564,7 +568,7 @@ On success: moon deleted; parent `moonId` cleared; fleets on moon → debris 50%
 | Attack | `300_000` (strongest) |
 | Shield | `800_000` |
 | Hull | `2_000_000` |
-| Speed | `600` |
+| Speed | `600` → **queued −50% → `300`** (Micah 2026-10-14; apply in `tuning.ts` when backlog CHANGE #10 lands) |
 | Fuel / distance | `4` |
 
 Also required (≥5) to capture/destroy mini planets; counts toward moon-kill chance with Void Titans.
