@@ -236,6 +236,7 @@ export async function launchFleetMission(
     targetCoords?: Coordinates;
     asteroidId?: string;
     pirateBaseId?: string;
+  alienBaseId?: string;
     cargo?: Partial<Resources>;
   },
 ): Promise<PlayerView> {
