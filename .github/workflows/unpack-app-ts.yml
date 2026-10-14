@@ -1,0 +1,36 @@
+name: unpack-app-ts
+on:
+  push:
+    paths:
+      - ".cursor-stage/round3-app/**"
+      - ".github/workflows/unpack-app-ts.yml"
+permissions:
+  contents: write
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unpack apps/server/src/app.ts
+        run: |
+          set -euo pipefail
+          STAGE=.cursor-stage/round3-app
+          python3 - <<'PY'
+          import gzip, base64, json, hashlib, pathlib
+          stage = pathlib.Path(".cursor-stage/round3-app")
+          man = json.loads((stage / "manifest.json").read_text())
+          b64 = "".join((stage / f"part-{i:02d}.b64").read_text().strip() for i in range(man["parts"]))
+          raw = gzip.decompress(base64.b64decode(b64))
+          assert hashlib.sha256(raw).hexdigest() == man["sha256"]
+          path = pathlib.Path(man["path"])
+          path.parent.mkdir(parents=True, exist_ok=True)
+          path.write_bytes(raw)
+          print("wrote", path, "bytes", len(raw), "sha256", man["sha256"])
+          PY
+          rm -rf .cursor-stage/round3-app
+          rm -f .github/workflows/unpack-app-ts.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: unpack apps/server/src/app.ts from staging (round3 rename-planet)"
+          git push
