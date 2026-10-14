@@ -1,0 +1,46 @@
+name: Assemble API index (one-shot)
+
+on:
+  push:
+    branches: [cursor/api-nested-routes-1afb]
+    paths:
+      - ".github/workflows/assemble-api-index.yml"
+      - "scripts/bundle-api.mjs"
+      - "vercel.json"
+      - "apps/server/**"
+  workflow_dispatch:
+
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cursor/api-nested-routes-1afb
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install + build vercel API bundle
+        run: |
+          npm ci
+          npm run build:vercel
+
+      - name: Commit api/index.js, drop catch-all, remove workflow
+        run: |
+          rm -f "api/[[...route]].js"
+          rm -f .github/workflows/assemble-api-index.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A api/ .github/workflows/assemble-api-index.yml
+          if git diff --cached --quiet; then
+            echo "nothing to commit"
+            exit 0
+          fi
+          git commit -m "chore(api): assemble api/index.js and remove catch-all"
+          git push origin HEAD:cursor/api-nested-routes-1afb
