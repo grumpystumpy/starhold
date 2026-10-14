@@ -6,6 +6,7 @@ import {
   fetchState,
   joinGame,
   requestMagicLink,
+  renamePlanet,
   selectPlanet,
 } from "./api";
 import {
@@ -282,6 +283,34 @@ export async function doSelectPlanet(planetId: string): Promise<void> {
     setFlash(
       "error",
       err instanceof Error ? err.message : "Planet switch failed.",
+    );
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doRenamePlanet(name: string): Promise<void> {
+  if (!session.view) return;
+  if (session.busy) {
+    setFlash("error", "Still applying the last action — try again in a moment.");
+    schedulePaint();
+    return;
+  }
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    session.view = await renamePlanet(
+      session.view.player.id,
+      session.view.planet.id,
+      name,
+    );
+    setFlash("notice", `Colony renamed to ${session.view.planet.name}.`);
+  } catch (err) {
+    setFlash(
+      "error",
+      err instanceof Error ? err.message : "Rename failed.",
     );
   } finally {
     session.busy = false;
