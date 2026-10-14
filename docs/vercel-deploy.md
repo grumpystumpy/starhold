@@ -6,7 +6,11 @@ Agents do **not** create accounts. No credit card.
 
 API is serverless (`api/index.js`, with `/api/*` rewritten to `/api`). Shared multiplayer needs Redis REST credentials.
 
-**Deploys:** Only `main` deploys to Vercel (`git.deploymentEnabled`: `*` false, `main` true). PR checks run on GitHub Actions (`unit-and-e2e`); preview branches do not consume Hobby deploy quota.
+**Deploys:** Only `main` deploys to Vercel (`git.deploymentEnabled`: `*` false, `main` true). PR checks run on GitHub Actions (`unit-and-e2e`); preview branches must not consume Hobby deploy quota.
+
+**Dashboard (Micah — once):** Vercel → **starhold** → **Settings → Build and Deployment → Ignored Build Step** → set to **Only build production**. This belt-and-suspenders with `vercel.json` so PR/preview branches never build even if `git.deploymentEnabled` is ignored.
+
+**API bundle:** `api/index.js` is **not** in git. `buildCommand` (`npm run build:vercel`) generates it during each production deploy.
 
 **Planned (not yet):** staging branch or second Vercel project + ~daily promote to production `main`. Until that lands, keep main-only production as above — do not enable preview deploys for every PR.
 
