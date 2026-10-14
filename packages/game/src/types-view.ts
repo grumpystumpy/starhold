@@ -13,6 +13,7 @@ import type {
   OfficerDef,
   OfficerState,
   PirateBase,
+  PlayerClassState,
   ResearchLevels,
   ResearchQueueItem,
   Resources,
@@ -104,6 +105,8 @@ export interface PlanetState {
   parentPlanetId?: string | null;
   moonId?: string | null;
   fieldsCap?: number;
+  /** Wall-clock ms when Fold Bridge may jump again (moon). */
+  jumpReadyAt?: number;
   resources: Resources;
   lastTickAt: number;
   buildings: Record<BuildingId, number>;
@@ -147,6 +150,8 @@ export interface PlayerState {
   accountId?: string | null;
   /** Saved fleet compositions (built-ins + custom), per player in this universe. */
   fleetPresets?: FleetPreset[];
+  /** Round 3 player class (Miner / Explorer / Fleeter / Expansionist). */
+  playerClass?: PlayerClassState;
 }
 
 export interface UniverseState {
@@ -277,8 +282,20 @@ export interface HighscoreEntry {
 
 export interface EconomySnapshot {
   productionPerHour: Resources;
-  energy: { produced: number; used: number; factor: number };
+  temperatureK: number;
+  energy: {
+    produced: number;
+    used: number;
+    factor: number;
+    helioBuoy: number;
+    solarTempFactor: number;
+  };
   storage: Resources;
-  fields: { used: number; cap: number; remaining: number };
+  fields: {
+    used: number;
+    cap: number;
+    remaining: number;
+    mantleLoomBonus: number;
+  };
   positionMult: SlotProductionMult;
 }
