@@ -1,5 +1,6 @@
 import {
   DEFENSE_ORDER,
+  MINI_BUILDING_ORDER,
   MOON_BUILDING_ORDER,
   PLANET_NAME_MAX_LEN,
   RESEARCH_ORDER,
@@ -61,6 +62,15 @@ const FACILITY_BUILDINGS_PLANET: BuildingId[] = [
 const FACILITY_BUILDINGS_MOON: BuildingId[] = MOON_BUILDING_ORDER.filter(
   (id) => !RESOURCE_BUILDINGS.includes(id),
 );
+const MINI_RESOURCE_BUILDINGS: BuildingId[] = [
+  "solarPlant",
+  "metalStorage",
+  "crystalStorage",
+  "deutTank",
+];
+const MINI_FACILITY_BUILDINGS: BuildingId[] = MINI_BUILDING_ORDER.filter(
+  (id) => !MINI_RESOURCE_BUILDINGS.includes(id),
+);
 
 function stubPanel(title: string, body: string, testId: string): string {
   return `
@@ -103,27 +113,33 @@ function overviewPage(view: PlayerView, busy: boolean): string {
 
 function buildingsPage(view: PlayerView, busy: boolean): string {
   const { planet, universe, now } = view;
-  const resourceIds =
-    planet.kind === "moon"
+  const isMini = Boolean(planet.flags?.mini);
+  const resourceIds = isMini
+    ? MINI_RESOURCE_BUILDINGS
+    : planet.kind === "moon"
       ? RESOURCE_BUILDINGS.filter((id) =>
           MOON_BUILDING_ORDER.includes(id),
         )
       : RESOURCE_BUILDINGS;
-  const facilityIds =
-    planet.kind === "moon"
+  const facilityIds = isMini
+    ? MINI_FACILITY_BUILDINGS
+    : planet.kind === "moon"
       ? FACILITY_BUILDINGS_MOON
       : FACILITY_BUILDINGS_PLANET;
   return `
     <section class="panel" data-testid="buildings-panel">
       <h2>Buildings</h2>
       <p class="hint" data-testid="planet-fields">Fields ${fmt(view.economy.fields.used)} / ${fmt(view.economy.fields.cap)} · ${fmt(view.economy.fields.remaining)} free</p>
-      <h3 class="subhead">Extraction &amp; storage</h3>
+      ${isMini ? `<p class="hint" data-testid="mini-planet-hint">Mini planet — special structures only (no mines or lab).</p>` : ""}
+      <h3 class="subhead">${isMini ? "Power &amp; storage" : "Extraction &amp; storage"}</h3>
       ${resourceIds.map((id) => buildingRow(id, planet, universe.speed, now, busy)).join("")}
-      <h3 class="subhead">Structures</h3>
+      <h3 class="subhead">${isMini ? "Anomaly structures" : "Structures"}</h3>
       ${facilityIds.map((id) => buildingRow(id, planet, universe.speed, now, busy)).join("")}
       ${
         buildQueueHtml(planet, now) ||
-        (planet.kind === "moon"
+        (isMini
+          ? `<p class="hint">Mini colonies use Rift Siphon, Echo Vault, Anomaly Forge, and Drift Beacon.</p>`
+          : planet.kind === "moon"
           ? `<p class="hint">Moons have no mines — expand crater structures on the moon.</p>`
           : `<p class="hint">One construction at a time. Upgrade the Solar Array if mines stall.</p>`)
       }

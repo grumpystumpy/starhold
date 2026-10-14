@@ -164,6 +164,20 @@ export function galaxyPanel(
       return `<li data-testid="galaxy-slot-${s.coords.slot}"><span>${fmt(s.coords.slot)}. ${who}${debris}</span><span>${fmtCoords(s.coords)}</span></li>`;
     })
     .join("");
+  const miniRows =
+    galaxy.minis && galaxy.minis.length > 0
+      ? galaxy.minis
+          .map((s) => {
+            const debris = s.debris
+              ? ` · debris ${fmt(s.debris.metal)}/${fmt(s.debris.crystal)}`
+              : "";
+            const who = s.playerName
+              ? `${escapeHtml(s.playerName)}${s.isOwn ? " (you)" : ""}`
+              : "Unclaimed";
+            return `<li data-testid="galaxy-mini-${s.coords.slot}"><span>Mini ${fmt(s.coords.slot)}. ${who}${debris}</span><span>${fmtCoords(s.coords)}</span></li>`;
+          })
+          .join("")
+      : "";
   const asteroids =
     galaxy.asteroids?.length > 0
       ? `<ul class="roster" data-testid="galaxy-asteroids">${galaxy.asteroids
@@ -192,6 +206,11 @@ export function galaxyPanel(
       </div>
       <p class="hint">Send max uses the Expedition preset and fills free expedition slots from ships in orbit on the selected colony. Scan probes every foreign-owned planet/moon in this system.</p>
       <ul class="roster" data-testid="galaxy-slots">${rows}</ul>
+      ${
+        miniRows
+          ? `<h3 class="subhead">Mini planets</h3><ul class="roster" data-testid="galaxy-minis">${miniRows}</ul>`
+          : ""
+      }
       <h3 class="subhead">Deep space</h3>
       ${deep}
       <h3 class="subhead">Asteroids</h3>

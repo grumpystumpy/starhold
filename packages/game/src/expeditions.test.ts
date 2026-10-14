@@ -20,7 +20,9 @@ describe("P2 expeditions", () => {
     assert.equal(expeditionKindFromRoll(40), "ships");
     assert.equal(expeditionKindFromRoll(54), "ships");
     assert.equal(expeditionKindFromRoll(55), "nothing");
-    assert.equal(expeditionKindFromRoll(69), "nothing");
+    assert.equal(expeditionKindFromRoll(67), "nothing");
+    assert.equal(expeditionKindFromRoll(68), "miniPlanet");
+    assert.equal(expeditionKindFromRoll(69), "miniPlanet");
     assert.equal(expeditionKindFromRoll(70), "starshards");
     assert.equal(expeditionKindFromRoll(74), "starshards");
     assert.equal(expeditionKindFromRoll(75), "pirates");
@@ -58,9 +60,14 @@ describe("P2 expeditions", () => {
     const report = universe.expeditionReports[mid.reportId!];
     assert.ok(report);
     assert.ok(
-      ["resources", "ships", "nothing", "pirates", "starshards"].includes(
-        report.kind,
-      ),
+      [
+        "resources",
+        "ships",
+        "nothing",
+        "pirates",
+        "starshards",
+        "miniPlanet",
+      ].includes(report.kind),
     );
 
     const metalBefore = universe.planets[a.planet.id].resources.metal;

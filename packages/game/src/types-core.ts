@@ -17,7 +17,11 @@ export type BuildingId =
   | "jumpGate"
   | "chronoLathe"
   | "mantleLoom"
-  | "rigFoundry";
+  | "rigFoundry"
+  | "riftSiphon"
+  | "echoVault"
+  | "anomalyForge"
+  | "driftBeacon";
 
 export type BodyKind = "planet" | "moon";
 
@@ -163,6 +167,8 @@ export interface BuildingDef {
   energyProdFormula?: "solar";
   /** Resource this mine produces */
   produces?: ResourceId;
+  /** Soft/hard max level (mini specials). */
+  maxLevel?: number;
 }
 
 export interface ShipDef {

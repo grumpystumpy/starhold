@@ -148,10 +148,49 @@ export function galaxyViewFor(
     }
   }
 
+  const minis: GalaxySlot[] = [];
+  for (const miniId of universe.miniPlanetIds ?? []) {
+    const mini = universe.planets[miniId];
+    if (
+      !mini?.flags?.mini ||
+      mini.coords.galaxy !== g ||
+      mini.coords.system !== s
+    ) {
+      continue;
+    }
+    const known =
+      mini.ownerPlayerId === playerId ||
+      Boolean(mini.discoveredBy?.includes(playerId)) ||
+      Boolean(
+        universe.players[playerId]?.discoveredMiniIds?.includes(miniId),
+      );
+    if (!known) continue;
+    const owner = mini.ownerPlayerId
+      ? universe.players[mini.ownerPlayerId]
+      : undefined;
+    const debris = getDebris(universe, mini.coords);
+    minis.push({
+      coords: { ...mini.coords },
+      planetId: mini.id,
+      playerId: owner?.id ?? null,
+      playerName: owner?.name ?? (mini.ownerPlayerId ? null : "Unclaimed"),
+      allianceTag: null,
+      pointsHint: Math.floor(planetPoints(mini)),
+      debris: debris
+        ? { metal: debris.metal, crystal: debris.crystal }
+        : null,
+      isOwn: owner?.id === playerId,
+      hasMoon: false,
+      moonId: null,
+      activity: "planet",
+    });
+  }
+
   return {
     galaxy: g,
     system: s,
     slots,
+    minis,
     deepSpace: { coords: { galaxy: g, system: s, slot: DEEP_SPACE_SLOT } },
     asteroids: asteroidsInSystem(universe, g, s),
     pirateBase: pirate

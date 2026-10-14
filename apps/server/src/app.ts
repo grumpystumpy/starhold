@@ -23,6 +23,7 @@ import {
   claimDailyLogin,
   classCatalog,
   deleteFleetPreset,
+  discoverMiniPlanet,
   ensureUniverseShape,
   isPlayerClassId,
   joinUniverse,
@@ -759,6 +760,35 @@ export function createApp(): Hono {
         body.choice ?? "capture",
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  /**
+   * Local quality-gate only (`STARHOLD_E2E=1`). Reveals the first mini planet
+   * to the player so Playwright can exercise discovery UI without flaky rolls.
+   */
+  app.post("/api/e2e/discover-mini", async (c) => {
+    if (process.env.STARHOLD_E2E !== "1") {
+      return c.json({ error: "Not found." }, 404);
+    }
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+    };
+    if (!body.playerId) {
+      return c.json({ error: "playerId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      advanceUniverse(universe);
+      const ids = universe.miniPlanetIds ?? [];
+      const targetId = ids.find((id) => universe.planets[id]?.flags?.mini);
+      if (!targetId) {
+        return c.json({ error: "No mini planets seeded." }, 500);
+      }
+      const planet = discoverMiniPlanet(universe, body.playerId!, targetId);
+      if (!planet) {
+        return c.json({ error: "Discover failed." }, 400);
+      }
       return c.json(playerView(universe, body.playerId!));
     });
   });

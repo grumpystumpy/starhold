@@ -93,6 +93,10 @@ export const BUILDING_ORDER: BuildingId[] = [
   "chronoLathe",
   "mantleLoom",
   "rigFoundry",
+  "riftSiphon",
+  "echoVault",
+  "anomalyForge",
+  "driftBeacon",
 ];
 
 /** Buildings shown / allowed on normal planets. */
@@ -116,6 +120,22 @@ export const MOON_BUILDING_ORDER: BuildingId[] = [
   "lunarBase",
   "sensorArray",
   "jumpGate",
+  "solarPlant",
+  "metalStorage",
+  "crystalStorage",
+  "deutTank",
+  "shipyard",
+];
+
+/**
+ * Mini planets: specials + Solar Array + storages + Shipyard.
+ * Mines, lab, moon buildings, Mantle Loom / Rig Foundry / Chrono Lathe blocked.
+ */
+export const MINI_BUILDING_ORDER: BuildingId[] = [
+  "riftSiphon",
+  "echoVault",
+  "anomalyForge",
+  "driftBeacon",
   "solarPlant",
   "metalStorage",
   "crystalStorage",
@@ -245,6 +265,16 @@ export {
   OCCUPATION_OCCUPIER_SHARE,
   OCCUPATION_OWNER_SHARE,
   MINI_WORLD_EATER_MIN,
+  MINI_SLOT_MIN,
+  MINI_SLOT_MAX,
+  MINI_SYSTEMS_PER,
+  MINI_FIELDS_MIN,
+  MINI_FIELDS_MAX,
+  MINI_DESTROY_RESOURCE_MULT,
+  MINI_DESTROY_DEBRIS_FRAC,
+  RIFT_SIPHON_MINE_PER,
+  ECHO_VAULT_STORAGE_PER,
+  ANOMALY_FORGE_SHIP_TIME_PER,
 } from "./data/tuning.js";
 
 export const STARTING_RESOURCES = {

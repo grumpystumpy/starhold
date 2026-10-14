@@ -1,15 +1,19 @@
 import {
+  ANOMALY_FORGE_SHIP_TIME_PER,
   BUILDINGS,
   DEFENSES,
+  ECHO_VAULT_STORAGE_PER,
   MANTLE_LOOM_FIELDS_USED,
   MINE_BASE_PER_HOUR,
   MINE_GROWTH,
+  MINI_BUILDING_ORDER,
   MOON_BUILDING_ORDER,
   MOON_FIELDS_BASE,
   MOON_FIELDS_PER_LUNAR_BASE,
   PLANET_BUILDING_ORDER,
   PRODUCTION_MULT,
   RESEARCH,
+  RIFT_SIPHON_MINE_PER,
   SHIPS,
 } from "./catalog.js";
 import type {
@@ -37,12 +41,35 @@ export function isMoon(planet: PlanetState): boolean {
   return planet.kind === "moon";
 }
 
+export function isMiniBody(planet: PlanetState): boolean {
+  return Boolean(planet.flags?.mini);
+}
+
 export function buildingAllowedOn(
   planet: PlanetState,
   buildingId: BuildingId,
 ): boolean {
+  if (isMiniBody(planet)) return MINI_BUILDING_ORDER.includes(buildingId);
   const order = isMoon(planet) ? MOON_BUILDING_ORDER : PLANET_BUILDING_ORDER;
   return order.includes(buildingId);
+}
+
+/** Rift Siphon mine-output multiplier (mini special). */
+export function riftSiphonMineMult(planet: PlanetState): number {
+  const level = Math.min(5, Math.max(0, planet.buildings.riftSiphon ?? 0));
+  return 1 + RIFT_SIPHON_MINE_PER * level;
+}
+
+/** Echo Vault storage multiplier (mini special). */
+export function echoVaultStorageMult(planet: PlanetState): number {
+  const level = Math.min(5, Math.max(0, planet.buildings.echoVault ?? 0));
+  return 1 + ECHO_VAULT_STORAGE_PER * level;
+}
+
+/** Anomaly Forge ship-build time factor (mini special). */
+export function anomalyForgeShipTimeFactor(planet: PlanetState): number {
+  const level = Math.min(5, Math.max(0, planet.buildings.anomalyForge ?? 0));
+  return Math.max(0.2, 1 - ANOMALY_FORGE_SHIP_TIME_PER * level);
 }
 
 export function fieldsCap(planet: PlanetState): number {
@@ -155,12 +182,19 @@ export function shipUnitBuildSeconds(
   shipyardLevel: number,
   naniteLevel = 0,
   rigFoundryLevel = 0,
+  anomalyForgeLevel = 0,
 ): number {
   const def = SHIPS[shipId];
   const speedFactor = 1 + Math.max(0, shipyardLevel - 1) * 0.1;
+  const anomaly = Math.min(5, Math.max(0, Math.floor(anomalyForgeLevel)));
+  const anomalyFactor = Math.max(
+    0.2,
+    1 - ANOMALY_FORGE_SHIP_TIME_PER * anomaly,
+  );
   const raw =
     (def.buildSeconds / speedFactor) *
-    constructionSpeedFactor(rigFoundryLevel, naniteLevel);
+    constructionSpeedFactor(rigFoundryLevel, naniteLevel) *
+    anomalyFactor;
   return Math.max(MIN_UNIT_SECONDS, raw);
 }
 
@@ -170,10 +204,16 @@ export function shipBuildSeconds(
   shipyardLevel: number,
   naniteLevel = 0,
   rigFoundryLevel = 0,
+  anomalyForgeLevel = 0,
 ): number {
   return (
-    shipUnitBuildSeconds(shipId, shipyardLevel, naniteLevel, rigFoundryLevel) *
-    count
+    shipUnitBuildSeconds(
+      shipId,
+      shipyardLevel,
+      naniteLevel,
+      rigFoundryLevel,
+      anomalyForgeLevel,
+    ) * count
   );
 }
 
@@ -303,10 +343,13 @@ export function energyFactor(
 }
 
 export function storageFor(planet: PlanetState): Resources {
+  const vault = echoVaultStorageMult(planet);
   return {
-    metal: storageCap(planet.buildings.metalStorage ?? 0),
-    crystal: storageCap(planet.buildings.crystalStorage ?? 0),
-    deuterium: storageCap(planet.buildings.deutTank ?? 0),
+    metal: Math.floor(storageCap(planet.buildings.metalStorage ?? 0) * vault),
+    crystal: Math.floor(
+      storageCap(planet.buildings.crystalStorage ?? 0) * vault,
+    ),
+    deuterium: Math.floor(storageCap(planet.buildings.deutTank ?? 0) * vault),
   };
 }
 
@@ -344,8 +387,10 @@ export function productionPerHour(
   const techBonus = 1 + energyTechLevel * 0.02;
   // universe.speed scales timers + income; PRODUCTION_MULT is income-only test tuning.
   const vein = veinAnchorMineMult(planet);
+  const rift = riftSiphonMineMult(planet);
   const incomeScale =
-    universeSpeed * PRODUCTION_MULT * techBonus * mineMult * vein;
+    universeSpeed * PRODUCTION_MULT * techBonus * mineMult * vein * rift;
+  // Mini planets use slot-8 neutral mults (out-of-band slots already neutral).
   const pos = productionMultForSlot(planet.coords.slot);
   return {
     metal:

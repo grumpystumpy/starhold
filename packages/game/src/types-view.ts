@@ -50,6 +50,10 @@ export interface CombatReport {
   /** Voidforge Titan moon-kill success. */
   moonDestroyed?: boolean;
   moonKillChancePct?: number;
+  /** Post-battle mini capture/destroy available (≥5 World Eaters, attacker win). */
+  miniResolveAvailable?: boolean;
+  miniPlanetId?: string;
+  miniResolved?: "capture" | "destroy";
 }
 
 export interface EspionageReport {
@@ -74,7 +78,8 @@ export type ExpeditionKind =
   | "ships"
   | "nothing"
   | "pirates"
-  | "starshards";
+  | "starshards"
+  | "miniPlanet";
 
 export interface ExpeditionReport {
   id: string;
@@ -87,6 +92,9 @@ export interface ExpeditionReport {
   shipsDelta: Partial<FleetShips>;
   /** Starshards granted to the player (expedition find). */
   starshardsGained?: number;
+  /** Mini-planet discovery coords (finder-only). */
+  miniPlanetId?: string;
+  miniCoords?: Coordinates;
   summary: string;
 }
 
@@ -116,8 +124,10 @@ export interface PlanetState {
   buildQueue: BuildQueueItem[];
   shipQueue: ShipQueueItem[];
   defenseQueue: DefenseQueueItem[];
-  /** Round 2 mini-planet flag (thread K fills discovery). */
+  /** Round 2 mini-planet flag. */
   flags?: { mini?: boolean };
+  /** Player ids who know this mini's coords (discovery). */
+  discoveredBy?: string[];
 }
 
 export interface PlayerState {
@@ -152,6 +162,8 @@ export interface PlayerState {
   fleetPresets?: FleetPreset[];
   /** Round 3 player class (Miner / Explorer / Fleeter / Expansionist). */
   playerClass?: PlayerClassState;
+  /** Mini planet ids this player has discovered (coords known). */
+  discoveredMiniIds?: string[];
 }
 
 export interface UniverseState {
@@ -203,6 +215,8 @@ export interface GalaxyView {
   galaxy: number;
   system: number;
   slots: GalaxySlot[];
+  /** Mini planets in this system visible to the viewer (discovered or owned). */
+  minis?: GalaxySlot[];
   deepSpace: { coords: Coordinates };
   asteroids: AsteroidField[];
   pirateBase: PirateBasePublic | null;

@@ -23,6 +23,8 @@ import { playerBoosts } from "./world-boosts.js";
 import { emptyCargo } from "./world-bootstrap.js";
 import { tryFormMoon } from "./world-moons.js";
 import { clearOccupationIfRecaptured } from "./world-occupation.js";
+import { canResolveMiniPlanet } from "./formulas-round2.js";
+import { isMiniPlanet } from "./world-mini.js";
 import { maybeDestroyMoonWithTitans } from "./world-round2.js";
 import { addDebris, subtractCargo } from "./world-tick.js";
 
@@ -141,6 +143,15 @@ export function resolveRaidArrival(
     clearOccupationIfRecaptured(universe, target.id, target.ownerPlayerId);
   }
 
+  const miniEligible =
+    combat.outcome === "attacker_win" &&
+    isMiniPlanet(target) &&
+    Boolean(target.ownerPlayerId) &&
+    canResolveMiniPlanet(combat.attackerAfter);
+  if (miniEligible) {
+    summary = `${summary} Mini planet vulnerable — choose capture or destroy (≥5 World Eaters).`;
+  }
+
   const report: CombatReport = {
     id: reportId,
     at: now,
@@ -164,6 +175,8 @@ export function resolveRaidArrival(
     moonFormed,
     moonDestroyed: moonDestroyed || undefined,
     moonKillChancePct,
+    miniResolveAvailable: miniEligible || undefined,
+    miniPlanetId: miniEligible ? target.id : undefined,
   };
   universe.reports[reportId] = report;
 

@@ -367,7 +367,7 @@ describe("World Eater mini gates + swarm produce", () => {
     assert.equal(universe.fleets[fleetId].swarmProduce, null);
   });
 
-  it("mini-resolve hook rejects non-mini targets", () => {
+  it("mini-resolve rejects non-mini / missing report", () => {
     const universe = createUniverse("Mini Drift", 8);
     const a = joinUniverse(universe, "Eater", 220_000_000);
     const b = joinUniverse(universe, "Victim", 220_000_001);
@@ -384,7 +384,7 @@ describe("World Eater mini gates + swarm produce", () => {
       cargo: { metal: 0, crystal: 0, deuterium: 0 },
       departedAt: 220_000_100,
       arrivesAt: 220_000_100,
-      phase: "outbound",
+      phase: "returning",
       reportId: null,
     };
     const rejected = resolveMiniPlanetChoice(
@@ -394,10 +394,5 @@ describe("World Eater mini gates + swarm produce", () => {
       "destroy",
     );
     assert.equal(rejected.ok, false);
-    universe.planets[b.planet.id].flags = { mini: true };
-    assert.equal(
-      resolveMiniPlanetChoice(universe, a.player.id, fleetId, "capture").ok,
-      true,
-    );
   });
 });

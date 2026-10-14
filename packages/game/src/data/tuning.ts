@@ -787,6 +787,48 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
     baseBuildSeconds: 40,
     energyUsePerLevel: 15,
   },
+  riftSiphon: {
+    id: "riftSiphon",
+    name: "Rift Siphon",
+    description:
+      "Mini-planet special — +15% all mine output on this body per level (max 5).",
+    baseCost: { metal: 800, crystal: 400, deuterium: 200 },
+    costGrowth: 1.8,
+    baseBuildSeconds: 45,
+    energyUsePerLevel: 25,
+    maxLevel: 5,
+  },
+  echoVault: {
+    id: "echoVault",
+    name: "Echo Vault",
+    description:
+      "Mini-planet special — +25% storage caps per level (max 5).",
+    baseCost: { metal: 1200, crystal: 800, deuterium: 0 },
+    costGrowth: 1.9,
+    baseBuildSeconds: 40,
+    maxLevel: 5,
+  },
+  anomalyForge: {
+    id: "anomalyForge",
+    name: "Anomaly Forge",
+    description:
+      "Mini-planet special — −8% ship build time per level (max 5).",
+    baseCost: { metal: 1000, crystal: 1000, deuterium: 400 },
+    costGrowth: 1.9,
+    baseBuildSeconds: 50,
+    energyUsePerLevel: 30,
+    maxLevel: 5,
+  },
+  driftBeacon: {
+    id: "driftBeacon",
+    name: "Drift Beacon",
+    description:
+      "Mini-planet special — +1 expedition slot at level 1 (higher levels reserved).",
+    baseCost: { metal: 2000, crystal: 1500, deuterium: 1000 },
+    costGrowth: 2.0,
+    baseBuildSeconds: 60,
+    maxLevel: 5,
+  },
 
 };
 
@@ -927,6 +969,24 @@ export const OCCUPATION_OCCUPIER_SHARE = 0.3;
 export const OCCUPATION_OWNER_SHARE = 0.7;
 /** World Eaters required to capture/destroy a mini planet. */
 export const MINI_WORLD_EATER_MIN = 5;
+/** Mini planets spawn outside normal slots 1–16. */
+export const MINI_SLOT_MIN = 20;
+export const MINI_SLOT_MAX = 29;
+/** ~1 mini planet per N systems (≈50 / universe at 10×399). */
+export const MINI_SYSTEMS_PER = 80;
+/** Fields cap band for mini planets (v1). */
+export const MINI_FIELDS_MIN = 80;
+export const MINI_FIELDS_MAX = 140;
+/** Destroy payout multiplier on remaining resources. */
+export const MINI_DESTROY_RESOURCE_MULT = 3;
+/** Debris fraction of cumulative building residual cost on destroy. */
+export const MINI_DESTROY_DEBRIS_FRAC = 0.5;
+/** Rift Siphon: +15% mine output per level. */
+export const RIFT_SIPHON_MINE_PER = 0.15;
+/** Echo Vault: +25% storage caps per level. */
+export const ECHO_VAULT_STORAGE_PER = 0.25;
+/** Anomaly Forge: −8% ship build time per level. */
+export const ANOMALY_FORGE_SHIP_TIME_PER = 0.08;
 
 /** Round 3 — Rig Foundry: −15% build time per level, floor ×0.10. */
 export const RIG_FOUNDRY_TIME_PER_LEVEL = 0.15;

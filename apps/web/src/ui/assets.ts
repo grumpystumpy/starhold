@@ -17,6 +17,10 @@ export const BUILDING_ART: Record<BuildingId, string> = {
   chronoLathe: "/assets/buildings/chrono-lathe.svg",
   mantleLoom: "/assets/buildings/mantle-loom.svg",
   rigFoundry: "/assets/buildings/rig-foundry.svg",
+  riftSiphon: "/assets/buildings/deut-synth.svg",
+  echoVault: "/assets/buildings/metal-storage.svg",
+  anomalyForge: "/assets/buildings/shipyard.svg",
+  driftBeacon: "/assets/buildings/sensor-array.svg",
 };
 
 export const SHIP_ART: Record<ShipId, string> = {
