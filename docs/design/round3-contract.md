@@ -77,7 +77,7 @@ Existing `POST /api/queue/defense` / build-defense paths — new ids only. No mi
 
 ### Classes (choose one)
 
-| Id | Display | Role | Bonuses (v1, multiplicative unless noted) |
+| Id | Display | Focus | Bonuses (v1, multiplicative unless noted) |
 |----|---------|-------|-------------------------------------------|
 | `miner` | **Miner** | Defense + resources | Mine output **×1.12**; defense power **×1.10**; defense build time **×0.90** |
 | `explorer` | **Explorer** | Exploration + research | Expedition yield **×1.20**; research time **×0.90**; Whisper Probe speed **×1.25**; +1 expedition slot |
