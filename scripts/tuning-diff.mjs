@@ -122,7 +122,7 @@ function formatVal(v) {
 function buildMarkdown(baseSnap, headSnap, baseRef, headRef) {
   const lines = [];
   lines.push("<!-- starhold-tuning-diff -->");
-  lines.push(`## Tuning diff vs \`${baseRef}\`);
+  lines.push(`## Tuning diff vs \`${baseRef}\``);
   lines.push("");
   lines.push(`Head \`${headRef}\` vs base \`${baseRef}\` · \`${TUNING_PATH}\`.`);
   lines.push("");
@@ -212,10 +212,15 @@ function buildMarkdown(baseSnap, headSnap, baseRef, headRef) {
 async function main() {
   // Ensure base ref exists locally when possible.
   if (BASE_REF.startsWith("origin/")) {
-    spawnSync("git", ["fetch", "--no-tags", "--depth=1", "origin", BASE_REF.replace(/^origin\//, "")], {
-      cwd: ROOT,
-      stdio: "ignore",
-    });
+    const branch = BASE_REF.replace(/^origin\//, "");
+    spawnSync(
+      "git",
+      ["fetch", "--no-tags", "--depth=1", "origin", `${branch}:refs/remotes/origin/${branch}`],
+      {
+        cwd: ROOT,
+        stdio: "ignore",
+      },
+    );
   }
 
   let headSource;

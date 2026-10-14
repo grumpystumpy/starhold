@@ -101,7 +101,7 @@ jobs:
         env:
           TUNING_DIFF_OUT: tuning-diff.md
         run: |
-          git fetch --no-tags origin "${{ github.base_ref }}"
+          git fetch --no-tags origin "${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
           node scripts/tuning-diff.mjs --base "origin/${{ github.base_ref }}" --head HEAD
 
       - name: Comment tuning diff on PR
