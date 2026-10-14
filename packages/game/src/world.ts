@@ -32,6 +32,7 @@ export {
 export {
   migrateUniverseV2ToV3,
   migrateUniverseV3ToV4,
+  migrateUniverseV4ToV5,
 } from "./world-migrate.js";
 export {
   changePlayerClass,
@@ -96,17 +97,31 @@ export {
   seedUniverseAsteroids,
 } from "./world-asteroids.js";
 export {
+  activeAlienBases,
   activePirateBases,
+  alienBaseAtCoords,
+  alienBaseId,
+  createAlienBase,
   createPirateBase,
+  ensurePiratePopulation,
+  findNearestOpenSlot1,
   pirateBaseAtCoords,
   pirateBaseId,
+  pirateCombatResearch,
   pirateDestroyStarshards,
+  pirateEligibleShipIds,
+  pirateFreeSpawnShips,
   pirateRespawnAt,
   pirateShipsForTier,
+  pirateTechsForLevel,
+  pickRaidTarget,
+  resolveAlienRaidArrival,
   resolvePirateRaidArrival,
+  rollNextRaidAt,
   scalePirateRaidFleet,
   seedUniversePirates,
   tickPirates,
+  tryAlienExpeditionFind,
 } from "./world-pirates.js";
 export {
   activateOfficer,
