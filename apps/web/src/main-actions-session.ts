@@ -258,6 +258,9 @@ export async function resumeFromCookie(): Promise<boolean> {
       syncSessionUrl({ replace: true });
       startPolling(me.view.player.id);
       setFlash("notice", `Signed in as ${me.view.player.name}.`);
+      // Paint immediately — boot() returns early on true and would otherwise
+      // leave the join screen up until the first poll (~1s).
+      schedulePaint();
       return true;
     }
     if (me.account) {
