@@ -5,10 +5,15 @@ import {
   MAP_SYSTEMS,
   PIRATE_DESTROY_STARSHARDS_BASE,
   PIRATE_DESTROY_STARSHARDS_PER_TIER,
+  PIRATE_FREE_SPAWN_BASE,
+  PIRATE_FREE_SPAWN_INTERVAL_MS,
+  PIRATE_FREE_SPAWN_PER_LEVEL,
   PIRATE_GROWTH_INTERVAL_MS,
   PIRATE_RAID_POWER_FLOOR,
+  PIRATE_RELIC_RAID_WEIGHT,
   PIRATE_SYSTEMS_PER_BASE,
   PIRATE_TIER_CAP,
+  SHIPS,
 } from "./catalog.js";
 import {
   emptyFleetShips,
@@ -20,11 +25,18 @@ import {
   advanceUniverse,
   createUniverse,
   galaxyViewFor,
+  isRelicWorldPlanet,
   joinUniverse,
   launchFleet,
+  pirateCombatResearch,
   pirateDestroyStarshards,
+  pirateEligibleShipIds,
+  pirateFreeSpawnShips,
   pirateRespawnAt,
   pirateShipsForTier,
+  pirateTechsForLevel,
+  pickRaidTarget,
+  planetRaidWeight,
   scalePirateRaidFleet,
   tickPirates,
 } from "./world.js";
@@ -38,11 +50,78 @@ describe("pirate balance helpers", () => {
     );
   });
 
-  it("grows ship pools with tier up to cap", () => {
+  it("grows ship pools with tier up to cap 12", () => {
+    assert.equal(PIRATE_TIER_CAP, 12);
     const t0 = pirateShipsForTier(0);
-    const t8 = pirateShipsForTier(PIRATE_TIER_CAP);
-    assert.ok(fleetShipCount(t8) > fleetShipCount(t0));
+    const t12 = pirateShipsForTier(PIRATE_TIER_CAP);
+    assert.ok(fleetShipCount(t12) > fleetShipCount(t0));
     assert.deepEqual(pirateShipsForTier(99), pirateShipsForTier(PIRATE_TIER_CAP));
+  });
+
+  it("unlocks hulls by level bands without class or stationary ships", () => {
+    const eligible = new Set(pirateEligibleShipIds());
+    for (const id of eligible) {
+      assert.equal(SHIPS[id].classExclusive, undefined);
+      assert.notEqual(SHIPS[id].stationary, true);
+    }
+    assert.ok(!eligible.has("vaultScout"));
+    assert.ok(!eligible.has("helioBuoy"));
+    assert.ok(!eligible.has("veinAnchor"));
+
+    const light = pirateShipsForTier(2);
+    assert.ok(light.scout > 0);
+    assert.equal(light.cruiser, 0);
+    assert.equal(light.worldEater, 0);
+
+    const mid = pirateShipsForTier(5);
+    assert.ok(mid.cruiser > 0);
+    assert.ok(mid.bomber > 0);
+    assert.equal(mid.recycler, 0);
+
+    const late = pirateShipsForTier(8);
+    assert.ok(late.recycler > 0);
+    assert.ok(late.colonyShip > 0);
+    assert.equal(late.worldEater, 0);
+
+    const elite = pirateShipsForTier(12);
+    assert.ok(elite.swarmDrone > 0);
+    assert.equal(elite.worldEater, 1);
+    assert.equal(elite.voidforgeTitan, 1);
+  });
+
+  it("keeps pirate techs very low vs level", () => {
+    assert.deepEqual(pirateTechsForLevel(0), {
+      weapons: 0,
+      armour: 0,
+      shielding: 0,
+    });
+    assert.deepEqual(pirateTechsForLevel(3), {
+      weapons: 0,
+      armour: 0,
+      shielding: 0,
+    });
+    assert.deepEqual(pirateTechsForLevel(4), {
+      weapons: 1,
+      armour: 1,
+      shielding: 1,
+    });
+    assert.deepEqual(pirateTechsForLevel(12), {
+      weapons: 2,
+      armour: 2,
+      shielding: 2,
+    });
+  });
+
+  it("free-spawns weak scout/interceptor counts scaled by level", () => {
+    const lvl = 3;
+    const free = pirateFreeSpawnShips(lvl);
+    const expected =
+      PIRATE_FREE_SPAWN_BASE + PIRATE_FREE_SPAWN_PER_LEVEL * lvl;
+    assert.equal(fleetShipCount(free), expected);
+    assert.ok(free.scout > free.interceptor);
+    assert.equal(free.voidforgeTitan, 0);
+    assert.equal(free.worldEater, 0);
+    assert.equal(free.cruiser, 0);
   });
 
   it("caps raid fleets vs weak defenders", () => {
@@ -69,10 +148,13 @@ describe("pirate spawn / galaxy", () => {
     assert.equal(systemsWith.size, living.length);
   });
 
-  it("exposes pirateBase on galaxy view for occupied systems", () => {
+  it("exposes pirateBase level on galaxy view", () => {
     const universe = createUniverse("Pirate View", 8);
     const base = activePirateBases(universe)[0];
     assert.ok(base);
+    assert.equal(base!.level, base!.tier);
+    assert.ok(base!.techs);
+    assert.ok(base!.lastFreeSpawnAt != null);
     const { player } = joinUniverse(universe, "Viewer", 300_000_000);
     const view = galaxyViewFor(
       universe,
@@ -83,17 +165,39 @@ describe("pirate spawn / galaxy", () => {
     assert.ok(view.pirateBase);
     assert.equal(view.pirateBase!.id, base!.id);
     assert.equal(view.pirateBase!.tier, base!.tier);
+    assert.equal(view.pirateBase!.level, base!.level);
   });
 });
 
-describe("pirate growth and respawn", () => {
-  it("grows tier on the growth interval", () => {
+describe("pirate growth, free ships, and respawn", () => {
+  it("grows tier/level on the growth interval and syncs techs", () => {
     const universe = createUniverse("Grow Drift", 8);
     const base = activePirateBases(universe)[0]!;
     const t0 = base.tier;
     const now = base.lastGrewAt + PIRATE_GROWTH_INTERVAL_MS + 1;
     tickPirates(universe, now);
-    assert.equal(universe.pirateBases![base.id]!.tier, t0 + 1);
+    const after = universe.pirateBases![base.id]!;
+    assert.equal(after.tier, t0 + 1);
+    assert.equal(after.level, after.tier);
+    assert.deepEqual(after.techs, pirateTechsForLevel(after.level));
+  });
+
+  it("adds free weak ships every 3h without Void Titan", () => {
+    const universe = createUniverse("Free Spawn Drift", 8);
+    const base = activePirateBases(universe)[0]!;
+    base.level = 2;
+    base.tier = 2;
+    base.techs = pirateTechsForLevel(2);
+    base.ships = emptyFleetShips();
+    base.ships.scout = 1;
+    const before = fleetShipCount(base.ships);
+    const expectedAdd =
+      PIRATE_FREE_SPAWN_BASE + PIRATE_FREE_SPAWN_PER_LEVEL * 2;
+    tickPirates(universe, base.lastFreeSpawnAt + PIRATE_FREE_SPAWN_INTERVAL_MS + 1);
+    const after = universe.pirateBases![base.id]!;
+    assert.equal(fleetShipCount(after.ships), before + expectedAdd);
+    assert.equal(after.ships.voidforgeTitan, 0);
+    assert.ok(after.ships.scout >= 1);
   });
 
   it("respawns elsewhere after destroy delay", () => {
@@ -109,6 +213,7 @@ describe("pirate growth and respawn", () => {
     const living = activePirateBases(universe);
     assert.ok(living.length >= 1);
     assert.ok(living.every((b) => b.destroyedAt == null));
+    assert.ok(living.every((b) => b.level === b.tier));
   });
 });
 
@@ -118,6 +223,8 @@ describe("pirateRaid mission", () => {
     const base = activePirateBases(universe)[0]!;
     // Keep the fight trivial so the player wins.
     base.tier = 0;
+    base.level = 0;
+    base.techs = pirateTechsForLevel(0);
     base.ships = emptyFleetShips();
     base.resources = { metal: 2000, crystal: 1000, deuterium: 200 };
 
@@ -156,6 +263,18 @@ describe("pirateRaid mission", () => {
     assert.equal(universe.fleets[launch.fleet.id], undefined);
     assert.ok(universe.planets[planet.id].ships.cruiser >= 1);
   });
+
+  it("applies pirate combat research from techs", () => {
+    const universe = createUniverse("Tech Drift", 8);
+    const base = activePirateBases(universe)[0]!;
+    base.tier = 8;
+    base.level = 8;
+    base.techs = pirateTechsForLevel(8);
+    const research = pirateCombatResearch(base);
+    assert.equal(research.weaponsTech, 2);
+    assert.equal(research.armourTech, 2);
+    assert.equal(research.shieldingTech, 2);
+  });
 });
 
 describe("NPC pirate raids", () => {
@@ -168,6 +287,8 @@ describe("NPC pirate raids", () => {
 
     const base = activePirateBases(universe)[0]!;
     base.tier = 8;
+    base.level = 8;
+    base.techs = pirateTechsForLevel(8);
     base.ships = pirateShipsForTier(8);
     base.lastRaidAt = 0;
 
@@ -178,5 +299,45 @@ describe("NPC pirate raids", () => {
     const capped = scalePirateRaidFleet(base.ships, fleetCombatPower(body.ships));
     assert.ok(fleetCombatPower(capped) < fleetCombatPower(base.ships));
     assert.ok(fleetShipCount(body.ships) >= 0);
+  });
+
+  it("weights Relic Worlds higher when picking planet raid targets", () => {
+    assert.equal(PIRATE_RELIC_RAID_WEIGHT, 4);
+    const universe = createUniverse("Relic Raids", 11);
+    const a = joinUniverse(universe, "Holder", 100);
+    const b = joinUniverse(universe, "Neighbor", 200);
+    const relic = universe.planets[a.planet.id];
+    const normal = universe.planets[b.planet.id];
+    relic.flags = { mini: true, relicWorld: true };
+    normal.flags = { mini: true };
+    assert.equal(isRelicWorldPlanet(relic), true);
+    assert.equal(isRelicWorldPlanet(normal), false);
+    assert.equal(planetRaidWeight(relic), PIRATE_RELIC_RAID_WEIGHT);
+    assert.equal(planetRaidWeight(normal), 1);
+
+    // Isolate to two planets so weighted pick is measurable.
+    for (const id of Object.keys(universe.planets)) {
+      if (id !== relic.id && id !== normal.id) delete universe.planets[id];
+    }
+    // Only one pirate so target roll always prefers planets.
+    const keep = activePirateBases(universe)[0]!;
+    universe.pirateBases = { [keep.id]: keep };
+
+    let relicHits = 0;
+    let normalHits = 0;
+    const samples = 200;
+    for (let i = 0; i < samples; i++) {
+      keep.lastRaidAt = i * 1_000;
+      const target = pickRaidTarget(universe, keep, 50_000 + i * 17);
+      assert.ok(target?.kind === "planet");
+      if (target.planet.id === relic.id) relicHits += 1;
+      else if (target.planet.id === normal.id) normalHits += 1;
+    }
+    assert.equal(relicHits + normalHits, samples);
+    // 4:1 weight → expect ~80% Relic; allow generous slack for hashSeed.
+    assert.ok(
+      relicHits > normalHits * 2,
+      `expected Relic bias, got relic=${relicHits} normal=${normalHits}`,
+    );
   });
 });

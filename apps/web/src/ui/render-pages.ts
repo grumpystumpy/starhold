@@ -1,16 +1,25 @@
 import {
   DEFENSE_ORDER,
+  MAP_GALAXIES,
+  MAP_SYSTEMS,
+  MINI_BUILDING_ORDER,
+  MINI_FORTRESS_RELOCATE_ACCURACY,
+  MINI_FORTRESS_RELOCATE_GALAXY_RANGE,
   MOON_BUILDING_ORDER,
   PLANET_NAME_MAX_LEN,
   RESEARCH_ORDER,
   SHIP_ORDER,
   SHIPS,
+  shipClassAllowed,
+  fortressRelocateDeutCost,
+  fortressRelocateLandingWindow,
   type BuildingId,
   type PlayerView,
 } from "@starhold/game";
-import { PLANET_ART, SHIP_ART, UI_ART } from "./assets";
+import { PLANET_ART, SHIP_ART, UI_ART, planetArtFor } from "./assets";
 import { fmt, fmtCoords } from "./format";
 import type { NavPage } from "./nav";
+import { classPanelHtml } from "./render-class";
 import {
   buildingRow,
   defenseRow,
@@ -23,6 +32,7 @@ import {
   fleetComposer,
   fleetsInFlight,
   galaxyPanel,
+  hostileInboundHtml,
   reportsHtml,
   sensorContactsHtml,
   spyReportsHtml,
@@ -61,6 +71,18 @@ const FACILITY_BUILDINGS_PLANET: BuildingId[] = [
 const FACILITY_BUILDINGS_MOON: BuildingId[] = MOON_BUILDING_ORDER.filter(
   (id) => !RESOURCE_BUILDINGS.includes(id),
 );
+const MINI_RESOURCE_BUILDINGS: BuildingId[] = [
+  "metalMine",
+  "crystalMine",
+  "deutSynth",
+  "solarPlant",
+  "metalStorage",
+  "crystalStorage",
+  "deutTank",
+];
+const MINI_FACILITY_BUILDINGS: BuildingId[] = MINI_BUILDING_ORDER.filter(
+  (id) => !MINI_RESOURCE_BUILDINGS.includes(id),
+);
 
 function stubPanel(title: string, body: string, testId: string): string {
   return `
@@ -73,15 +95,20 @@ function stubPanel(title: string, body: string, testId: string): string {
 function overviewPage(view: PlayerView, busy: boolean): string {
   const { planet, economy } = view;
   const pm = economy.positionMult;
+  const loomBonus = economy.fields.mantleLoomBonus ?? 0;
+  const tempK = economy.temperatureK ?? 0;
+  const helio = economy.energy.helioBuoy ?? 0;
+  const solarTemp = economy.energy.solarTempFactor ?? 1;
   return `
     <section class="panel" data-testid="overview-panel">
       <h2>Overview</h2>
       <div class="overview-hero">
-        <img class="thumb thumb-lg" src="${planet.kind === "moon" ? PLANET_ART.moon : PLANET_ART.outpost}" alt="" width="72" height="72" />
+        <img class="thumb thumb-lg" src="${planetArtFor({ kind: planet.kind, flags: planet.flags, variant: "hero" })}" alt="" width="72" height="72" data-testid="overview-planet-art" />
         <div>
-          <p class="overview-name" data-testid="overview-planet-name">${escapeHtml(planet.name)}${planet.kind === "moon" ? " · Moon" : ""}</p>
+          <p class="overview-name" data-testid="overview-planet-name">${escapeHtml(planet.name)}${planet.flags?.mini ? " · Mini" : planet.kind === "moon" ? " · Moon" : ""}</p>
           <p class="coords">${fmtCoords(planet.coords)}</p>
-          <p class="hint" data-testid="planet-fields">Fields ${fmt(economy.fields.used)} / ${fmt(economy.fields.cap)} · ${fmt(economy.fields.remaining)} free</p>
+          <p class="hint" data-testid="planet-fields">Fields ${fmt(economy.fields.used)} / ${fmt(economy.fields.cap)} · ${fmt(economy.fields.remaining)} free${loomBonus > 0 ? ` · Mantle Loom +${fmt(loomBonus)}` : ""}</p>
+          <p class="hint" data-testid="planet-temperature">Temp ${fmt(tempK)} K · solar ×${solarTemp.toFixed(2)}${helio > 0 ? ` · Helio Buoy +${fmt(helio)}` : ""}</p>
         </div>
       </div>
       <form class="planet-rename" id="planet-rename-form" data-testid="planet-rename-form">
@@ -98,36 +125,79 @@ function overviewPage(view: PlayerView, busy: boolean): string {
       <h3 class="subhead">Build queues</h3>
       ${overviewQueuesHtml(view)}
       <p class="hint" data-testid="recommended-next">${escapeHtml(recommendedNext(view))}</p>
-    </section>`;
+    </section>
+    ${classPanelHtml(view, busy)}`;
 }
 
 function buildingsPage(view: PlayerView, busy: boolean): string {
   const { planet, universe, now } = view;
-  const resourceIds =
-    planet.kind === "moon"
+  const isMini = Boolean(planet.flags?.mini);
+  const resourceIds = isMini
+    ? MINI_RESOURCE_BUILDINGS
+    : planet.kind === "moon"
       ? RESOURCE_BUILDINGS.filter((id) =>
           MOON_BUILDING_ORDER.includes(id),
         )
       : RESOURCE_BUILDINGS;
-  const facilityIds =
-    planet.kind === "moon"
+  const facilityIds = isMini
+    ? MINI_FACILITY_BUILDINGS
+    : planet.kind === "moon"
       ? FACILITY_BUILDINGS_MOON
       : FACILITY_BUILDINGS_PLANET;
   return `
     <section class="panel" data-testid="buildings-panel">
       <h2>Buildings</h2>
       <p class="hint" data-testid="planet-fields">Fields ${fmt(view.economy.fields.used)} / ${fmt(view.economy.fields.cap)} · ${fmt(view.economy.fields.remaining)} free</p>
+      ${
+        isMini
+          ? `<p class="hint" data-testid="mini-planet-hint">Mini planet — rich mines + specials${
+              planet.flags?.miniKind && planet.flags.miniKind !== "standard"
+                ? ` · ${planet.flags.miniKind}`
+                : ""
+            }.</p>`
+          : ""
+      }
       <h3 class="subhead">Extraction &amp; storage</h3>
       ${resourceIds.map((id) => buildingRow(id, planet, universe.speed, now, busy)).join("")}
-      <h3 class="subhead">Structures</h3>
+      <h3 class="subhead">${isMini ? "Structures &amp; anomaly specials" : "Structures"}</h3>
       ${facilityIds.map((id) => buildingRow(id, planet, universe.speed, now, busy)).join("")}
       ${
         buildQueueHtml(planet, now) ||
-        (planet.kind === "moon"
+        (isMini
+          ? `<p class="hint">Minis allow normal buildings plus Rift Siphon, Echo Vault, Anomaly Forge, and Drift Beacon.</p>`
+          : planet.kind === "moon"
           ? `<p class="hint">Moons have no mines — expand crater structures on the moon.</p>`
           : `<p class="hint">One construction at a time. Upgrade the Solar Array if mines stall.</p>`)
       }
+      ${fortressRelocatePanel(view, busy)}
     </section>`;
+}
+
+function fortressRelocatePanel(view: PlayerView, busy: boolean): string {
+  const { planet } = view;
+  if (planet.flags?.miniKind !== "fortress") return "";
+  const aimG = planet.coords.galaxy;
+  const aimS = planet.coords.system;
+  const window = fortressRelocateLandingWindow(aimG, aimS);
+  const cost = fortressRelocateDeutCost(planet.coords, aimG, aimS);
+  const gMin = Math.max(1, planet.coords.galaxy - MINI_FORTRESS_RELOCATE_GALAXY_RANGE);
+  const gMax = Math.min(
+    MAP_GALAXIES,
+    planet.coords.galaxy + MINI_FORTRESS_RELOCATE_GALAXY_RANGE,
+  );
+  return `
+    <h3 class="subhead">Fortress jump</h3>
+    <p class="hint" data-testid="fortress-landing-window">
+      Aim a system in galaxy ${gMin}–${gMax}. Landing window for current aim:
+      <strong>${window.galaxy}:${window.systemMin}–${window.galaxy}:${window.systemMax}</strong>
+      (±${MINI_FORTRESS_RELOCATE_ACCURACY} systems). Free mini slot on landing. Est. cost at current aim: ${fmt(cost)} deut.
+    </p>
+    <form id="fortress-relocate-form" class="inline-form" data-testid="fortress-relocate-form">
+      <label>Galaxy <input id="fortress-aim-galaxy" name="galaxy" type="number" min="${gMin}" max="${gMax}" value="${aimG}" ${busy ? "disabled" : ""} /></label>
+      <label>System <input id="fortress-aim-system" name="system" type="number" min="1" max="${MAP_SYSTEMS}" value="${aimS}" ${busy ? "disabled" : ""} /></label>
+      <button type="submit" ${busy ? "disabled" : ""}>Jump</button>
+    </form>
+  `;
 }
 
 function researchPage(view: PlayerView, busy: boolean): string {
@@ -145,11 +215,18 @@ function researchPage(view: PlayerView, busy: boolean): string {
 
 function shipyardPage(view: PlayerView, busy: boolean): string {
   const { planet, now } = view;
+  const classId = view.player.playerClass?.classId ?? null;
+  const buildable = SHIP_ORDER.filter((id) => shipClassAllowed(id, classId));
   const hangarEmpty = SHIP_ORDER.every((id) => (planet.ships[id] ?? 0) <= 0);
   return `
     <section class="panel" data-testid="hull-bay-panel">
       <h2>Shipyard</h2>
-      ${SHIP_ORDER.map((id) => shipRow(id, planet, busy)).join("")}
+      ${
+        classId == null
+          ? `<p class="hint" data-testid="shipyard-need-class">Choose a class on Overview to unlock class-exclusive hulls.</p>`
+          : ""
+      }
+      ${buildable.map((id) => shipRow(id, planet, busy)).join("")}
       ${
         shipQueueHtml(planet, now) ||
         `<p class="hint">Raise the Shipyard facility to unlock hulls.</p>`
@@ -197,6 +274,7 @@ function fleetPage(
       <h2>Fleets &amp; missions</h2>
       ${fleetComposer(view, busy, fleetDraft)}
       ${fleetsInFlight(fleets, view.roster, view.now)}
+      ${hostileInboundHtml(view.hostileInbound ?? [], view.roster, view.now)}
       ${sensorContactsHtml(view.sensorContacts ?? [], view.roster, view.now)}
       ${reportsHtml(reports, view.player.id)}
       ${spyReportsHtml(spyReports)}

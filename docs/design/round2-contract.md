@@ -328,54 +328,66 @@ Unlock table (which ship types appear in pirate hangars by level): level 0–2 l
 
 ## 6. Mini planets
 
+> **Micah revision (latest overrides).** Tunables in `packages/game/src/data/tuning.ts`.
+
 ### Spawning
 
-- Outside normal slots **1–16**: use synthetic coords `galaxy:system:slot` with **`slot >= 20`** (reserved band `20–29`), or stable id `mini:{galaxy}:{system}:{n}` plus display coords.
-- Density (v1): ~1 mini planet per **80** systems (≈50 / universe), rolled at universe create + rare expedition “seed” events.
-- Size: fields cap **80–140**; no slot production curve (use slot-8 neutral mults).
+- Outside normal slots **1–16**: synthetic coords with **`slot` in `20–29`**; stable planet id (coords may drift).
+- Density (standard): ~1 mini per **`MINI_SYSTEMS_PER` (= 5)** systems. **Multiple minis OK in the same system** (different mini slots).
+- Size: fields **`MINI_FIELDS_MIN`–`MINI_FIELDS_MAX`**; production × **`MINI_RICH_MINE_MULT`**.
+- **Drift:** periodically shift system (same galaxy); ownership kept across moves.
+- **Destroyed → rediscoverable immediately** (no respawn timer): a fresh unclaimed mini of the same kind is seeded into the pool at once.
+- **Super-rares** (very low spawn): `ironwater` | `fortress` | `relic` via `planet.flags.miniKind`.
 
 ```ts
-interface MiniPlanetMeta {
-  isMini: true;
-  discoveredBy: string[];     // playerIds who know coords
-  specialOnly: true;          // only special buildings + shipyard/storages subset
-}
-
-// PlanetState.kind stays "planet"; flag:
-// planet.flags?.mini === true
+flags?: {
+  mini?: boolean;
+  miniKind?: "standard" | "ironwater" | "fortress" | "relic";
+  relicWorld?: boolean; // set when miniKind === "relic"; pirate raid weight ×4
+};
+discoveredBy?: string[];
+lastDriftAt?: number;
+colonizedAt?: number;  // first successful colonize; drives 8h galaxy reveal
 ```
 
-### Discovery
+### Discovery & visibility
 
-- Expedition outcome kind `miniPlanet`: reveals coords **only to finder** (`discoveredBy`).
-- Galaxy UI: show mini row only if viewer ∈ `discoveredBy` or owns it.
-- Colonize with **Outpost Cradle** (`colonyShip`) once discovered; counts toward colony cap.
+- Expedition outcome `miniPlanet`: reveals coords **only to finder** (`discoveredBy`).
+- Galaxy UI: show mini if viewer discovered it, owns it, **or** `now >= colonizedAt + MINI_GALAXY_VISIBLE_AFTER_MS` (8h after first colonize → visible to **all**).
+- Claim **unoccupied** mini: **Colonizer only** (`colonyShip`) via separate `colonize` mission; counts toward colony cap.
 
-### Special-only buildings (3–4)
+### Buildings
+
+**Normal planet buildings allowed** + four specials as extras (moon-only still blocked):
 
 | Id | Display | Effect (v1) |
 |----|---------|-------------|
 | `riftSiphon` | **Rift Siphon** | +15% all mine output on this body per level (max 5) |
 | `echoVault` | **Echo Vault** | +25% storage caps per level (max 5) |
 | `anomalyForge` | **Anomaly Forge** | −8% ship build time per level (max 5) |
-| `driftBeacon` | **Drift Beacon** | +1 expedition slot at level 1; level 2+ unused stub |
+| `driftBeacon` | **Drift Beacon** | +1 expedition slot at level 1 |
 
-Blocked: normal mines/lab optional — **mines blocked**; lab blocked; moon buildings blocked. Allowed: specials + Solar Array + storages + Shipyard + defenses.
+### Contested combat (after colonized)
 
-### Capture / destroy (after colonized)
-
-Attacker wins raid on mini planet **and** brings **≥ 5 World Eaters**:
-
-| Choice | Effect |
-|--------|--------|
-| **Capture** | Ownership transfer to attacker; buildings remain; defender fleets that survived retreat home if possible else destroyed |
-| **Destroy** | Planet deleted; payout `×3` of current resources to attacker cargo (overflow → lost); debris = `0.5 × building residual cost` metal/crystal; World Eaters **cannot collect** debris (need Salvage Trawler) |
-
-UI: post-battle prompt when conditions met; default **Capture** if omitted in API for v1 tests.
+| Outcome | Gate | Effect |
+|---------|------|--------|
+| **Vacate** | Any attacker **win** vs owner **without** Void Titan / Mothership / World Eater | Owner removed; mini **unoccupied**; buildings remain; **that same fleet cannot capture** — need a later Colonizer mission |
+| **Capture** | Attacker win **and** fleet has ≥1 **Void Titan or Mothership or World Eater** | Ownership transfer (direct); one-MF / one-Relic per player still enforced |
+| **Destroy** | Attacker win **and ≥1 World Eater** | Planet deleted; massive metal/crystal payout + debris (**never deut**); immediate reseed into discoverable pool |
 
 ```http
-POST /api/fleet/mini-resolve { playerId, fleetId, choice: "capture" | "destroy" }
+POST /api/mini-resolve { playerId, fleetId, choice: "capture" | "destroy" }
 ```
+
+Default on return when pending: **capture** if fleet can direct-capture; else vacate already applied at combat.
+
+### Super-rares
+
+| Kind | Rules |
+|------|--------|
+| **Ironwater Rock** | Deut **`MINI_IRONWATER_DEUT_MULT`** (10× best normal slot) vs slot-8 baseline. |
+| **Moving Fortress** | Jump: aim **current galaxy or ±1**; pay deut (`MINI_FORTRESS_RELOCATE_DEUT_*`); land random system within **±`MINI_FORTRESS_RELOCATE_ACCURACY` (10)** of aim (clamped 1–399), any free mini slot. UI shows landing window. Blank espionage; no hostile inbound warning; battlefield shields×3 / attack×2 / armor×0.25; **one per player**. |
+| **Relic World** | +30% research speed, +25% expedition finds; pirate weight up; **one per player**. |
 
 ---
 
@@ -429,7 +441,7 @@ On success: moon deleted; parent `moonId` cleared; fleets on moon → debris 50%
 | Speed | `600` |
 | Fuel / distance | `4` |
 
-Also required (≥5) to capture/destroy mini planets; counts toward moon-kill chance with Void Titans.
+Can **destroy** mini planets (≥1 survived on win); capture no longer gates on World Eater count. Counts toward moon-kill chance with Void Titans.
 
 ### 7.3 Swarm Drone (`swarmDrone`)
 
@@ -558,7 +570,7 @@ Existing RF table unchanged otherwise.
 - Intercept damage redirection
 - Harvester kamikaze threshold
 - Occupation start/expiry/recapture
-- World Eater cannot recycle; mini destroy/capture gates on count ≥ 5
+- World Eater cannot recycle; mini **destroy** needs ≥1 WE; mini **capture** is any raid win (no WE gate)
 
 ---
 
@@ -585,7 +597,7 @@ interface PlanetState {
   buildingQueue: BuildingQueueItem[];  // array
   shipQueue: ShipQueueItem[];
   defenseQueue: DefenseQueueItem[];
-  flags?: { mini?: boolean };
+  flags?: { mini?: boolean; relicWorld?: boolean };
 }
 ```
 
