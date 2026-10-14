@@ -3,6 +3,7 @@ import {
   MAP_GALAXIES,
   MAP_SLOTS,
   MAP_SYSTEMS,
+  NEWBIE_PROTECTION_POINTS,
 } from "./catalog.js";
 import {
   empireColonyCap,
@@ -22,6 +23,7 @@ import type {
 } from "./types.js";
 import { planetAtCoords } from "./world-bootstrap.js";
 import { pirateBaseAtCoords } from "./world-pirates.js";
+import { isNewbieProtected } from "./world-protection.js";
 import { getDebris } from "./world-tick.js";
 
 export type LaunchTargetResult =
@@ -215,6 +217,14 @@ export function resolveLaunchTarget(
         return {
           ok: false,
           error: "Use transport or deploy to move between your own planets.",
+        };
+      }
+      const defender = universe.players[targetPlanet.ownerPlayerId];
+      if (defender && isNewbieProtected(universe, defender)) {
+        const cap = NEWBIE_PROTECTION_POINTS.toLocaleString("en-US");
+        return {
+          ok: false,
+          error: `Target is under newbie protection (under ${cap} points).`,
         };
       }
     } else if (mission === "espionage") {

@@ -48,6 +48,10 @@ import {
   grantPirateFleetKillStarshards,
 } from "./world-boosts.js";
 import { emptyCargo, planetAtCoords } from "./world-bootstrap.js";
+import {
+  pirateRaidPickWeight,
+  recordSuccessfulPirateRaid,
+} from "./world-protection.js";
 import { subtractCargo } from "./world-tick.js";
 
 const PIRATE_NAMES = [
@@ -347,6 +351,36 @@ function planetDefensePower(planet: PlanetState, universe: UniverseState): numbe
   );
 }
 
+/**
+ * Weighted planet pick for pirate NPC raids.
+ * Newbie-protected empires weigh 0; under 100k pts lose 1% of original
+ * weight per successful pirate raid that UTC day (CHANGE #15 / #18).
+ */
+function pickWeightedPlanet(
+  universe: UniverseState,
+  planets: PlanetState[],
+  roll: number,
+  now: number,
+): PlanetState | null {
+  const weighted: { planet: PlanetState; weight: number }[] = [];
+  let total = 0;
+  for (const planet of planets) {
+    const owner = universe.players[planet.ownerPlayerId];
+    if (!owner) continue;
+    const weight = pirateRaidPickWeight(universe, owner, now);
+    if (weight <= 0) continue;
+    weighted.push({ planet, weight });
+    total += weight;
+  }
+  if (weighted.length === 0 || total <= 0) return null;
+  let cursor = (roll % 1_000_000) / 1_000_000 * total;
+  for (const entry of weighted) {
+    cursor -= entry.weight;
+    if (cursor <= 0) return entry.planet;
+  }
+  return weighted[weighted.length - 1]!.planet;
+}
+
 function pickRaidTarget(
   universe: UniverseState,
   base: PirateBase,
@@ -362,8 +396,9 @@ function pickRaidTarget(
   );
 
   if (planets.length > 0 && (others.length === 0 || roll % 10 < 7)) {
-    const planet = planets[roll % planets.length]!;
-    return { kind: "planet", planet };
+    const planet = pickWeightedPlanet(universe, planets, roll, now);
+    if (planet) return { kind: "planet", planet };
+    // All player targets filtered (newbie / zero weight) — try pirates.
   }
   if (others.length > 0) {
     const other = others[roll % others.length]!;
@@ -422,6 +457,8 @@ function applyPirateRaidOnPlanet(
   } else {
     grantPlayerXp(owner, xpForCombatLose());
   }
+  // Successful pirate raid for fairness (#18) — not alien; fires when raid lands.
+  recordSuccessfulPirateRaid(owner, now);
   universe.players[owner.id] = owner;
 
   if (fleetShipCount(base.ships) <= 0) {

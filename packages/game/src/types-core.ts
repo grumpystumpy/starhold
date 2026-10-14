@@ -135,7 +135,7 @@ export type FleetPresetIntent =
 export interface FleetPreset {
   id: string;
   name: string;
-  /** Ship type → count. Display names come from the ship catalog (Outpost Cradle, Swarm Mothership, …). */
+  /** Ship type → count. Display names come from the ship catalog (Colonizer, Mothership, …). */
   ships: Partial<FleetShips>;
   builtIn: boolean;
   intent: FleetPresetIntent;

@@ -152,6 +152,14 @@ export interface PlayerState {
   fleetPresets?: FleetPreset[];
   /** Round 3 player class (Miner / Explorer / Fleeter / Expansionist). */
   playerClass?: PlayerClassState;
+  /**
+   * Pirate raid fairness (CHANGE #18): successful pirate NPC raids on this
+   * player for a UTC day. Lazy daily reset by `dayKey`. Aliens exempt.
+   */
+  pirateRaidFairness?: {
+    dayKey: string;
+    successfulRaids: number;
+  };
 }
 
 export interface UniverseState {

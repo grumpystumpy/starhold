@@ -125,6 +125,31 @@ export function roughPoints(
   return Math.floor(points);
 }
 
+/** Empire total: all planets + in-flight ships + research once. */
+export function empirePoints(
+  universe: {
+    planets: Record<string, PlanetState>;
+    fleets: Record<string, { ownerPlayerId: string; ships: FleetShips }>;
+  },
+  player: {
+    research: ResearchLevels;
+    planetIds?: string[];
+    id: string;
+  },
+): number {
+  let points = researchPoints(player.research);
+  for (const id of player.planetIds ?? []) {
+    const planet = universe.planets[id];
+    if (planet) points += planetPoints(planet);
+  }
+  for (const fleet of Object.values(universe.fleets)) {
+    if (fleet.ownerPlayerId === player.id) {
+      points += shipStockPoints(fleet.ships);
+    }
+  }
+  return Math.floor(points);
+}
+
 export function economySnapshot(
   planet: PlanetState,
   universeSpeed = 1,

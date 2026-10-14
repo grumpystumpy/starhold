@@ -68,6 +68,11 @@ export {
   playerView,
   publicRoster,
 } from "./world-view.js";
+export {
+  isNewbieProtected,
+  pirateRaidPickWeight,
+  recordSuccessfulPirateRaid,
+} from "./world-protection.js";
 export { pruneSpyReports } from "./world-spy-prune.js";
 export {
   expeditionKindFromRoll,
