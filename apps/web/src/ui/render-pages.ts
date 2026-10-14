@@ -70,6 +70,34 @@ function stubPanel(title: string, body: string, testId: string): string {
     </section>`;
 }
 
+function goalsHtml(view: PlayerView, busy: boolean): string {
+  const goals = view.goals ?? [];
+  if (!goals.length) return "";
+  const daily = goals.filter((g) => g.cadence === "daily");
+  const weekly = goals.filter((g) => g.cadence === "weekly");
+  const row = (g: (typeof goals)[number]) => {
+    const status = g.claimed
+      ? "Claimed"
+      : g.claimable
+        ? "Ready"
+        : `${fmt(g.progress)} / ${fmt(g.target)}`;
+    const btn =
+      g.claimable && !busy
+        ? `<button type="button" class="ghost" data-claim-goal="${escapeAttr(g.id)}" data-testid="claim-goal-${escapeAttr(g.id)}">Claim</button>`
+        : `<button type="button" class="ghost" disabled data-testid="claim-goal-${escapeAttr(g.id)}">${g.claimed ? "Claimed" : "In progress"}</button>`;
+    return `<li data-testid="goal-${escapeAttr(g.id)}"><div><strong>${escapeHtml(g.name)}</strong> · ${escapeHtml(status)}<br/><span class="meta">${escapeHtml(g.description)} · ${escapeHtml(g.rewardLabel)}</span></div>${btn}</li>`;
+  };
+  return `
+    <h3 class="subhead">Goals</h3>
+    <div class="goals-panel" data-testid="goals-panel">
+      <h4 class="goals-cadence">Daily</h4>
+      <ul class="goals-list" data-testid="goals-daily">${daily.map(row).join("")}</ul>
+      <h4 class="goals-cadence">Weekly</h4>
+      <ul class="goals-list" data-testid="goals-weekly">${weekly.map(row).join("")}</ul>
+    </div>
+  `;
+}
+
 function overviewPage(view: PlayerView, busy: boolean): string {
   const { planet, economy } = view;
   const pm = economy.positionMult;
@@ -95,6 +123,7 @@ function overviewPage(view: PlayerView, busy: boolean): string {
       <p class="hint" data-testid="position-mult" title="Position production multipliers for this slot">
         Position × metal ${pm.metal.toFixed(2)} · crystal ${pm.crystal.toFixed(2)} · deut ${pm.deuterium.toFixed(2)} · energy ${pm.energy.toFixed(2)}
       </p>
+      ${goalsHtml(view, busy)}
       <h3 class="subhead">Build queues</h3>
       ${overviewQueuesHtml(view)}
       <p class="hint" data-testid="recommended-next">${escapeHtml(recommendedNext(view))}</p>

@@ -48,6 +48,7 @@ import {
   grantPirateFleetKillStarshards,
 } from "./world-boosts.js";
 import { emptyCargo, planetAtCoords } from "./world-bootstrap.js";
+import { noteGoalProgress } from "./world-goals.js";
 import { subtractCargo } from "./world-tick.js";
 
 const PIRATE_NAMES = [
@@ -545,6 +546,7 @@ export function resolvePirateRaidArrival(
           xpForPirateShipKills(killed),
       );
       universe.players[owner.id] = owner;
+      noteGoalProgress(universe, owner.id, "pirateWin", 1, now);
     }
   } else if (owner) {
     grantPlayerXp(owner, xpForCombatLose());
