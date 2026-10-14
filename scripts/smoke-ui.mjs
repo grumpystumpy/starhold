@@ -146,6 +146,18 @@ async function apiSmoke() {
     throw new Error(`victim join failed: ${JSON.stringify(victim)}`);
   }
 
+  // Clear newbie protection on the victim so PvP raid e2e still runs.
+  const graduated = await apiJson("/api/e2e/graduate-newbie", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId: victim.player.id }),
+  });
+  if (graduated.error) {
+    throw new Error(
+      `graduate-newbie hook failed (is ALLOW_E2E_HOOKS=1?): ${JSON.stringify(graduated)}`,
+    );
+  }
+
   const launch = await apiJson("/api/launch-fleet", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -490,6 +502,18 @@ async function uiSmoke() {
   });
   await rivalPage.waitForSelector('[data-testid="resources"]', { timeout: 15_000 });
   logs.push(`rival-join:${rivalName}`);
+  const rivalId = await rivalPage.evaluate(() => window.starhold?.getState()?.player?.id);
+  if (rivalId) {
+    const grad = await apiJson("/api/e2e/graduate-newbie", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId: rivalId }),
+    });
+    if (grad.error) {
+      throw new Error(`UI rival graduate failed: ${JSON.stringify(grad)}`);
+    }
+    logs.push("rival-graduated");
+  }
 
   await page.reload({ waitUntil: "networkidle" });
   const hasResources = await page.locator('[data-testid="resources"]').count();
