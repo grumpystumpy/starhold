@@ -1,10 +1,14 @@
 import { SHIPS, SHIP_ORDER } from "./catalog.js";
 import {
   canAfford,
+  classBonuses,
   fleetShipCount,
   flightSecondsOneWay,
   fuelCostOneWay,
+  isStationaryShip,
+  jumpGateCooldownMs,
   levelBonuses,
+  lineDrummerFleetSpeedMult,
   maxFleetSlots,
   normalizeFleetShips,
   spend,
@@ -93,14 +97,25 @@ export function launchFleet(
   if (fleetShipCount(ships) < 1) {
     return { ok: false, error: "Select at least one ship." };
   }
+  for (const id of SHIP_ORDER) {
+    if ((ships[id] ?? 0) > 0 && isStationaryShip(id)) {
+      return {
+        ok: false,
+        error: `${SHIPS[id].name} cannot join fleets (stationary).`,
+      };
+    }
+  }
 
   advanceUniverse(universe, now);
   const origin = resolveActionPlanet(universe, player, opts.originPlanetId);
   if (!origin) return { ok: false, error: "Planet missing." };
 
   const boosts = playerBoosts(player, now);
+  const cls = classBonuses(player.playerClass?.classId);
   const slotCap =
-    maxFleetSlots(player.research.computerTech) + boosts.fleetSlots;
+    maxFleetSlots(player.research.computerTech) +
+    boosts.fleetSlots +
+    cls.fleetSlots;
   const activeFleets = Object.values(universe.fleets).filter(
     (f) => f.ownerPlayerId === player.id,
   ).length;
@@ -183,7 +198,34 @@ export function launchFleet(
     deuterium: fuel,
   });
 
+  if (opts.mission === "jump") {
+    if ((origin.jumpReadyAt ?? 0) > now) {
+      const wait = Math.ceil(((origin.jumpReadyAt ?? 0) - now) / 1000);
+      return {
+        ok: false,
+        error: `Fold Bridge cooling down (${wait}s remaining).`,
+      };
+    }
+  }
+
   const lb = levelBonuses(player.level ?? 1);
+  let fleetSpeedMult =
+    Math.max(0.01, boosts.fleetSpeed) *
+    cls.fleetSpeed *
+    lineDrummerFleetSpeedMult(ships);
+  const onlyProbes =
+    (ships.probe ?? 0) > 0 &&
+    !SHIP_ORDER.some((id) => id !== "probe" && (ships[id] ?? 0) > 0);
+  if (onlyProbes) fleetSpeedMult *= cls.probeSpeed;
+  const onlyColony =
+    ((ships.colonyShip ?? 0) > 0 || (ships.foundationArk ?? 0) > 0) &&
+    !SHIP_ORDER.some(
+      (id) =>
+        id !== "colonyShip" &&
+        id !== "foundationArk" &&
+        (ships[id] ?? 0) > 0,
+    );
+  if (onlyColony) fleetSpeedMult *= cls.colonyShipSpeed;
   const oneWay =
     opts.mission === "jump"
       ? 1
@@ -191,8 +233,8 @@ export function launchFleet(
           origin.coords,
           targetCoords,
           ships,
-          // Stack: base → combustion → level time → officers/skills fleetSpeed.
-          (universe.fleetSpeed * Math.max(0.01, boosts.fleetSpeed)) /
+          // Stack: base → combustion → level → officers/skills → class → Line Drummer.
+          (universe.fleetSpeed * fleetSpeedMult) /
             Math.max(0.01, lb.fleetTime),
           player.research.combustionDrive ?? 0,
         );
@@ -214,6 +256,10 @@ export function launchFleet(
     phase: "outbound",
     reportId: null,
   };
+
+  if (opts.mission === "jump") {
+    origin.jumpReadyAt = now + jumpGateCooldownMs(player, universe);
+  }
 
   universe.fleets[fleetId] = fleet;
   universe.planets[origin.id] = origin;

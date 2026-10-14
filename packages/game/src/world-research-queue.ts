@@ -1,6 +1,8 @@
 import { RESEARCH } from "./catalog.js";
 import {
+  astrolabeResearchTimeMult,
   canAfford,
+  classBonuses,
   levelBonuses,
   researchUpgradeCost,
   researchUpgradeSeconds,
@@ -66,11 +68,16 @@ export function queueResearch(
 
   const researchSpeed = playerBoosts(player, now).researchSpeed;
   const lb = levelBonuses(player.level ?? 1);
-  // Stack: base → lab → level → officers/skills researchSpeed.
+  const cls = classBonuses(player.playerClass?.classId);
+  const astrolabe = astrolabeResearchTimeMult(universe, player.id);
+  // Stack: base → lab → level → officers/skills → class → Astrolabe Wing.
   const seconds = Math.max(
     1,
     Math.ceil(
-      (researchUpgradeSeconds(researchId, current, lab) * lb.researchTime) /
+      (researchUpgradeSeconds(researchId, current, lab) *
+        lb.researchTime *
+        cls.researchTime *
+        astrolabe) /
         universe.speed /
         Math.max(0.01, researchSpeed),
     ),

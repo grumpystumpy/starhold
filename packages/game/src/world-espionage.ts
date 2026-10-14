@@ -18,9 +18,13 @@ export function resolveEspionage(
   if (!spy || !targetOwner) return;
 
   const spyBoost = playerBoosts(spy, now).espionageLevel;
-  const detail = espionageDetail(
-    (spy.research.espionageTech ?? 0) + spyBoost,
-    target.buildings.researchLab ?? 0,
+  const wingBonus = (fleet.ships.astrolabeWing ?? 0) >= 1 ? 1 : 0;
+  const detail = Math.min(
+    3,
+    espionageDetail(
+      (spy.research.espionageTech ?? 0) + spyBoost,
+      target.buildings.researchLab ?? 0,
+    ) + wingBonus,
   );
   const reportId = `spy_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
   const report: EspionageReport = {

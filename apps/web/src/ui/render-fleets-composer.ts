@@ -133,7 +133,8 @@ export function fleetComposer(
     selected = options[0]?.match(/value="([^"]+)"/)?.[1] ?? "";
   }
 
-  const shipInputs = SHIP_ORDER.map((id) => {
+  const shipInputs = SHIP_ORDER.filter((id) => !SHIPS[id].stationary)
+    .map((id) => {
     const have = view.planet.ships[id] ?? 0;
     const raw = draft?.counts[id] ?? 0;
     const value = Math.min(have, Math.max(0, raw));

@@ -22,10 +22,10 @@ import {
 } from "./index.js";
 
 describe("Round 2 multi-item queues", () => {
-  it("schema version is 3", () => {
-    assert.equal(UNIVERSE_SCHEMA_VERSION, 3);
+  it("schema version is 4", () => {
+    assert.equal(UNIVERSE_SCHEMA_VERSION, 4);
     const u = createUniverse("Queue Drift", 8);
-    assert.equal(u.schemaVersion, 3);
+    assert.equal(u.schemaVersion, 4);
   });
 
   it("base caps are 2/2/2/1 with hard cap 8", () => {
@@ -250,16 +250,17 @@ describe("Round 2 multi-item queues", () => {
 
     const result = migrateOrResetUniverse(universe);
     assert.equal(result.didReset, false);
-    assert.equal(result.universe.schemaVersion, 3);
+    assert.equal(result.universe.schemaVersion, 4);
     assert.ok(Array.isArray(result.universe.planets[planet.id].buildQueue));
     assert.equal(result.universe.planets[planet.id].buildQueue.length, 1);
     assert.ok(result.universe.planets[planet.id].buildQueue[0]!.id);
     assert.ok(Array.isArray(result.universe.players[player.id].researchQueue));
     assert.equal(result.universe.players[player.id].researchQueue.length, 1);
+    assert.ok(result.universe.players[player.id].playerClass);
 
     // Idempotent
     migrateUniverseV2ToV3(result.universe);
-    assert.equal(result.universe.schemaVersion, 3);
+    assert.equal(result.universe.schemaVersion, 4);
     assert.equal(result.universe.planets[planet.id].buildQueue.length, 1);
   });
 
