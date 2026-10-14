@@ -2,6 +2,7 @@ import type { OfficerId } from "@starhold/game";
 import {
   activateOfficerHire,
   claimDaily,
+  claimGoal,
   unlockSkillNode,
 } from "./api";
 import { clearFlash, schedulePaint, session, setFlash } from "./session";
@@ -18,6 +19,25 @@ export async function doClaimDaily(): Promise<void> {
     setFlash(
       "error",
       err instanceof Error ? err.message : "Daily claim failed.",
+    );
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doClaimGoal(goalId: string): Promise<void> {
+  if (!session.view || session.busy) return;
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    session.view = await claimGoal(session.view.player.id, goalId);
+    setFlash("notice", "Goal reward claimed.");
+  } catch (err) {
+    setFlash(
+      "error",
+      err instanceof Error ? err.message : "Goal claim failed.",
     );
   } finally {
     session.busy = false;
