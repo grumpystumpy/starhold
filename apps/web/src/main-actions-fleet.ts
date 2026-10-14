@@ -46,6 +46,7 @@ export async function doLaunchFleet(opts: {
   targetCoords?: Coordinates;
   asteroidId?: string;
   pirateBaseId?: string;
+  alienBaseId?: string;
   cargo?: Partial<Resources>;
 }): Promise<void> {
   if (!session.view) return;
