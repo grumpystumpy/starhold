@@ -38,6 +38,7 @@ const MISSIONS: MissionType[] = [
   "harvestAsteroid",
   "expedition",
   "pirateRaid",
+  "alienRaid",
   "jump",
 ];
 
@@ -49,6 +50,7 @@ export interface LaunchFleetOpts {
   targetCoords?: Coordinates;
   asteroidId?: string;
   pirateBaseId?: string;
+  alienBaseId?: string;
   cargo?: Partial<Resources>;
   now?: number;
   originPlanetId?: string;
@@ -136,6 +138,7 @@ export function launchFleet(
     opts.targetCoords,
     opts.asteroidId,
     opts.pirateBaseId,
+    opts.alienBaseId,
   );
   if (!target.ok) return target;
   const {
@@ -144,6 +147,7 @@ export function launchFleet(
     targetPlayerId,
     targetAsteroidId,
     targetPirateBaseId,
+    targetAlienBaseId,
   } = target;
 
   for (const id of SHIP_ORDER) {
@@ -248,6 +252,7 @@ export function launchFleet(
     targetCoords,
     targetAsteroidId,
     targetPirateBaseId,
+    targetAlienBaseId,
     mission: opts.mission,
     ships: { ...ships },
     cargo: { ...cargo },
