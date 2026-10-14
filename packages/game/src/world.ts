@@ -34,6 +34,24 @@ export {
 } from "./world-migrate.js";
 export type { LaunchFleetOpts } from "./world-launch.js";
 export { launchFleet } from "./world-launch.js";
+export type {
+  BuiltinPresetId,
+  PresetActionResult,
+} from "./world-fleet-presets.js";
+export {
+  BUILTIN_PRESET_IDS,
+  deleteFleetPreset,
+  expeditionPresetShips,
+  ensurePlayerFleetPresets,
+  getFleetPreset,
+  listFleetPresets,
+  saveFleetPreset,
+} from "./world-fleet-presets.js";
+export type { BatchFleetResult } from "./world-fleet-batch.js";
+export {
+  batchScanSystem,
+  launchMaxExpeditions,
+} from "./world-fleet-batch.js";
 export {
   empirePoints,
   galaxyViewFor,
@@ -130,4 +148,3 @@ export {
   resolveMiniPlanetChoice,
   swarmProduce,
 } from "./world-round2.js";
-
