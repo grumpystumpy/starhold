@@ -26,6 +26,45 @@ async function waitHealthy(ms = 60_000) {
   throw new Error("API health timeout");
 }
 
+function coordDistance(a, b) {
+  return (
+    Math.abs(a.galaxy - b.galaxy) * 100 +
+    Math.abs(a.system - b.system) * 10 +
+    Math.abs(a.slot - b.slot)
+  );
+}
+
+/** Closest foreign homeworld so a probe deploy round-trips in seconds, not minutes. */
+async function nearestRivalPlanet(selfId, origin) {
+  const load = async () => {
+    const res = await fetch(`${API}/api/universe`);
+    if (!res.ok) throw new Error(`universe ${res.status}`);
+    return res.json();
+  };
+  let uni = await load();
+  const others = () =>
+    (uni.players ?? []).filter(
+      (p) => p.id !== selfId && p.planetId && p.coords,
+    );
+  if (others().length === 0) {
+    const joined = await fetch(`${API}/api/join`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: `Rival${Date.now().toString(36).slice(-6)}` }),
+    });
+    if (!joined.ok) {
+      throw new Error(`rival join ${joined.status} ${await joined.text()}`);
+    }
+    uni = await load();
+  }
+  const candidates = others();
+  if (candidates.length === 0) throw new Error("no rival planet to deploy to");
+  candidates.sort(
+    (a, b) => coordDistance(origin, a.coords) - coordDistance(origin, b.coords),
+  );
+  return candidates[0];
+}
+
 async function assertFitsViewport(page, testId) {
   const box = await page.getByTestId(testId).boundingBox();
   const viewport = page.viewportSize();
@@ -117,9 +156,9 @@ async function main() {
   );
   logs.push("shipyard_ready");
 
-  await page.evaluate(() => window.starhold.buildShip("probe", 1));
+  await page.evaluate(() => window.starhold.buildShip("probe", 2));
   await page.waitForFunction(
-    () => (window.starhold?.getState()?.ships?.probe ?? 0) >= 1,
+    () => (window.starhold?.getState()?.ships?.probe ?? 0) >= 2,
     undefined,
     { timeout: 30_000 },
   );
@@ -128,36 +167,66 @@ async function main() {
   const coords = await page.getByTestId("planet-coords").innerText();
   const match = coords.match(/(\d+):(\d+):(\d+)/);
   if (!match) throw new Error(`could not read coords from ${coords}`);
-  const galaxy = Number(match[1]);
-  const system = Number(match[2]);
-  const launched = await page.evaluate(
-    async ({ galaxy, system }) => {
-      try {
-        await window.starhold.launch({
-          mission: "expedition",
-          ships: { probe: 1 },
-          targetCoords: { galaxy, system, slot: 16 },
-        });
-        return { ok: true, error: window.starhold.getState().error };
-      } catch (err) {
-        return { ok: false, error: String(err) };
-      }
-    },
-    { galaxy, system },
+  const origin = {
+    galaxy: Number(match[1]),
+    system: Number(match[2]),
+    slot: Number(match[3]),
+  };
+  const selfId = await page.evaluate(
+    () => window.starhold?.getState()?.playerId ?? null,
   );
-  if (!launched.ok || launched.error) {
-    throw new Error(`expedition launch failed: ${launched.error ?? "unknown"}`);
+  if (!selfId) throw new Error("missing player id after probe build");
+  const rival = await nearestRivalPlanet(selfId, origin);
+  const launched = await page.evaluate(async (targetPlanetId) => {
+    try {
+      await window.starhold.launch({
+        mission: "deploy",
+        ships: { probe: 2 },
+        targetPlanetId,
+      });
+      const st = window.starhold.getState();
+      const fleet = st.fleets?.[0] ?? null;
+      return {
+        ok: true,
+        error: st.error,
+        fleets: st.fleets?.length ?? 0,
+        mission: fleet?.mission ?? null,
+        phase: fleet?.phase ?? null,
+        arrivesInMs: fleet ? fleet.arrivesAt - Date.now() : null,
+        ships: fleet?.ships ?? null,
+      };
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  }, rival.planetId);
+  if (!launched.ok || launched.error || launched.fleets < 1) {
+    throw new Error(
+      `deploy launch failed: ${launched.error ?? "no fleet"} (fleets=${launched.fleets ?? 0})`,
+    );
   }
-  logs.push("expedition_launched");
-
-  await page.waitForFunction(
-    () =>
-      (window.starhold?.getState()?.eventLog ?? []).some(
-        (entry) => entry.kind === "fleetReturn",
-      ),
-    undefined,
-    { timeout: 40_000 },
+  if (launched.mission !== "deploy" || launched.ships?.probe !== 2) {
+    throw new Error(`expected probe deploy, got ${JSON.stringify(launched)}`);
+  }
+  logs.push(
+    `deploy_launched_${rival.coords.galaxy}:${rival.coords.system}:${rival.coords.slot}`,
   );
+
+  const oneWayMs = Math.max(8_000, launched.arrivesInMs ?? 8_000);
+  try {
+    await page.waitForFunction(
+      () =>
+        (window.starhold?.getState()?.eventLog ?? []).some(
+          (entry) => entry.kind === "fleetReturn",
+        ),
+      undefined,
+      { timeout: oneWayMs * 2 + 12_000 },
+    );
+  } catch (err) {
+    const snap = await page.evaluate(() => window.starhold?.getState() ?? null);
+    throw new Error(
+      `fleet return missing: ${err instanceof Error ? err.message : err} state=${JSON.stringify(snap)}`,
+    );
+  }
   logs.push("fleet_return_event");
 
   await page.getByTestId("nav-messages").click();
@@ -176,17 +245,22 @@ async function main() {
   logs.push(`badge_${badge.trim()}`);
 
   await page.getByTestId("inbox-filter-alerts").click();
-  await page
-    .locator('[data-testid^="message-fleetReturn-"]')
-    .first()
-    .waitFor({ timeout: 5_000 });
-  if (
-    (await page.locator('[data-testid^="message-combat-"]').count()) +
-      (await page.locator('[data-testid^="message-expedition-"]').count()) >
-    0
-  ) {
-    throw new Error("alerts filter still shows combat mail");
-  }
+  await page.waitForFunction(
+    () => {
+      const pressed = document
+        .querySelector('[data-testid="inbox-filter-alerts"]')
+        ?.getAttribute("aria-pressed");
+      const combatMail = document.querySelectorAll(
+        '[data-testid^="message-combat-"], [data-testid^="message-spy-"], [data-testid^="message-expedition-"]',
+      ).length;
+      const fleet = document.querySelectorAll(
+        '[data-testid^="message-fleetReturn-"]',
+      ).length;
+      return pressed === "true" && combatMail === 0 && fleet >= 1;
+    },
+    undefined,
+    { timeout: 8_000 },
+  );
   logs.push("alerts_filter_ok");
 
   await assertFitsViewport(page, "messages-panel");
@@ -213,7 +287,16 @@ async function main() {
   await page.getByTestId("nav-messages-badge").waitFor({ timeout: 5_000 });
   logs.push("persist_reload");
 
+  const readResponse = page.waitForResponse(
+    (r) =>
+      r.url().includes("/api/events/read") && r.request().method() === "POST",
+    { timeout: 15_000 },
+  );
   await page.getByTestId("mark-all-read").click();
+  const marked = await readResponse;
+  if (!marked.ok()) {
+    throw new Error(`mark all read failed: ${marked.status()} ${await marked.text()}`);
+  }
   await page.waitForFunction(
     () => document.querySelector('[data-testid="nav-messages-badge"]') == null,
     undefined,

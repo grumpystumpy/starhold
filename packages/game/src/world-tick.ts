@@ -58,6 +58,9 @@ function advanceCountableQueue<T extends ShipQueueItem | DefenseQueueItem>(
   while (queue.length > 0) {
     const front = queue[0]!;
     if (front.startedAt == null) break;
+    if (front.orderedCount == null || front.orderedCount < front.count) {
+      front.orderedCount = front.count;
+    }
     const unit = Math.max(MIN_UNIT_SECONDS, front.unitSeconds);
     const elapsedSec = Math.max(0, (now - front.startedAt) / 1000);
     // completesAt is authoritative for finishing the remaining count (avoids float floor-to-0).
@@ -72,7 +75,7 @@ function advanceCountableQueue<T extends ShipQueueItem | DefenseQueueItem>(
     front.count -= batch;
     front.paidCost = scalePaidCost(front.paidCost, front.count, before);
     if (front.count <= 0) {
-      onFinished?.(front, before);
+      onFinished?.(front, front.orderedCount ?? before);
       const freedAt = Math.min(now, front.completesAt);
       queue.shift();
       ensureQueueFrontStarted(queue, now, freedAt);

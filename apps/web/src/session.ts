@@ -49,6 +49,8 @@ export const session = {
   armedShip: null as ShipId | null,
   armedDefense: null as DefenseId | null,
   armedResearch: null as ResearchId | null,
+  /** Mark-read armed the same way. `all` marks every unread alert. */
+  armedEventRead: null as { kind: "one"; id: string } | { kind: "all" } | null,
   /** Galaxy browser system override (null = follow active planet). */
   galaxySystem: null as number | null,
   /** Active routed page (synced to URL pathname). */

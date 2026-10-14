@@ -16,6 +16,7 @@ import {
 import {
   doBuild,
   doBuildDefense,
+  doMarkEventsRead,
   doResearch,
   doUpgrade,
 } from "./main-actions";
@@ -40,6 +41,24 @@ function dispatchArmedResearch(researchId: ResearchId): void {
   void doResearch(researchId);
 }
 
+function dispatchArmedEventRead(
+  armed: { kind: "one"; id: string } | { kind: "all" },
+): void {
+  session.suppressClickUntil = Date.now() + GESTURE_PAINT_GRACE_MS;
+  switch (armed.kind) {
+    case "one":
+      void doMarkEventsRead([armed.id]);
+      return;
+    case "all":
+      void doMarkEventsRead();
+      return;
+    default: {
+      const _exhaustive: never = armed;
+      return _exhaustive;
+    }
+  }
+}
+
 export function bindPointerHandlers(): void {
   root.addEventListener(
     "pointerdown",
@@ -49,6 +68,8 @@ export function bindPointerHandlers(): void {
       const shipBtn = closestActionEl(ev.target, "[data-ship]");
       const defenseBtn = closestActionEl(ev.target, "[data-defense]");
       const researchBtn = closestActionEl(ev.target, "[data-research]");
+      const readAllBtn = closestActionEl(ev.target, "[data-event-read-all]");
+      const readOneBtn = closestActionEl(ev.target, "[data-event-read]");
       session.armedUpgrade =
         (upgradeBtn?.getAttribute("data-upgrade") as BuildingId | null) ?? null;
       if (shipBtn?.getAttribute("data-locked") === "1") {
@@ -71,6 +92,15 @@ export function bindPointerHandlers(): void {
           (researchBtn?.getAttribute("data-research") as ResearchId | null) ??
           null;
       }
+      if (readAllBtn && !readAllBtn.hasAttribute("disabled")) {
+        session.armedEventRead = { kind: "all" };
+      } else {
+        const readId = readOneBtn?.getAttribute("data-event-read");
+        session.armedEventRead =
+          readOneBtn && !readOneBtn.hasAttribute("disabled") && readId
+            ? { kind: "one", id: readId }
+            : null;
+      }
     },
     true,
   );
@@ -81,7 +111,8 @@ export function bindPointerHandlers(): void {
       !session.armedUpgrade &&
       !session.armedShip &&
       !session.armedDefense &&
-      !session.armedResearch
+      !session.armedResearch &&
+      !session.armedEventRead
     ) {
       return;
     }
@@ -92,10 +123,12 @@ export function bindPointerHandlers(): void {
       const shipId = session.armedShip;
       const defenseId = session.armedDefense;
       const researchId = session.armedResearch;
+      const eventRead = session.armedEventRead;
       session.armedUpgrade = null;
       session.armedShip = null;
       session.armedDefense = null;
       session.armedResearch = null;
+      session.armedEventRead = null;
       if (upgradeId) {
         dispatchArmedUpgrade(upgradeId);
       } else if (shipId) {
@@ -104,12 +137,15 @@ export function bindPointerHandlers(): void {
         dispatchArmedDefense(defenseId);
       } else if (researchId) {
         dispatchArmedResearch(researchId);
+      } else if (eventRead) {
+        dispatchArmedEventRead(eventRead);
       }
     } else {
       session.armedUpgrade = null;
       session.armedShip = null;
       session.armedDefense = null;
       session.armedResearch = null;
+      session.armedEventRead = null;
     }
 
     if (session.pointersDown === 0) {
@@ -124,6 +160,7 @@ export function bindPointerHandlers(): void {
     session.armedShip = null;
     session.armedDefense = null;
     session.armedResearch = null;
+    session.armedEventRead = null;
     armGestureGrace();
   });
 }

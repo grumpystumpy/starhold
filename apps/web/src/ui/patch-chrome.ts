@@ -1,8 +1,10 @@
 import {
   PRODUCTION_MULT,
+  unreadEventCount,
   type PlayerView,
 } from "@starhold/game";
 import { fmt, fmtCoords } from "./format";
+import { NAV_LABELS } from "./nav";
 import { patchFlash } from "./render-chrome-join.js";
 import { escapeHtml } from "./render-escape";
 import { storageFillTitle } from "./render-tooltips";
@@ -120,6 +122,7 @@ export function patchLiveChrome(
   shell.dataset.busy = state.busy ? "1" : "0";
 
   patchFlash(root, state.error, state.notice);
+  patchMessagesBadge(root, view);
 
   // Keep empire rail labels in sync without remounting chips.
   for (const p of view.ownedPlanets) {
@@ -136,6 +139,39 @@ export function patchLiveChrome(
   }
 
   return true;
+}
+
+function patchMessagesBadge(root: HTMLElement, view: PlayerView): void {
+  const unread = unreadEventCount(view.player);
+  const link = root.querySelector<HTMLElement>('[data-testid="nav-messages"]');
+  if (link) {
+    const existing = link.querySelector<HTMLElement>(
+      '[data-testid="nav-messages-badge"]',
+    );
+    if (unread > 0) {
+      if (existing) {
+        existing.textContent = fmt(unread);
+      } else {
+        const badge = document.createElement("span");
+        badge.className = "nav-badge";
+        badge.dataset.testid = "nav-messages-badge";
+        badge.textContent = fmt(unread);
+        link.append(badge);
+      }
+    } else if (existing) {
+      existing.remove();
+    }
+  }
+
+  const option = root.querySelector<HTMLOptionElement>(
+    '[data-testid="nav-dropdown"] option[value="messages"]',
+  );
+  if (option) {
+    option.textContent =
+      unread > 0
+        ? `${NAV_LABELS.messages} (${fmt(unread)})`
+        : NAV_LABELS.messages;
+  }
 }
 
 function patchRes(

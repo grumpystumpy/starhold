@@ -120,6 +120,32 @@ describe("event log", () => {
     assert.ok(unreadEventCount(view.player) >= 3);
   });
 
+  it("reports the full ship order when batches finish across ticks", () => {
+    const universe = createUniverse("Split Yard", 1);
+    const { player, planet } = joinUniverse(universe, "Splitter", 70_000_000);
+    planet.resources = { metal: 20_000, crystal: 20_000, deuterium: 20_000 };
+    planet.buildings.shipyard = 1;
+
+    const ship = queueShipBuild(universe, player.id, "scout", 2, 70_000_000);
+    assert.equal(ship.ok, true, ship.ok ? "" : ship.error);
+    const item = universe.planets[planet.id].shipQueue[0]!;
+    const mid = (item.startedAt ?? 70_000_000) + item.unitSeconds * 1000;
+    advanceUniverse(universe, mid);
+    assert.equal(universe.planets[planet.id].ships.scout, 1);
+    assert.equal(
+      (universe.players[player.id].eventLog ?? []).some(
+        (entry) => entry.title === "Scout Skiff × 2",
+      ),
+      false,
+    );
+    advanceUniverse(universe, item.completesAt);
+    assert.equal(universe.planets[planet.id].ships.scout, 2);
+    const titles = (universe.players[player.id].eventLog ?? [])
+      .filter((entry) => entry.kind === "buildComplete")
+      .map((entry) => entry.title);
+    assert.deepEqual(titles, ["Scout Skiff × 2"]);
+  });
+
   it("alerts the defender on a hostile raid and the owner when the fleet returns", () => {
     const universe = createUniverse("Raid Log", 8);
     const a = joinUniverse(universe, "Raider", 60_000_000);
