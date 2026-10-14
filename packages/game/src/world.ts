@@ -41,6 +41,24 @@ export {
   isPlayerClassId,
 } from "./world-class.js";
 export type { ClassActionResult } from "./world-class.js";
+export type { AllianceActionResult } from "./world-alliances.js";
+export {
+  allianceDirectory,
+  allianceTagForPlayer,
+  allianceViewFor,
+  createAlliance,
+  disbandAlliance,
+  inviteToAlliance,
+  isAllianceJoinMode,
+  isAllianceRole,
+  joinAlliance,
+  kickFromAlliance,
+  leaveAlliance,
+  normalizeAllianceName,
+  normalizeAllianceTag,
+  setAllianceJoinMode,
+  setAllianceRole,
+} from "./world-alliances.js";
 export type { LaunchFleetOpts } from "./world-launch.js";
 export { launchFleet } from "./world-launch.js";
 export type {
