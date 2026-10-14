@@ -18,7 +18,14 @@ export {
   doResearch,
   doCancelQueue,
 } from "./main-actions-build.js";
-export { doLaunchFleet } from "./main-actions-fleet.js";
+export {
+  doApplyFleetPreset,
+  doDeleteFleetPreset,
+  doLaunchFleet,
+  doLaunchMaxExpeditions,
+  doSaveFleetPreset,
+  doScanSystem,
+} from "./main-actions-fleet.js";
 export {
   doClaimDaily,
   doActivateOfficer,
