@@ -25,7 +25,7 @@ export function fleetsInFlight(
       ${fleets
         .map((f) => {
           const ships = SHIP_ORDER.filter((id) => (f.ships[id] ?? 0) > 0)
-            .map((id) => `${f.ships[id]}× ${SHIPS[id].name}`)
+            .map((id) => `${fmt(f.ships[id] ?? 0)}× ${SHIPS[id].name}`)
             .join(", ");
           const eta = fmtEta(remainingSeconds(f.arrivesAt, now));
           const phase =
@@ -84,7 +84,7 @@ export function sensorContactsHtml(
       ${contacts
         .map((f) => {
           const ships = SHIP_ORDER.filter((id) => (f.ships[id] ?? 0) > 0)
-            .map((id) => `${f.ships[id]}× ${SHIPS[id].name}`)
+            .map((id) => `${fmt(f.ships[id] ?? 0)}× ${SHIPS[id].name}`)
             .join(", ");
           return `<li data-testid="sensor-${f.id}"><span>${escapeHtml(nameFor(f.ownerPlayerId))} ${escapeHtml(f.mission)} → ${fmtCoords(f.targetCoords)}<br/><span class="meta">${escapeHtml(ships)}</span></span><span>${fmtEta(remainingSeconds(f.arrivesAt, now))}</span></li>`;
         })
@@ -110,11 +110,11 @@ export function spyReportsHtml(reports: PlayerView["spyReports"]): string {
           }
           if (r.ships) {
             const ships = SHIP_ORDER.filter((id) => (r.ships?.[id] ?? 0) > 0)
-              .map((id) => `${r.ships![id]}×${SHIPS[id].name}`)
+              .map((id) => `${fmt(r.ships![id] ?? 0)}×${SHIPS[id].name}`)
               .join(", ");
             if (ships) bits.push(ships);
           }
-          return `<li data-testid="spy-${r.id}"><strong>Spy L${r.detail}</strong> ${escapeHtml(r.targetName)} @ ${fmtCoords(r.targetCoords)}<br/><span class="meta">${escapeHtml(r.summary)}${bits.length ? ` · ${escapeHtml(bits.join(" · "))}` : ""}</span></li>`;
+          return `<li data-testid="spy-${r.id}"><strong>Spy L${fmt(r.detail)}</strong> ${escapeHtml(r.targetName)} @ ${fmtCoords(r.targetCoords)}<br/><span class="meta">${escapeHtml(r.summary)}${bits.length ? ` · ${escapeHtml(bits.join(" · "))}` : ""}</span></li>`;
         })
         .join("")}
     </ul>
@@ -159,9 +159,9 @@ export function galaxyPanel(
       const moon = s.hasMoon ? " · Moon" : "";
       const tag = s.allianceTag ? ` [${escapeHtml(s.allianceTag)}]` : "";
       const who = s.playerName
-        ? `${escapeHtml(s.playerName)}${tag}${s.isOwn ? " (you)" : ""} · ~${s.pointsHint} pts${moon}`
+        ? `${escapeHtml(s.playerName)}${tag}${s.isOwn ? " (you)" : ""} · ~${fmt(s.pointsHint)} pts${moon}`
         : "Empty";
-      return `<li data-testid="galaxy-slot-${s.coords.slot}"><span>${s.coords.slot}. ${who}${debris}</span><span>${fmtCoords(s.coords)}</span></li>`;
+      return `<li data-testid="galaxy-slot-${s.coords.slot}"><span>${fmt(s.coords.slot)}. ${who}${debris}</span><span>${fmtCoords(s.coords)}</span></li>`;
     })
     .join("");
   const asteroids =
@@ -169,14 +169,13 @@ export function galaxyPanel(
       ? `<ul class="roster" data-testid="galaxy-asteroids">${galaxy.asteroids
           .map(
             (a) =>
-              `<li data-testid="asteroid-${escapeAttr(a.id)}"><span>Asteroid ${escapeHtml(a.id)} · richness ${a.richness}</span><span>${fmt(a.metal)}/${fmt(a.crystal)}/${fmt(a.deuterium)}</span></li>`,
+              `<li data-testid="asteroid-${escapeAttr(a.id)}"><span>Asteroid ${escapeHtml(a.id)} · richness ${fmt(a.richness)}</span><span>${fmt(a.metal)}/${fmt(a.crystal)}/${fmt(a.deuterium)}</span></li>`,
           )
           .join("")}</ul>`
       : `<p class="hint" data-testid="galaxy-asteroids-empty">No asteroid fields in this system.</p>`;
   const pirate = galaxy.pirateBase
-    ? `<p class="hint pirate-row" data-testid="galaxy-pirate">${escapeHtml(galaxy.pirateBase.name)} · tier ${galaxy.pirateBase.tier} · threat ${escapeHtml(galaxy.pirateBase.threatHint)} · ${fmtCoords(galaxy.pirateBase.coords)}</p>`
-    : `<p class="hint" data-testid="galaxy-pirate-empty">No pirate base reported.</p>`;
-  const deep = galaxy.deepSpace
+    ? `<p class="hint pirate-row" data-testid="galaxy-pirate">${escapeHtml(galaxy.pirateBase.name)} · tier ${fmt(galaxy.pirateBase.tier)} · threat ${escapeHtml(galaxy.pirateBase.threatHint)} · ${fmtCoords(galaxy.pirateBase.coords)}</p>`
+    : `<p class="hint" data-testid="galaxy-pirate-empty">No pirate base reported.</p>`;  const deep = galaxy.deepSpace
     ? `<p class="hint" data-testid="galaxy-deep-space">Deep space ${fmtCoords(galaxy.deepSpace.coords)} — expedition target.</p>`
     : "";
   return `
