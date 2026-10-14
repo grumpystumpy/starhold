@@ -19,7 +19,8 @@
     "e2e:gate": "node scripts/e2e-quality-gate.mjs",
     "e2e:gate:pirates": "node scripts/quality-gate-pirates-aliens.mjs",
     "tuning-diff": "node scripts/tuning-diff.mjs",
-    "start": "npm run start -w @starhold/server"
+    "start": "npm run start -w @starhold/server",
+    "e2e:gate:alliances": "node scripts/quality-gate-alliances.mjs"
   },
   "dependencies": {
     "@upstash/redis": "^1.34.9",

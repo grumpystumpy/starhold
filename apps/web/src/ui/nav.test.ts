@@ -20,6 +20,7 @@ describe("nav routes", () => {
     assert.equal(pageFromPath("/officers"), "officers");
     assert.equal(pageFromPath("/skills"), "skills");
     assert.equal(pageFromPath("/highscore"), "highscore");
+    assert.equal(pageFromPath("/alliances"), "alliances");
     assert.equal(pageFromPath("/messages"), "messages");
   });
 

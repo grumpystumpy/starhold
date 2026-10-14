@@ -22,13 +22,21 @@ import {
   choosePlayerClass,
   claimDailyLogin,
   classCatalog,
+  createAlliance,
   deleteFleetPreset,
   discoverMiniPlanet,
+  disbandAlliance,
   ensureUniverseShape,
+  inviteToAlliance,
+  isAllianceJoinMode,
+  isAllianceRole,
   isPlayerClassId,
+  joinAlliance,
   joinUniverse,
+  kickFromAlliance,
   launchFleet,
   launchMaxExpeditions,
+  leaveAlliance,
   playerView,
   queueBuildingUpgrade,
   queueDefenseBuild,
@@ -40,9 +48,13 @@ import {
   resolveMiniPlanetChoice,
   saveFleetPreset,
   setActivePlanet,
+  setAllianceJoinMode,
+  setAllianceRole,
   startOccupation,
   swarmProduce,
   unlockSkill,
+  type AllianceJoinMode,
+  type AllianceRole,
 } from "@starhold/game";
 import { sessionSecretConfigured } from "./accounts.js";
 import { mountAuthRoutes } from "./auth-routes.js";
@@ -626,6 +638,184 @@ export function createApp(): Hono {
     }
     return withUniverse((universe) => {
       const result = unlockSkill(universe, body.playerId!, body.skillId!);
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  // Alliances foundation (backlog #7).
+  app.get("/api/alliance", async (c) => {
+    const playerId = c.req.query("playerId");
+    if (!playerId) return c.json({ error: "playerId required." }, 400);
+    return withUniverse((universe) => {
+      return c.json(playerView(universe, playerId));
+    });
+  });
+
+  app.get("/api/alliance/list", async (c) => {
+    const playerId = c.req.query("playerId");
+    if (!playerId) return c.json({ error: "playerId required." }, 400);
+    return withUniverse((universe) => {
+      const view = playerView(universe, playerId);
+      return c.json({ alliances: view.allianceDirectory });
+    });
+  });
+
+  app.post("/api/alliance/create", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      name?: string;
+      tag?: string;
+      joinMode?: string;
+    };
+    if (!body.playerId || !body.name || !body.tag) {
+      return c.json({ error: "playerId, name, and tag required." }, 400);
+    }
+    const joinMode = body.joinMode ?? "open";
+    if (!isAllianceJoinMode(joinMode)) {
+      return c.json({ error: "joinMode must be open or invite." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = createAlliance(
+        universe,
+        body.playerId!,
+        body.name!,
+        body.tag!,
+        joinMode as AllianceJoinMode,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  app.post("/api/alliance/join", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      allianceId?: string;
+      tag?: string;
+    };
+    if (!body.playerId || (!body.allianceId && !body.tag)) {
+      return c.json(
+        { error: "playerId and allianceId or tag required." },
+        400,
+      );
+    }
+    return withUniverse((universe) => {
+      const result = joinAlliance(universe, body.playerId!, {
+        allianceId: body.allianceId,
+        tag: body.tag,
+      });
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  app.post("/api/alliance/leave", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+    };
+    if (!body.playerId) return c.json({ error: "playerId required." }, 400);
+    return withUniverse((universe) => {
+      const result = leaveAlliance(universe, body.playerId!);
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  app.post("/api/alliance/invite", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      targetPlayerId?: string;
+    };
+    if (!body.playerId || !body.targetPlayerId) {
+      return c.json({ error: "playerId and targetPlayerId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = inviteToAlliance(
+        universe,
+        body.playerId!,
+        body.targetPlayerId!,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  app.post("/api/alliance/kick", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      targetPlayerId?: string;
+    };
+    if (!body.playerId || !body.targetPlayerId) {
+      return c.json({ error: "playerId and targetPlayerId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = kickFromAlliance(
+        universe,
+        body.playerId!,
+        body.targetPlayerId!,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  app.post("/api/alliance/set-role", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      targetPlayerId?: string;
+      role?: string;
+    };
+    if (!body.playerId || !body.targetPlayerId || !body.role) {
+      return c.json(
+        { error: "playerId, targetPlayerId, and role required." },
+        400,
+      );
+    }
+    if (!isAllianceRole(body.role)) {
+      return c.json({ error: "Unknown role." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = setAllianceRole(
+        universe,
+        body.playerId!,
+        body.targetPlayerId!,
+        body.role as AllianceRole,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  app.post("/api/alliance/set-join-mode", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      joinMode?: string;
+    };
+    if (!body.playerId || !body.joinMode) {
+      return c.json({ error: "playerId and joinMode required." }, 400);
+    }
+    if (!isAllianceJoinMode(body.joinMode)) {
+      return c.json({ error: "joinMode must be open or invite." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = setAllianceJoinMode(
+        universe,
+        body.playerId!,
+        body.joinMode as AllianceJoinMode,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  app.post("/api/alliance/disband", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+    };
+    if (!body.playerId) return c.json({ error: "playerId required." }, 400);
+    return withUniverse((universe) => {
+      const result = disbandAlliance(universe, body.playerId!);
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
     });

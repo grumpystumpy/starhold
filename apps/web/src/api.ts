@@ -366,3 +366,98 @@ export async function relocateMiniFortress(
   });
   return parse<PlayerView>(res);
 }
+
+export async function createAllianceRequest(
+  playerId: string,
+  opts: { name: string; tag: string; joinMode?: "open" | "invite" },
+): Promise<PlayerView> {
+  const res = await credFetch("/api/alliance/create", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, ...opts }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function joinAllianceRequest(
+  playerId: string,
+  opts: { allianceId?: string; tag?: string },
+): Promise<PlayerView> {
+  const res = await credFetch("/api/alliance/join", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, ...opts }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function leaveAllianceRequest(
+  playerId: string,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/alliance/leave", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function inviteAllianceRequest(
+  playerId: string,
+  targetPlayerId: string,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/alliance/invite", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, targetPlayerId }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function kickAllianceRequest(
+  playerId: string,
+  targetPlayerId: string,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/alliance/kick", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, targetPlayerId }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function setAllianceRoleRequest(
+  playerId: string,
+  targetPlayerId: string,
+  role: "founder" | "officer" | "member",
+): Promise<PlayerView> {
+  const res = await credFetch("/api/alliance/set-role", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, targetPlayerId, role }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function setAllianceJoinModeRequest(
+  playerId: string,
+  joinMode: "open" | "invite",
+): Promise<PlayerView> {
+  const res = await credFetch("/api/alliance/set-join-mode", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, joinMode }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function disbandAllianceRequest(
+  playerId: string,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/alliance/disband", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId }),
+  });
+  return parse<PlayerView>(res);
+}

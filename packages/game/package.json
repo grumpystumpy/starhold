@@ -15,7 +15,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
-    "test": "npm run build && node --import tsx --test src/world.test.ts src/fleets.test.ts src/parity-lab.test.ts src/parity-fleet.test.ts src/empire-logistics.test.ts src/combat-hulls.test.ts src/combat-rounds.test.ts src/expeditions.test.ts src/highscores.test.ts src/moons.test.ts src/universe-economy.test.ts src/pirates.test.ts src/starshards.test.ts src/player-levels.test.ts src/queues.test.ts src/round2-ships.test.ts src/accounts.test.ts src/fleet-presets.test.ts src/round3-content.test.ts src/planet-name.test.ts src/mini-planets.test.ts"
+"test": "npm run build && node --import tsx --test src/world.test.ts src/fleets.test.ts src/parity-lab.test.ts src/parity-fleet.test.ts src/empire-logistics.test.ts src/combat-hulls.test.ts src/combat-rounds.test.ts src/expeditions.test.ts src/highscores.test.ts src/moons.test.ts src/universe-economy.test.ts src/pirates.test.ts src/starshards.test.ts src/player-levels.test.ts src/queues.test.ts src/round2-ships.test.ts src/accounts.test.ts src/fleet-presets.test.ts src/round3-content.test.ts src/planet-name.test.ts src/mini-planets.test.ts src/alliances.test.ts"
   },
   "devDependencies": {
     "tsx": "^4.23.15"

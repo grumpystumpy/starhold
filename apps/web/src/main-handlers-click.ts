@@ -29,12 +29,18 @@ import {
   doChangeClass,
   doChooseClass,
   doClaimDaily,
+  doCreateAlliance,
   doDeleteFleetPreset,
+  doDisbandAlliance,
   doGalaxyNav,
   doClaimAnonymous,
+  doInviteAlliance,
   doJoin,
+  doJoinAlliance,
+  doKickAllianceMember,
   doLaunchFleet,
   doLaunchMaxExpeditions,
+  doLeaveAlliance,
   doRefresh,
   doRenamePlanet,
   doRelocateFortress,
@@ -44,6 +50,8 @@ import {
   doSaveFleetPreset,
   doScanSystem,
   doSelectPlanet,
+  doSetAllianceJoinMode,
+  doSetAllianceRole,
   doUnlockSkill,
   doUpgrade,
 } from "./main-actions";
@@ -301,6 +309,50 @@ export function bindClickHandlers(): void {
         ev.preventDefault();
         void doRefresh();
       }
+
+      const joinAlly = closestActionEl(target, "[data-alliance-join]");
+      if (joinAlly) {
+        ev.preventDefault();
+        const id = joinAlly.getAttribute("data-alliance-join");
+        if (id) void doJoinAlliance(id);
+        return;
+      }
+
+      if (closestActionEl(target, "[data-alliance-leave]")) {
+        ev.preventDefault();
+        void doLeaveAlliance();
+        return;
+      }
+
+      if (closestActionEl(target, "[data-alliance-disband]")) {
+        ev.preventDefault();
+        void doDisbandAlliance();
+        return;
+      }
+
+      const kickBtn = closestActionEl(target, "[data-alliance-kick]");
+      if (kickBtn) {
+        ev.preventDefault();
+        const id = kickBtn.getAttribute("data-alliance-kick");
+        if (id) void doKickAllianceMember(id);
+        return;
+      }
+
+      const promoteBtn = closestActionEl(target, "[data-alliance-promote]");
+      if (promoteBtn) {
+        ev.preventDefault();
+        const id = promoteBtn.getAttribute("data-alliance-promote");
+        if (id) void doSetAllianceRole(id, "officer");
+        return;
+      }
+
+      const transferBtn = closestActionEl(target, "[data-alliance-transfer]");
+      if (transferBtn) {
+        ev.preventDefault();
+        const id = transferBtn.getAttribute("data-alliance-transfer");
+        if (id) void doSetAllianceRole(id, "founder");
+        return;
+      }
     },
     true,
   );
@@ -310,6 +362,14 @@ export function bindClickHandlers(): void {
     if (el instanceof HTMLSelectElement && el.matches("[data-nav-select]")) {
       const page = resolveNavPage(el.value);
       if (page) navigateTo(page);
+      return;
+    }
+    if (
+      el instanceof HTMLSelectElement &&
+      el.matches("[data-alliance-join-mode-select]")
+    ) {
+      const mode = el.value === "invite" ? "invite" : "open";
+      void doSetAllianceJoinMode(mode);
       return;
     }
     if (
@@ -384,6 +444,36 @@ export function bindClickHandlers(): void {
       const g = Number(gEl?.value ?? 0);
       const s = Number(sEl?.value ?? 0);
       void doRelocateFortress(g, s);
+      return;
+    }
+
+    if (form.id === "alliance-create-form") {
+      ev.preventDefault();
+      const nameInput = form.querySelector<HTMLInputElement>(
+        '[name="alliance-name"]',
+      );
+      const tagInput = form.querySelector<HTMLInputElement>(
+        '[name="alliance-tag"]',
+      );
+      const modeSelect = form.querySelector<HTMLSelectElement>(
+        '[name="alliance-join-mode"]',
+      );
+      const joinMode = modeSelect?.value === "invite" ? "invite" : "open";
+      void doCreateAlliance(
+        nameInput?.value ?? "",
+        tagInput?.value ?? "",
+        joinMode,
+      );
+      return;
+    }
+
+    if (form.id === "alliance-invite-form") {
+      ev.preventDefault();
+      const input = form.querySelector<HTMLInputElement>(
+        '[name="alliance-invite-id"]',
+      );
+      void doInviteAlliance(input?.value?.trim() ?? "");
+      return;
     }
   });
 

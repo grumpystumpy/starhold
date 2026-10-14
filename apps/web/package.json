@@ -8,7 +8,7 @@
     "build": "tsc -p tsconfig.json && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --import tsx --test src/ui/nav.test.ts src/ui/render-messages.test.ts"
+"test": "node --import tsx --test src/ui/nav.test.ts src/ui/render-messages.test.ts src/ui/render-alliances.test.ts"
   },
   "dependencies": {
     "@starhold/game": "*"

@@ -35,3 +35,13 @@ export {
   doChooseClass,
   doChangeClass,
 } from "./main-actions-starshards.js";
+export {
+  doCreateAlliance,
+  doDisbandAlliance,
+  doInviteAlliance,
+  doJoinAlliance,
+  doKickAllianceMember,
+  doLeaveAlliance,
+  doSetAllianceJoinMode,
+  doSetAllianceRole,
+} from "./main-actions-alliances.js";
