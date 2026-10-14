@@ -163,7 +163,11 @@ button.ghost {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 1rem;
-  animation: fade-up 0.55s ease-out both;
+  /* No enter animation — poll patches update chrome in place. */
+}
+
+.shell-top.topbar {
+  animation: none;
 }
 
 .topbar-brand,
