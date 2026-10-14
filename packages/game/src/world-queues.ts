@@ -1,19 +1,25 @@
 import { BUILDINGS, DEFENSES, SHIPS } from "./catalog.js";
 import {
+  CHRONO_LATHE_RIG_FOUNDRY_REQ,
   CHRONO_LATHE_SHIPYARD_REQ,
+  MANTLE_LOOM_LAB_REQ,
+  MANTLE_LOOM_SOLAR_REQ,
   MOON_FIELDS_BASE,
   MOON_FIELDS_PER_LUNAR_BASE,
+  RIG_FOUNDRY_SHIPYARD_REQ,
 } from "./catalog.js";
 import {
   buildingAllowedOn,
   buildingUpgradeCost,
   buildingUpgradeSeconds,
   canAfford,
+  classBonuses,
   defenseCost,
   defenseUnitBuildSeconds,
   fieldsRemaining,
   fieldsUsed,
   levelBonuses,
+  shipClassAllowed,
   shipCost,
   shipResearchReqMet,
   shipUnitBuildSeconds,
@@ -115,12 +121,47 @@ export function queueBuildingUpgrade(
   if (buildingId === "jumpGate" && (planet.buildings.lunarBase ?? 0) < 1) {
     return { ok: false, error: "Fold Bridge needs Crater Hab level 1." };
   }
+  if (buildingId === "rigFoundry") {
+    const yard = planet.buildings.shipyard ?? 0;
+    if (yard < RIG_FOUNDRY_SHIPYARD_REQ) {
+      return {
+        ok: false,
+        error: `Rig Foundry needs Shipyard level ${RIG_FOUNDRY_SHIPYARD_REQ} (you have ${yard}).`,
+      };
+    }
+  }
+  if (buildingId === "mantleLoom") {
+    if (planet.kind === "moon") {
+      return { ok: false, error: "Mantle Loom cannot be built on moons." };
+    }
+    const solar = planet.buildings.solarPlant ?? 0;
+    const lab = planet.buildings.researchLab ?? 0;
+    if (solar < MANTLE_LOOM_SOLAR_REQ) {
+      return {
+        ok: false,
+        error: `Mantle Loom needs Solar Array level ${MANTLE_LOOM_SOLAR_REQ} (you have ${solar}).`,
+      };
+    }
+    if (lab < MANTLE_LOOM_LAB_REQ) {
+      return {
+        ok: false,
+        error: `Mantle Loom needs Research Lab level ${MANTLE_LOOM_LAB_REQ} (you have ${lab}).`,
+      };
+    }
+  }
   if (buildingId === "chronoLathe") {
     const yard = planet.buildings.shipyard ?? 0;
+    const foundry = planet.buildings.rigFoundry ?? 0;
     if (yard < CHRONO_LATHE_SHIPYARD_REQ) {
       return {
         ok: false,
         error: `Chrono Lathe needs Shipyard level ${CHRONO_LATHE_SHIPYARD_REQ} (you have ${yard}).`,
+      };
+    }
+    if (foundry < CHRONO_LATHE_RIG_FOUNDRY_REQ) {
+      return {
+        ok: false,
+        error: `Chrono Lathe needs Rig Foundry level ${CHRONO_LATHE_RIG_FOUNDRY_REQ} (you have ${foundry}).`,
       };
     }
   }
@@ -160,11 +201,18 @@ export function queueBuildingUpgrade(
   }
 
   const lb = levelBonuses(player.level ?? 1);
+  const cls = classBonuses(player.playerClass?.classId);
   // Chrono Lathe does not accelerate itself (avoid recursive free builds).
   const naniteLevel =
     buildingId === "chronoLathe" ? 0 : naniteFactoryLevel(planet);
+  const rigLevel =
+    buildingId === "chronoLathe" || buildingId === "rigFoundry"
+      ? 0
+      : (planet.buildings.rigFoundry ?? 0);
   const seconds =
-    (buildingUpgradeSeconds(buildingId, current, naniteLevel) * lb.buildTime) /
+    (buildingUpgradeSeconds(buildingId, current, naniteLevel, rigLevel) *
+      lb.buildTime *
+      cls.buildingBuildTime) /
     universe.speed;
 
   planet.resources = spend(planet.resources, cost);
@@ -225,6 +273,16 @@ export function queueShipBuild(
     };
   }
 
+  if (!shipClassAllowed(shipId, player.playerClass?.classId ?? null)) {
+    const need = def.classExclusive;
+    return {
+      ok: false,
+      error: need
+        ? `Requires ${need} class (exclusive hull).`
+        : "Class exclusive hull.",
+    };
+  }
+
   const researchOk = shipResearchReqMet(shipId, player.research);
   if (!researchOk.ok) return researchOk;
 
@@ -234,9 +292,13 @@ export function queueShipBuild(
   }
 
   const lb = levelBonuses(player.level ?? 1);
+  const cls = classBonuses(player.playerClass?.classId);
   const naniteLevel = naniteFactoryLevel(planet);
+  const rigLevel = planet.buildings.rigFoundry ?? 0;
   const unitSeconds =
-    (shipUnitBuildSeconds(shipId, yard, naniteLevel) * lb.shipBuild) /
+    (shipUnitBuildSeconds(shipId, yard, naniteLevel, rigLevel) *
+      lb.shipBuild *
+      cls.shipBuildTime) /
     universe.speed;
   const seconds = unitSeconds * qty;
 
@@ -305,9 +367,13 @@ export function queueDefenseBuild(
   }
 
   const lb = levelBonuses(player.level ?? 1);
+  const cls = classBonuses(player.playerClass?.classId);
   const naniteLevel = naniteFactoryLevel(planet);
+  const rigLevel = planet.buildings.rigFoundry ?? 0;
   const unitSeconds =
-    (defenseUnitBuildSeconds(defenseId, yard, naniteLevel) * lb.shipBuild) /
+    (defenseUnitBuildSeconds(defenseId, yard, naniteLevel, rigLevel) *
+      lb.shipBuild *
+      cls.defenseBuildTime) /
     universe.speed;
   const seconds = unitSeconds * qty;
 

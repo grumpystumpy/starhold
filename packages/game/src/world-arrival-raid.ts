@@ -1,4 +1,5 @@
 import {
+  classBonuses,
   computeRaidLoot,
   debrisFromDestroyed,
   destroyedShipResources,
@@ -7,6 +8,7 @@ import {
   grantPlayerXp,
   resolveCombat,
   resourcesCostTotal,
+  spoilSkimmerDebris,
   xpForCombatLose,
   xpForCombatWin,
 } from "./formulas.js";
@@ -35,14 +37,21 @@ export function resolveRaidArrival(
   const defenderOwner = universe.players[target.ownerPlayerId];
   const defenderBefore = { ...target.ships };
   const defensesBefore = { ...(target.defenses ?? emptyDefenses()) };
-  const defensePower = playerBoosts(defenderOwner, now).defensePower;
+  const atkCls = classBonuses(owner?.playerClass?.classId);
+  const defCls = classBonuses(defenderOwner?.playerClass?.classId);
+  const defensePower =
+    playerBoosts(defenderOwner, now).defensePower * defCls.defensePower;
   const combat = resolveCombat(
     fleet.ships,
     defenderBefore,
     defensesBefore,
     effectiveCombatResearch(owner),
     effectiveCombatResearch(defenderOwner),
-    { defensePower },
+    {
+      defensePower,
+      attackMult: atkCls.attack,
+      defenseSlot: target.coords.slot,
+    },
   );
   target.ships = combat.defenderAfter;
   target.defenses = combat.defensesAfter;
@@ -53,18 +62,25 @@ export function resolveRaidArrival(
   const debrisDef = debrisFromDestroyed(
     destroyedShipResources(defenderBefore, combat.defenderAfter),
   );
-  const debrisCreated: Resources = {
+  let debrisCreated: Resources = {
     metal: debrisAtk.metal + debrisDef.metal,
     crystal: debrisAtk.crystal + debrisDef.crystal,
     deuterium: 0,
   };
-  addDebris(universe, target.coords, debrisCreated);
 
   let loot = emptyCargo();
   if (combat.outcome === "attacker_win") {
     loot = computeRaidLoot(target.resources, combat.attackerAfter);
     subtractCargo(target, loot);
+    const skim = spoilSkimmerDebris(debrisCreated, combat.attackerAfter);
+    debrisCreated = skim.remaining;
+    loot = {
+      metal: loot.metal + skim.skimmed.metal,
+      crystal: loot.crystal + skim.skimmed.crystal,
+      deuterium: loot.deuterium,
+    };
   }
+  addDebris(universe, target.coords, debrisCreated);
 
   // XP: winner gets combat-win formula vs destroyed enemy ships; loser +8.
   const atkDestroyed = resourcesCostTotal(

@@ -50,7 +50,13 @@ const RESOURCE_BUILDINGS: BuildingId[] = [
   "deutTank",
 ];
 
-const FACILITY_BUILDINGS_PLANET: BuildingId[] = ["shipyard", "researchLab"];
+const FACILITY_BUILDINGS_PLANET: BuildingId[] = [
+  "shipyard",
+  "researchLab",
+  "rigFoundry",
+  "mantleLoom",
+  "chronoLathe",
+];
 const FACILITY_BUILDINGS_MOON: BuildingId[] = MOON_BUILDING_ORDER.filter(
   (id) => !RESOURCE_BUILDINGS.includes(id),
 );

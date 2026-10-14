@@ -3,6 +3,7 @@ import type {
   BuildingId,
   DefenseDef,
   DefenseId,
+  PlayerClassId,
   ResearchDef,
   ResearchId,
   ShipDef,
@@ -148,6 +149,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
       weaponsTech: 10,
       shieldingTech: 10,
       armourTech: 10,
+      gravityWell: 1,
     },
   },
   worldEater: {
@@ -168,6 +170,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
       weaponsTech: 14,
       shieldingTech: 14,
       armourTech: 14,
+      gravityWell: 1,
     },
   },
   swarmDrone: {
@@ -220,8 +223,237 @@ export const SHIPS: Record<ShipId, ShipDef> = {
       weaponsTech: 11,
       shieldingTech: 11,
       armourTech: 11,
+      gravityWell: 1,
     },
   },
+  helioBuoy: {
+    id: "helioBuoy",
+    name: "Helio Buoy",
+    description:
+      "Orbital energy platform. Parks in hangar; does not fly missions. Energy scales with planet temperature.",
+    cost: { metal: 0, crystal: 2000, deuterium: 500 },
+    buildSeconds: 30,
+    shipyardLevel: 3,
+    cargo: 0,
+    attack: 0,
+    shield: 1,
+    hull: 10,
+    speed: 0,
+    fuelPerDistance: 0,
+    stationary: true,
+    orbitalEnergy: true,
+    noDebris: true,
+  },
+  keelSovereign: {
+    id: "keelSovereign",
+    name: "Keel Sovereign",
+    description: "Fleet backbone — heavy line ship above Aegis Cruiser.",
+    cost: { metal: 40_000, crystal: 20_000, deuterium: 10_000 },
+    buildSeconds: 1800,
+    shipyardLevel: 7,
+    cargo: 1500,
+    attack: 1000,
+    shield: 400,
+    hull: 2500,
+    speed: 2500,
+    fuelPerDistance: 3,
+    researchReq: {
+      weaponsTech: 6,
+      armourTech: 5,
+      shieldingTech: 5,
+      combustionDrive: 4,
+    },
+  },
+  rakeCorsair: {
+    id: "rakeCorsair",
+    name: "Rake Corsair",
+    description: "Fleet hunter — rapid fire vs light hulls.",
+    cost: { metal: 30_000, crystal: 40_000, deuterium: 15_000 },
+    buildSeconds: 1600,
+    shipyardLevel: 7,
+    cargo: 750,
+    attack: 700,
+    shield: 250,
+    hull: 1200,
+    speed: 6000,
+    fuelPerDistance: 2.5,
+    researchReq: {
+      weaponsTech: 6,
+      armourTech: 5,
+      shieldingTech: 5,
+      combustionDrive: 4,
+    },
+  },
+  anvilDread: {
+    id: "anvilDread",
+    name: "Anvil Dread",
+    description: "Mobile battle platform — heavy shields and hull.",
+    cost: { metal: 60_000, crystal: 25_000, deuterium: 20_000 },
+    buildSeconds: 2200,
+    shipyardLevel: 8,
+    cargo: 2000,
+    attack: 500,
+    shield: 800,
+    hull: 3000,
+    speed: 2000,
+    fuelPerDistance: 4,
+    researchReq: {
+      weaponsTech: 6,
+      armourTech: 5,
+      shieldingTech: 5,
+      combustionDrive: 4,
+    },
+  },
+  wardbreaker: {
+    id: "wardbreaker",
+    name: "Wardbreaker",
+    description: "Anti-defense strike hull — shreds static guns.",
+    cost: { metal: 50_000, crystal: 35_000, deuterium: 20_000 },
+    buildSeconds: 2000,
+    shipyardLevel: 8,
+    cargo: 400,
+    attack: 1200,
+    shield: 150,
+    hull: 900,
+    speed: 3000,
+    fuelPerDistance: 3.5,
+    researchReq: {
+      weaponsTech: 6,
+      armourTech: 5,
+      shieldingTech: 5,
+      combustionDrive: 4,
+    },
+  },
+  vaultScout: {
+    id: "vaultScout",
+    name: "Vault Scout",
+    description: "Explorer exclusive — boosts expedition yield when in the fleet.",
+    cost: { metal: 2000, crystal: 4000, deuterium: 1000 },
+    buildSeconds: 120,
+    shipyardLevel: 5,
+    cargo: 200,
+    attack: 20,
+    shield: 40,
+    hull: 80,
+    speed: 18_000,
+    fuelPerDistance: 1,
+    classExclusive: "explorer",
+  },
+  astrolabeWing: {
+    id: "astrolabeWing",
+    name: "Astrolabe Wing",
+    description:
+      "Explorer exclusive — parked: −8% empire research time; spy escort +1 detail.",
+    cost: { metal: 3000, crystal: 5000, deuterium: 1500 },
+    buildSeconds: 150,
+    shipyardLevel: 6,
+    cargo: 100,
+    attack: 10,
+    shield: 60,
+    hull: 100,
+    speed: 14_000,
+    fuelPerDistance: 1.2,
+    classExclusive: "explorer",
+  },
+  spoilSkimmer: {
+    id: "spoilSkimmer",
+    name: "Spoil Skimmer",
+    description:
+      "Fleeter exclusive — on attacker victory, skims 15% of the debris field into cargo.",
+    cost: { metal: 4000, crystal: 2000, deuterium: 2000 },
+    buildSeconds: 140,
+    shipyardLevel: 6,
+    cargo: 25_000,
+    attack: 5,
+    shield: 30,
+    hull: 120,
+    speed: 5000,
+    fuelPerDistance: 1.5,
+    classExclusive: "fleeter",
+  },
+  lineDrummer: {
+    id: "lineDrummer",
+    name: "Line Drummer",
+    description:
+      "Fleeter exclusive — fleet-speed aura (+2%/hull, cap +20%) and light RF support.",
+    cost: { metal: 5000, crystal: 4000, deuterium: 1000 },
+    buildSeconds: 160,
+    shipyardLevel: 6,
+    cargo: 500,
+    attack: 80,
+    shield: 40,
+    hull: 200,
+    speed: 8000,
+    fuelPerDistance: 2,
+    classExclusive: "fleeter",
+  },
+  veinAnchor: {
+    id: "veinAnchor",
+    name: "Vein Anchor",
+    description:
+      "Miner exclusive — stationary mine booster (+3%/hull on that planet, cap +30%).",
+    cost: { metal: 5000, crystal: 2500, deuterium: 0 },
+    buildSeconds: 200,
+    shipyardLevel: 4,
+    cargo: 0,
+    attack: 0,
+    shield: 50,
+    hull: 200,
+    speed: 0,
+    fuelPerDistance: 0,
+    stationary: true,
+    classExclusive: "miner",
+  },
+  gridStake: {
+    id: "gridStake",
+    name: "Grid Stake",
+    description:
+      "Miner exclusive — stationary energy booster (+4%/hull, cap +40%) and light defense.",
+    cost: { metal: 4000, crystal: 4000, deuterium: 500 },
+    buildSeconds: 180,
+    shipyardLevel: 5,
+    cargo: 0,
+    attack: 40,
+    shield: 80,
+    hull: 250,
+    speed: 0,
+    fuelPerDistance: 0,
+    stationary: true,
+    classExclusive: "miner",
+  },
+  foundationArk: {
+    id: "foundationArk",
+    name: "Foundation Ark",
+    description:
+      "Expansionist exclusive — colonizer that bootstraps starting buildings (consumed on landing).",
+    cost: { metal: 10_000, crystal: 10_000, deuterium: 5000 },
+    buildSeconds: 600,
+    shipyardLevel: 5,
+    cargo: 2000,
+    attack: 0,
+    shield: 80,
+    hull: 400,
+    speed: 2500,
+    fuelPerDistance: 2,
+    classExclusive: "expansionist",
+  },
+  frontierBeacon: {
+    id: "frontierBeacon",
+    name: "Frontier Beacon",
+    description:
+      "Expansionist exclusive — +1 colony slot empire-wide; Fold Bridge cooldown ×0.75.",
+    cost: { metal: 8000, crystal: 6000, deuterium: 4000 },
+    buildSeconds: 400,
+    shipyardLevel: 6,
+    cargo: 1000,
+    attack: 30,
+    shield: 100,
+    hull: 300,
+    speed: 4000,
+    fuelPerDistance: 1.5,
+    classExclusive: "expansionist",
+  },
+
 };
 
 export const DEFENSES: Record<DefenseId, DefenseDef> = {
@@ -247,6 +479,175 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
     shield: 80,
     hull: 100,
   },
+  needleTurret: {
+    id: "needleTurret",
+    name: "Needle Turret",
+    description: "Cheap mass DPS turret.",
+    cost: { metal: 200, crystal: 0, deuterium: 0 },
+    buildSeconds: 8,
+    shipyardLevel: 1,
+    attack: 12,
+    shield: 2,
+    hull: 25,
+  },
+  arcLattice: {
+    id: "arcLattice",
+    name: "Arc Lattice",
+    description: "Light beam lattice.",
+    cost: { metal: 150, crystal: 50, deuterium: 0 },
+    buildSeconds: 10,
+    shipyardLevel: 2,
+    attack: 20,
+    shield: 4,
+    hull: 35,
+  },
+  pulseBastion: {
+    id: "pulseBastion",
+    name: "Pulse Bastion",
+    description: "Mid-weight beam bastion.",
+    cost: { metal: 600, crystal: 200, deuterium: 0 },
+    buildSeconds: 25,
+    shipyardLevel: 4,
+    attack: 80,
+    shield: 20,
+    hull: 100,
+  },
+  gaussRail: {
+    id: "gaussRail",
+    name: "Gauss Rail",
+    description: "Crystal-heavy pierce rail.",
+    cost: { metal: 2000, crystal: 1500, deuterium: 0 },
+    buildSeconds: 50,
+    shipyardLevel: 6,
+    attack: 180,
+    shield: 30,
+    hull: 180,
+  },
+  ionSheath: {
+    id: "ionSheath",
+    name: "Ion Sheath",
+    description: "Shield-breaker ion wall.",
+    cost: { metal: 1000, crystal: 500, deuterium: 200 },
+    buildSeconds: 45,
+    shipyardLevel: 6,
+    attack: 120,
+    shield: 80,
+    hull: 150,
+  },
+  plasmaSpire: {
+    id: "plasmaSpire",
+    name: "Plasma Spire",
+    description: "Late heavy DPS spire.",
+    cost: { metal: 5000, crystal: 3000, deuterium: 1000 },
+    buildSeconds: 90,
+    shipyardLevel: 8,
+    attack: 450,
+    shield: 60,
+    hull: 400,
+  },
+  flakCurtain: {
+    id: "flakCurtain",
+    name: "Flak Curtain",
+    description: "Anti-fighter flak with rapid fire vs light hulls.",
+    cost: { metal: 400, crystal: 200, deuterium: 50 },
+    buildSeconds: 18,
+    shipyardLevel: 3,
+    attack: 30,
+    shield: 10,
+    hull: 60,
+  },
+  kineticFence: {
+    id: "kineticFence",
+    name: "Kinetic Fence",
+    description: "Cheap hull wall.",
+    cost: { metal: 400, crystal: 100, deuterium: 0 },
+    buildSeconds: 12,
+    shipyardLevel: 2,
+    attack: 5,
+    shield: 5,
+    hull: 120,
+  },
+  emberMortar: {
+    id: "emberMortar",
+    name: "Ember Mortar",
+    description: "Deut-hungry punch mortar.",
+    cost: { metal: 800, crystal: 400, deuterium: 400 },
+    buildSeconds: 35,
+    shipyardLevel: 5,
+    attack: 140,
+    shield: 15,
+    hull: 90,
+  },
+  rippleArray: {
+    id: "rippleArray",
+    name: "Ripple Array",
+    description: "Mid soak shield array.",
+    cost: { metal: 800, crystal: 600, deuterium: 0 },
+    buildSeconds: 30,
+    shipyardLevel: 4,
+    attack: 4,
+    shield: 120,
+    hull: 150,
+  },
+  haloProjector: {
+    id: "haloProjector",
+    name: "Halo Projector",
+    description: "Small cupola — soft-cap 1 per planet.",
+    cost: { metal: 6000, crystal: 4000, deuterium: 0 },
+    buildSeconds: 120,
+    shipyardLevel: 5,
+    attack: 1,
+    shield: 400,
+    hull: 200,
+    uniqueHint: true,
+  },
+  crownAegis: {
+    id: "crownAegis",
+    name: "Crown Aegis",
+    description: "Large cupola — soft-cap 1 per planet.",
+    cost: { metal: 50_000, crystal: 40_000, deuterium: 10_000 },
+    buildSeconds: 600,
+    shipyardLevel: 8,
+    attack: 1,
+    shield: 5000,
+    hull: 2000,
+    uniqueHint: true,
+  },
+  siegeBlockade: {
+    id: "siegeBlockade",
+    name: "Siege Blockade",
+    description: "Anti-capital soak wall.",
+    cost: { metal: 3000, crystal: 2000, deuterium: 500 },
+    buildSeconds: 70,
+    shipyardLevel: 7,
+    attack: 40,
+    shield: 200,
+    hull: 500,
+  },
+  frostLance: {
+    id: "frostLance",
+    name: "Frost Lance",
+    description: "Cold-slot preferential (+10% attack on slots 12–15).",
+    cost: { metal: 900, crystal: 300, deuterium: 300 },
+    buildSeconds: 40,
+    shipyardLevel: 5,
+    attack: 100,
+    shield: 25,
+    hull: 110,
+    slotAttackBonus: { slots: [12, 13, 14, 15], factor: 1.1 },
+  },
+  voidWard: {
+    id: "voidWard",
+    name: "Void Ward",
+    description: "Elite late defense.",
+    cost: { metal: 20_000, crystal: 15_000, deuterium: 5000 },
+    buildSeconds: 300,
+    shipyardLevel: 10,
+    attack: 600,
+    shield: 300,
+    hull: 800,
+  },
+
 };
 
 export const BUILDINGS: Record<BuildingId, BuildingDef> = {
@@ -366,6 +767,27 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
     costGrowth: 2.5,
     baseBuildSeconds: 3_600,
   },
+  mantleLoom: {
+    id: "mantleLoom",
+    name: "Mantle Loom",
+    description:
+      "Field expansion — occupies 1 field; +5 fieldsCap per level. Very high energy use. Planet only.",
+    baseCost: { metal: 50_000, crystal: 100_000, deuterium: 30_000 },
+    costGrowth: 2.0,
+    baseBuildSeconds: 120,
+    energyUsePerLevel: 80,
+  },
+  rigFoundry: {
+    id: "rigFoundry",
+    name: "Rig Foundry",
+    description:
+      "Construction plant — −15% build time per level for buildings/ships/defenses (floor ×0.10). Required for Chrono Lathe.",
+    baseCost: { metal: 400, crystal: 200, deuterium: 100 },
+    costGrowth: 2.0,
+    baseBuildSeconds: 40,
+    energyUsePerLevel: 15,
+  },
+
 };
 
 export const RESEARCH: Record<ResearchId, ResearchDef> = {
@@ -462,6 +884,17 @@ export const RESEARCH: Record<ResearchId, ResearchDef> = {
     baseResearchSeconds: 40,
     labLevel: 4,
   },
+  gravityWell: {
+    id: "gravityWell",
+    name: "Well Binding",
+    description:
+      "Gravity doctrine — required for Void Titan, Swarm Mothership, and World Eater.",
+    baseCost: { metal: 0, crystal: 4000, deuterium: 2000 },
+    costGrowth: 2.0,
+    baseResearchSeconds: 120,
+    labLevel: 6,
+  },
+
 };
 
 /** Swarm Mothership base carry capacity (drones + harvesters). */
@@ -494,3 +927,177 @@ export const OCCUPATION_OCCUPIER_SHARE = 0.3;
 export const OCCUPATION_OWNER_SHARE = 0.7;
 /** World Eaters required to capture/destroy a mini planet. */
 export const MINI_WORLD_EATER_MIN = 5;
+
+/** Round 3 — Rig Foundry: −15% build time per level, floor ×0.10. */
+export const RIG_FOUNDRY_TIME_PER_LEVEL = 0.15;
+export const RIG_FOUNDRY_TIME_FLOOR = 0.1;
+/** Chrono Lathe also requires Rig Foundry this level. */
+export const CHRONO_LATHE_RIG_FOUNDRY_REQ = 10;
+/** Mantle Loom: +fieldsCap per level; always occupies 1 field. */
+export const MANTLE_LOOM_FIELDS_PER_LEVEL = 5;
+export const MANTLE_LOOM_FIELDS_USED = 1;
+/** Mantle Loom gates. */
+export const MANTLE_LOOM_SOLAR_REQ = 5;
+export const MANTLE_LOOM_LAB_REQ = 3;
+/** Rig Foundry gate. */
+export const RIG_FOUNDRY_SHIPYARD_REQ = 2;
+
+/** Slot → temperature K (v1). Slot 8 = 90K baseline for solar. */
+export const SLOT_TEMPERATURE_K: Readonly<Record<number, number>> = {
+  1: 220,
+  2: 200,
+  3: 180,
+  4: 160,
+  5: 140,
+  6: 120,
+  7: 100,
+  8: 90,
+  9: 80,
+  10: 70,
+  11: 60,
+  12: 50,
+  13: 40,
+  14: 30,
+  15: 20,
+};
+export const SOLAR_TEMP_BASELINE_K = 90;
+
+/** Class change Starshards: 200 + 100 × priorChangeCount. */
+export const CLASS_CHANGE_BASE_COST = 200;
+export const CLASS_CHANGE_COST_PER_PRIOR = 100;
+/** 7-day wall-clock cooldown after a paid class change. */
+export const CLASS_CHANGE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+
+export const PLAYER_CLASS_ORDER: readonly PlayerClassId[] = [
+  "miner",
+  "explorer",
+  "fleeter",
+  "expansionist",
+] as const;
+
+export const PLAYER_CLASS_BONUSES: Readonly<
+  Record<
+    PlayerClassId,
+    {
+      name: string;
+      mineOutput: number;
+      defensePower: number;
+      defenseBuildTime: number;
+      expeditionYield: number;
+      researchTime: number;
+      probeSpeed: number;
+      expeditionSlots: number;
+      attack: number;
+      fleetSpeed: number;
+      shipBuildTime: number;
+      fleetSlots: number;
+      colonySlots: number;
+      colonyShipSpeed: number;
+      buildingBuildTime: number;
+      jumpGateCooldown: number;
+    }
+  >
+> = {
+  miner: {
+    name: "Miner",
+    mineOutput: 1.12,
+    defensePower: 1.1,
+    defenseBuildTime: 0.9,
+    expeditionYield: 1,
+    researchTime: 1,
+    probeSpeed: 1,
+    expeditionSlots: 0,
+    attack: 1,
+    fleetSpeed: 1,
+    shipBuildTime: 1,
+    fleetSlots: 0,
+    colonySlots: 0,
+    colonyShipSpeed: 1,
+    buildingBuildTime: 1,
+    jumpGateCooldown: 1,
+  },
+  explorer: {
+    name: "Explorer",
+    mineOutput: 1,
+    defensePower: 1,
+    defenseBuildTime: 1,
+    expeditionYield: 1.2,
+    researchTime: 0.9,
+    probeSpeed: 1.25,
+    expeditionSlots: 1,
+    attack: 1,
+    fleetSpeed: 1,
+    shipBuildTime: 1,
+    fleetSlots: 0,
+    colonySlots: 0,
+    colonyShipSpeed: 1,
+    buildingBuildTime: 1,
+    jumpGateCooldown: 1,
+  },
+  fleeter: {
+    name: "Fleeter",
+    mineOutput: 1,
+    defensePower: 1,
+    defenseBuildTime: 1,
+    expeditionYield: 1,
+    researchTime: 1,
+    probeSpeed: 1,
+    expeditionSlots: 0,
+    attack: 1.08,
+    fleetSpeed: 1.1,
+    shipBuildTime: 0.9,
+    fleetSlots: 1,
+    colonySlots: 0,
+    colonyShipSpeed: 1,
+    buildingBuildTime: 1,
+    jumpGateCooldown: 1,
+  },
+  expansionist: {
+    name: "Expansionist",
+    mineOutput: 1,
+    defensePower: 1,
+    defenseBuildTime: 1,
+    expeditionYield: 1,
+    researchTime: 1,
+    probeSpeed: 1,
+    expeditionSlots: 0,
+    attack: 1,
+    fleetSpeed: 1,
+    shipBuildTime: 1,
+    fleetSlots: 0,
+    colonySlots: 2,
+    colonyShipSpeed: 1.15,
+    buildingBuildTime: 0.95,
+    jumpGateCooldown: 0.85,
+  },
+};
+
+/** Fold Bridge base cooldown (wall-clock). Class / Beacon multiply. */
+export const JUMP_GATE_BASE_COOLDOWN_MS = 300_000;
+
+/** Class ship effect constants. */
+export const VAULT_SCOUT_YIELD_PER = 0.05;
+export const VAULT_SCOUT_YIELD_CAP = 10;
+export const ASTROLABE_RESEARCH_TIME = 0.92;
+export const SPOIL_SKIMMER_DEBRIS_FRAC = 0.15;
+export const LINE_DRUMMER_SPEED_PER = 0.02;
+export const LINE_DRUMMER_SPEED_CAP = 10;
+export const VEIN_ANCHOR_MINE_PER = 0.03;
+export const VEIN_ANCHOR_MINE_CAP = 10;
+export const GRID_STAKE_ENERGY_PER = 0.04;
+export const GRID_STAKE_ENERGY_CAP = 10;
+export const FRONTIER_BEACON_JUMP_CD = 0.75;
+
+/** Foundation Ark bootstrap building levels on successful colonize. */
+export const FOUNDATION_ARK_BOOTSTRAP: Readonly<
+  Partial<Record<BuildingId, number>>
+> = {
+  metalMine: 5,
+  crystalMine: 5,
+  deutSynth: 5,
+  solarPlant: 5,
+  metalStorage: 5,
+  crystalStorage: 5,
+  deutTank: 5,
+  rigFoundry: 6,
+};

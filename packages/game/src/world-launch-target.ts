@@ -4,7 +4,12 @@ import {
   MAP_SLOTS,
   MAP_SYSTEMS,
 } from "./catalog.js";
-import { maxColonies, maxExpeditions } from "./formulas.js";
+import {
+  empireColonyCap,
+  empireExpeditionCap,
+  maxColonies,
+  maxExpeditions,
+} from "./formulas.js";
 import { canCollectDebris } from "./formulas-round2.js";
 import { ownedPlanetCount } from "./world-moons.js";
 import type {
@@ -67,7 +72,7 @@ export function resolveLaunchTarget(
     const activeExpeditions = Object.values(universe.fleets).filter(
       (f) => f.ownerPlayerId === player.id && f.mission === "expedition",
     ).length;
-    const cap = maxExpeditions(player.research.astrophysics);
+    const cap = empireExpeditionCap(player, maxExpeditions);
     if (activeExpeditions >= cap) {
       return {
         ok: false,
@@ -155,16 +160,19 @@ export function resolveLaunchTarget(
       if (pirateBaseAtCoords(universe, targetCoords)) {
         return { ok: false, error: "Pirate base occupies that slot." };
       }
-      if ((ships.colonyShip ?? 0) < 1) {
-        return { ok: false, error: "Colonize requires an Outpost Cradle." };
-      }
-      if (
-        ownedPlanetCount(universe, player.id) >=
-        maxColonies(player.research.astrophysics)
-      ) {
+      const hasCradle = (ships.colonyShip ?? 0) >= 1;
+      const hasArk = (ships.foundationArk ?? 0) >= 1;
+      if (!hasCradle && !hasArk) {
         return {
           ok: false,
-          error: `Colony limit reached (Stellar Cartography → ${maxColonies(player.research.astrophysics)} worlds).`,
+          error: "Colonize requires an Outpost Cradle or Foundation Ark.",
+        };
+      }
+      const colonyCap = empireColonyCap(player, universe, maxColonies);
+      if (ownedPlanetCount(universe, player.id) >= colonyCap) {
+        return {
+          ok: false,
+          error: `Colony limit reached (Stellar Cartography → ${colonyCap} worlds).`,
         };
       }
     } else {

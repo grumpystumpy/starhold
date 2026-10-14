@@ -1,7 +1,9 @@
-import { SHIPS, SHIP_ORDER } from "./catalog.js";
+import { FOUNDATION_ARK_BOOTSTRAP, SHIPS, SHIP_ORDER } from "./catalog.js";
 import {
+  classBonuses,
   coordsKey,
   emptyDefenses,
+  empireColonyCap,
   fleetShipCount,
   flightSecondsOneWay,
   levelBonuses,
@@ -9,6 +11,7 @@ import {
   normalizeFleetShips,
   rollPlanetFields,
 } from "./formulas.js";
+import type { BuildingId } from "./types.js";
 import type {
   FleetMission,
   FleetShips,
@@ -135,14 +138,16 @@ export function resolveFleetArrival(
       return;
     } else if (fleet.mission === "colonize") {
       const occupied = planetAtCoords(universe, fleet.targetCoords);
+      const hasCradle = (fleet.ships.colonyShip ?? 0) >= 1;
+      const hasArk = (fleet.ships.foundationArk ?? 0) >= 1;
       if (occupied) {
-      } else if ((fleet.ships.colonyShip ?? 0) < 1) {
+      } else if (!hasCradle && !hasArk) {
       } else if (!owner) {
         delete universe.fleets[fleet.id];
         return;
       } else if (
         ownedPlanetCount(universe, owner.id) >=
-        maxColonies(owner.research.astrophysics)
+        empireColonyCap(owner, universe, maxColonies)
       ) {
       } else {
         const planetId = `plnt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
@@ -168,9 +173,16 @@ export function resolveFleetArrival(
           shipQueue: [],
           defenseQueue: [],
         };
-        colony.buildings.solarPlant = 1;
         const remaining = normalizeFleetShips(fleet.ships);
-        remaining.colonyShip = Math.max(0, remaining.colonyShip - 1);
+        if (hasArk) {
+          remaining.foundationArk = Math.max(0, remaining.foundationArk - 1);
+          for (const [bid, level] of Object.entries(FOUNDATION_ARK_BOOTSTRAP)) {
+            colony.buildings[bid as BuildingId] = level ?? 0;
+          }
+        } else {
+          remaining.colonyShip = Math.max(0, remaining.colonyShip - 1);
+          colony.buildings.solarPlant = 1;
+        }
         addShipsToPlanet(colony, remaining);
         universe.planets[planetId] = colony;
         owner.planetIds.push(planetId);
@@ -275,7 +287,10 @@ export function advanceUniverse(universe: UniverseState, now = Date.now()): void
       now,
       energyTech,
       {
-        mineOutput: lb.production * boosts.mineOutput,
+        mineOutput:
+          lb.production *
+          boosts.mineOutput *
+          classBonuses(owner?.playerClass?.classId).mineOutput,
         energyOutput: boosts.energyOutput,
       },
       owner,

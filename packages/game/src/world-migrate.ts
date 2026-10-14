@@ -1,4 +1,5 @@
 import { UNIVERSE_SCHEMA_VERSION } from "./catalog.js";
+import { emptyPlayerClass } from "./formulas-round3.js";
 import type { PirateBase, UniverseState } from "./types.js";
 import { createUniverse, ensureUniverseShape } from "./world-bootstrap.js";
 import {
@@ -84,9 +85,42 @@ export function migrateUniverseV2ToV3(
 }
 
 /**
+ * Additive Round 3 migrator: playerClass defaults + gravityWell research.
+ * Idempotent when schemaVersion >= 4. No map reset.
+ */
+export function migrateUniverseV3ToV4(universe: UniverseState): UniverseState {
+  if ((universe.schemaVersion ?? 0) >= 4) {
+    ensureUniverseShape(universe);
+    return universe;
+  }
+
+  // Ensure v3 shape first if somehow still on 2.
+  if ((universe.schemaVersion ?? 0) < 3) {
+    migrateUniverseV2ToV3(universe);
+  }
+
+  for (const player of Object.values(universe.players)) {
+    if (!player.playerClass) player.playerClass = emptyPlayerClass();
+    if (player.research && player.research.gravityWell == null) {
+      player.research.gravityWell = 0;
+    }
+  }
+
+  for (const planet of Object.values(universe.planets)) {
+    if (planet.buildings.mantleLoom == null) planet.buildings.mantleLoom = 0;
+    if (planet.buildings.rigFoundry == null) planet.buildings.rigFoundry = 0;
+  }
+
+  universe.schemaVersion = 4;
+  ensureUniverseShape(universe);
+  return universe;
+}
+
+/**
  * Load-path helper:
- * - schema >= 3: shape-normalize in place
- * - schema 2: additive migrate to 3 (queues + levels; no archive / no map reset)
+ * - schema >= 4: shape-normalize in place
+ * - schema 3: additive migrate to 4
+ * - schema 2: additive migrate to 3 then 4
  * - schema < 2: full universe reset (prototype 1×9×8 → contract map)
  */
 export function migrateOrResetUniverse(
@@ -103,8 +137,14 @@ export function migrateOrResetUniverse(
     return { universe: data, didReset: false, archived: null };
   }
 
+  if (version === 3 && data.id) {
+    migrateUniverseV3ToV4(data);
+    return { universe: data, didReset: false, archived: null };
+  }
+
   if (version === 2 && data.id) {
     migrateUniverseV2ToV3(data);
+    migrateUniverseV3ToV4(data);
     return { universe: data, didReset: false, archived: null };
   }
 
