@@ -52,3 +52,24 @@ export function recordSuccessfulPirateRaid(
     player.pirateRaidFairness = { dayKey: day, successfulRaids: 1 };
   }
 }
+
+/**
+ * Clear newbie protection by raising storage buildings (no combat skew).
+ * Used by unit fixtures and CI e2e hooks only.
+ */
+export function graduateNewbieProtection(
+  universe: UniverseState,
+  player: PlayerState,
+): void {
+  const planet = universe.planets[player.homePlanetId];
+  if (!planet) return;
+  planet.buildings.metalStorage = Math.max(
+    planet.buildings.metalStorage ?? 0,
+    20,
+  );
+  planet.buildings.crystalStorage = Math.max(
+    planet.buildings.crystalStorage ?? 0,
+    20,
+  );
+  planet.buildings.deutTank = Math.max(planet.buildings.deutTank ?? 0, 20);
+}
