@@ -1,1 +1,1 @@
-PLACEHOLDER_LOAD_FROM_DISK
+FILE_CONTENT_FROM_/agent/starhold/apps/web/src/ui/render-pages.ts
