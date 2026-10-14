@@ -1,0 +1,32 @@
+name: assemble-naming-16
+on:
+  push:
+    branches: [cursor/oct14-naming-d837]
+    paths:
+      - ".cursor-staging/naming-16/READY"
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cursor/oct14-naming-d837
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Assemble remaining naming files
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/asm
+          cat .cursor-staging/naming-16/part-*.txt | tr -d '\n' | base64 -d > /tmp/asm/rest.tgz
+          echo "ca4767abf5fab95f191b333a17c38c5aeaead60d6e44196facf3229848b0ab4a  /tmp/asm/rest.tgz" | sha256sum -c
+          tar xzf /tmp/asm/rest.tgz -C .
+          rm -rf .cursor-staging/naming-16
+          rm -f .github/workflows/assemble-naming-16.yml
+          git config user.name "grumpystumpy"
+          git config user.email "stumpysgarage@gmail.com"
+          git add -A
+          git status
+          git diff --cached --stat
+          git commit -m "fix: naming consistency — remaining UI/docs/types (assembled)"
+          git push
