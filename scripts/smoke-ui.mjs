@@ -1,1 +1,1 @@
-PLACEHOLDER_WILL_REPLACE_WITH_FILE_READ
+__LOAD_FROM__/tmp/starhold/scripts/smoke-ui.mjs
