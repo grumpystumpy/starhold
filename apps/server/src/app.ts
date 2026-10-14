@@ -1,1 +1,1 @@
-PLACEHOLDER_LOAD_FROM_DISK
+{{file:/agent/starhold/apps/server/src/app.ts}}
