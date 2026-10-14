@@ -1,16 +1,13 @@
 import {
   EXPEDITION_SLOT,
-  MAP_SYSTEMS,
   SHIP_ORDER,
   SHIPS,
   fuelCostOneWay,
   flightSecondsOneWay,
   maxExpeditions,
   normalizeFleetShips,
-  type Coordinates,
   type MissionType,
   type PlayerView,
-  type Resources,
 } from "@starhold/game";
 import { SHIP_ART } from "./assets";
 import { fmt, fmtCoords, fmtEta } from "./format";
@@ -133,17 +130,24 @@ export function fleetComposer(
     selected = options[0]?.match(/value="([^"]+)"/)?.[1] ?? "";
   }
 
-  const shipInputs = SHIP_ORDER.map((id) => {
-    const have = view.planet.ships[id] ?? 0;
-    const raw = draft?.counts[id] ?? 0;
-    const value = Math.min(have, Math.max(0, raw));
-    return `
+  const orbitShipIds = SHIP_ORDER.filter(
+    (id) => (view.planet.ships[id] ?? 0) > 0,
+  );
+  const shipInputs = orbitShipIds.length
+    ? orbitShipIds
+        .map((id) => {
+          const have = view.planet.ships[id] ?? 0;
+          const raw = draft?.counts[id] ?? 0;
+          const value = Math.min(have, Math.max(0, raw));
+          return `
       <label class="fleet-ship">
         <img class="thumb" src="${SHIP_ART[id]}" alt="" width="36" height="36" />
-        <span>${escapeHtml(SHIPS[id].name)} <span class="meta">(have ${have})</span></span>
+        <span>${escapeHtml(SHIPS[id].name)} <span class="meta">(in orbit ${have})</span></span>
         <input type="number" min="0" max="${have}" value="${value}" data-fleet-count="${id}" data-testid="fleet-count-${id}" ${busy ? "disabled" : ""} />
       </label>`;
-  }).join("");
+        })
+        .join("")
+    : `<p class="hint" data-testid="fleet-orbit-empty">No ships in orbit on this colony. Build at the shipyard or park a fleet here.</p>`;
 
   const cargoBlock =
     mission === "transport"
@@ -213,12 +217,40 @@ export function fleetComposer(
     return `<label><input type="radio" name="fleet-mission" value="${m}" data-testid="mission-${m}" ${mission === m ? "checked" : ""} ${busy ? "disabled" : ""} /> ${labels[m]}</label>`;
   }).join("");
 
+  const presets = view.player.fleetPresets ?? [];
+  const presetOptions = presets
+    .map((p) => {
+      const ships = SHIP_ORDER.filter((id) => (p.ships[id] ?? 0) > 0)
+        .map((id) => `${p.ships[id]}×${SHIPS[id].name}`)
+        .join(", ");
+      return `<option value="${escapeAttr(p.id)}">${escapeHtml(p.name)}${ships ? ` — ${escapeHtml(ships)}` : ""}</option>`;
+    })
+    .join("");
+  const presetPanel = `
+      <div class="fleet-presets" data-testid="fleet-presets">
+        <label>
+          Preset
+          <select id="fleet-preset" data-testid="fleet-preset" ${busy ? "disabled" : ""}>
+            <option value="">— select —</option>
+            ${presetOptions}
+          </select>
+        </label>
+        <button type="button" data-fleet-preset-apply data-testid="fleet-preset-apply" ${busy ? "disabled" : ""}>Load into form</button>
+        <label class="fleet-preset-name">
+          Save as
+          <input type="text" id="fleet-preset-name" data-testid="fleet-preset-name" maxlength="48" placeholder="Custom name" ${busy ? "disabled" : ""} />
+        </label>
+        <button type="button" data-fleet-preset-save data-testid="fleet-preset-save" ${busy ? "disabled" : ""}>Save preset</button>
+        <button type="button" data-fleet-preset-delete data-testid="fleet-preset-delete" ${busy ? "disabled" : ""}>Delete custom</button>
+      </div>`;
+
   return `
     <form id="fleet-form" data-testid="fleet-form" class="fleet-form">
       <fieldset class="mission-pick">
         <legend>Mission</legend>
         ${missionRadios}
       </fieldset>
+      ${presetPanel}
       <label>
         Target
         <select id="fleet-target" data-testid="fleet-target" ${launchBlocked ? "disabled" : ""}>
@@ -226,10 +258,10 @@ export function fleetComposer(
         </select>
       </label>
       ${cargoBlock}
-      <div class="fleet-ships">${shipInputs}</div>
+      <div class="fleet-ships" data-testid="fleet-orbit-ships">${shipInputs}</div>
       ${needHint}
-      <p class="hint">Example one-way ETA ~${fmtEta(sampleEta)} · fuel ~${sampleFuel} deut (1 scout). Fleet slots: ${1 + (view.player.research.computerTech ?? 0)}${mission === "expedition" ? ` · expeditions ${expeditionActive}/${expeditionCap}` : ""}.</p>
-      <button type="submit" data-testid="launch-fleet" ${launchBlocked ? "disabled" : ""}>Launch fleet</button>
+      <p class="hint">Ships shown are in orbit on the selected colony. Example one-way ETA ~${fmtEta(sampleEta)} · fuel ~${sampleFuel} deut (1 scout). Fleet slots: ${1 + (view.player.research.computerTech ?? 0)}${mission === "expedition" ? ` · expeditions ${expeditionActive}/${expeditionCap}` : ""}.</p>
+      <button type="submit" data-testid="launch-fleet" ${launchBlocked || orbitShipIds.length === 0 ? "disabled" : ""}>Launch fleet</button>
     </form>
   `;
 }
