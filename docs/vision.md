@@ -55,7 +55,7 @@ OGame-style map: galaxy:system navigation; planet table with player names, allia
 
 #### Pirates (E)
 
-NPC bases spawn randomly, grow slowly, raid players and each other. Successful player raid destroys the base; it eventually respawns elsewhere. Challenging but not run-ending for small players.
+NPC bases across the universe. **Superseded for levels/raids/density by [Pirates + Aliens redesign](#pirates--aliens-redesign-2026-10-14)** (max level 100, 200 bases, once-per-hour random raids, coalitions). Successful player raid still destroys the base; challenging but not run-ending for small players.
 
 #### Universe size (A)
 
@@ -92,7 +92,7 @@ Shared contract: **[design/round2-contract.md](./design/round2-contract.md)** (o
 1. **Build queues** — Multi-item queues per planet for buildings, ships, defenses, and research; cancel/reorder; live countdowns. Queue length grows via research, skills, and officers.
 2. **Navigation** — Top-left dropdown; separate pages with real routes/URLs for Buildings, Defenses, Shipyard, Research, Galaxy, Officers, Skills, plus Overview, Fleet, Highscore, Messages.
 3. **Player levels** — No max level. XP from building, research, combat, expeditions, pirate kills (design amounts in contract). Each level grants: +0.5% resource production, time reduction on build/research/fleet, shielding tech, weapons tech, and ship build speed. Level + XP bar in the top bar and on highscores.
-4. **Pirates upgrade** — Bases build every ship type players can; bases level up over time; every 3h free weak ships scaled by base level (count grows with level); pirate techs stay very low vs players.
+4. **Pirates upgrade** — Historical Round 2 intent (levels, 3h free ships). **Operational rules now follow [Pirates + Aliens redesign](#pirates--aliens-redesign-2026-10-14)** (cap 100, defenses accumulate, ship exclusions, 200-base density, once-per-hour random raids, split/coalition).
 5. **Rename audit** — OGame-identical labels → Starhold flavor (Crater Hab, Horizon Scanner, Fold Bridge, Voidforge Titan, Outpost Cradle, Salvage Trawler, Whisper Probe, Beam Emplacement, Aegis Cupola, Power Discipline, Pulse Drive, Ordnance Doctrine, Hull Weave, Aegis Lattice, Shadow Optics, Stellar Cartography, Fleet OS). Audit entire catalogs.
 6. **Mini planets** — Random small planets outside slots 1–16; discoverable only via expedition outcome (reveals coords to finder). 3–4 special-only buildings. After colonize: attacker with ≥5 World Eaters who wins can **capture** (ownership transfer) or **destroy** (huge resource payout + debris).
 7. **New ships** (combat + rapid fire + tests; friend-group balance):
@@ -185,16 +185,92 @@ Once per **merged batch**; no status-only wakes. After contract merge: short nam
 
 ---
 
-## Process (Micah-approved — adopt 2026-10-13)
+## Process (Micah-approved — adopt 2026-10-13; batch-merge rule 2026-10-14)
 
-1. **No status-only wakes/reports.** Do not schedule wakes just to note “waiting on CI” or rebase progress. Use CI completion / merge events. Report only on **merge**, **blocker**, or a **decision needed from Micah**.
+1. **No status-only wakes/reports.** Do not schedule wakes just to note “waiting on CI” or rebase progress. Use CI completion / merge events. Report only on a **batch merge to `main`**, a **blocker**, or a **decision needed from Micah**.
 2. **Max 3 concurrent build threads**, fixed lanes — apply after current H/J finish:
    - **(a) UI / routes**
    - **(b) Game engine / rules / persistence**
    - **(c) Content + balance data**
    Assign each thread to one lane; avoid cross-lane file edits (cuts rebase churn).
 3. **Single tuning source.** All ship/defense/building/research stats, costs, build times, XP awards, queue sizes, and level bonuses live in one module (e.g. `packages/game/src/data/tuning.ts` or JSON). Balance tweaks = edit that file only.
-4. **Fast lane.** Number tweaks, renames, copy/UI text → straight PR to `main` with auto-merge on green CI; **no** design doc. Design-contract-first **only** for new systems.
-5. **Staging + balance report.** Staging env (Vercel preview or second project on a `staging` branch, within Hobby deploy limits). Promote to production `main` about **once a day** in a batch. CI posts a PR comment diffing tuning values (stats/costs/requirements) vs `main`.
+4. **Fast lane.** Number tweaks, renames, copy/UI text → open a PR to `main`; **no** design doc. Design-contract-first **only** for new systems. **Turn off auto-merge** for fast-lane PRs. **Do not** merge small PRs to `main` one-at-a-time.
+5. **Protect Vercel Hobby deploy limit.** Each merge to `main` triggers a production deploy. Let all active lanes finish, then combine into **as few merges as possible** (ideally one batch PR) so production deploys once. No solo merges to `main`.
+6. **Staging + balance report.** Staging env (Vercel preview or second project on a `staging` branch, within Hobby deploy limits). Promote to production `main` about **once a day** in a batch. CI posts a PR comment diffing tuning values (stats/costs/requirements) vs `main`.
 
 Main-only production deploys stay; staging is the exception path for daily batch promote.
+
+### Micah approval gate (2026-10-14)
+
+1. **Nothing merges to `main` without Micah's explicit approval** (relayed by the coordinator). No auto-merge at all, including fast-lane. Finished work stays as open PRs or one integration branch until approved.
+2. **Deploys:** at most 3–4 production updates per day, each approved by Micah first. Keep Vercel usage minimal (spare deploys for urgent fixes). No PR preview deploys — `git.deploymentEnabled` main-only (or ignoreCommand).
+3. **Queue order:** Micah's send order, oldest first. Keep lanes busy continuously.
+4. **Reporting:** as soon as each item is done, report merge-ready (PR link + one-line plain summary) for Micah's approval list; also report blockers.
+
+### Quality gate (2026-10-14)
+
+An item only goes on Micah's merge list after it is proven against what's currently running:
+
+1. Rebase on latest `main` (includes #39 nested `/api/*`).
+2. Unit tests + typecheck + production build green.
+3. Playwright against a **local** production build (`npm run build:vercel` + local serve of `apps/web/dist` + API — not Next.js; Starhold is Vite/Hono). Env shape like prod: KV + `SESSION_SECRET`. Cover signup → login → cookie persistence **and** the new feature end-to-end.
+4. UI reviewer sign-off at desktop 1280×800 and phone 390×844.
+5. Save-format compatibility with existing Upstash KV player data (no resets; migrate if needed).
+6. Combines cleanly with other merge-ready items.
+7. **Do not** use Vercel preview deploys for this testing.
+
+Report to coordinator only when passed: PR link + one-line summary + what was tested.
+
+
+## Pirates + Aliens redesign (2026-10-14)
+
+Micah redesign. **Supersedes** Round 1 density/raid cadence, Round 2 pirate cap-12 / “every ship” catalog, and open PR **#44**. Contract: [design/round2-contract.md](./design/round2-contract.md) §5–5b. Implementer note: store `internal/pirates-aliens-redesign.md`. All numeric knobs live in `packages/game/src/data/tuning.ts` (constant names documented before code lands). **Original names only** (no OGame terms).
+
+### Pirates
+
+- **Max level 100** (not 12). Every level-up grants defenses; higher levels grant more.
+- Each **weak-ship spawn** (every **3h**) **also** adds defenses. Defenses **accumulate forever**; amount scales with level.
+- Ship catalog: every ship **except the three biggest** — **World Eater**, **Mothership**, **Void Titan**.
+- **Raid once per hour** at a **random time within that hour** (players and other pirates). Pirate-vs-pirate slightly less often than pirate-vs-player. Same **split family** (original + descendants) never attack each other (**coalition**).
+- Universe target: **200 pirate bases** across all galaxies. New universes seed to 200; migration **tops up** existing universes to 200 **without wiping player data**.
+- **Split once at exactly level 25:** original unchanged + **2** new level-1 bases in nearby systems. No other split levels.
+
+### Aliens (new faction)
+
+- Universe starts with **zero** alien bases — they exist **only after** an expedition find.
+- **Hidden** until found by expedition. Find chance **0.001% per expedition**; universe daily find window/roll **resets each day**. More expedition runners → more independent find chances.
+- Once found: settle the **nearest open slot-1** planet relative to the finder’s expedition origin.
+- **Build up 4 hours**, then raid anyone on the **same** once-per-hour random-time schedule as pirates.
+- Same growth path as pirates (leveling, accumulating defenses, 3h ship+defense spawns, hourly random raids, coalitions) but **split at level 50**, **stronger**, more ships/defenses per spawn period.
+- **Few** alien bases (found only). Tech always **1 level above** the top player’s tech **per research**.
+
+### Performance (Hobby)
+
+200 pirate bases (+ rare aliens) × hourly random raids must not blow KV / serverless. Simulate with **lazy catch-up on read** (or a rare batched tick) — not per-base writes. **Recommendation:** do **not** rely on Vercel Hobby cron for hourly cadence (Hobby cron is daily-only); prefer player-driven lazy AI ticks. Flag Upstash free-tier command budget if every tick rewrites the whole universe document. Details in the implementer note.
+
+### Queue addendum — PLANET ART (after mini / pirates / backlog)
+
+60–75 distinct planet images: hot slots 1–5, habitable 6–10, cold 11–15 (track temperature mechanic). Mini planets: 30–40 varied. Deterministic seed `galaxy:system:slot`; no duplicates in-system or adjacent. Original art only; webp/lazy-load; overview + galaxy + lists; desktop+phone; quality gate; report merge-ready with preview screenshots.
+
+### Mini planets (revised 2026-10-14 — PR #42 redesign)
+
+**Spawn:** ~**1 per 5 systems** (not 1/80). Multiple minis allowed in the same system.
+
+**Lifecycle / ownership**
+- Rich output (well above similar-size normals). Drift/move over time; holder keeps it until lost.
+- **Remove owner:** any ship/fleet that **wins a battle** there removes the current owner → leaves it **unoccupied**. That same fleet operation **cannot** also capture it.
+- **Capture unoccupied:** only a **Colonizer**, as a **separate** fleet mission.
+- **Capture occupied exception:** a fleet containing a **Void Titan, Mothership, or World Eater** that wins vs the owner **captures directly** (ownership transfer, no Colonizer).
+- **Destroy:** **World Eater only**. Always a massive debris field (**metal/crystal only**, never deuterium). Destroyed minis have **no respawn timer** — they re-enter the discoverable pool immediately (expeditions can find them/new ones).
+
+**Visibility:** discovered minis visible **only to the finder** at first; **8 hours after colonized** → visible to all in galaxy view.
+
+**Buildings:** normal buildings allowed; 4 specials as extras if they fit.
+
+**Super-rare (very low spawn)** — numbers in tuning module:
+1. **Ironwater Rock** (original name OK) — deut **10×** best normal planet; normal buildings.
+2. **Moving Fortress** — relocate by spending deuterium: target any system in the **current galaxy or ±1 galaxy** (at most one galaxy per jump). Accuracy **±10 systems** around the chosen system (e.g. pick 1:350 → land 1:340–1:360), clamped to systems **1–399**; slot = any free mini slot. Show landing window in move UI. Espionage returns nothing; owner gets **no** incoming-fleet warning; combat mods for fleets/defenses defending/attacking/orbiting: shields **×3**, plasma attack **×2**, armor **−75%**; **one per player** (document simplest second-MF rule). Range/accuracy/cost in tuning.
+3. **Relic World** — +30% research speed empire-wide, +25% expedition finds; draws more pirate raids; **one per player**.
+
+Revise open PR #42; quality gate again before merge list.
+
