@@ -1,5 +1,5 @@
 /**
- * Vercel Node serverless entry — bundled to api/[[...route]].js.
+ * Vercel Node serverless entry — bundled to api/index.js.
  * Explicit Node (req,res) bridge — avoids hono/vercel edge assumptions.
  */
 import type { IncomingMessage, ServerResponse } from "node:http";

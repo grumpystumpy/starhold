@@ -4,7 +4,7 @@
 **Team:** Stumpy's Creations · **Project:** starhold · **Production branch:** `main`  
 Agents do **not** create accounts. No credit card.
 
-API is serverless (`api/[[...route]].js`). Shared multiplayer needs Redis REST credentials.
+API is serverless (`api/index.js`, with `/api/*` rewritten to `/api`). Shared multiplayer needs Redis REST credentials.
 
 **Deploys:** Only `main` deploys to Vercel (`git.deploymentEnabled`: `*` false, `main` true). PR checks run on GitHub Actions (`unit-and-e2e`); preview branches do not consume Hobby deploy quota.
 
@@ -90,7 +90,7 @@ If `main` merge does not appear on production (Vercel Hobby monthly deploy cap):
 | Install | `npm install` |
 | Build | `npm run build:vercel` |
 | Output | `apps/web/dist` |
-| API | `api/[[...route]].js` |
+| API | `api/index.js` |
 
 ## Local
 

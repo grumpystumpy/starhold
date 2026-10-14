@@ -16,12 +16,16 @@
       "destination": "/api/state?playerId=:playerId"
     },
     {
-      "source": "/((?!api/).*)",
+      "source": "/api/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/((?!api$).*)",
       "destination": "/index.html"
     }
   ],
   "functions": {
-    "api/[[...route]].js": {
+    "api/index.js": {
       "maxDuration": 30,
       "memory": 1024
     }
