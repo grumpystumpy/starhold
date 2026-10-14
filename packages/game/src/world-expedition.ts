@@ -22,6 +22,7 @@ import {
   expeditionStarshardsAmount,
   grantStarshards,
 } from "./world-boosts.js";
+import { tryAlienExpeditionFind } from "./world-pirates.js";
 
 /** Deterministic 0..99 roll from fleet id + arrival time. */
 export function expeditionRoll(fleetId: string, at: number): number {
@@ -160,6 +161,14 @@ export function resolveExpeditionArrival(
       const _exhaustive: never = kind;
       throw new Error(`Unhandled expedition kind: ${_exhaustive}`);
     }
+  }
+
+  // Rare alien find (0.001%) — independent of other outcomes; settle slot-1.
+  const alien = tryAlienExpeditionFind(universe, fleet, now);
+  if (alien) {
+    summary =
+      (summary ? summary + " " : "") +
+      `Alien signal traced — ${alien.name} settled at ${alien.coords.galaxy}:${alien.coords.system}:${alien.coords.slot}.`;
   }
 
   // Non-empty expedition outcomes grant XP (contract v1).
