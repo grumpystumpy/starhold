@@ -156,7 +156,7 @@ export function resolveLaunchTarget(
         return { ok: false, error: "Pirate base occupies that slot." };
       }
       if ((ships.colonyShip ?? 0) < 1) {
-        return { ok: false, error: "Colonize requires an Outpost Cradle." };
+        return { ok: false, error: "Colonize requires a Colonizer." };
       }
       if (
         ownedPlanetCount(universe, player.id) >=
@@ -175,7 +175,7 @@ export function resolveLaunchTarget(
       if (!canCollectDebris(ships)) {
         return {
           ok: false,
-          error: "Harvest requires a Salvage Trawler or Swarm Mothership.",
+          error: "Harvest requires a Salvage Trawler or Mothership.",
         };
       }
     }
@@ -189,7 +189,7 @@ export function resolveLaunchTarget(
     targetPlayerId = targetPlanet.ownerPlayerId;
 
     if (mission === "transport") {
-      if (targetPlanet.ownerPlayerId !== player.id) {
+      if (targetPlanet.ownerPlayerId === player.id) {
         return { ok: false, error: "Transport only between your planets." };
       }
       if (targetPlanet.id === origin.id) {
