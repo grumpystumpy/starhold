@@ -195,8 +195,13 @@ export function galaxyViewFor(
           coords: pirate.coords,
           name: pirate.name,
           tier: pirate.tier,
+          level: pirate.level ?? pirate.tier,
           threatHint:
-            pirate.tier >= 5 ? "high" : pirate.tier >= 2 ? "medium" : "low",
+            (pirate.level ?? pirate.tier) >= 5
+              ? "high"
+              : (pirate.level ?? pirate.tier) >= 2
+                ? "medium"
+                : "low",
         }
       : null,
   };

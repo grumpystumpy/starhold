@@ -201,6 +201,8 @@ export interface PirateBasePublic {
   coords: Coordinates;
   name: string;
   tier: number;
+  /** Alias of tier (Round 2 L). */
+  level: number;
   threatHint: "low" | "medium" | "high";
 }
 

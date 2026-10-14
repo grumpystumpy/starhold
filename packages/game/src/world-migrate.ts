@@ -61,20 +61,19 @@ export function migrateUniverseV2ToV3(
 
   if (universe.pirateBases) {
     for (const base of Object.values(universe.pirateBases) as PirateBase[]) {
-      const tier = base.tier ?? 0;
-      if ((base as { level?: number }).level == null) {
-        (base as { level?: number }).level = tier;
-      }
+      const tier = Math.max(0, Math.floor(base.tier ?? 0));
+      base.tier = tier;
+      base.level = tier;
+      const techLevel = Math.min(2, Math.floor(tier / 4));
       if ((base as { techs?: unknown }).techs == null) {
-        (base as { techs?: unknown }).techs = {
-          weapons: 0,
-          armour: 0,
-          shielding: 0,
+        base.techs = {
+          weapons: techLevel,
+          armour: techLevel,
+          shielding: techLevel,
         };
       }
       if ((base as { lastFreeSpawnAt?: number }).lastFreeSpawnAt == null) {
-        (base as { lastFreeSpawnAt?: number }).lastFreeSpawnAt =
-          base.lastGrewAt ?? now;
+        base.lastFreeSpawnAt = base.lastGrewAt ?? now;
       }
     }
   }

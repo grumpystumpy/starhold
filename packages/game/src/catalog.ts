@@ -389,9 +389,14 @@ export const SLOT_PRODUCTION_MULT: Readonly<
 /** ~1 pirate base per N systems (≈100 / 10×399 map). */
 export const PIRATE_SYSTEMS_PER_BASE = 40;
 
-/** Growth: tier +1 every interval, capped. */
+/** Growth: tier/level +1 every interval, capped (Round 2 raised 8 → 12). */
 export const PIRATE_GROWTH_INTERVAL_MS = 6 * 60 * 60 * 1000;
-export const PIRATE_TIER_CAP = 8;
+export const PIRATE_TIER_CAP = 12;
+
+/** Free weak ships every interval: count = base + per-level × level. */
+export const PIRATE_FREE_SPAWN_INTERVAL_MS = 3 * 60 * 60 * 1000;
+export const PIRATE_FREE_SPAWN_BASE = 10;
+export const PIRATE_FREE_SPAWN_PER_LEVEL = 5;
 
 /** After player destroy: respawn delay elsewhere (inclusive range). */
 export const PIRATE_RESPAWN_DELAY_MIN_MS = 12 * 60 * 60 * 1000;
@@ -412,3 +417,4 @@ export const PIRATE_DEFENSE_WIN_STARSHARDS = 10;
  */
 export const PIRATE_RAID_POWER_FACTOR = 1.4;
 export const PIRATE_RAID_POWER_FLOOR = 40;
+

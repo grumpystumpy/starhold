@@ -3341,7 +3341,10 @@ var SLOT_PRODUCTION_MULT = {
 };
 var PIRATE_SYSTEMS_PER_BASE = 40;
 var PIRATE_GROWTH_INTERVAL_MS = 6 * 60 * 60 * 1e3;
-var PIRATE_TIER_CAP = 8;
+var PIRATE_TIER_CAP = 12;
+var PIRATE_FREE_SPAWN_INTERVAL_MS = 3 * 60 * 60 * 1e3;
+var PIRATE_FREE_SPAWN_BASE = 10;
+var PIRATE_FREE_SPAWN_PER_LEVEL = 5;
 var PIRATE_RESPAWN_DELAY_MIN_MS = 12 * 60 * 60 * 1e3;
 var PIRATE_RESPAWN_DELAY_MAX_MS = 36 * 60 * 60 * 1e3;
 var PIRATE_RAID_INTERVAL_MIN_MS = 8 * 60 * 60 * 1e3;
@@ -5672,6 +5675,52 @@ var PIRATE_NAMES = [
   "Ashen Jolly",
   "Cutlass Beacon"
 ];
+function pirateEligibleShipIds() {
+  return SHIP_ORDER.filter((id) => {
+    const def = SHIPS[id];
+    if (def.classExclusive) return false;
+    if (def.stationary) return false;
+    return true;
+  });
+}
+function pirateTechsForLevel(level) {
+  const v = Math.min(2, Math.floor(Math.max(0, Math.floor(level)) / 4));
+  return { weapons: v, armour: v, shielding: v };
+}
+function pirateCombatResearch(base) {
+  const techs = base.techs ?? pirateTechsForLevel(base.level ?? base.tier ?? 0);
+  const research = emptyResearch();
+  research.weaponsTech = techs.weapons;
+  research.armourTech = techs.armour;
+  research.shieldingTech = techs.shielding;
+  return research;
+}
+function ensurePirateBaseShape(base, now = Date.now()) {
+  const tier = Math.max(0, Math.floor(base.tier ?? 0));
+  base.tier = tier;
+  if (base.level == null) base.level = tier;
+  else base.level = Math.max(0, Math.floor(base.level));
+  base.level = base.tier;
+  if (!base.techs) base.techs = pirateTechsForLevel(base.level);
+  else {
+    const expected = pirateTechsForLevel(base.level);
+    base.techs = {
+      weapons: base.techs.weapons ?? expected.weapons,
+      armour: base.techs.armour ?? expected.armour,
+      shielding: base.techs.shielding ?? expected.shielding
+    };
+  }
+  if (base.lastFreeSpawnAt == null) {
+    base.lastFreeSpawnAt = base.lastGrewAt ?? now;
+  }
+  if (!base.ships) base.ships = emptyFleetShips();
+  else base.ships = normalizeFleetShips(base.ships);
+  const eligible = new Set(pirateEligibleShipIds());
+  for (const id of SHIP_ORDER) {
+    if (!eligible.has(id)) base.ships[id] = 0;
+  }
+  return base;
+}
 function pirateBaseId(galaxy, system, slot) {
   return `pir:${galaxy}:${system}:${slot}`;
 }
@@ -5697,14 +5746,51 @@ function scaleShips(base, factor) {
   }
   return out;
 }
+function mergeHangarAtLeast(current, template) {
+  const out = normalizeFleetShips(current);
+  for (const id of SHIP_ORDER) {
+    out[id] = Math.max(out[id] ?? 0, template[id] ?? 0);
+  }
+  return out;
+}
+function addShips(into, add) {
+  const out = normalizeFleetShips(into);
+  for (const id of SHIP_ORDER) {
+    out[id] = (out[id] ?? 0) + (add[id] ?? 0);
+  }
+  return out;
+}
 function pirateShipsForTier(tier) {
   const t = Math.max(0, Math.min(PIRATE_TIER_CAP, Math.floor(tier)));
   const ships = emptyFleetShips();
   ships.scout = 2 + t * 2;
   ships.interceptor = t >= 1 ? t : 0;
-  ships.hauler = t >= 2 ? Math.ceil(t / 2) : 0;
+  ships.hauler = t >= 1 ? Math.ceil(t / 2) : 0;
+  ships.probe = t >= 2 ? 1 + Math.floor(t / 3) : 0;
   ships.cruiser = t >= 3 ? Math.floor((t - 2) / 2) : 0;
-  ships.bomber = t >= 6 ? t - 5 : 0;
+  ships.bomber = t >= 5 ? Math.max(1, t - 4) : 0;
+  ships.keelSovereign = t >= 4 ? Math.max(0, Math.floor((t - 3) / 3)) : 0;
+  ships.rakeCorsair = t >= 5 ? Math.max(0, Math.floor((t - 4) / 3)) : 0;
+  ships.recycler = t >= 6 ? Math.max(1, Math.floor((t - 5) / 2)) : 0;
+  ships.colonyShip = t >= 6 ? 1 : 0;
+  ships.anvilDread = t >= 7 ? Math.max(0, Math.floor((t - 6) / 2)) : 0;
+  ships.wardbreaker = t >= 8 ? Math.max(0, Math.floor((t - 7) / 2)) : 0;
+  if (t >= 9) {
+    ships.swarmDrone = 2 + (t - 9) * 2;
+    ships.swarmHarvester = t >= 10 ? 1 : 0;
+    ships.swarmMothership = t >= 10 ? 1 : 0;
+    ships.worldEater = t >= 11 ? 1 : 0;
+    ships.voidforgeTitan = t >= 12 ? 1 : 0;
+  }
+  return ships;
+}
+function pirateFreeSpawnShips(level) {
+  const lvl = Math.max(0, Math.floor(level));
+  const total = PIRATE_FREE_SPAWN_BASE + PIRATE_FREE_SPAWN_PER_LEVEL * lvl;
+  const ships = emptyFleetShips();
+  const interceptors = Math.floor(total * 0.3);
+  ships.scout = total - interceptors;
+  ships.interceptor = interceptors;
   return ships;
 }
 function pirateResourcesForTier(tier) {
@@ -5747,24 +5833,33 @@ function pickEmptySlot(universe, galaxy, system, seedKey) {
 }
 function createPirateBase(universeSeed, galaxy, system, slot, now, tier = 0) {
   const id = pirateBaseId(galaxy, system, slot);
-  return {
-    id,
-    coords: { galaxy, system, slot },
-    name: pirateName(universeSeed, galaxy, system),
-    tier,
-    ships: pirateShipsForTier(tier),
-    resources: pirateResourcesForTier(tier),
-    lastGrewAt: now,
-    lastRaidAt: now,
-    destroyedAt: null
-  };
+  const level = Math.max(0, Math.min(PIRATE_TIER_CAP, Math.floor(tier)));
+  return ensurePirateBaseShape(
+    {
+      id,
+      coords: { galaxy, system, slot },
+      name: pirateName(universeSeed, galaxy, system),
+      tier: level,
+      level,
+      ships: pirateShipsForTier(level),
+      resources: pirateResourcesForTier(level),
+      techs: pirateTechsForLevel(level),
+      lastGrewAt: now,
+      lastRaidAt: now,
+      lastFreeSpawnAt: now,
+      destroyedAt: null
+    },
+    now
+  );
 }
 function seedUniversePirates(universe, now = Date.now()) {
   const seed = universe.seed ?? universe.id;
   if (!universe.pirateBases) universe.pirateBases = {};
   const kept = {};
   for (const [id, base] of Object.entries(universe.pirateBases)) {
-    if (base.destroyedAt != null) kept[id] = base;
+    if (base.destroyedAt != null) {
+      kept[id] = ensurePirateBaseShape(base, now);
+    }
   }
   const living = {};
   for (let galaxy = 1; galaxy <= MAP_GALAXIES; galaxy++) {
@@ -5808,10 +5903,13 @@ function scalePirateRaidFleet(full, defenderPower) {
 }
 function growPirateBase(base, now) {
   if (base.destroyedAt != null) return;
+  ensurePirateBaseShape(base, now);
   while (base.tier < PIRATE_TIER_CAP && now - base.lastGrewAt >= PIRATE_GROWTH_INTERVAL_MS) {
     base.tier += 1;
+    base.level = base.tier;
+    base.techs = pirateTechsForLevel(base.level);
     base.lastGrewAt += PIRATE_GROWTH_INTERVAL_MS;
-    base.ships = pirateShipsForTier(base.tier);
+    base.ships = mergeHangarAtLeast(base.ships, pirateShipsForTier(base.tier));
     const stock = pirateResourcesForTier(base.tier);
     base.resources = {
       metal: Math.max(base.resources.metal, stock.metal),
@@ -5821,6 +5919,14 @@ function growPirateBase(base, now) {
   }
   if (base.tier >= PIRATE_TIER_CAP && now - base.lastGrewAt >= PIRATE_GROWTH_INTERVAL_MS) {
     base.lastGrewAt = now;
+  }
+}
+function applyFreeShipSpawns(base, now) {
+  if (base.destroyedAt != null) return;
+  ensurePirateBaseShape(base, now);
+  while (now - base.lastFreeSpawnAt >= PIRATE_FREE_SPAWN_INTERVAL_MS) {
+    base.lastFreeSpawnAt += PIRATE_FREE_SPAWN_INTERVAL_MS;
+    base.ships = addShips(base.ships, pirateFreeSpawnShips(base.level));
   }
 }
 function markPirateDestroyed(base, now) {
@@ -5872,6 +5978,23 @@ function planetDefensePower(planet, universe) {
   const owner = universe.players[planet.ownerPlayerId];
   return fleetCombatPower(planet.ships, owner?.research) + defenseCombatPower(planet.defenses ?? emptyDefenses(), owner?.research);
 }
+function isRelicWorldPlanet(planet) {
+  return Boolean(planet.flags?.mini && planet.flags.miniKind === "relic");
+}
+function planetRaidWeight(planet) {
+  return isRelicWorldPlanet(planet) ? MINI_RELIC_PIRATE_WEIGHT : 1;
+}
+function pickWeightedPlanet(planets, roll) {
+  let total = 0;
+  for (const p of planets) total += planetRaidWeight(p);
+  if (total <= 0) return planets[roll % planets.length];
+  let slot = roll % total;
+  for (const p of planets) {
+    slot -= planetRaidWeight(p);
+    if (slot < 0) return p;
+  }
+  return planets[planets.length - 1];
+}
 function pickRaidTarget(universe, base, now) {
   const roll = hashSeed(`${base.id}:target:${base.lastRaidAt}:${now}`);
   const others = activePirateBases(universe).filter((b) => b.id !== base.id);
@@ -5879,13 +6002,7 @@ function pickRaidTarget(universe, base, now) {
     (p) => p.kind !== "moon"
   );
   if (planets.length > 0 && (others.length === 0 || roll % 10 < 7)) {
-    const weighted = [];
-    for (const p of planets) {
-      const w = p.flags?.mini && p.flags.miniKind === "relic" ? MINI_RELIC_PIRATE_WEIGHT : 1;
-      for (let i = 0; i < w; i++) weighted.push(p);
-    }
-    const planet = weighted[roll % weighted.length];
-    return { kind: "planet", planet };
+    return { kind: "planet", planet: pickWeightedPlanet(planets, roll) };
   }
   if (others.length > 0) {
     const other = others[roll % others.length];
@@ -5896,6 +6013,7 @@ function pickRaidTarget(universe, base, now) {
 function applyPirateRaidOnPlanet(universe, base, planet, now) {
   const owner = universe.players[planet.ownerPlayerId];
   if (!owner) return;
+  const pirateResearch = pirateCombatResearch(base);
   const defPower = planetDefensePower(planet, universe);
   const raidFleet = scalePirateRaidFleet(base.ships, defPower);
   if (fleetShipCount(raidFleet) < 1) return;
@@ -5903,7 +6021,7 @@ function applyPirateRaidOnPlanet(universe, base, planet, now) {
     raidFleet,
     planet.ships,
     planet.defenses ?? emptyDefenses(),
-    void 0,
+    pirateResearch,
     effectiveCombatResearch(owner)
   );
   planet.ships = combat.defenderAfter;
@@ -5943,10 +6061,16 @@ function applyPirateRaidOnPlanet(universe, base, planet, now) {
 function applyPirateRaidOnPirate(universe, base, other, now) {
   const raidFleet = scalePirateRaidFleet(
     base.ships,
-    fleetCombatPower(other.ships)
+    fleetCombatPower(other.ships, pirateCombatResearch(other))
   );
   if (fleetShipCount(raidFleet) < 1) return;
-  const combat = resolveCombat(raidFleet, other.ships, emptyDefenses());
+  const combat = resolveCombat(
+    raidFleet,
+    other.ships,
+    emptyDefenses(),
+    pirateCombatResearch(base),
+    pirateCombatResearch(other)
+  );
   other.ships = combat.defenderAfter;
   const sent = fleetShipCount(raidFleet);
   const survived = fleetShipCount(combat.attackerAfter);
@@ -5991,7 +6115,9 @@ function runDuePirateRaids(universe, now) {
 function tickPirates(universe, now) {
   if (!universe.pirateBases) universe.pirateBases = {};
   for (const base of Object.values(universe.pirateBases)) {
+    ensurePirateBaseShape(base, now);
     growPirateBase(base, now);
+    applyFreeShipSpawns(base, now);
   }
   runDuePirateRaids(universe, now);
   respawnDestroyedPirates(universe, now);
@@ -6002,6 +6128,7 @@ function resolvePirateRaidArrival(universe, fleet, now) {
   if (!base || base.destroyedAt != null) {
     return;
   }
+  ensurePirateBaseShape(base, now);
   const owner = universe.players[fleet.ownerPlayerId];
   const defenderBefore = { ...base.ships };
   const tierAtFight = base.tier;
@@ -6009,7 +6136,8 @@ function resolvePirateRaidArrival(universe, fleet, now) {
     fleet.ships,
     defenderBefore,
     emptyDefenses(),
-    effectiveCombatResearch(owner)
+    effectiveCombatResearch(owner),
+    pirateCombatResearch(base)
   );
   base.ships = combat.defenderAfter;
   const killed = resourcesCostTotal(
@@ -6162,6 +6290,9 @@ function ensureUniverseShape(universe) {
   if (!universe.debris) universe.debris = {};
   if (!universe.asteroids) universe.asteroids = {};
   if (!universe.pirateBases) universe.pirateBases = {};
+  for (const base of Object.values(universe.pirateBases)) {
+    ensurePirateBaseShape(base);
+  }
   if (!universe.occupations) universe.occupations = {};
   if (!universe.miniPlanetIds) universe.miniPlanetIds = [];
   if (!universe.fleetSpeed) universe.fleetSpeed = universe.speed || 1;
@@ -7846,15 +7977,15 @@ function migrateUniverseV2ToV3(universe, now = Date.now()) {
   }
   if (universe.pirateBases) {
     for (const base of Object.values(universe.pirateBases)) {
-      const tier = base.tier ?? 0;
-      if (base.level == null) {
-        base.level = tier;
-      }
+      const tier = Math.max(0, Math.floor(base.tier ?? 0));
+      base.tier = tier;
+      base.level = tier;
+      const techLevel = Math.min(2, Math.floor(tier / 4));
       if (base.techs == null) {
         base.techs = {
-          weapons: 0,
-          armour: 0,
-          shielding: 0
+          weapons: techLevel,
+          armour: techLevel,
+          shielding: techLevel
         };
       }
       if (base.lastFreeSpawnAt == null) {
@@ -8622,7 +8753,8 @@ function galaxyViewFor(universe, playerId, galaxy, system) {
       coords: pirate.coords,
       name: pirate.name,
       tier: pirate.tier,
-      threatHint: pirate.tier >= 5 ? "high" : pirate.tier >= 2 ? "medium" : "low"
+      level: pirate.level ?? pirate.tier,
+      threatHint: (pirate.level ?? pirate.tier) >= 5 ? "high" : (pirate.level ?? pirate.tier) >= 2 ? "medium" : "low"
     } : null
   };
 }

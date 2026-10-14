@@ -347,6 +347,7 @@ flags?: {
 discoveredBy?: string[];
 lastDriftAt?: number;
 colonizedAt?: number;  // first successful colonize; drives 8h galaxy reveal
+// Relic (miniKind === "relic"): pirate raid weight × MINI_RELIC_PIRATE_WEIGHT (4)
 ```
 
 ### Discovery & visibility
@@ -596,7 +597,10 @@ interface PlanetState {
   buildingQueue: BuildingQueueItem[];  // array
   shipQueue: ShipQueueItem[];
   defenseQueue: DefenseQueueItem[];
-  flags?: { mini?: boolean };
+  flags?: {
+    mini?: boolean;
+    miniKind?: "standard" | "ironwater" | "fortress" | "relic";
+  };
 }
 ```
 
