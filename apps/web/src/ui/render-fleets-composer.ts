@@ -13,6 +13,7 @@ import { SHIP_ART } from "./assets";
 import { fmt, fmtCoords, fmtEta } from "./format";
 import { escapeAttr, escapeHtml } from "./render-escape";
 import { MISSIONS, type FleetDraft } from "./render-fleets-draft.js";
+import { infoTooltip } from "./render-tooltips";
 
 export function fleetComposer(
   view: PlayerView,
@@ -139,10 +140,19 @@ export function fleetComposer(
           const have = view.planet.ships[id] ?? 0;
           const raw = draft?.counts[id] ?? 0;
           const value = Math.min(have, Math.max(0, raw));
+          const def = SHIPS[id];
+          const tip = infoTooltip({
+            title: def.name,
+            lines: [
+              def.description,
+              `Cargo ${fmt(def.cargo)} · atk ${fmt(def.attack)} · in orbit ${fmt(have)}`,
+            ],
+            testId: `fleet-ship-tip-${id}`,
+          });
           return `
       <label class="fleet-ship">
         <img class="thumb" src="${SHIP_ART[id]}" alt="" width="36" height="36" />
-        <span>${escapeHtml(SHIPS[id].name)} <span class="meta">(in orbit ${fmt(have)})</span></span>
+        <span>${escapeHtml(def.name)} ${tip.html} <span class="meta">(in orbit ${fmt(have)})</span></span>
         <input type="number" min="0" max="${have}" value="${value}" data-fleet-count="${id}" data-testid="fleet-count-${id}" ${busy ? "disabled" : ""} />
       </label>`;
         })
@@ -201,20 +211,67 @@ export function fleetComposer(
     sampleShips,
   );
 
+  const missionMeta: Record<
+    MissionType,
+    { label: string; detail: string; requires?: string[] }
+  > = {
+    deploy: {
+      label: "Deploy (park own / attack rival)",
+      detail: "Park ships on your worlds or strike a rival colony.",
+    },
+    raid: {
+      label: "Raid / attack",
+      detail: "Combat mission against a rival — winners leave debris.",
+    },
+    espionage: {
+      label: "Spy (Whisper Probe)",
+      detail: "Probe a foreign world for fleet, defense, and resource intel.",
+      requires: ["Whisper Probe in orbit"],
+    },
+    transport: {
+      label: "Transport cargo (own worlds)",
+      detail: "Move metal, crystal, and deuterium between your colonies.",
+      requires: ["Second owned world"],
+    },
+    colonize: {
+      label: "Colonize empty slot",
+      detail: "Found a new colony on an empty galaxy slot.",
+      requires: ["Colonizer in the fleet"],
+    },
+    harvest: {
+      label: "Harvest debris",
+      detail: "Collect metal/crystal from a debris field after combat.",
+      requires: ["Recycler / harvester hull"],
+    },
+    harvestAsteroid: {
+      label: "Harvest asteroid (Salvage Trawler)",
+      detail: "Mine an asteroid field for resources.",
+      requires: ["Salvage Trawler"],
+    },
+    expedition: {
+      label: "Expedition (deep space)",
+      detail: "Send fleets beyond the system for finds and Starshards.",
+      requires: ["Free expedition slot"],
+    },
+    pirateRaid: {
+      label: "Raid pirate base",
+      detail: "Attack the system pirate base — destroy to earn rewards.",
+    },
+    jump: {
+      label: "Fold Bridge (moon → moon)",
+      detail: "Instant transfer between your moons with Fold Bridges.",
+      requires: ["Fold Bridge on both moons"],
+    },
+  };
   const missionRadios = MISSIONS.map((m) => {
-    const labels: Record<MissionType, string> = {
-      deploy: "Deploy (park own / attack rival)",
-      raid: "Raid / attack",
-      espionage: "Spy (Whisper Probe)",
-      transport: "Transport cargo (own worlds)",
-      colonize: "Colonize empty slot",
-      harvest: "Harvest debris",
-      harvestAsteroid: "Harvest asteroid (Salvage Trawler)",
-      expedition: "Expedition (deep space)",
-      pirateRaid: "Raid pirate base",
-      jump: "Fold Bridge (moon → moon)",
-    };
-    return `<label><input type="radio" name="fleet-mission" value="${m}" data-testid="mission-${m}" ${mission === m ? "checked" : ""} ${busy ? "disabled" : ""} /> ${labels[m]}</label>`;
+    const meta = missionMeta[m];
+    const tip = infoTooltip({
+      title: meta.label,
+      lines: [meta.detail],
+      requires: meta.requires,
+      testId: `mission-tip-${m}`,
+    });
+    return `<label><input type="radio" name="fleet-mission" value="${m}" data-testid="mission-${m}" ${mission === m ? "checked" : ""} ${busy ? "disabled" : ""} /> ${meta.label} ${tip.html}</label>`;
   }).join("");
 
   const presets = view.player.fleetPresets ?? [];

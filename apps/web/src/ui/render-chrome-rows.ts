@@ -44,7 +44,11 @@ export function shipRow(
   const tip = costTooltip({
     action: `Build ${def.name}`,
     cost: def.cost,
-    requires: [`Shipyard L${def.shipyardLevel}+`],
+    detail: def.description,
+    requires: [
+      `Shipyard L${def.shipyardLevel}+`,
+      `Cargo ${fmt(def.cargo)} · atk ${fmt(def.attack)}`,
+    ],
     blocked,
   });
   // Locked hulls are disabled so mis-clicks cannot set busy and silence Upgrade.
@@ -93,7 +97,11 @@ export function defenseRow(
   const tip = costTooltip({
     action: `Build ${def.name}`,
     cost,
-    requires: [`Shipyard L${def.shipyardLevel}+`],
+    detail: def.description,
+    requires: [
+      `Shipyard L${def.shipyardLevel}+`,
+      `Attack ${fmt(def.attack)}`,
+    ],
     blocked,
   });
   return `
@@ -155,7 +163,8 @@ export function researchRow(
     action: `Research ${def.name} → L${level + 1}`,
     cost,
     timeSecs: secs,
-    requires: [`Research Lab L${def.labLevel}+`],
+    detail: def.description,
+    requires: [`Research Lab L${def.labLevel}+`, `Current L${level}`],
     blocked,
   });
   return `

@@ -7,6 +7,7 @@ import {
 import { SHIP_ART } from "./assets";
 import { fmt, fmtCoords, fmtEta, remainingSeconds } from "./format";
 import { escapeAttr, escapeHtml } from "./render-escape";
+import { infoTooltip } from "./render-tooltips";
 
 export function fleetsInFlight(
   fleets: PlayerView["fleets"],
@@ -175,9 +176,32 @@ export function galaxyPanel(
       : `<p class="hint" data-testid="galaxy-asteroids-empty">No asteroid fields in this system.</p>`;
   const pirate = galaxy.pirateBase
     ? `<p class="hint pirate-row" data-testid="galaxy-pirate">${escapeHtml(galaxy.pirateBase.name)} · tier ${fmt(galaxy.pirateBase.tier)} · threat ${escapeHtml(galaxy.pirateBase.threatHint)} · ${fmtCoords(galaxy.pirateBase.coords)}</p>`
-    : `<p class="hint" data-testid="galaxy-pirate-empty">No pirate base reported.</p>`;  const deep = galaxy.deepSpace
+    : `<p class="hint" data-testid="galaxy-pirate-empty">No pirate base reported.</p>`;
+  const deep = galaxy.deepSpace
     ? `<p class="hint" data-testid="galaxy-deep-space">Deep space ${fmtCoords(galaxy.deepSpace.coords)} — expedition target.</p>`
     : "";
+  const maxTip = infoTooltip({
+    title: "Send max expeditions",
+    lines: [
+      "Launches as many expeditions as free slots allow.",
+      "Uses the Expedition fleet preset and ships in orbit on the selected colony.",
+    ],
+    requires: [
+      "Expedition preset",
+      "Free expedition slots",
+      "Ships in orbit",
+    ],
+    testId: "galaxy-max-expeditions-tip",
+  });
+  const scanTip = infoTooltip({
+    title: "Scan system",
+    lines: [
+      "Send Whisper Probes to every foreign-owned planet and moon in this system.",
+      "Consumes probes from ships in orbit on the selected colony.",
+    ],
+    requires: ["Whisper Probe in orbit"],
+    testId: "galaxy-scan-tip",
+  });
   return `
     <section class="panel" data-testid="galaxy-panel">
       <h2>Galaxy</h2>
@@ -187,8 +211,14 @@ export function galaxyPanel(
         <button type="button" data-galaxy-nav="next" data-testid="galaxy-next" ${busy ? "disabled" : ""}>System ▶</button>
       </div>
       <div class="galaxy-actions" data-testid="galaxy-actions">
-        <button type="button" data-galaxy-max-expeditions data-testid="galaxy-max-expeditions" ${busy ? "disabled" : ""}>Send max expeditions</button>
-        <button type="button" data-galaxy-scan-system data-testid="galaxy-scan-system" ${busy ? "disabled" : ""}>Scan system (probes)</button>
+        <span class="galaxy-action">
+          <button type="button" data-galaxy-max-expeditions data-testid="galaxy-max-expeditions" ${busy ? "disabled" : ""} title="${maxTip.title}">Send max expeditions</button>
+          ${maxTip.html}
+        </span>
+        <span class="galaxy-action">
+          <button type="button" data-galaxy-scan-system data-testid="galaxy-scan-system" ${busy ? "disabled" : ""} title="${scanTip.title}">Scan system (probes)</button>
+          ${scanTip.html}
+        </span>
       </div>
       <p class="hint">Send max uses the Expedition preset and fills free expedition slots from ships in orbit on the selected colony. Scan probes every foreign-owned planet/moon in this system.</p>
       <ul class="roster" data-testid="galaxy-slots">${rows}</ul>

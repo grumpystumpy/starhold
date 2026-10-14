@@ -8,24 +8,65 @@ import { NAV_LABELS, NAV_PAGES, type NavPage } from "./nav";
 import { flashHtml, resBlock } from "./render-chrome";
 import { escapeAttr, escapeHtml } from "./render-escape";
 import { hrefForPage } from "./router";
-import { storageFillTitle } from "./render-tooltips";
+import { infoTooltip, storageFillTitle } from "./render-tooltips";
 
 function resourceBar(view: PlayerView, busy: boolean): string {
   const { planet, economy } = view;
   const shards = view.starshards ?? 0;
   const canClaim = Boolean(view.dailyLoginAvailable) && !busy;
+  const metalTip = infoTooltip({
+    title: "Metal",
+    lines: [
+      "Primary build and hull material.",
+      "Hover/tap the bar for live storage fill (amount / cap / rate).",
+    ],
+    testId: "res-tip-metal",
+  });
+  const crystalTip = infoTooltip({
+    title: "Crystal",
+    lines: [
+      "Used for research, electronics, and advanced hulls.",
+      "Hover/tap the bar for live storage fill (amount / cap / rate).",
+    ],
+    testId: "res-tip-crystal",
+  });
+  const deutTip = infoTooltip({
+    title: "Deuterium",
+    lines: [
+      "Fuel for fleets and some facilities.",
+      "Hover/tap the bar for live storage fill (amount / cap / rate).",
+    ],
+    testId: "res-tip-deuterium",
+  });
+  const energyTip = infoTooltip({
+    title: "Energy",
+    lines: [
+      "Powers mines; deficit slows production (factor < 100%).",
+      "Produced vs used shown on the bar; expand Solar Array if short.",
+    ],
+    testId: "res-tip-energy",
+  });
+  const shardsTip = infoTooltip({
+    title: "Starshards",
+    lines: [
+      "Premium in-game currency (no real money).",
+      "Earn from expeditions, pirates, and daily login.",
+      "Spend on officers and skills.",
+    ],
+    testId: "res-tip-starshards",
+  });
   return `
     <section class="resource-bar" aria-label="Resources" data-testid="resources">
-      ${resBlock("metal", "Metal", planet.resources.metal, economy.productionPerHour.metal, economy.storage.metal, RESOURCE_ART.metal)}
-      ${resBlock("crystal", "Crystal", planet.resources.crystal, economy.productionPerHour.crystal, economy.storage.crystal, RESOURCE_ART.crystal)}
-      ${resBlock("deuterium", "Deuterium", planet.resources.deuterium, economy.productionPerHour.deuterium, economy.storage.deuterium, RESOURCE_ART.deuterium)}
+      ${resBlock("metal", `Metal ${metalTip.html}`, planet.resources.metal, economy.productionPerHour.metal, economy.storage.metal, RESOURCE_ART.metal)}
+      ${resBlock("crystal", `Crystal ${crystalTip.html}`, planet.resources.crystal, economy.productionPerHour.crystal, economy.storage.crystal, RESOURCE_ART.crystal)}
+      ${resBlock("deuterium", `Deuterium ${deutTip.html}`, planet.resources.deuterium, economy.productionPerHour.deuterium, economy.storage.deuterium, RESOURCE_ART.deuterium)}
       <div class="res energy${economy.energy.factor < 1 ? " deficit" : ""}" title="${escapeAttr(`Energy factor ${(economy.energy.factor * 100).toFixed(0)}% · produced ${fmt(economy.energy.produced)} · used ${fmt(economy.energy.used)}`)}" data-testid="res-energy">
-        <span class="res-head"><img class="icon" src="${RESOURCE_ART.energy}" alt="" width="28" height="28" /><span class="label">Energy</span></span>
+        <span class="res-head"><img class="icon" src="${RESOURCE_ART.energy}" alt="" width="28" height="28" /><span class="label">Energy ${energyTip.html}</span></span>
         <span class="value">${fmt(economy.energy.produced)} / ${fmt(economy.energy.used)}</span>
         <span class="sub">Factor ${(economy.energy.factor * 100).toFixed(0)}%</span>
       </div>
       <div class="res starshards" title="Starshards (premium in-game currency)" data-testid="res-starshards">
-        <span class="res-head"><span class="label">Starshards</span></span>
+        <span class="res-head"><span class="label">Starshards ${shardsTip.html}</span></span>
         <span class="value" data-testid="starshards-balance">${fmt(shards)}</span>
         <span class="sub">earned in-game</span>
         <button type="button" class="ghost claim-daily" data-claim-daily data-testid="claim-daily" ${canClaim ? "" : "disabled"}>${view.dailyLoginAvailable ? "Claim daily +15" : "Daily claimed"}</button>
@@ -128,7 +169,15 @@ export function shellHtml(
           </div>
         </div>
         <div class="topbar-progress" data-testid="player-level" title="Lifetime XP ${fmt(progress.xpTotal)}">
-          <span class="level-label">Lv ${fmt(progress.level)}</span>
+          <span class="level-label">Lv ${fmt(progress.level)} ${infoTooltip({
+            title: `Commander level ${fmt(progress.level)}`,
+            lines: [
+              `Progress ${fmt(progress.xp)} / ${fmt(progress.xpToNext)} XP to next level.`,
+              `Lifetime XP ${fmt(progress.xpTotal)}.`,
+              "XP comes from buildings, fleets, defenses, and research.",
+            ],
+            testId: "level-tip",
+          }).html}</span>
           <div class="xp-bar" data-testid="xp-bar" role="progressbar" aria-valuemin="0" aria-valuemax="${progress.xpToNext}" aria-valuenow="${progress.xp}" aria-label="Experience">
             <div class="xp-fill" style="width:${xpPct}%"></div>
             <span class="xp-text">${fmt(progress.xp)} / ${fmt(progress.xpToNext)}</span>

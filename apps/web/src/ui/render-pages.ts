@@ -40,6 +40,7 @@ import {
   researchQueueHtml,
   shipQueueHtml,
 } from "./render-queues";
+import { infoTooltip } from "./render-tooltips";
 
 const RESOURCE_BUILDINGS: BuildingId[] = [
   "metalMine",
@@ -94,6 +95,14 @@ function overviewPage(view: PlayerView, busy: boolean): string {
       </form>
       <p class="hint" data-testid="position-mult" title="Position production multipliers for this slot">
         Position × metal ${pm.metal.toFixed(2)} · crystal ${pm.crystal.toFixed(2)} · deut ${pm.deuterium.toFixed(2)} · energy ${pm.energy.toFixed(2)}
+        ${infoTooltip({
+          title: "Position multipliers",
+          lines: [
+            "Slot temperature changes mine and energy output.",
+            `Metal ×${pm.metal.toFixed(2)} · crystal ×${pm.crystal.toFixed(2)} · deuterium ×${pm.deuterium.toFixed(2)} · energy ×${pm.energy.toFixed(2)}`,
+          ],
+          testId: "position-mult-tip",
+        }).html}
       </p>
       <h3 class="subhead">Build queues</h3>
       ${overviewQueuesHtml(view)}
@@ -161,10 +170,19 @@ function shipyardPage(view: PlayerView, busy: boolean): string {
         hangarEmpty
           ? `<div class="empty-hangar" data-testid="hangar-empty"><img src="${UI_ART.emptyHangar}" alt="Empty hangar" width="128" height="96" /><p class="hint">No hulls docked — build above.</p></div>`
           : `<ul class="roster" data-testid="hangar">
-        ${SHIP_ORDER.map(
-          (id) =>
-            `<li data-testid="hangar-${id}"><span class="row-with-thumb"><img class="thumb" src="${SHIP_ART[id]}" alt="" width="36" height="36" />${escapeHtml(SHIPS[id].name)}</span><span>${fmt(planet.ships[id] ?? 0)}</span></li>`,
-        ).join("")}
+        ${SHIP_ORDER.map((id) => {
+          const def = SHIPS[id];
+          const count = planet.ships[id] ?? 0;
+          const tip = infoTooltip({
+            title: def.name,
+            lines: [
+              def.description,
+              `In hangar ${fmt(count)} · cargo ${fmt(def.cargo)} · atk ${fmt(def.attack)}`,
+            ],
+            testId: `hangar-tip-${id}`,
+          });
+          return `<li data-testid="hangar-${id}"><span class="row-with-thumb"><img class="thumb" src="${SHIP_ART[id]}" alt="" width="36" height="36" />${escapeHtml(def.name)} ${tip.html}</span><span>${fmt(count)}</span></li>`;
+        }).join("")}
       </ul>`
       }
     </section>`;
