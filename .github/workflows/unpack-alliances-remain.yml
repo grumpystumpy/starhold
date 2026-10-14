@@ -1,0 +1,51 @@
+name: unpack-alliances-remain
+on:
+  push:
+    paths:
+      - ".github/workflows/unpack-alliances-remain.yml"
+  workflow_dispatch:
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cursor/alliances-4bd8
+      - name: Download, verify, unpack, commit
+        env:
+          TAR_URL: https://litter.catbox.moe/ab1ett.tgz
+          TAR_SHA: bfad5f8546fa62d465fcf4207169d2c018fcf42b958c05035db08816438ed214
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/remain.tgz "$TAR_URL"
+          echo "$TAR_SHA  /tmp/remain.tgz" | sha256sum -c
+          tar -xzf /tmp/remain.tgz -C .
+          rm -f /tmp/remain.tgz
+          rm -f .github/workflows/unpack-alliances-remain.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            packages/game/src/data/tuning.ts \
+            packages/game/src/catalog.ts \
+            packages/game/src/types-view.ts \
+            packages/game/src/world-bootstrap.ts \
+            packages/game/src/world-view.ts
+          if ! git diff --cached --quiet; then
+            git commit -m "feat(alliances): game engine + types"
+          fi
+          git add \
+            apps/server/src/app.ts \
+            apps/web/src/api.ts \
+            apps/web/src/main-handlers-click.ts \
+            apps/web/src/ui/render-pages.ts \
+            apps/web/src/ui/styles-panels.css
+          if ! git diff --cached --quiet; then
+            git commit -m "feat(alliances): API + UI"
+          fi
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "ci: remove alliances unpack workflow"
+          fi
+          git push origin HEAD:cursor/alliances-4bd8
