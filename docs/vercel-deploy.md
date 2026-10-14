@@ -32,26 +32,23 @@ Optional (universe):
 | `STARHOLD_UNIVERSE_SPEED` | `8` |
 | `ALLOWED_ORIGINS` | includes `https://starhold-two.vercel.app` |
 
-Universe state is one JSON document at `STARHOLD_UNIVERSE_KEY`. Accounts/sessions use additional KV keys (`starhold:account:*`, `starhold:session:*`, `starhold:magic:*`, `starhold:email:*`) — see [design/accounts.md](./design/accounts.md).
+Universe state is one JSON document at `STARHOLD_UNIVERSE_KEY`. Accounts/sessions use additional KV keys (`starhold:account:*`, `starhold:session:*`, `starhold:email:*`, `starhold:ratelimit:auth:*`) — see [design/accounts.md](./design/accounts.md).
 
-### Accounts / magic-link email (Micah)
+### Accounts / email + password (Micah)
 
-Agents do **not** create Resend accounts. Free tier only (no credit card).
+No email provider. Sign up / log in with email + password; HttpOnly session cookie keeps progress after closing the tab.
 
-1. Open https://resend.com → **Sign up** (GitHub/Google OK) → free plan.
-2. **API Keys → Create API Key** → copy `re_…`.
-3. Vercel → **starhold** → **Settings → Environment Variables** → add for **Production** (and Preview if you use it later):
+1. Vercel → **starhold** → **Settings → Environment Variables** → add for **Production**:
 
 | Name | Value |
 |------|--------|
-| `RESEND_API_KEY` | `re_…` from Resend |
-| `RESEND_FROM` | `Starhold <onboarding@resend.dev>` (Resend test sender; replace after you verify a domain) |
-| `SESSION_SECRET` | long random string (e.g. `openssl rand -base64 32`) |
-| `APP_URL` | `https://starhold-two.vercel.app` |
+| `SESSION_SECRET` | **Required.** Long random string (e.g. `openssl rand -base64 32`). Without it, signup/login return HTTP 503 on Vercel. |
+| `APP_URL` | optional — `https://starhold-two.vercel.app` |
 
-4. **Deployments → latest Production → … → Redeploy** (or wait for next `main` deploy).
+2. **Remove** `RESEND_API_KEY` / `RESEND_FROM` if present (unused).
+3. **Deployments → latest Production → … → Redeploy** (or wait for next `main` deploy) after setting `SESSION_SECRET`.
 
-Without `RESEND_API_KEY`, the API still works: `POST /api/auth/request-link` returns `devMagicUrl` for local/CI. Production sign-in email needs the key.
+Local / CI use a fixed dev fallback secret when `SESSION_SECRET` is unset (never log it).
 
 ### If vars were just added
 
@@ -63,14 +60,14 @@ Without `RESEND_API_KEY`, the API still works: `POST /api/auth/request-link` ret
 curl -s https://starhold-two.vercel.app/api/health
 ```
 
-Expect `"storage":"kv"` or `"storage":"upstash"` (not `"memory"`).
+Expect `"storage":"kv"` or `"storage":"upstash"` (not `"memory"`), and `auth.passwordAuth: true`.
 
-Signup flow once Resend is set:
+Signup / login:
 
 1. Open https://starhold-two.vercel.app/
-2. Enter email → **Email link** → open the message from Resend
-3. Cookie session resumes after closing the tab (`GET /api/auth/me`)
-4. Guest → signed-in: join as guest first (saves `playerId`), then request magic link (sends `claimPlayerId`) or use **Claim guest save** after sign-in
+2. Enter email + password (8+) → **Sign up** (or **Log in**)
+3. Enter a commander name (or **Claim guest save**)
+4. Close the tab → reopen → cookie session resumes via `GET /api/auth/me` (not localStorage alone)
 
 ### Hobby deploy rate limit
 
@@ -80,7 +77,7 @@ If `main` merge does not appear on production (Vercel Hobby monthly deploy cap):
 2. Confirm latest Production commit SHA matches `main`
 3. If stuck / rate-limited: wait for the Hobby quota reset, then **Redeploy** the latest Production deployment (or push an empty commit on `main` after the window clears)
 
-**2026-10-14:** Hobby deploy window reopened — this docs note kicks a production redeploy of latest `main` (includes Round 3 / #37).
+**2026-10-14:** Hobby deploy window reopened — production redeploys on `main` merges.
 
 ---
 

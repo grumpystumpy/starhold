@@ -31,7 +31,7 @@ export interface AuthAccount {
 export interface AuthMeResponse {
   account: AuthAccount | null;
   view: PlayerView | null;
-  auth?: { resendConfigured?: boolean };
+  auth?: { sessionSecretConfigured?: boolean; passwordAuth?: boolean };
   error?: string;
 }
 
@@ -40,23 +40,40 @@ export async function fetchAuthMe(): Promise<AuthMeResponse> {
   return parse<AuthMeResponse>(res);
 }
 
-export async function requestMagicLink(
+export async function signupAccount(
   email: string,
+  password: string,
   claimPlayerId?: string | null,
 ): Promise<{
   ok: boolean;
-  emailed: boolean;
-  devMagicUrl?: string;
-  resendConfigured?: boolean;
+  account: AuthAccount;
   error?: string;
 }> {
-  const res = await credFetch("/api/auth/request-link", {
+  const res = await credFetch("/api/auth/signup", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       email,
+      password,
       claimPlayerId: claimPlayerId || undefined,
     }),
+  });
+  return parse(res);
+}
+
+export async function loginAccount(
+  email: string,
+  password: string,
+): Promise<{
+  ok: boolean;
+  account: AuthAccount;
+  view: PlayerView | null;
+  error?: string;
+}> {
+  const res = await credFetch("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
   });
   return parse(res);
 }

@@ -20,15 +20,16 @@ export function renderJoin(
     busy: boolean;
     joinDraft: string;
     emailDraft?: string;
+    passwordDraft?: string;
     accountEmail?: string | null;
     claimablePlayerId?: string | null;
-    devMagicUrl?: string | null;
   },
 ): void {
   const existingForm = root.querySelector<HTMLFormElement>("#join-form");
   const existingInput = root.querySelector<HTMLInputElement>("#commander");
   const emailInput = root.querySelector<HTMLInputElement>("#auth-email");
-  const hasMagicForm = Boolean(root.querySelector("#magic-form"));
+  const passwordInput = root.querySelector<HTMLInputElement>("#auth-password");
+  const hasAuthForm = Boolean(root.querySelector("#auth-form"));
   const hasAccountLine = Boolean(
     root.querySelector("[data-testid='account-email']"),
   );
@@ -37,7 +38,7 @@ export function renderJoin(
   const structureOk =
     existingForm &&
     existingInput &&
-    hasMagicForm &&
+    hasAuthForm &&
     Boolean(state.accountEmail) === hasAccountLine &&
     wantClaim === hasClaimBtn;
 
@@ -45,8 +46,10 @@ export function renderJoin(
     patchFlash(root, state.error, state.notice);
     const btn = root.querySelector<HTMLButtonElement>("#join-btn");
     if (btn) btn.disabled = state.busy;
-    const magicBtn = root.querySelector<HTMLButtonElement>("#magic-btn");
-    if (magicBtn) magicBtn.disabled = state.busy;
+    for (const id of ["auth-login-btn", "auth-signup-btn"]) {
+      const authBtn = root.querySelector<HTMLButtonElement>(`#${id}`);
+      if (authBtn) authBtn.disabled = state.busy;
+    }
     const claimBtn = root.querySelector<HTMLButtonElement>("#claim-btn");
     if (claimBtn) claimBtn.disabled = state.busy;
     if (
@@ -62,11 +65,12 @@ export function renderJoin(
     ) {
       emailInput.value = state.emailDraft ?? "";
     }
-    const devSlot = root.querySelector<HTMLElement>("[data-dev-magic]");
-    if (devSlot) {
-      devSlot.innerHTML = state.devMagicUrl
-        ? `<p class="hint" data-testid="dev-magic-url">Dev magic link: <a href="${escapeAttr(state.devMagicUrl)}">${escapeHtml(state.devMagicUrl)}</a></p>`
-        : "";
+    if (
+      passwordInput &&
+      document.activeElement !== passwordInput &&
+      (state.passwordDraft ?? "") !== passwordInput.value
+    ) {
+      passwordInput.value = state.passwordDraft ?? "";
     }
     return;
   }
@@ -79,10 +83,10 @@ export function renderJoin(
       ? `<div class="join-row" style="margin-top:0.75rem">
           <button type="button" id="claim-btn" data-testid="claim-btn" data-claim-anonymous ${state.busy ? "disabled" : ""}>Claim guest save</button>
         </div>
-        <p class="hint">Links local guest <code>${escapeHtml(state.claimablePlayerId)}</code> to this email. Closing the tab will keep progress via your sign-in cookie.</p>`
+        <p class="hint">Links local guest <code>${escapeHtml(state.claimablePlayerId)}</code> to this account. Closing the tab will keep progress via your sign-in cookie.</p>`
       : "";
   const joinLabel = state.accountEmail
-    ? "Commander name (linked to your email)"
+    ? "Commander name (linked to your account)"
     : "Commander name (guest)";
   const joinBtn = state.accountEmail ? "Enter as signed-in" : "Enter universe";
 
@@ -106,19 +110,18 @@ export function renderJoin(
       </form>
       ${claimBlock}
       <hr style="margin:1.25rem 0;border:none;border-top:1px solid rgba(255,255,255,0.12)" />
-      <form id="magic-form" data-testid="magic-form">
-        <label for="auth-email">Email magic link</label>
-        <div class="join-row" style="margin-top:0.5rem">
+      <form id="auth-form" data-testid="auth-form">
+        <label for="auth-email">Email + password</label>
+        <div class="join-row" style="margin-top:0.5rem;flex-wrap:wrap;gap:0.5rem">
           <input id="auth-email" name="email" type="email" maxlength="254" placeholder="you@example.com" autocomplete="email" data-testid="auth-email" value="${escapeAttr(state.emailDraft ?? "")}" />
-          <button type="submit" id="magic-btn" data-testid="magic-btn" ${state.busy ? "disabled" : ""}>Email link</button>
+          <input id="auth-password" name="password" type="password" minlength="8" maxlength="128" placeholder="password (8+)" autocomplete="current-password" data-testid="auth-password" value="${escapeAttr(state.passwordDraft ?? "")}" />
+        </div>
+        <div class="join-row" style="margin-top:0.5rem;gap:0.5rem">
+          <button type="submit" id="auth-login-btn" data-testid="auth-login-btn" data-auth-action="login" ${state.busy ? "disabled" : ""}>Log in</button>
+          <button type="submit" id="auth-signup-btn" data-testid="auth-signup-btn" data-auth-action="signup" ${state.busy ? "disabled" : ""}>Sign up</button>
         </div>
       </form>
-      <div data-dev-magic>${
-        state.devMagicUrl
-          ? `<p class="hint" data-testid="dev-magic-url">Dev magic link: <a href="${escapeAttr(state.devMagicUrl)}">${escapeHtml(state.devMagicUrl)}</a></p>`
-          : ""
-      }</div>
-      <p class="hint">Guest play still works for quick tests. Sign in with email to keep progress after closing the tab (secure cookie). Automation: <code>/?commander=Name</code> or <code>window.starhold.join("Name")</code>.</p>
+      <p class="hint">Guest play still works for quick tests. Sign up with email + password to keep progress after closing the tab (secure cookie — not localStorage alone). Automation: <code>/?commander=Name</code> or <code>window.starhold.join("Name")</code>.</p>
     </section>
   `;
 

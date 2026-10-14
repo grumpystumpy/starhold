@@ -42,8 +42,8 @@ import {
   swarmProduce,
   unlockSkill,
 } from "@starhold/game";
+import { sessionSecretConfigured } from "./accounts.js";
 import { mountAuthRoutes } from "./auth-routes.js";
-import { resendConfigured } from "./email.js";
 import { storageMode, withUniverse } from "./store.js";
 
 function allowedOrigins(): Set<string> {
@@ -124,7 +124,8 @@ export function createApp(): Hono {
           fleets: Object.keys(universe.fleets ?? {}).length,
           debris: Object.keys(universe.debris ?? {}).length,
           auth: {
-            resendConfigured: resendConfigured(),
+            sessionSecretConfigured: sessionSecretConfigured(),
+            passwordAuth: true,
           },
         });
       });

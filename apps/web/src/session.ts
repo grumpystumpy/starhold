@@ -31,12 +31,11 @@ export const session = {
   busy: false,
   joinDraft: "",
   emailDraft: "",
+  passwordDraft: "",
   /** Cookie session account (null = guest / anonymous). */
   account: null as AuthAccount | null,
   /** Pending anonymous playerId offer for claim UI. */
   claimablePlayerId: null as string | null,
-  /** Dev-only magic URL when Resend is not configured. */
-  devMagicUrl: null as string | null,
   pollTimer: undefined as number | undefined,
   flashTimer: undefined as number | undefined,
   /** Defer full paints while a pointer is down so polls cannot swallow clicks. */
