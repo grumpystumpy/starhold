@@ -125,7 +125,7 @@ export function resolveLaunchTarget(
       targetPlanet: null,
       targetPlayerId: null,
       targetAsteroidId,
-      targetPirateBaseId,
+      targetPirateBaseId: null,
     };
   }
 
