@@ -56,6 +56,8 @@ const FORBIDDEN_LABELS = [
   "Jump Gate",
   "Death Star",
   "Colony Ship",
+  "Outpost Cradle",
+  "Swarm Mothership",
   "Spy Probe",
   "Laser Battery",
   "Shield Dome",
@@ -97,7 +99,7 @@ function rectsOverlap(a, b, slack = 1) {
   return !(
     a.right <= b.left + slack ||
     a.left >= b.right - slack ||
-    a.bottom <= b.top + slack ||
+    a.bottom <= b.top - slack ||
     a.top >= b.bottom - slack
   );
 }
