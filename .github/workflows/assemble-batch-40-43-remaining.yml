@@ -1,0 +1,36 @@
+name: assemble-batch-40-43-remaining
+on:
+  push:
+    paths:
+      - ".github/workflows/assemble-batch-40-43-remaining.yml"
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cursor/batch-40-43-7401
+          fetch-depth: 0
+      - name: Download unpack commit cleanup
+        run: |
+          set -euo pipefail
+          EXPECT="79a6f4d2b808d3e1156b4643b14150cd935b3026472d33c9f6b964cc028994a1"
+          URL="https://litter.catbox.moe/kuczf6.gz"
+          curl -fsSL "$URL" -o /tmp/remaining.tar.gz
+          GOT="$(sha256sum /tmp/remaining.tar.gz | awk '{print $1}')"
+          echo "expect=$EXPECT got=$GOT"
+          test "$GOT" = "$EXPECT"
+          tar -tzf /tmp/remaining.tar.gz
+          tar -xzf /tmp/remaining.tar.gz
+          rm -rf .cursor-staging/batch-40-43-remaining || true
+          rm -f .github/mcp-push-smoke-batch-40-43.txt || true
+          rm -f .github/workflows/assemble-batch-40-43-remaining.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git status
+          git commit -m "integrate: batch #40–#43 sources (part 8/9)"
+          git push origin HEAD:cursor/batch-40-43-7401
