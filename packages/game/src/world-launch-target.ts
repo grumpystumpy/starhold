@@ -189,7 +189,7 @@ export function resolveLaunchTarget(
     targetPlayerId = targetPlanet.ownerPlayerId;
 
     if (mission === "transport") {
-      if (targetPlanet.ownerPlayerId === player.id) {
+      if (targetPlanet.ownerPlayerId !== player.id) {
         return { ok: false, error: "Transport only between your planets." };
       }
       if (targetPlanet.id === origin.id) {
