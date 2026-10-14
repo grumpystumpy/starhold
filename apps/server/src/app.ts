@@ -23,6 +23,7 @@ import {
   claimDailyLogin,
   classCatalog,
   deleteFleetPreset,
+  discoverMiniPlanet,
   ensureUniverseShape,
   isPlayerClassId,
   joinUniverse,
@@ -35,6 +36,7 @@ import {
   queueShipBuild,
   reorderQueue,
   renamePlanet,
+  relocateMovingFortress,
   resolveMiniPlanetChoice,
   saveFleetPreset,
   setActivePlanet,
@@ -759,6 +761,68 @@ export function createApp(): Hono {
         body.choice ?? "capture",
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  app.post("/api/mini-relocate", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      planetId?: string;
+      galaxy?: number;
+      system?: number;
+    };
+    if (
+      !body.playerId ||
+      !body.planetId ||
+      body.galaxy == null ||
+      body.system == null
+    ) {
+      return c.json(
+        { error: "playerId, planetId, galaxy, and system required." },
+        400,
+      );
+    }
+    return withUniverse((universe) => {
+      advanceUniverse(universe);
+      const result = relocateMovingFortress(
+        universe,
+        body.playerId!,
+        body.planetId!,
+        Number(body.galaxy),
+        Number(body.system),
+        Date.now(),
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  /**
+   * Local quality-gate only (`STARHOLD_E2E=1`). Reveals the first mini planet
+   * to the player so Playwright can exercise discovery UI without flaky rolls.
+   */
+  app.post("/api/e2e/discover-mini", async (c) => {
+    if (process.env.STARHOLD_E2E !== "1") {
+      return c.json({ error: "Not found." }, 404);
+    }
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+    };
+    if (!body.playerId) {
+      return c.json({ error: "playerId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      advanceUniverse(universe);
+      const ids = universe.miniPlanetIds ?? [];
+      const targetId = ids.find((id) => universe.planets[id]?.flags?.mini);
+      if (!targetId) {
+        return c.json({ error: "No mini planets seeded." }, 500);
+      }
+      const planet = discoverMiniPlanet(universe, body.playerId!, targetId);
+      if (!planet) {
+        return c.json({ error: "Discover failed." }, 400);
+      }
       return c.json(playerView(universe, body.playerId!));
     });
   });

@@ -327,3 +327,17 @@ export async function unlockSkillNode(
   });
   return parse<PlayerView>(res);
 }
+
+export async function relocateMiniFortress(
+  playerId: string,
+  planetId: string,
+  galaxy: number,
+  system: number,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/mini-relocate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, planetId, galaxy, system }),
+  });
+  return parse<PlayerView>(res);
+}

@@ -1,9 +1,12 @@
-import type {
-  BuildingId,
-  DefenseId,
-  OfficerId,
-  ResearchId,
-  ShipId,
+import {
+  fortressRelocateDeutCost,
+  fortressRelocateLandingWindow,
+  MINI_FORTRESS_RELOCATE_ACCURACY,
+  type BuildingId,
+  type DefenseId,
+  type OfficerId,
+  type ResearchId,
+  type ShipId,
 } from "@starhold/game";
 import {
   clearFlash,
@@ -30,6 +33,7 @@ import {
   doLaunchMaxExpeditions,
   doRefresh,
   doRenamePlanet,
+  doRelocateFortress,
   doLogin,
   doSignup,
   doResearch,
@@ -302,6 +306,16 @@ export function bindClickHandlers(): void {
         "#planet-rename-input",
       );
       void doRenamePlanet(input?.value ?? "");
+      return;
+    }
+
+    if (form.id === "fortress-relocate-form") {
+      ev.preventDefault();
+      const gEl = form.querySelector<HTMLInputElement>("#fortress-aim-galaxy");
+      const sEl = form.querySelector<HTMLInputElement>("#fortress-aim-system");
+      const g = Number(gEl?.value ?? 0);
+      const s = Number(sEl?.value ?? 0);
+      void doRelocateFortress(g, s);
     }
   });
 
@@ -315,6 +329,27 @@ export function bindClickHandlers(): void {
     }
     if (el instanceof HTMLInputElement && el.id === "auth-password") {
       session.passwordDraft = el.value;
+    }
+    if (
+      el instanceof HTMLInputElement &&
+      (el.id === "fortress-aim-galaxy" || el.id === "fortress-aim-system")
+    ) {
+      const form = el.closest("#fortress-relocate-form");
+      const hint = root.querySelector<HTMLElement>(
+        "[data-testid='fortress-landing-window']",
+      );
+      if (!form || !hint || !session.view) return;
+      const g = Number(
+        form.querySelector<HTMLInputElement>("#fortress-aim-galaxy")?.value ??
+          0,
+      );
+      const s = Number(
+        form.querySelector<HTMLInputElement>("#fortress-aim-system")?.value ??
+          0,
+      );
+      const win = fortressRelocateLandingWindow(g, s);
+      const cost = fortressRelocateDeutCost(session.view.planet.coords, g, s);
+      hint.innerHTML = `Aim a system in an allowed galaxy. Landing window for current aim: <strong>${win.galaxy}:${win.systemMin}–${win.galaxy}:${win.systemMax}</strong> (±${MINI_FORTRESS_RELOCATE_ACCURACY} systems). Free mini slot on landing. Est. cost at current aim: ${cost} deut.`;
     }
   });
 }

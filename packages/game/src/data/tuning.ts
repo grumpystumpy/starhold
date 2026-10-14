@@ -787,6 +787,48 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
     baseBuildSeconds: 40,
     energyUsePerLevel: 15,
   },
+  riftSiphon: {
+    id: "riftSiphon",
+    name: "Rift Siphon",
+    description:
+      "Mini-planet special — +15% all mine output on this body per level (max 5).",
+    baseCost: { metal: 800, crystal: 400, deuterium: 200 },
+    costGrowth: 1.8,
+    baseBuildSeconds: 45,
+    energyUsePerLevel: 25,
+    maxLevel: 5,
+  },
+  echoVault: {
+    id: "echoVault",
+    name: "Echo Vault",
+    description:
+      "Mini-planet special — +25% storage caps per level (max 5).",
+    baseCost: { metal: 1200, crystal: 800, deuterium: 0 },
+    costGrowth: 1.9,
+    baseBuildSeconds: 40,
+    maxLevel: 5,
+  },
+  anomalyForge: {
+    id: "anomalyForge",
+    name: "Anomaly Forge",
+    description:
+      "Mini-planet special — −8% ship build time per level (max 5).",
+    baseCost: { metal: 1000, crystal: 1000, deuterium: 400 },
+    costGrowth: 1.9,
+    baseBuildSeconds: 50,
+    energyUsePerLevel: 30,
+    maxLevel: 5,
+  },
+  driftBeacon: {
+    id: "driftBeacon",
+    name: "Drift Beacon",
+    description:
+      "Mini-planet special — +1 expedition slot at level 1 (higher levels reserved).",
+    baseCost: { metal: 2000, crystal: 1500, deuterium: 1000 },
+    costGrowth: 2.0,
+    baseBuildSeconds: 60,
+    maxLevel: 5,
+  },
 
 };
 
@@ -925,8 +967,70 @@ export const OCCUPATION_DURATION_MS = 2 * 24 * 60 * 60 * 1000;
 /** Occupier / owner mine output split while occupied. */
 export const OCCUPATION_OCCUPIER_SHARE = 0.3;
 export const OCCUPATION_OWNER_SHARE = 0.7;
-/** World Eaters required to capture/destroy a mini planet. */
-export const MINI_WORLD_EATER_MIN = 5;
+/**
+ * World Eaters required to **destroy** a mini planet.
+ * Direct capture on win: Void Titan / Mothership / World Eater (see canDirectCaptureMini).
+ */
+export const MINI_WORLD_EATER_MIN = 1;
+/** Mini planets spawn outside normal slots 1–16. */
+export const MINI_SLOT_MIN = 20;
+export const MINI_SLOT_MAX = 29;
+/** ~1 standard mini planet per N systems (multiple minis OK in same system). */
+export const MINI_SYSTEMS_PER = 5;
+/** Fields cap band for mini planets (v1). */
+export const MINI_FIELDS_MIN = 80;
+export const MINI_FIELDS_MAX = 140;
+/** Rich output vs similar-size normals (slot-8 baseline). */
+export const MINI_RICH_MINE_MULT = 1.75;
+/** Destroy payout multiplier on remaining metal/crystal (never deut) — massive. */
+export const MINI_DESTROY_RESOURCE_MULT = 5;
+/** Debris fraction of cumulative building residual cost on destroy (metal/crystal). */
+export const MINI_DESTROY_DEBRIS_FRAC = 0.75;
+/** After first colonize, minis become galaxy-visible to all after this delay. */
+export const MINI_GALAXY_VISIBLE_AFTER_MS = 8 * 60 * 60 * 1000;
+/** Wall-clock between mini drift steps. */
+export const MINI_DRIFT_INTERVAL_MS = 6 * 60 * 60 * 1000;
+/** Max |Δsystem| per drift step (same galaxy). */
+export const MINI_DRIFT_SYSTEM_STEP = 2;
+
+/** Super-rare spawn: ~1 Ironwater per N systems. */
+export const MINI_IRONWATER_SYSTEMS_PER = 2000;
+/** Super-rare spawn: ~1 Moving Fortress per N systems. */
+export const MINI_FORTRESS_SYSTEMS_PER = 2500;
+/** Super-rare spawn: ~1 Relic World per N systems. */
+export const MINI_RELIC_SYSTEMS_PER = 2500;
+/**
+ * Ironwater deut mult vs slot-8 baseline at same deutSynth.
+ * Best normal slot deut mult is 1.3 (slot 15) × 10 = 13.
+ */
+export const MINI_IRONWATER_DEUT_MULT = 13;
+/** Moving Fortress: max |Δgalaxy| per jump (current or one over). */
+export const MINI_FORTRESS_RELOCATE_GALAXY_RANGE = 1;
+/** Landing accuracy: final system is random within ±N of chosen (clamped 1–MAP_SYSTEMS). */
+export const MINI_FORTRESS_RELOCATE_ACCURACY = 10;
+/** Deut cost: base + per |Δgalaxy| + per |Δsystem| of the chosen aim. */
+export const MINI_FORTRESS_RELOCATE_DEUT_BASE = 10_000;
+export const MINI_FORTRESS_RELOCATE_DEUT_PER_GALAXY = 25_000;
+export const MINI_FORTRESS_RELOCATE_DEUT_PER_SYSTEM = 200;
+/** @deprecated Replaced by galaxy-range + accuracy jump model. */
+export const MINI_FORTRESS_RELOCATE_SYSTEMS = 8;
+/** Fortress battlefield combat mods (all fleets/defenses at body). */
+export const MINI_FORTRESS_SHIELD_MULT = 3;
+export const MINI_FORTRESS_ATTACK_MULT = 2;
+export const MINI_FORTRESS_ARMOR_MULT = 0.25;
+/** Relic World empire research time factor (×0.70 = +30% speed). */
+export const MINI_RELIC_RESEARCH_TIME = 0.7;
+/** Relic World expedition find multiplier. */
+export const MINI_RELIC_EXPEDITION_FIND = 1.25;
+/** Relic Worlds get this many extra lottery tickets in pirate raid targeting. */
+export const MINI_RELIC_PIRATE_WEIGHT = 4;
+
+/** Rift Siphon: +15% mine output per level. */
+export const RIFT_SIPHON_MINE_PER = 0.15;
+/** Echo Vault: +25% storage caps per level. */
+export const ECHO_VAULT_STORAGE_PER = 0.25;
+/** Anomaly Forge: −8% ship build time per level. */
+export const ANOMALY_FORGE_SHIP_TIME_PER = 0.08;
 
 /** Round 3 — Rig Foundry: −15% build time per level, floor ×0.10. */
 export const RIG_FOUNDRY_TIME_PER_LEVEL = 0.15;
