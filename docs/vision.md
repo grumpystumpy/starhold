@@ -185,16 +185,38 @@ Once per **merged batch**; no status-only wakes. After contract merge: short nam
 
 ---
 
-## Process (Micah-approved — adopt 2026-10-13)
+## Process (Micah-approved — adopt 2026-10-13; batch-merge rule 2026-10-14)
 
-1. **No status-only wakes/reports.** Do not schedule wakes just to note “waiting on CI” or rebase progress. Use CI completion / merge events. Report only on **merge**, **blocker**, or a **decision needed from Micah**.
+1. **No status-only wakes/reports.** Do not schedule wakes just to note “waiting on CI” or rebase progress. Use CI completion / merge events. Report only on a **batch merge to `main`**, a **blocker**, or a **decision needed from Micah**.
 2. **Max 3 concurrent build threads**, fixed lanes — apply after current H/J finish:
    - **(a) UI / routes**
    - **(b) Game engine / rules / persistence**
    - **(c) Content + balance data**
    Assign each thread to one lane; avoid cross-lane file edits (cuts rebase churn).
 3. **Single tuning source.** All ship/defense/building/research stats, costs, build times, XP awards, queue sizes, and level bonuses live in one module (e.g. `packages/game/src/data/tuning.ts` or JSON). Balance tweaks = edit that file only.
-4. **Fast lane.** Number tweaks, renames, copy/UI text → straight PR to `main` with auto-merge on green CI; **no** design doc. Design-contract-first **only** for new systems.
-5. **Staging + balance report.** Staging env (Vercel preview or second project on a `staging` branch, within Hobby deploy limits). Promote to production `main` about **once a day** in a batch. CI posts a PR comment diffing tuning values (stats/costs/requirements) vs `main`.
+4. **Fast lane.** Number tweaks, renames, copy/UI text → open a PR to `main`; **no** design doc. Design-contract-first **only** for new systems. **Turn off auto-merge** for fast-lane PRs. **Do not** merge small PRs to `main` one-at-a-time.
+5. **Protect Vercel Hobby deploy limit.** Each merge to `main` triggers a production deploy. Let all active lanes finish, then combine into **as few merges as possible** (ideally one batch PR) so production deploys once. No solo merges to `main`.
+6. **Staging + balance report.** Staging env (Vercel preview or second project on a `staging` branch, within Hobby deploy limits). Promote to production `main` about **once a day** in a batch. CI posts a PR comment diffing tuning values (stats/costs/requirements) vs `main`.
 
 Main-only production deploys stay; staging is the exception path for daily batch promote.
+
+### Micah approval gate (2026-10-14)
+
+1. **Nothing merges to `main` without Micah's explicit approval** (relayed by the coordinator). No auto-merge at all, including fast-lane. Finished work stays as open PRs or one integration branch until approved.
+2. **Deploys:** at most 3–4 production updates per day, each approved by Micah first. Keep Vercel usage minimal (spare deploys for urgent fixes). No PR preview deploys — `git.deploymentEnabled` main-only (or ignoreCommand).
+3. **Queue order:** Micah's send order, oldest first. Keep lanes busy continuously.
+4. **Reporting:** as soon as each item is done, report merge-ready (PR link + one-line plain summary) for Micah's approval list; also report blockers.
+
+### Quality gate (2026-10-14)
+
+An item only goes on Micah's merge list after it is proven against what's currently running:
+
+1. Rebase on latest `main` (includes #39 nested `/api/*`).
+2. Unit tests + typecheck + production build green.
+3. Playwright against a **local** production build (`npm run build:vercel` + local serve of `apps/web/dist` + API — not Next.js; Starhold is Vite/Hono). Env shape like prod: KV + `SESSION_SECRET`. Cover signup → login → cookie persistence **and** the new feature end-to-end.
+4. UI reviewer sign-off at desktop 1280×800 and phone 390×844.
+5. Save-format compatibility with existing Upstash KV player data (no resets; migrate if needed).
+6. Combines cleanly with other merge-ready items.
+7. **Do not** use Vercel preview deploys for this testing.
+
+Report to coordinator only when passed: PR link + one-line summary + what was tested.
