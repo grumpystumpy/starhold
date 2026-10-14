@@ -80,7 +80,7 @@ async function main() {
   await page2.getByTestId("alliance-tag-badge").waitFor({ timeout: 10_000 });
   logs.push("alliance_created");
 
-  await page2.getByTestId("nav-fleets").click();
+  await page2.getByTestId("nav-fleet").click();
   await page2.getByTestId("fleet-form").waitFor({ timeout: 10_000 });
   await page2.getByTestId("mission-raid").click();
   await page2.getByTestId("acs-pick").waitFor({ timeout: 5_000 });
