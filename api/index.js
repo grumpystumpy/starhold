@@ -4597,6 +4597,19 @@ function recordSuccessfulPirateRaid(player, now) {
     player.pirateRaidFairness = { dayKey: day, successfulRaids: 1 };
   }
 }
+function graduateNewbieProtection(universe, player) {
+  const planet = universe.planets[player.homePlanetId];
+  if (!planet) return;
+  planet.buildings.metalStorage = Math.max(
+    planet.buildings.metalStorage ?? 0,
+    20
+  );
+  planet.buildings.crystalStorage = Math.max(
+    planet.buildings.crystalStorage ?? 0,
+    20
+  );
+  planet.buildings.deutTank = Math.max(planet.buildings.deutTank ?? 0, 20);
+}
 
 // packages/game/src/world-queue-normalize.ts
 function newQueueItemId(now = Date.now()) {
@@ -15008,6 +15021,23 @@ function createApp() {
       return c.json(playerView(universe, body.playerId));
     });
   });
+  if (process.env.ALLOW_E2E_HOOKS === "1") {
+    app2.post("/api/e2e/graduate-newbie", async (c) => {
+      const body = await c.req.json().catch(() => ({}));
+      if (!body.playerId) {
+        return c.json({ error: "playerId required." }, 400);
+      }
+      return withUniverse((universe) => {
+        const player = universe.players[body.playerId];
+        if (!player) return c.json({ error: "Unknown player." }, 404);
+        graduateNewbieProtection(universe, player);
+        return c.json({
+          ok: true,
+          points: empirePoints(universe, player)
+        });
+      });
+    });
+  }
   return app2;
 }
 var app = createApp();
