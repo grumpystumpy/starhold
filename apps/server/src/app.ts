@@ -29,6 +29,7 @@ import {
   queueResearch,
   queueShipBuild,
   reorderQueue,
+  renamePlanet,
   resolveMiniPlanetChoice,
   saveFleetPreset,
   setActivePlanet,
@@ -422,6 +423,30 @@ export function createApp(): Hono {
         universe,
         body.playerId!,
         body.planetId!,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  app.post("/api/rename-planet", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      planetId?: string;
+      name?: string;
+    };
+    if (!body.playerId || !body.planetId || typeof body.name !== "string") {
+      return c.json(
+        { error: "playerId, planetId, and name required." },
+        400,
+      );
+    }
+    return withUniverse((universe) => {
+      const result = renamePlanet(
+        universe,
+        body.playerId!,
+        body.planetId!,
+        body.name!,
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
