@@ -4,6 +4,7 @@ import { UNIVERSE_SCHEMA_VERSION } from "./catalog.js";
 import {
   buildingUpgradeSeconds,
   effectiveCombatResearch,
+  emptyDefenses,
   emptyFleetShips,
   grantPlayerXp,
   levelBonuses,
@@ -224,17 +225,44 @@ describe("Thread I XP grants live", () => {
   });
 
   it("grants pirate destroy + kill XP on pirateRaid win", () => {
+    const now = Date.now();
     const universe = createUniverse("Pirate XP", 8);
-    const base = activePirateBases(universe)[0]!;
+    const { player, planet } = joinUniverse(universe, "Hunter", now);
+    for (const b of activePirateBases(universe)) {
+      b.lastGrewAt = now + 86_400_000;
+      b.lastFreeSpawnAt = now + 86_400_000;
+      b.nextRaidAt = now + 86_400_000;
+    }
+    let base =
+      activePirateBases(universe).find(
+        (b) =>
+          b.coords.galaxy === planet.coords.galaxy &&
+          b.coords.system === planet.coords.system,
+      ) ?? activePirateBases(universe)[0]!;
+    if (
+      base.coords.galaxy !== planet.coords.galaxy ||
+      base.coords.system !== planet.coords.system
+    ) {
+      const oldId = base.id;
+      base.coords = {
+        galaxy: planet.coords.galaxy,
+        system: planet.coords.system,
+        slot: planet.coords.slot === 15 ? 14 : planet.coords.slot + 1,
+      };
+      base.id = `pir:${base.coords.galaxy}:${base.coords.system}:${base.coords.slot}`;
+      delete universe.pirateBases![oldId];
+      universe.pirateBases![base.id] = base;
+    }
     base.tier = 2;
+    base.level = 2;
     base.ships = { ...emptyFleetShips(), scout: 2 };
+    base.defenses = emptyDefenses();
     base.resources = { metal: 2000, crystal: 1000, deuterium: 200 };
 
-    const { player, planet } = joinUniverse(universe, "Hunter", 303_000_000);
     const body = universe.planets[planet.id];
     body.ships.cruiser = 10;
     body.ships.interceptor = 20;
-    body.resources.deuterium = 50_000;
+    body.resources = { metal: 50_000, crystal: 50_000, deuterium: 5_000_000 };
 
     const before = universe.players[player.id].xpTotal ?? 0;
     const launch = launchFleet(universe, {
@@ -242,11 +270,13 @@ describe("Thread I XP grants live", () => {
       mission: "pirateRaid",
       ships: { cruiser: 5, interceptor: 10 },
       pirateBaseId: base.id,
-      now: 303_000_100,
+      now: now + 100,
     });
-    assert.equal(launch.ok, true);
+    assert.equal(launch.ok, true, !launch.ok ? launch.error : "");
     if (!launch.ok) return;
 
+    base.ships = { ...emptyFleetShips(), scout: 2 };
+    base.defenses = emptyDefenses();
     advanceUniverse(universe, launch.fleet.arrivesAt);
     const after = universe.players[player.id].xpTotal ?? 0;
     assert.ok(after > before);
@@ -333,9 +363,9 @@ describe("Thread I level bonuses wired", () => {
   });
 });
 
-describe("Thread I schema migrate 2→4", () => {
-  it("stamps schema 4 and backfills level/xp without reset", () => {
-    assert.equal(UNIVERSE_SCHEMA_VERSION, 4);
+describe("Thread I schema migrate 2→5", () => {
+  it("stamps schema 5 and backfills level/xp without reset", () => {
+    assert.equal(UNIVERSE_SCHEMA_VERSION, 5);
     const universe = createUniverse("Legacy Lvl", 8);
     const a = joinUniverse(universe, "OldHand", 306_000_000);
     universe.schemaVersion = 2;
@@ -345,7 +375,7 @@ describe("Thread I schema migrate 2→4", () => {
 
     const result = migrateOrResetUniverse(universe);
     assert.equal(result.didReset, false);
-    assert.equal(result.universe.schemaVersion, 4);
+    assert.equal(result.universe.schemaVersion, UNIVERSE_SCHEMA_VERSION);
     assert.equal(result.universe.players[a.player.id].level, 1);
     assert.equal(result.universe.players[a.player.id].xp, 0);
     assert.equal(result.universe.players[a.player.id].xpTotal, 0);
