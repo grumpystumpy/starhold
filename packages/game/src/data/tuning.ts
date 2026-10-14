@@ -1101,3 +1101,14 @@ export const FOUNDATION_ARK_BOOTSTRAP: Readonly<
   deutTank: 5,
   rigFoundry: 6,
 };
+
+/** Alliances foundation (backlog #7) — friends-scale social groups. */
+export const ALLIANCE_TAG_MIN = 2;
+export const ALLIANCE_TAG_MAX = 4;
+export const ALLIANCE_NAME_MIN = 3;
+export const ALLIANCE_NAME_MAX = 30;
+export const ALLIANCE_MAX_MEMBERS = 16;
+export const ALLIANCE_MAX_OFFICERS = 3;
+export const ALLIANCE_CREATE_MIN_POINTS = 0;
+/** Default join mode when creating an alliance. */
+export const ALLIANCE_JOIN_MODE_DEFAULT: "open" | "invite" = "open";

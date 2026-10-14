@@ -86,6 +86,7 @@ export function createUniverse(
     asteroids: {},
     pirateBases: {},
     occupations: {},
+    alliances: {},
     miniPlanetIds: [],
   };
   seedUniverseAsteroids(universe);
@@ -147,6 +148,7 @@ export function ensureUniverseShape(universe: UniverseState): void {
   if (!universe.pirateBases) universe.pirateBases = {};
   if (!universe.occupations) universe.occupations = {};
   if (!universe.miniPlanetIds) universe.miniPlanetIds = [];
+  if (!universe.alliances) universe.alliances = {};
   if (!universe.fleetSpeed) universe.fleetSpeed = universe.speed || 1;
   if (!universe.seed) universe.seed = `seed_${universe.id}`;
   for (const player of Object.values(universe.players)) {
@@ -177,6 +179,7 @@ export function ensureUniverseShape(universe: UniverseState): void {
     if (player.level == null || player.level < 1) player.level = 1;
     if (player.xp == null || player.xp < 0) player.xp = 0;
     if (player.xpTotal == null || player.xpTotal < 0) player.xpTotal = 0;
+    if (player.allianceId === undefined) player.allianceId = null;
     ensurePlayerFleetPresets(player);
   }
   const seed = universe.seed ?? universe.id;
@@ -296,6 +299,7 @@ export function joinUniverse(
     highscoreStarshardsClaimed: false,
     fleetPresets: [],
     playerClass: emptyPlayerClass(),
+    allianceId: null,
   };
   ensurePlayerFleetPresets(player);
 

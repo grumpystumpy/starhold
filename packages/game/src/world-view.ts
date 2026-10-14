@@ -27,6 +27,11 @@ import type {
   PublicPlayer,
   UniverseState,
 } from "./types.js";
+import {
+  allianceDirectory,
+  allianceTagForPlayer,
+  allianceViewFor,
+} from "./world-alliances.js";
 import { advanceUniverse } from "./world-arrival.js";
 import { asteroidsInSystem } from "./world-asteroids.js";
 import {
@@ -75,6 +80,7 @@ export function highscoresBoard(universe: UniverseState): HighscoreEntry[] {
       planetCount: ownedPlanetCount(universe, p.id),
       level: p.level ?? 1,
       xpTotal: p.xpTotal ?? 0,
+      allianceTag: allianceTagForPlayer(universe, p),
     };
   });
   rows.sort(
@@ -96,6 +102,7 @@ export function publicRoster(universe: UniverseState): PublicPlayer[] {
       coords: planet?.coords ?? { galaxy: 0, system: 0, slot: 0 },
       pointsHint: empirePoints(universe, p),
       planetId: p.homePlanetId,
+      allianceTag: allianceTagForPlayer(universe, p),
     };
   });
 }
@@ -123,7 +130,7 @@ export function galaxyViewFor(
       planetId: planet?.id ?? null,
       playerId: owner?.id ?? null,
       playerName: owner?.name ?? null,
-      allianceTag: null,
+      allianceTag: allianceTagForPlayer(universe, owner),
       pointsHint: planet ? Math.floor(planetPoints(planet)) : 0,
       debris: debris
         ? { metal: debris.metal, crystal: debris.crystal }
@@ -294,5 +301,7 @@ export function playerView(
     dailyLoginAvailable: canClaimDailyLogin(player, now),
     progress: playerProgressView(player),
     occupation: occupationForPlanet(universe, planet.id, now),
+    alliance: allianceViewFor(universe, playerId),
+    allianceDirectory: allianceDirectory(universe),
   };
 }

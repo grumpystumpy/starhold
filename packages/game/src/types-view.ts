@@ -120,6 +120,59 @@ export interface PlanetState {
   flags?: { mini?: boolean };
 }
 
+export type AllianceRole = "founder" | "officer" | "member";
+export type AllianceJoinMode = "open" | "invite";
+
+export interface AllianceMember {
+  playerId: string;
+  role: AllianceRole;
+  joinedAt: number;
+}
+
+export interface AllianceRecord {
+  id: string;
+  name: string;
+  /** Short uppercase tag shown in galaxy / highscores. */
+  tag: string;
+  joinMode: AllianceJoinMode;
+  createdAt: number;
+  founderPlayerId: string;
+  members: Record<string, AllianceMember>;
+  /** Pending invite player ids (invite mode). */
+  pendingInvites?: string[];
+}
+
+export interface AllianceMemberView {
+  playerId: string;
+  name: string;
+  role: AllianceRole;
+  joinedAt: number;
+  pointsHint: number;
+}
+
+export interface AllianceView {
+  id: string;
+  name: string;
+  tag: string;
+  joinMode: AllianceJoinMode;
+  createdAt: number;
+  founderPlayerId: string;
+  myRole: AllianceRole;
+  members: AllianceMemberView[];
+  pendingInvites: Array<{ playerId: string; name: string }>;
+  memberCount: number;
+  maxMembers: number;
+}
+
+export interface AllianceListEntry {
+  id: string;
+  name: string;
+  tag: string;
+  joinMode: AllianceJoinMode;
+  memberCount: number;
+  maxMembers: number;
+}
+
 export interface PlayerState {
   id: string;
   name: string;
@@ -152,6 +205,8 @@ export interface PlayerState {
   fleetPresets?: FleetPreset[];
   /** Round 3 player class (Miner / Explorer / Fleeter / Expansionist). */
   playerClass?: PlayerClassState;
+  /** Alliance membership — tag resolved at read time. */
+  allianceId?: string | null;
 }
 
 export interface UniverseState {
@@ -175,6 +230,8 @@ export interface UniverseState {
   occupations?: Record<string, OccupationState>;
   /** Mini planet ids (thread K fills discovery). */
   miniPlanetIds?: string[];
+  /** Alliances keyed by id (lazy; no tick). */
+  alliances?: Record<string, AllianceRecord>;
 }
 
 export interface PirateBasePublic {
@@ -257,6 +314,10 @@ export interface PlayerView {
   };
   /** Occupation on the active planet, if any. */
   occupation: OccupationState | null;
+  /** Current alliance view, or null when unaffiliated. */
+  alliance: AllianceView | null;
+  /** Lightweight directory of alliances (for join UI). */
+  allianceDirectory: AllianceListEntry[];
 }
 
 export interface PublicPlayer {
@@ -265,6 +326,7 @@ export interface PublicPlayer {
   coords: Coordinates;
   pointsHint: number;
   planetId: string;
+  allianceTag?: string | null;
 }
 
 export interface HighscoreEntry {
@@ -278,6 +340,7 @@ export interface HighscoreEntry {
   level: number;
   /** Lifetime XP (Round 2). */
   xpTotal: number;
+  allianceTag?: string | null;
 }
 
 export interface EconomySnapshot {
