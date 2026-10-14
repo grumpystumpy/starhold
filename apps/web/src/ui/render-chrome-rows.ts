@@ -33,7 +33,7 @@ export function shipRow(
   if (locked) label = "Locked";
   else if (queueFull) label = "Queue full";
   else if (!affordable) label = "Can't afford";
-  const lockMsg = `Needs Shipyard level ${def.shipyardLevel} (you have ${yard}).`;
+  const lockMsg = `Needs Shipyard level ${fmt(def.shipyardLevel)} (you have ${fmt(yard)}).`;
   const blocked = locked
     ? lockMsg
     : queueFull
@@ -44,7 +44,7 @@ export function shipRow(
   const tip = costTooltip({
     action: `Build ${def.name}`,
     cost: def.cost,
-    requires: [`Shipyard L${def.shipyardLevel}+`],
+    requires: [`Shipyard L${fmt(def.shipyardLevel)}+`],
     blocked,
   });
   // Locked hulls are disabled so mis-clicks cannot set busy and silence Upgrade.
@@ -84,7 +84,7 @@ export function defenseRow(
   else if (queueFull) label = "Queue full";
   else if (!affordable) label = "Can't afford";
   const blocked = locked
-    ? `Needs Shipyard level ${def.shipyardLevel}`
+    ? `Needs Shipyard level ${fmt(def.shipyardLevel)}`
     : queueFull
       ? "Defense queue is full."
       : !affordable
@@ -93,7 +93,7 @@ export function defenseRow(
   const tip = costTooltip({
     action: `Build ${def.name}`,
     cost,
-    requires: [`Shipyard L${def.shipyardLevel}+`],
+    requires: [`Shipyard L${fmt(def.shipyardLevel)}+`],
     blocked,
   });
   return `
@@ -143,25 +143,25 @@ export function researchRow(
   else if (!affordable) label = "Can't afford";
   const blocked =
     lab < def.labLevel
-      ? `Needs Research Lab ${def.labLevel}`
+      ? `Needs Research Lab ${fmt(def.labLevel)}`
       : level >= lab
-        ? `Lab level ${lab} caps research at L${lab}`
+        ? `Lab level ${fmt(lab)} caps research at L${fmt(lab)}`
         : queueFull
           ? "Research queue is full."
           : !affordable
             ? "Not enough resources on active planet."
             : null;
   const tip = costTooltip({
-    action: `Research ${def.name} → L${level + 1}`,
+    action: `Research ${def.name} → L${fmt(level + 1)}`,
     cost,
     timeSecs: secs,
-    requires: [`Research Lab L${def.labLevel}+`],
+    requires: [`Research Lab L${fmt(def.labLevel)}+`],
     blocked,
   });
   return `
     <article class="item" data-testid="research-${id}">
       <div>
-        <h3>${escapeHtml(def.name)} <span class="meta" data-testid="research-level-${id}">L${level}</span> ${tip.html}</h3>
+        <h3>${escapeHtml(def.name)} <span class="meta" data-testid="research-level-${id}">L${fmt(level)}</span> ${tip.html}</h3>
         <p>${escapeHtml(def.description)}</p>
         <div class="meta">Next: ${fmtCost(cost)} · ${fmtEta(secs)}</div>
       </div>
