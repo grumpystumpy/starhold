@@ -97,7 +97,14 @@ export function fleetComposer(
     const pirate = view.galaxy.pirateBase;
     if (pirate) {
       options.push(
-        `<option value="pirate:${escapeAttr(pirate.id)}">${escapeHtml(pirate.name)} · T${pirate.tier} · ${pirate.threatHint} · ${fmtCoords(pirate.coords)}</option>`,
+        `<option value="pirate:${escapeAttr(pirate.id)}">${escapeHtml(pirate.name)} · Lv ${pirate.level ?? pirate.tier} · ${pirate.threatHint} · ${fmtCoords(pirate.coords)}</option>`,
+      );
+    }
+  } else if (mission === "alienRaid") {
+    const alien = view.galaxy.alienBase;
+    if (alien) {
+      options.push(
+        `<option value="alien:${escapeAttr(alien.id)}">${escapeHtml(alien.name)} · Aliens · Lv ${alien.level ?? alien.tier} · ${alien.threatHint} · ${fmtCoords(alien.coords)}</option>`,
       );
     }
   } else {
@@ -179,6 +186,8 @@ export function fleetComposer(
                     ? `<p class="hint">No asteroids in this system — browse another system.</p>`
                     : mission === "pirateRaid"
                       ? `<p class="hint">No pirate base in this system — browse the galaxy for NPC activity.</p>`
+                    : mission === "alienRaid"
+                      ? `<p class="hint">No alien base in this system — find them via expedition.</p>`
                       : `<p class="hint" data-testid="fleet-need-rival">Join a second commander (another tab) for attacking another rival / spy targets.</p>`
         : "";
   const launchBlocked =
@@ -212,6 +221,7 @@ export function fleetComposer(
       harvestAsteroid: "Harvest asteroid (Salvage Trawler)",
       expedition: "Expedition (deep space)",
       pirateRaid: "Raid pirate base",
+      alienRaid: "Raid alien base",
       jump: "Fold Bridge (moon → moon)",
     };
     return `<label><input type="radio" name="fleet-mission" value="${m}" data-testid="mission-${m}" ${mission === m ? "checked" : ""} ${busy ? "disabled" : ""} /> ${labels[m]}</label>`;
