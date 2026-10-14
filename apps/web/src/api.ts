@@ -217,6 +217,54 @@ export async function launchFleetMission(
   return parse<PlayerView>(res);
 }
 
+export async function saveFleetPresetRequest(
+  playerId: string,
+  opts: { id?: string; name: string; ships: Partial<FleetShips> },
+): Promise<PlayerView> {
+  const res = await credFetch("/api/fleet-preset", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, ...opts }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function deleteFleetPresetRequest(
+  playerId: string,
+  id: string,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/fleet-preset", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, id, delete: true }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function launchMaxExpeditionsRequest(
+  playerId: string,
+  opts: { galaxy?: number; system?: number; originPlanetId?: string },
+): Promise<PlayerView> {
+  const res = await credFetch("/api/launch-max-expeditions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, ...opts }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function scanSystemRequest(
+  playerId: string,
+  opts: { galaxy: number; system: number; originPlanetId?: string },
+): Promise<PlayerView> {
+  const res = await credFetch("/api/scan-system", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, ...opts }),
+  });
+  return parse<PlayerView>(res);
+}
+
 export async function claimDaily(playerId: string): Promise<PlayerView> {
   const res = await credFetch("/api/claim-daily", {
     method: "POST",
