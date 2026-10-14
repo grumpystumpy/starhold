@@ -1,5 +1,5 @@
 import type { OfficerId, PlayerView } from "@starhold/game";
-import { fmtEta, remainingSeconds } from "./format";
+import { fmt, fmtEta, fmtLabel, remainingSeconds } from "./format";
 import { escapeAttr, escapeHtml } from "./render-escape";
 
 function effectLabel(kind: string, value: number): string {
@@ -11,16 +11,24 @@ function effectLabel(kind: string, value: number): string {
     case "fleetSpeed":
       return `Fleet speed ×${value.toFixed(2)}`;
     case "fleetSlots":
-      return `Fleet slots +${value}`;
+      return `Fleet slots +${fmt(value)}`;
     case "defensePower":
       return `Defense ×${value.toFixed(2)}`;
     case "energyOutput":
       return `Energy ×${value.toFixed(2)}`;
     case "espionageLevel":
-      return `Shadow Optics +${value}`;
+      return `Shadow Optics +${fmt(value)}`;
     default:
-      return `${kind} ${value}`;
+      return `${fmtLabel(kind)} ${value}`;
   }
+}
+
+function skillDisplayName(
+  catalog: NonNullable<PlayerView["skillCatalog"]>,
+  id: string,
+): string {
+  const hit = catalog.find((n) => n.id === id);
+  return fmtLabel(hit?.name ?? id);
 }
 
 export function officersPanelHtml(
@@ -49,7 +57,7 @@ export function officersPanelHtml(
           <span class="hint">${escapeHtml(effects)}</span>
           <span class="hint" data-testid="officer-status-${escapeAttr(def.id)}">${escapeHtml(status)}</span>
         </div>
-        <button type="button" data-activate-officer="${escapeAttr(def.id)}" data-testid="activate-officer-${escapeAttr(def.id)}" ${busy || !canAfford ? "disabled" : ""}>${hire ? "Renew" : "Hire"} · ${def.cost} ✦</button>
+        <button type="button" data-activate-officer="${escapeAttr(def.id)}" data-testid="activate-officer-${escapeAttr(def.id)}" ${busy || !canAfford ? "disabled" : ""}>${hire ? "Renew" : "Hire"} · ${fmt(def.cost)} ✦</button>
       </li>`;
     })
     .join("");
@@ -80,11 +88,12 @@ export function skillsPanelHtml(view: PlayerView, busy: boolean): string {
             .join(" · ");
           const req =
             def.requires.length > 0
-              ? `Requires ${def.requires.join(", ")}`
+              ? `Requires ${def.requires.map((r) => skillDisplayName(catalog, r)).join(", ")}`
               : "Root node";
+          const name = fmtLabel(def.name);
           return `<li class="skill-row ${have ? "unlocked" : ""}" data-testid="skill-${escapeAttr(def.id)}">
             <div>
-              <strong>${escapeHtml(def.name)}</strong>
+              <strong>${escapeHtml(name)}</strong>
               <span class="hint">${escapeHtml(def.description)}</span>
               <span class="hint">${escapeHtml(effects)}</span>
               <span class="hint">${escapeHtml(req)}</span>
@@ -92,7 +101,7 @@ export function skillsPanelHtml(view: PlayerView, busy: boolean): string {
             ${
               have
                 ? `<span class="badge" data-testid="skill-owned-${escapeAttr(def.id)}">Unlocked</span>`
-                : `<button type="button" data-unlock-skill="${escapeAttr(def.id)}" data-testid="unlock-skill-${escapeAttr(def.id)}" ${busy || !canBuy ? "disabled" : ""}>Unlock · ${def.cost} ✦</button>`
+                : `<button type="button" data-unlock-skill="${escapeAttr(def.id)}" data-testid="unlock-skill-${escapeAttr(def.id)}" ${busy || !canBuy ? "disabled" : ""}>Unlock · ${fmt(def.cost)} ✦</button>`
             }
           </li>`;
         })
@@ -116,4 +125,3 @@ export function skillsPanelHtml(view: PlayerView, busy: boolean): string {
     ${sections}
   </section>`;
 }
-
