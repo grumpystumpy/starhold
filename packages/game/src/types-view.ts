@@ -26,6 +26,21 @@ import type {
 
 export type CombatOutcome = "attacker_win" | "defender_win" | "draw";
 
+/** Sparse units destroyed in a single combat round (omit zeros). */
+export interface CombatRoundLosses {
+  ships: Partial<FleetShips>;
+  defenses?: Partial<DefenseStock>;
+}
+
+/** One simultaneous-fire round for replayable battle reports. */
+export interface CombatRoundLog {
+  round: number;
+  attackerLosses: CombatRoundLosses;
+  defenderLosses: CombatRoundLosses;
+  /** Debris implied by ship losses this round (pre-skim; metal/crystal). */
+  debrisThisRound: Resources;
+}
+
 export interface CombatReport {
   id: string;
   at: number;
@@ -54,6 +69,12 @@ export interface CombatReport {
   miniResolveAvailable?: boolean;
   miniPlanetId?: string;
   miniResolved?: "capture" | "destroy";
+  /** Per-round losses / debris (absent on legacy reports). */
+  roundLog?: CombatRoundLog[];
+  /** XP granted to each side for this fight (absent on legacy reports). */
+  xpAwarded?: { attacker: number; defender: number };
+  /** Short opaque token for chat paste / future alliance intel. */
+  shareCode?: string;
 }
 
 export interface EspionageReport {

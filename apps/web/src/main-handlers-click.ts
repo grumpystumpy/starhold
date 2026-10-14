@@ -1,4 +1,5 @@
 import {
+  formatCombatShareCard,
   fortressRelocateDeutCost,
   fortressRelocateLandingWindow,
   MINI_FORTRESS_RELOCATE_ACCURACY,
@@ -211,6 +212,50 @@ export function bindClickHandlers(): void {
       if (closestActionEl(target, "[data-claim-daily]")) {
         ev.preventDefault();
         void doClaimDaily();
+        return;
+      }
+
+      const copyShare = closestActionEl(target, "[data-copy-battle-share]");
+      if (copyShare) {
+        ev.preventDefault();
+        const reportId = copyShare.getAttribute("data-copy-battle-share");
+        const report = session.view?.reports?.find((r) => r.id === reportId);
+        if (!report) {
+          setFlash("error", "Battle report not found.");
+          schedulePaint();
+          return;
+        }
+        const text = formatCombatShareCard(report, session.view?.player.id);
+        void navigator.clipboard.writeText(text).then(
+          () => {
+            setFlash("notice", "Battle share copied.");
+            schedulePaint();
+          },
+          () => {
+            setFlash("error", "Could not copy share text.");
+            schedulePaint();
+          },
+        );
+        return;
+      }
+
+      const roundTab = closestActionEl(target, "[data-battle-round-tab]");
+      if (roundTab) {
+        ev.preventDefault();
+        const round = roundTab.getAttribute("data-battle-round-tab");
+        const details = roundTab.closest("details");
+        if (!round || !details) return;
+        for (const tab of details.querySelectorAll("[data-battle-round-tab]")) {
+          tab.classList.toggle(
+            "is-active",
+            tab.getAttribute("data-battle-round-tab") === round,
+          );
+        }
+        for (const pane of details.querySelectorAll("[data-battle-round]")) {
+          const match = pane.getAttribute("data-battle-round") === round;
+          if (match) pane.removeAttribute("hidden");
+          else pane.setAttribute("hidden", "");
+        }
         return;
       }
 

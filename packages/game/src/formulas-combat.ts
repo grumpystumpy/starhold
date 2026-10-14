@@ -16,6 +16,8 @@ import {
 } from "./catalog.js";
 import type {
   CombatOutcome,
+  CombatRoundLog,
+  CombatRoundLosses,
   DefenseId,
   DefenseStock,
   FleetShips,
@@ -117,6 +119,71 @@ export function debrisFromDestroyed(destroyed: Resources): Resources {
   };
 }
 
+/** Sparse ship losses (before → after). Omits zeros. */
+export function sparseShipLosses(
+  before: FleetShips,
+  after: FleetShips,
+): Partial<FleetShips> {
+  const out: Partial<FleetShips> = {};
+  for (const id of SHIP_ORDER) {
+    const lost = Math.max(0, (before[id] ?? 0) - (after[id] ?? 0));
+    if (lost > 0) out[id] = lost;
+  }
+  return out;
+}
+
+/** Sparse defense losses (before → after). Omits zeros. */
+export function sparseDefenseLosses(
+  before: DefenseStock,
+  after: DefenseStock,
+): Partial<DefenseStock> {
+  const out: Partial<DefenseStock> = {};
+  for (const id of DEFENSE_ORDER) {
+    const lost = Math.max(0, (before[id] ?? 0) - (after[id] ?? 0));
+    if (lost > 0) out[id] = lost;
+  }
+  return out;
+}
+
+function cloneFleetShips(ships: FleetShips): FleetShips {
+  return { ...ships };
+}
+
+function cloneDefenses(defenses: DefenseStock): DefenseStock {
+  return { ...defenses };
+}
+
+function lossesFromSnapshots(
+  shipsBefore: FleetShips,
+  shipsAfter: FleetShips,
+  defensesBefore?: DefenseStock,
+  defensesAfter?: DefenseStock,
+): CombatRoundLosses {
+  const ships = sparseShipLosses(shipsBefore, shipsAfter);
+  const defenses =
+    defensesBefore && defensesAfter
+      ? sparseDefenseLosses(defensesBefore, defensesAfter)
+      : undefined;
+  const losses: CombatRoundLosses = { ships };
+  if (defenses && Object.keys(defenses).length > 0) {
+    losses.defenses = defenses;
+  }
+  return losses;
+}
+
+/** Debris from sparse ship losses this round (defenses never debris). */
+export function debrisFromShipLosses(
+  ...sides: Array<Partial<FleetShips>>
+): Resources {
+  const before = emptyFleetShips();
+  for (const ships of sides) {
+    for (const id of SHIP_ORDER) {
+      before[id] = (before[id] ?? 0) + (ships[id] ?? 0);
+    }
+  }
+  return debrisFromDestroyed(destroyedShipResources(before, emptyFleetShips()));
+}
+
 export interface CombatResolution {
   outcome: CombatOutcome;
   attackerAfter: FleetShips;
@@ -124,6 +191,8 @@ export interface CombatResolution {
   defensesAfter: DefenseStock;
   rounds: number;
   summary: string;
+  /** Empty when no rounds fought (unopposed / no attackers). */
+  roundLog: CombatRoundLog[];
 }
 
 type SidePools = {
@@ -427,6 +496,7 @@ export function resolveCombat(
       defensesAfter: defSide.defenses,
       rounds: 0,
       summary: "No attacking ships.",
+      roundLog: [],
     };
   }
 
@@ -438,12 +508,18 @@ export function resolveCombat(
       defensesAfter: emptyDefenses(),
       rounds: 0,
       summary: "Unopposed landing. Garrison empty.",
+      roundLog: [],
     };
   }
 
   let rounds = 0;
+  const roundLog: CombatRoundLog[] = [];
   for (let r = 1; r <= MAX_COMBAT_ROUNDS; r++) {
     rounds = r;
+    const atkShipsBefore = cloneFleetShips(atkSide.ships);
+    const defShipsBefore = cloneFleetShips(defSide.ships);
+    const defDefsBefore = cloneDefenses(defSide.defenses);
+
     const atkShots = collectFire(
       atkSide.ships,
       null,
@@ -496,6 +572,23 @@ export function resolveCombat(
       battlefield,
     );
 
+    const attackerLosses = lossesFromSnapshots(atkShipsBefore, atkSide.ships);
+    const defenderLosses = lossesFromSnapshots(
+      defShipsBefore,
+      defSide.ships,
+      defDefsBefore,
+      defSide.defenses,
+    );
+    roundLog.push({
+      round: r,
+      attackerLosses,
+      defenderLosses,
+      debrisThisRound: debrisFromShipLosses(
+        attackerLosses.ships,
+        defenderLosses.ships,
+      ),
+    });
+
     const atkAlive = shipCount(atkSide.ships) > 0;
     const defAlive =
       shipCount(defSide.ships) + defenseCount(defSide.defenses) > 0;
@@ -524,6 +617,7 @@ export function resolveCombat(
     defensesAfter: defSide.defenses,
     rounds,
     summary: `${outcome.split("_").join(" ")} after ${rounds} round${rounds === 1 ? "" : "s"} (surviving power atk ${atkPower.toFixed(0)} / def ${defPower.toFixed(0)}).`,
+    roundLog,
   };
 }
 

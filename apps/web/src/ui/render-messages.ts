@@ -1,10 +1,12 @@
 import {
   SHIP_ORDER,
   SHIPS,
+  type CombatReport,
   type PlayerView,
 } from "@starhold/game";
 import { fmt, fmtCoords } from "./format";
 import { escapeAttr, escapeHtml } from "./render-escape";
+import { combatBattleExtrasHtml } from "./render-fleets-panels";
 
 export type InboxKind = "combat" | "espionage" | "expedition";
 
@@ -45,34 +47,41 @@ function kindLabel(kind: InboxKind): string {
   }
 }
 
+function combatTitle(r: CombatReport, selfId: string): string {
+  const role = r.attackerPlayerId === selfId ? "Attack" : "Defense";
+  const foe =
+    r.attackerPlayerId === selfId ? r.defenderName : r.attackerName;
+  const loot =
+    r.loot.metal + r.loot.crystal + r.loot.deuterium > 0
+      ? ` · loot ${fmt(r.loot.metal)}/${fmt(r.loot.crystal)}/${fmt(r.loot.deuterium)}`
+      : "";
+  const debris =
+    (r.debrisCreated?.metal ?? 0) + (r.debrisCreated?.crystal ?? 0) > 0
+      ? ` · debris ${fmt(r.debrisCreated.metal)}/${fmt(r.debrisCreated.crystal)}`
+      : "";
+  const moon = r.moonFormed ? " · moon formed" : "";
+  const moonKill = r.moonDestroyed ? " · moon destroyed" : "";
+  const rounds = typeof r.rounds === "number" ? ` · ${r.rounds}r` : "";
+  const xp =
+    r.xpAwarded != null
+      ? ` · XP atk +${fmt(r.xpAwarded.attacker)} / def +${fmt(r.xpAwarded.defender)}`
+      : "";
+  const share =
+    r.shareCode != null ? ` · share ${r.shareCode}` : "";
+  return `${role}: ${r.outcome}${rounds} vs ${foe} @ ${fmtCoords(r.targetCoords)}${loot}${debris}${moon}${moonKill}${xp}${share}`;
+}
+
 function combatItems(
   reports: PlayerView["reports"],
   selfId: string,
 ): InboxItem[] {
-  return (reports ?? []).map((r) => {
-    const role = r.attackerPlayerId === selfId ? "Attack" : "Defense";
-    const foe =
-      r.attackerPlayerId === selfId ? r.defenderName : r.attackerName;
-    const loot =
-      r.loot.metal + r.loot.crystal + r.loot.deuterium > 0
-        ? ` · loot ${fmt(r.loot.metal)}/${fmt(r.loot.crystal)}/${fmt(r.loot.deuterium)}`
-        : "";
-    const debris =
-      (r.debrisCreated?.metal ?? 0) + (r.debrisCreated?.crystal ?? 0) > 0
-        ? ` · debris ${fmt(r.debrisCreated.metal)}/${fmt(r.debrisCreated.crystal)}`
-        : "";
-    const moon = r.moonFormed ? " · moon formed" : "";
-    const moonKill = r.moonDestroyed ? " · moon destroyed" : "";
-    const rounds =
-      typeof r.rounds === "number" ? ` · ${r.rounds}r` : "";
-    return {
-      kind: "combat" as const,
-      id: r.id,
-      at: r.at,
-      title: `${role}: ${r.outcome}${rounds} vs ${foe} @ ${fmtCoords(r.targetCoords)}${loot}${debris}${moon}${moonKill}`,
-      body: r.summary,
-    };
-  });
+  return (reports ?? []).map((r) => ({
+    kind: "combat" as const,
+    id: r.id,
+    at: r.at,
+    title: combatTitle(r, selfId),
+    body: r.summary,
+  }));
 }
 
 function spyItems(reports: PlayerView["spyReports"]): InboxItem[] {
@@ -144,20 +153,27 @@ export function messagesPageHtml(view: PlayerView): string {
     expedition: items.filter((i) => i.kind === "expedition").length,
   };
   const empty = items.length === 0;
+  const combatById = new Map(
+    (view.reports ?? []).map((r) => [r.id, r] as const),
+  );
   const list = empty
     ? `<p class="hint" data-testid="messages-empty">No mail yet. Combat, spy, and expedition reports appear here when fleets return.</p>`
     : `<ul class="reports messages-inbox" data-testid="messages-inbox">
         ${items
-          .map(
-            (item) => `<li class="message-row" data-testid="message-${escapeAttr(item.kind)}-${escapeAttr(item.id)}" data-kind="${escapeAttr(item.kind)}">
+          .map((item) => {
+            const combat =
+              item.kind === "combat" ? combatById.get(item.id) : undefined;
+            const extras = combat ? combatBattleExtrasHtml(combat) : "";
+            return `<li class="message-row" data-testid="message-${escapeAttr(item.kind)}-${escapeAttr(item.id)}" data-kind="${escapeAttr(item.kind)}"${combat ? ` data-report-id="${escapeAttr(combat.id)}"` : ""}>
               <div class="message-head">
                 <span class="message-kind" data-testid="message-kind">${escapeHtml(kindLabel(item.kind))}</span>
                 <time class="message-when meta" datetime="${escapeAttr(new Date(item.at).toISOString())}">${escapeHtml(fmtWhen(item.at))}</time>
               </div>
               <strong class="message-title">${escapeHtml(item.title)}</strong>
               <span class="meta message-body">${escapeHtml(item.body)}</span>
-            </li>`,
-          )
+              ${extras}
+            </li>`;
+          })
           .join("")}
       </ul>`;
 

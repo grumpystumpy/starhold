@@ -827,6 +827,45 @@ export function createApp(): Hono {
     });
   });
 
+  /** Local quality-gate seed hook — disabled unless STARHOLD_E2E=1. */
+  if (process.env.STARHOLD_E2E === "1") {
+    app.post("/api/e2e/grant", async (c) => {
+      const body = (await c.req.json().catch(() => ({}))) as {
+        playerId?: string;
+        ships?: Partial<FleetShips>;
+        resources?: Partial<Resources>;
+      };
+      if (!body.playerId) {
+        return c.json({ error: "playerId required." }, 400);
+      }
+      return withUniverse((universe) => {
+        ensureUniverseShape(universe);
+        const player = universe.players[body.playerId!];
+        if (!player) return c.json({ error: "Player not found." }, 404);
+        const planet =
+          universe.planets[player.activePlanetId] ??
+          universe.planets[player.homePlanetId];
+        if (!planet) return c.json({ error: "Planet not found." }, 404);
+        if (body.ships) {
+          for (const [id, n] of Object.entries(body.ships)) {
+            if (typeof n === "number" && n >= 0) {
+              planet.ships[id as ShipId] = Math.floor(n);
+            }
+          }
+        }
+        if (body.resources) {
+          for (const key of ["metal", "crystal", "deuterium"] as const) {
+            const n = body.resources[key];
+            if (typeof n === "number" && n >= 0) {
+              planet.resources[key] = Math.floor(n);
+            }
+          }
+        }
+        return c.json(playerView(universe, body.playerId!));
+      });
+    });
+  }
+
   return app;
 }
 

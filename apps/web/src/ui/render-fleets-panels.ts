@@ -1,7 +1,13 @@
 import {
+  DEFENSE_ORDER,
+  DEFENSES,
   MAP_SYSTEMS,
   SHIP_ORDER,
   SHIPS,
+  type CombatReport,
+  type CombatRoundLog,
+  type DefenseStock,
+  type FleetShips,
   type PlayerView,
 } from "@starhold/game";
 import { PLANET_ART, SHIP_ART } from "./assets";
@@ -39,6 +45,74 @@ export function fleetsInFlight(
   `;
 }
 
+function unitLossLine(
+  ships: Partial<FleetShips> | undefined,
+  defenses?: Partial<DefenseStock>,
+): string {
+  const parts: string[] = [];
+  for (const id of SHIP_ORDER) {
+    const n = ships?.[id] ?? 0;
+    if (n > 0) parts.push(`${fmt(n)}× ${escapeHtml(SHIPS[id].name)}`);
+  }
+  if (defenses) {
+    for (const id of DEFENSE_ORDER) {
+      const n = defenses[id] ?? 0;
+      if (n > 0) parts.push(`${fmt(n)}× ${escapeHtml(DEFENSES[id].name)}`);
+    }
+  }
+  return parts.length ? parts.join(", ") : "none";
+}
+
+function roundPaneHtml(round: CombatRoundLog, active: boolean): string {
+  const debris =
+    (round.debrisThisRound?.metal ?? 0) + (round.debrisThisRound?.crystal ?? 0);
+  return `
+    <div class="battle-round" data-battle-round="${round.round}" ${active ? "" : "hidden"} data-testid="battle-round-${round.round}">
+      <p class="meta"><strong>Round ${fmt(round.round)}</strong></p>
+      <p class="meta">Attacker losses: ${unitLossLine(round.attackerLosses.ships)}</p>
+      <p class="meta">Defender losses: ${unitLossLine(round.defenderLosses.ships, round.defenderLosses.defenses)}</p>
+      ${
+        debris > 0
+          ? `<p class="meta">Round debris: ${fmt(round.debrisThisRound.metal)}/${fmt(round.debrisThisRound.crystal)}</p>`
+          : `<p class="meta">Round debris: none</p>`
+      }
+    </div>
+  `;
+}
+
+function battleReplayHtml(report: CombatReport): string {
+  const log = report.roundLog ?? [];
+  if (!log.length) {
+    return `<p class="hint" data-testid="battle-replay-legacy">Summary only — older reports have no round replay.</p>`;
+  }
+  const tabs = log
+    .map(
+      (round, i) =>
+        `<button type="button" class="battle-round-tab${i === 0 ? " is-active" : ""}" data-battle-round-tab="${round.round}" data-testid="battle-round-tab-${round.round}">R${fmt(round.round)}</button>`,
+    )
+    .join("");
+  const panes = log.map((round, i) => roundPaneHtml(round, i === 0)).join("");
+  return `
+    <div class="battle-replay" data-testid="battle-replay">
+      <div class="battle-round-tabs" role="tablist">${tabs}</div>
+      ${panes}
+    </div>
+  `;
+}
+
+/** Share + round replay controls (Fleet list and Messages inbox). */
+export function combatBattleExtrasHtml(report: CombatReport): string {
+  return `
+    <div class="battle-report-actions">
+      <button type="button" class="ghost" data-copy-battle-share="${escapeAttr(report.id)}" data-testid="copy-battle-share-${escapeAttr(report.id)}">Copy share</button>
+    </div>
+    <details class="battle-report-details" data-testid="battle-details-${escapeAttr(report.id)}">
+      <summary>Replay rounds</summary>
+      ${battleReplayHtml(report)}
+    </details>
+  `;
+}
+
 export function reportsHtml(
   reports: PlayerView["reports"],
   selfId: string,
@@ -61,7 +135,19 @@ export function reportsHtml(
               ? ` · debris ${fmt(r.debrisCreated.metal)}/${fmt(r.debrisCreated.crystal)}`
               : "";
           const moon = r.moonFormed ? " · moon formed" : "";
-          return `<li data-testid="report-${r.id}"><strong>${role}: ${escapeHtml(r.outcome)}</strong>${typeof r.rounds === "number" ? ` · ${r.rounds}r` : ""} vs ${escapeHtml(r.attackerPlayerId === selfId ? r.defenderName : r.attackerName)} @ ${fmtCoords(r.targetCoords)}${loot}${debris}${moon}<br/><span class="meta">${escapeHtml(r.summary)}</span></li>`;
+          const xp =
+            r.xpAwarded != null
+              ? ` · XP atk +${fmt(r.xpAwarded.attacker)} / def +${fmt(r.xpAwarded.defender)}`
+              : "";
+          const share =
+            r.shareCode != null
+              ? ` · share ${escapeHtml(r.shareCode)}`
+              : "";
+          return `<li data-testid="report-${r.id}" data-report-id="${escapeAttr(r.id)}">
+            <strong>${role}: ${escapeHtml(r.outcome)}</strong>${typeof r.rounds === "number" ? ` · ${r.rounds}r` : ""} vs ${escapeHtml(r.attackerPlayerId === selfId ? r.defenderName : r.attackerName)} @ ${fmtCoords(r.targetCoords)}${loot}${debris}${moon}${xp}${share}
+            <br/><span class="meta">${escapeHtml(r.summary)}</span>
+            ${combatBattleExtrasHtml(r)}
+          </li>`;
         })
         .join("")}
     </ul>

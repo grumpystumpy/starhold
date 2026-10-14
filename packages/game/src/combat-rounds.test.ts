@@ -84,5 +84,7 @@ describe("P2 multi-round combat + rapid fire", () => {
     assert.ok(typeof report.rounds === "number");
     assert.ok(report.rounds >= 1);
     assert.match(report.summary, /round/i);
+    assert.ok(report.roundLog);
+    assert.equal(report.roundLog!.length, report.rounds);
   });
 });
