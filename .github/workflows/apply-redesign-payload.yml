@@ -1,6 +1,10 @@
 name: apply pirates-aliens redesign payload
 on:
   workflow_dispatch:
+  push:
+    branches: [cursor/pirates-aliens-redesign-abde]
+    paths:
+      - .github/workflows/apply-redesign-payload.yml
 permissions:
   contents: write
 jobs:
@@ -10,9 +14,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: cursor/pirates-aliens-redesign-abde
+          fetch-depth: 0
       - name: Unpack payload and commit batches
         run: |
           set -euo pipefail
+          test -f .cursor-push/CHUNK_COUNT
           cat .cursor-push/redesign-part-*.b64 | tr -d '\n' | base64 -d > /tmp/redesign.tar.gz
           mkdir -p /tmp/extract
           tar -xzf /tmp/redesign.tar.gz -C /tmp/extract
@@ -35,7 +41,6 @@ jobs:
               if st.returncode != 0:
                   subprocess.check_call(["git", "commit", "-m", b["message"]])
           subprocess.check_call(["git", "rm", "-r", "--ignore-unmatch", ".cursor-push"])
-          # also remove this workflow after success
           wf = ".github/workflows/apply-redesign-payload.yml"
           if os.path.exists(wf):
               subprocess.check_call(["git", "rm", "-f", wf])
