@@ -24,7 +24,11 @@ import type {
 import { emptyPlayerClass } from "./formulas-round3.js";
 import { seedUniverseAsteroids } from "./world-asteroids.js";
 import { ensurePlayerFleetPresets } from "./world-fleet-presets.js";
-import { seedUniversePirates } from "./world-pirates.js";
+import { seedUniverseMinis } from "./world-mini.js";
+import {
+  ensurePirateBaseShape,
+  seedUniversePirates,
+} from "./world-pirates.js";
 
 export function emptyBuildings(): PlanetState["buildings"] {
   return {
@@ -43,6 +47,10 @@ export function emptyBuildings(): PlanetState["buildings"] {
     chronoLathe: 0,
     mantleLoom: 0,
     rigFoundry: 0,
+    riftSiphon: 0,
+    echoVault: 0,
+    anomalyForge: 0,
+    driftBeacon: 0,
   };
 }
 
@@ -90,6 +98,7 @@ export function createUniverse(
   };
   seedUniverseAsteroids(universe);
   seedUniversePirates(universe, now);
+  seedUniverseMinis(universe, now);
   return universe;
 }
 
@@ -145,11 +154,18 @@ export function ensureUniverseShape(universe: UniverseState): void {
   if (!universe.debris) universe.debris = {};
   if (!universe.asteroids) universe.asteroids = {};
   if (!universe.pirateBases) universe.pirateBases = {};
+  for (const base of Object.values(universe.pirateBases)) {
+    ensurePirateBaseShape(base);
+  }
   if (!universe.occupations) universe.occupations = {};
   if (!universe.miniPlanetIds) universe.miniPlanetIds = [];
   if (!universe.fleetSpeed) universe.fleetSpeed = universe.speed || 1;
   if (!universe.seed) universe.seed = `seed_${universe.id}`;
+  if (universe.miniPlanetIds.length === 0) {
+    seedUniverseMinis(universe);
+  }
   for (const player of Object.values(universe.players)) {
+    if (!player.discoveredMiniIds) player.discoveredMiniIds = [];
     if (!player.planetIds?.length) {
       player.planetIds = [player.homePlanetId];
     }
@@ -203,6 +219,11 @@ export function ensureUniverseShape(universe: UniverseState): void {
     if (!planet.buildings.chronoLathe) planet.buildings.chronoLathe = 0;
     if (!planet.buildings.mantleLoom) planet.buildings.mantleLoom = 0;
     if (!planet.buildings.rigFoundry) planet.buildings.rigFoundry = 0;
+    if (!planet.buildings.riftSiphon) planet.buildings.riftSiphon = 0;
+    if (!planet.buildings.echoVault) planet.buildings.echoVault = 0;
+    if (!planet.buildings.anomalyForge) planet.buildings.anomalyForge = 0;
+    if (!planet.buildings.driftBeacon) planet.buildings.driftBeacon = 0;
+    if (planet.flags?.mini && !planet.discoveredBy) planet.discoveredBy = [];
     if (
       planet.kind !== "moon" &&
       (typeof planet.fieldsCap !== "number" || planet.fieldsCap <= 0)
@@ -296,6 +317,7 @@ export function joinUniverse(
     highscoreStarshardsClaimed: false,
     fleetPresets: [],
     playerClass: emptyPlayerClass(),
+    discoveredMiniIds: [],
   };
   ensurePlayerFleetPresets(player);
 

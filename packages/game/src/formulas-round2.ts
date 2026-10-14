@@ -68,9 +68,26 @@ export function canCollectDebris(ships: FleetShips): boolean {
   return (ships.recycler ?? 0) >= 1 || (ships.swarmMothership ?? 0) >= 1;
 }
 
-/** Mini-planet capture/destroy gate (≥5 World Eaters). */
-export function canResolveMiniPlanet(ships: FleetShips): boolean {
+/** Mini-planet **destroy** gate (≥1 World Eater). */
+export function canDestroyMiniPlanet(ships: FleetShips): boolean {
   return (ships.worldEater ?? 0) >= MINI_WORLD_EATER_MIN;
+}
+
+/**
+ * Direct capture on win: Void Titan, Swarm Mothership, or World Eater.
+ * Ordinary fleets only vacate the owner (unoccupied).
+ */
+export function canDirectCaptureMini(ships: FleetShips): boolean {
+  return (
+    (ships.worldEater ?? 0) >= 1 ||
+    (ships.voidforgeTitan ?? 0) >= 1 ||
+    (ships.swarmMothership ?? 0) >= 1
+  );
+}
+
+/** @deprecated Use canDestroyMiniPlanet — name kept for older tests. */
+export function canResolveMiniPlanet(ships: FleetShips): boolean {
+  return canDestroyMiniPlanet(ships);
 }
 
 /** Validate carried swarm vs mothership capacity; free-flying swarm alone is illegal. */

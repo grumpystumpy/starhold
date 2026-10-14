@@ -97,7 +97,7 @@ export function fleetComposer(
     const pirate = view.galaxy.pirateBase;
     if (pirate) {
       options.push(
-        `<option value="pirate:${escapeAttr(pirate.id)}">${escapeHtml(pirate.name)} · T${pirate.tier} · ${pirate.threatHint} · ${fmtCoords(pirate.coords)}</option>`,
+        `<option value="pirate:${escapeAttr(pirate.id)}">${escapeHtml(pirate.name)} · Lv${pirate.level ?? pirate.tier} · ${pirate.threatHint} · ${fmtCoords(pirate.coords)}</option>`,
       );
     }
   } else {

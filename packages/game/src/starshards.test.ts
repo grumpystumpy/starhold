@@ -24,7 +24,9 @@ import {
 
 describe("Thread D Starshards / officers / skills", () => {
   it("maps expedition rolls including 5% starshards band", () => {
-    assert.equal(expeditionKindFromRoll(69), "nothing");
+    assert.equal(expeditionKindFromRoll(67), "nothing");
+    assert.equal(expeditionKindFromRoll(68), "miniPlanet");
+    assert.equal(expeditionKindFromRoll(69), "miniPlanet");
     assert.equal(expeditionKindFromRoll(70), "starshards");
     assert.equal(expeditionKindFromRoll(74), "starshards");
     assert.equal(expeditionKindFromRoll(75), "pirates");

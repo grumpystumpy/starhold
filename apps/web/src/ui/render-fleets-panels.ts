@@ -4,7 +4,7 @@ import {
   SHIPS,
   type PlayerView,
 } from "@starhold/game";
-import { SHIP_ART } from "./assets";
+import { PLANET_ART, SHIP_ART } from "./assets";
 import { fmt, fmtCoords, fmtEta, remainingSeconds } from "./format";
 import { escapeAttr, escapeHtml } from "./render-escape";
 
@@ -93,6 +93,31 @@ export function sensorContactsHtml(
   `;
 }
 
+export function hostileInboundHtml(
+  contacts: PlayerView["hostileInbound"],
+  roster: PlayerView["roster"],
+  now: number,
+): string {
+  if (!contacts?.length) {
+    return "";
+  }
+  const nameFor = (playerId: string) =>
+    roster.find((r) => r.id === playerId)?.name ?? "commander";
+  return `
+    <h3 class="subhead">Hostile inbound</h3>
+    <ul class="roster" data-testid="hostile-inbound">
+      ${contacts
+        .map((f) => {
+          const ships = SHIP_ORDER.filter((id) => (f.ships[id] ?? 0) > 0)
+            .map((id) => `${fmt(f.ships[id] ?? 0)}× ${SHIPS[id].name}`)
+            .join(", ");
+          return `<li data-testid="inbound-${f.id}"><span>${escapeHtml(nameFor(f.ownerPlayerId))} ${escapeHtml(f.mission)} → ${fmtCoords(f.targetCoords)}<br/><span class="meta">${escapeHtml(ships)}</span></span><span>${fmtEta(remainingSeconds(f.arrivesAt, now))}</span></li>`;
+        })
+        .join("")}
+    </ul>
+  `;
+}
+
 export function spyReportsHtml(reports: PlayerView["spyReports"]): string {
   if (!reports?.length) {
     return `<p class="hint">No espionage reports yet.</p>`;
@@ -164,6 +189,20 @@ export function galaxyPanel(
       return `<li data-testid="galaxy-slot-${s.coords.slot}"><span>${fmt(s.coords.slot)}. ${who}${debris}</span><span>${fmtCoords(s.coords)}</span></li>`;
     })
     .join("");
+  const miniRows =
+    galaxy.minis && galaxy.minis.length > 0
+      ? galaxy.minis
+          .map((s) => {
+            const debris = s.debris
+              ? ` · debris ${fmt(s.debris.metal)}/${fmt(s.debris.crystal)}`
+              : "";
+            const who = s.playerName
+              ? `${escapeHtml(s.playerName)}${s.isOwn ? " (you)" : ""}`
+              : "Unclaimed";
+            return `<li data-testid="galaxy-mini-${s.coords.slot}"><span class="row-with-thumb"><img class="thumb" src="${PLANET_ART.mini}" alt="" width="28" height="28" />Mini ${fmt(s.coords.slot)}. ${who}${debris}</span><span>${fmtCoords(s.coords)}</span></li>`;
+          })
+          .join("")
+      : "";
   const asteroids =
     galaxy.asteroids?.length > 0
       ? `<ul class="roster" data-testid="galaxy-asteroids">${galaxy.asteroids
@@ -174,7 +213,7 @@ export function galaxyPanel(
           .join("")}</ul>`
       : `<p class="hint" data-testid="galaxy-asteroids-empty">No asteroid fields in this system.</p>`;
   const pirate = galaxy.pirateBase
-    ? `<p class="hint pirate-row" data-testid="galaxy-pirate">${escapeHtml(galaxy.pirateBase.name)} · tier ${fmt(galaxy.pirateBase.tier)} · threat ${escapeHtml(galaxy.pirateBase.threatHint)} · ${fmtCoords(galaxy.pirateBase.coords)}</p>`
+    ? `<p class="hint pirate-row" data-testid="galaxy-pirate">${escapeHtml(galaxy.pirateBase.name)} · Lv ${fmt(galaxy.pirateBase.level ?? galaxy.pirateBase.tier)} · threat ${escapeHtml(galaxy.pirateBase.threatHint)} · ${fmtCoords(galaxy.pirateBase.coords)}</p>`
     : `<p class="hint" data-testid="galaxy-pirate-empty">No pirate base reported.</p>`;  const deep = galaxy.deepSpace
     ? `<p class="hint" data-testid="galaxy-deep-space">Deep space ${fmtCoords(galaxy.deepSpace.coords)} — expedition target.</p>`
     : "";
@@ -192,6 +231,11 @@ export function galaxyPanel(
       </div>
       <p class="hint">Send max uses the Expedition preset and fills free expedition slots from ships in orbit on the selected colony. Scan probes every foreign-owned planet/moon in this system.</p>
       <ul class="roster" data-testid="galaxy-slots">${rows}</ul>
+      ${
+        miniRows
+          ? `<h3 class="subhead">Mini planets</h3><ul class="roster" data-testid="galaxy-minis">${miniRows}</ul>`
+          : ""
+      }
       <h3 class="subhead">Deep space</h3>
       ${deep}
       <h3 class="subhead">Asteroids</h3>

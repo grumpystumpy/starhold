@@ -61,20 +61,19 @@ export function migrateUniverseV2ToV3(
 
   if (universe.pirateBases) {
     for (const base of Object.values(universe.pirateBases) as PirateBase[]) {
-      const tier = base.tier ?? 0;
-      if ((base as { level?: number }).level == null) {
-        (base as { level?: number }).level = tier;
-      }
+      const tier = Math.max(0, Math.floor(base.tier ?? 0));
+      base.tier = tier;
+      base.level = tier;
+      const techLevel = Math.min(2, Math.floor(tier / 4));
       if ((base as { techs?: unknown }).techs == null) {
-        (base as { techs?: unknown }).techs = {
-          weapons: 0,
-          armour: 0,
-          shielding: 0,
+        base.techs = {
+          weapons: techLevel,
+          armour: techLevel,
+          shielding: techLevel,
         };
       }
       if ((base as { lastFreeSpawnAt?: number }).lastFreeSpawnAt == null) {
-        (base as { lastFreeSpawnAt?: number }).lastFreeSpawnAt =
-          base.lastGrewAt ?? now;
+        base.lastFreeSpawnAt = base.lastGrewAt ?? now;
       }
     }
   }
@@ -109,6 +108,16 @@ export function migrateUniverseV3ToV4(universe: UniverseState): UniverseState {
   for (const planet of Object.values(universe.planets)) {
     if (planet.buildings.mantleLoom == null) planet.buildings.mantleLoom = 0;
     if (planet.buildings.rigFoundry == null) planet.buildings.rigFoundry = 0;
+    if (planet.buildings.riftSiphon == null) planet.buildings.riftSiphon = 0;
+    if (planet.buildings.echoVault == null) planet.buildings.echoVault = 0;
+    if (planet.buildings.anomalyForge == null) planet.buildings.anomalyForge = 0;
+    if (planet.buildings.driftBeacon == null) planet.buildings.driftBeacon = 0;
+    if (planet.flags?.mini && !planet.flags.miniKind) {
+      planet.flags.miniKind = "standard";
+    }
+    if (planet.flags?.mini && planet.lastDriftAt == null) {
+      planet.lastDriftAt = planet.lastTickAt ?? Date.now();
+    }
   }
 
   universe.schemaVersion = 4;

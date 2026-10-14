@@ -50,6 +50,10 @@ export interface CombatReport {
   /** Voidforge Titan moon-kill success. */
   moonDestroyed?: boolean;
   moonKillChancePct?: number;
+  /** Post-battle mini capture/destroy available (attacker win on colonized mini). */
+  miniResolveAvailable?: boolean;
+  miniPlanetId?: string;
+  miniResolved?: "capture" | "destroy";
 }
 
 export interface EspionageReport {
@@ -74,7 +78,8 @@ export type ExpeditionKind =
   | "ships"
   | "nothing"
   | "pirates"
-  | "starshards";
+  | "starshards"
+  | "miniPlanet";
 
 export interface ExpeditionReport {
   id: string;
@@ -87,6 +92,9 @@ export interface ExpeditionReport {
   shipsDelta: Partial<FleetShips>;
   /** Starshards granted to the player (expedition find). */
   starshardsGained?: number;
+  /** Mini-planet discovery coords (finder-only). */
+  miniPlanetId?: string;
+  miniCoords?: Coordinates;
   summary: string;
 }
 
@@ -116,8 +124,17 @@ export interface PlanetState {
   buildQueue: BuildQueueItem[];
   shipQueue: ShipQueueItem[];
   defenseQueue: DefenseQueueItem[];
-  /** Round 2 mini-planet flag (thread K fills discovery). */
-  flags?: { mini?: boolean };
+  /** Round 2 mini-planet flag + optional super-rare kind. */
+  flags?: {
+    mini?: boolean;
+    miniKind?: "standard" | "ironwater" | "fortress" | "relic";
+  };
+  /** Player ids who know this mini's coords (discovery). */
+  discoveredBy?: string[];
+  /** Wall-clock ms of last mini drift step. */
+  lastDriftAt?: number;
+  /** First successful colonize time — drives 8h galaxy-wide visibility. */
+  colonizedAt?: number;
 }
 
 export interface PlayerState {
@@ -152,6 +169,8 @@ export interface PlayerState {
   fleetPresets?: FleetPreset[];
   /** Round 3 player class (Miner / Explorer / Fleeter / Expansionist). */
   playerClass?: PlayerClassState;
+  /** Mini planet ids this player has discovered (coords known). */
+  discoveredMiniIds?: string[];
 }
 
 export interface UniverseState {
@@ -182,6 +201,8 @@ export interface PirateBasePublic {
   coords: Coordinates;
   name: string;
   tier: number;
+  /** Alias of tier (Round 2 L). */
+  level: number;
   threatHint: "low" | "medium" | "high";
 }
 
@@ -203,6 +224,8 @@ export interface GalaxyView {
   galaxy: number;
   system: number;
   slots: GalaxySlot[];
+  /** Mini planets in this system visible to the viewer (discovered or owned). */
+  minis?: GalaxySlot[];
   deepSpace: { coords: Coordinates };
   asteroids: AsteroidField[];
   pirateBase: PirateBasePublic | null;
@@ -225,6 +248,8 @@ export interface PlayerView {
     isHome: boolean;
     isActive: boolean;
     isMoon: boolean;
+    /** Round 2 mini planet — art hook for PLANET_ART.mini. */
+    isMini?: boolean;
     jumpGateLevel: number;
   }>;
   economy: EconomySnapshot;
@@ -236,6 +261,8 @@ export interface PlayerView {
   spyReports: EspionageReport[];
   expeditionReports: ExpeditionReport[];
   sensorContacts: FleetMission[];
+  /** Hostile outbound fleets targeting this player (not Moving Fortress). */
+  hostileInbound: FleetMission[];
   /** Premium currency echo. */
   starshards: number;
   /** Active (non-expired) officers. */

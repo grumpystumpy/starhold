@@ -17,7 +17,11 @@ export type BuildingId =
   | "jumpGate"
   | "chronoLathe"
   | "mantleLoom"
-  | "rigFoundry";
+  | "rigFoundry"
+  | "riftSiphon"
+  | "echoVault"
+  | "anomalyForge"
+  | "driftBeacon";
 
 export type BodyKind = "planet" | "moon";
 
@@ -163,6 +167,8 @@ export interface BuildingDef {
   energyProdFormula?: "solar";
   /** Resource this mine produces */
   produces?: ResourceId;
+  /** Soft/hard max level (mini specials). */
+  maxLevel?: number;
 }
 
 export interface ShipDef {
@@ -326,16 +332,29 @@ export interface AsteroidField {
   richness: number;
 }
 
-/** NPC pirate base stub (thread E fills behavior). */
+/** Pirate combat techs — kept very low vs players (Round 2 L). */
+export interface PirateTechs {
+  weapons: number;
+  armour: number;
+  shielding: number;
+}
+
+/** NPC pirate base (Round 2 L: levels, free ships, full non-class catalog). */
 export interface PirateBase {
   id: string;
   coords: Coordinates;
   name: string;
+  /** Growth tier; kept in sync with `level`. */
   tier: number;
+  /** Alias of `tier` for Round 2 clarity (0..PIRATE_TIER_CAP). */
+  level: number;
   ships: FleetShips;
   resources: Resources;
+  techs: PirateTechs;
   lastGrewAt: number;
   lastRaidAt: number;
+  /** Cadence for free weak-ship spawns (3h). */
+  lastFreeSpawnAt: number;
   destroyedAt: number | null;
 }
 
@@ -348,7 +367,7 @@ export interface OccupationState {
   endsAt: number;
 }
 
-/** Post-battle choice when ≥5 World Eaters win on a mini planet (K wires full flow). */
+/** Post-battle choice after winning on a colonized mini (destroy needs ≥1 World Eater). */
 export type MiniPlanetResolveChoice = "capture" | "destroy";
 
 export interface SlotProductionMult {
