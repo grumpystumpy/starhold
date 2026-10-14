@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 /**
- * Bundle Hono API + game into Vercel catch-all: api/[[...route]].js
- * Matches /api, /api/health, /api/join, … without path-stripping rewrites.
+ * Bundle Hono API + game into Vercel serverless: api/index.js
+ *
+ * Nested paths like /api/auth/me need a rewrite to /api (see vercel.json).
+ * The optional catch-all api/[[...route]].js only matched one segment on
+ * this Hobby project ( /api/health ok, /api/auth/me → platform NOT_FOUND ).
  */
 import * as esbuild from "esbuild";
 import fs from "node:fs";
@@ -10,12 +13,12 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const outDir = path.join(root, "api");
-const outFile = path.join(outDir, "[[...route]].js");
+const outFile = path.join(outDir, "index.js");
 const gameEntry = path.join(root, "packages/game/src/index.ts");
 
 fs.mkdirSync(outDir, { recursive: true });
-// Remove legacy single-file entry so Vercel does not dual-route.
-for (const stale of ["index.js", "index.ts", "index.mjs"]) {
+// Remove catch-all / legacy names so Vercel does not dual-route.
+for (const stale of ["[[...route]].js", "index.ts", "index.mjs"]) {
   const p = path.join(outDir, stale);
   if (fs.existsSync(p)) fs.unlinkSync(p);
 }
