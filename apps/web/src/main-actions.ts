@@ -7,7 +7,8 @@ export {
   doGalaxyNav,
   doSelectPlanet,
   doRenamePlanet,
-  doRequestMagicLink,
+  doSignup,
+  doLogin,
   doClaimAnonymous,
   resumeFromCookie,
 } from "./main-actions-session.js";
