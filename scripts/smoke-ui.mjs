@@ -521,12 +521,10 @@ async function uiSmoke() {
   await page.click('[data-testid="build-scout"]');
   await page.waitForFunction(
     () => {
-      const hangar = document.querySelector(
-        '[data-testid="hangar-scout"] span:last-child',
-      );
+      const hangar = document.querySelector('[data-testid="hangar-count-scout"]');
       const q = document.querySelector('[data-testid="ship-queue"]');
       const ok = document.querySelector('[data-testid="flash-ok"]');
-      const n = Number(hangar?.textContent ?? 0);
+      const n = Number(String(hangar?.textContent ?? "0").replace(/,/g, ""));
       return n >= 1 || Boolean(q) || Boolean(ok?.textContent?.match(/scout|Hangar|Queued/i));
     },
     undefined,
@@ -535,10 +533,8 @@ async function uiSmoke() {
 
   await page.waitForFunction(
     () => {
-      const hangar = document.querySelector(
-        '[data-testid="hangar-scout"] span:last-child',
-      );
-      return Number(hangar?.textContent ?? 0) >= 1;
+      const hangar = document.querySelector('[data-testid="hangar-count-scout"]');
+      return Number(String(hangar?.textContent ?? "0").replace(/,/g, "")) >= 1;
     },
     undefined,
     { timeout: 30_000 },
@@ -546,9 +542,11 @@ async function uiSmoke() {
   logs.push("ui-build-scout");
 
   await page.waitForTimeout(1500);
+  const hangarCountText =
+    (await page.textContent('[data-testid="hangar-count-scout"]')) ?? "0";
   const noticeOrHangar =
     (await page.locator('[data-testid="flash-ok"]').count()) >= 1 ||
-    Number(await page.textContent('[data-testid="hangar-scout"] span:last-child')) >= 1;
+    Number(String(hangarCountText).replace(/,/g, "")) >= 1;
   if (!noticeOrHangar) throw new Error("lost build feedback after poll");
   logs.push("build-feedback-ok");
 
