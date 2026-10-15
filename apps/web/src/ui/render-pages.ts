@@ -55,6 +55,7 @@ import {
 } from "./render-queues";
 import { hrefForPage } from "./router";
 import { infoTooltip } from "./render-tooltips";
+import { seasonsPage } from "./render-seasons";
 
 const RESOURCE_BUILDINGS: BuildingId[] = [
   "metalMine",
@@ -96,12 +97,18 @@ function overviewPage(view: PlayerView, busy: boolean): string {
   const tempK = economy.temperatureK ?? 0;
   const helio = economy.energy.helioBuoy ?? 0;
   const solarTemp = economy.energy.solarTempFactor ?? 1;
+  const title = view.player.cosmetics?.activeTitle?.trim() ?? "";
+  const skin = view.player.cosmetics?.activePlanetSkinId ?? "";
   return `
     <section class="panel" data-testid="overview-panel">
       <h2>Overview</h2>
       <div class="overview-hero">
-        <img class="thumb thumb-lg" src="${planetArtFor({ kind: planet.kind, flags: planet.flags, variant: "hero" })}" alt="" width="72" height="72" data-testid="overview-planet-art" />
+        <div class="planet-frame" data-testid="planet-skin-frame" data-planet-skin="${escapeAttr(skin)}">
+          <img class="thumb thumb-lg" src="${planetArtFor({ kind: planet.kind, flags: planet.flags, variant: "hero" })}" alt="" width="72" height="72" data-testid="overview-planet-art" />
+        </div>
         <div>
+          <p class="overview-commander" data-testid="commander-name">${escapeHtml(view.player.name)}</p>
+          <p class="active-title" data-testid="active-title"${title ? "" : " hidden"}>${escapeHtml(title)}</p>
           <p class="overview-name" data-testid="overview-planet-name">${escapeHtml(planet.name)}${planet.flags?.mini ? " · Mini" : planet.kind === "moon" ? " · Moon" : ""}</p>
           <p class="coords">${fmtCoords(planet.coords)}</p>
           <p class="hint" data-testid="planet-fields">Fields ${fmt(economy.fields.used)} / ${fmt(economy.fields.cap)} · ${fmt(economy.fields.remaining)} free${loomBonus > 0 ? ` · Mantle Loom +${fmt(loomBonus)}` : ""}</p>
@@ -361,6 +368,8 @@ export function pageHtml(
       return highscorePage(view);
     case "alliances":
       return alliancesPageHtml(view, busy);
+    case "seasons":
+      return seasonsPage(view, busy);
     case "messages":
       return messagesPageHtml(view, { busy });
     default: {

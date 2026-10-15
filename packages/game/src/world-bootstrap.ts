@@ -30,6 +30,7 @@ import {
   ensurePirateBaseShape,
   seedUniversePirates,
 } from "./world-pirates.js";
+import { rollSeasons } from "./world-seasons.js";
 
 export function emptyBuildings(): PlanetState["buildings"] {
   return {
@@ -171,6 +172,7 @@ export function ensureUniverseShape(universe: UniverseState): void {
     if (!Array.isArray(alliance.intel)) alliance.intel = [];
     if (!Array.isArray(alliance.markers)) alliance.markers = [];
   }
+  if (!universe.seasons) universe.seasons = {};
   if (!universe.fleetSpeed) universe.fleetSpeed = universe.speed || 1;
   if (!universe.seed) universe.seed = `seed_${universe.id}`;
   if (universe.miniPlanetIds.length === 0) {
@@ -339,6 +341,7 @@ export function joinUniverse(
 
   universe.players[playerId] = player;
   universe.planets[planetId] = planet;
+  rollSeasons(universe, now);
   return { player, planet };
 }
 

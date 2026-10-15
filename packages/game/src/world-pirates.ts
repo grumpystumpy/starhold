@@ -80,6 +80,10 @@ import {
   xpForPirateShipKills,
 } from "./formulas.js";
 import { hashSeed } from "./formulas-position.js";
+import {
+  awardSeasonPirateKill,
+  awardSeasonPveWin,
+} from "./world-seasons.js";
 import type {
   AlienBase,
   Coordinates,
@@ -1196,6 +1200,7 @@ function applyNpcRaidOnPlanet(
     };
     grantPlayerXp(owner, xpForCombatLose());
   } else if (combat.outcome === "defender_win") {
+    awardSeasonPveWin(universe, owner, now);
     grantPirateFleetKillStarshards(owner);
     if (faction === "pirate") noteGoalMetric(owner, "pirateWin", 1, now);
     const killed = resourcesCostTotal(
@@ -1484,6 +1489,8 @@ function resolveNpcRaidArrival(
     if (kind === "pirate") markPirateDestroyed(base as PirateBase, now);
     else markAlienDestroyed(base as AlienBase, now);
     if (owner) {
+      awardSeasonPveWin(universe, owner, now);
+      awardSeasonPirateKill(universe, owner, now);
       grantPirateDestroyStarshards(owner, tierAtFight);
       if (kind === "pirate") noteGoalMetric(owner, "pirateWin", 1, now);
       attackerXp =

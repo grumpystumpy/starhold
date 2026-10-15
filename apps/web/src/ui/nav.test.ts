@@ -22,6 +22,7 @@ describe("nav routes", () => {
     assert.equal(pageFromPath("/skills"), "skills");
     assert.equal(pageFromPath("/highscore"), "highscore");
     assert.equal(pageFromPath("/alliances"), "alliances");
+    assert.equal(pageFromPath("/seasons"), "seasons");
     assert.equal(pageFromPath("/messages"), "messages");
   });
 

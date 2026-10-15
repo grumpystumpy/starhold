@@ -40,6 +40,7 @@ import {
 } from "./world-mini.js";
 import { maybeDestroyMoonWithTitans } from "./world-round2.js";
 import { pushEventLog } from "./world-event-log.js";
+import { awardSeasonPvpWin, isSeasonPvpMission } from "./world-seasons.js";
 import { addDebris, subtractCargo } from "./world-tick.js";
 
 /** Resolve outbound raid at target; mutates fleet cargo/ships/reportId. */
@@ -118,6 +119,13 @@ export function resolveRaidArrival(
   if (owner) {
     if (combat.outcome === "attacker_win") {
       attackerXp = xpForCombatWin(atkDestroyed);
+      if (
+        defenderOwner &&
+        defenderOwner.id !== owner.id &&
+        isSeasonPvpMission(fleet.mission)
+      ) {
+        awardSeasonPvpWin(universe, owner, now);
+      }
     } else {
       attackerXp = xpForCombatLose();
     }

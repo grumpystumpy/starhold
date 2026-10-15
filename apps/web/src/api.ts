@@ -346,6 +346,43 @@ export async function activateOfficerHire(
   return parse<PlayerView>(res);
 }
 
+export async function claimSeasonReward(
+  playerId: string,
+  board: string,
+  seasonId?: string,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/season/claim", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, board, seasonId }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function setCosmeticTitle(
+  playerId: string,
+  title: string | null,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/cosmetics/title", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, title }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function setCosmeticSkin(
+  playerId: string,
+  skinId: string | null,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/cosmetics/planet-skin", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, skinId }),
+  });
+  return parse<PlayerView>(res);
+}
+
 export async function unlockSkillNode(
   playerId: string,
   skillId: string,

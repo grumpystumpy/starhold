@@ -768,6 +768,108 @@ code {
   margin-top: 0.35rem;
 }
 
+.planet-frame {
+  flex: 0 0 auto;
+  display: inline-flex;
+  border-radius: 16px;
+  padding: 3px;
+  background: transparent;
+}
+
+.planet-frame[data-planet-skin]:not([data-planet-skin=""]) {
+  box-shadow: 0 0 0 1px var(--accent-dim);
+}
+
+.planet-frame[data-planet-skin^="season-champion-"] {
+  background: linear-gradient(140deg, #f6e27a, #e07a3d 42%, #7a4dff);
+}
+
+.planet-frame[data-planet-skin^="season-contender-"] {
+  background: linear-gradient(140deg, #9be7ff, #3d7dff 55%, #14325c);
+}
+
+.planet-frame img {
+  border-radius: 12px;
+  display: block;
+}
+
+.overview-commander {
+  margin: 0;
+  font-family: var(--font-brand);
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+}
+
+.active-title {
+  margin: 0.1rem 0 0.25rem;
+  color: var(--accent);
+  font-size: 0.92rem;
+}
+
+.season-boards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+}
+
+.season-board,
+.season-claim {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.65rem 0.75rem;
+  min-width: 0;
+}
+
+.season-board h3,
+.season-claim h3 {
+  margin: 0 0 0.35rem;
+}
+
+.season-list {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+}
+
+.season-list li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.season-list li:last-child {
+  border-bottom: none;
+}
+
+.season-claim-row span {
+  min-width: 0;
+  flex: 1 1 12rem;
+}
+
+.season-pickers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.season-pickers label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+}
+
+.season-pickers select {
+  width: 100%;
+  max-width: 24rem;
+}
+
 .skill-branch h3 {
   margin: 0.75rem 0 0.35rem;
   font-size: 1rem;

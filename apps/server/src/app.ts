@@ -47,13 +47,19 @@ import {
   queueResearch,
   queueShipBuild,
   reorderQueue,
+  claimSeasonReward,
+  grantSeasonPoints,
+  isSeasonBoard,
   renamePlanet,
   relocateMovingFortress,
   resolveMiniPlanetChoice,
+  rollSeasons,
   saveFleetPreset,
   setActivePlanet,
   setAllianceJoinMode,
   setAllianceRole,
+  setSeasonSkin,
+  setSeasonTitle,
   startOccupation,
   swarmProduce,
   unlockSkill,
@@ -992,6 +998,103 @@ export function createApp(): Hono {
       const result = markEventsRead(universe, playerId, ids, now);
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, playerId, now));
+    });
+  });
+
+  app.post("/api/season/claim", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      board?: string;
+      seasonId?: string;
+    };
+    if (!body.playerId || !body.board) {
+      return c.json({ error: "playerId and board required." }, 400);
+    }
+    if (!isSeasonBoard(body.board)) {
+      return c.json({ error: "Unknown board." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = claimSeasonReward(
+        universe,
+        body.playerId!,
+        body.board,
+        Date.now(),
+        body.seasonId,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  app.post("/api/cosmetics/title", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      title?: string | null;
+    };
+    if (!body.playerId || body.title === undefined) {
+      return c.json({ error: "playerId and title required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = setSeasonTitle(
+        universe,
+        body.playerId!,
+        body.title ?? null,
+        Date.now(),
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  app.post("/api/cosmetics/planet-skin", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      skinId?: string | null;
+    };
+    if (!body.playerId || body.skinId === undefined) {
+      return c.json({ error: "playerId and skinId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = setSeasonSkin(
+        universe,
+        body.playerId!,
+        body.skinId ?? null,
+        Date.now(),
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  app.post("/api/season/hook", async (c) => {
+    if (process.env.STARHOLD_E2E !== "1") {
+      return c.json({ error: "Not found" }, 404);
+    }
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      combat?: number;
+      economy?: number;
+      pirateKills?: number;
+      rollAt?: number;
+    };
+    if (!body.playerId) return c.json({ error: "playerId required." }, 400);
+    return withUniverse((universe) => {
+      const now = Date.now();
+      const granted = grantSeasonPoints(
+        universe,
+        body.playerId!,
+        {
+          combat: body.combat,
+          economy: body.economy,
+          pirateKills: body.pirateKills,
+        },
+        now,
+      );
+      if (!granted.ok) return c.json({ error: granted.error }, 400);
+      if (typeof body.rollAt === "number" && Number.isFinite(body.rollAt)) {
+        rollSeasons(universe, body.rollAt);
+      }
+      return c.json(playerView(universe, body.playerId!, now));
     });
   });
 

@@ -48,6 +48,7 @@ import {
   resolvePirateRaidArrival,
   tickPirates,
 } from "./world-pirates.js";
+import { rollSeasons } from "./world-seasons.js";
 import { pruneSpyReports } from "./world-spy-prune.js";
 import {
   clearOccupationIfFleetGone,
@@ -387,6 +388,7 @@ export function advanceFleets(universe: UniverseState, now: number): void {
 
 export function advanceUniverse(universe: UniverseState, now = Date.now()): void {
   ensureUniverseShape(universe);
+  rollSeasons(universe, now);
   pruneExpiredOccupations(universe, now);
   for (const player of Object.values(universe.players)) {
     advanceResearch(universe, player, now);

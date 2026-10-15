@@ -54,6 +54,7 @@ import { inSensorPhalanxRange, ownedPlanetCount } from "./world-moons.js";
 import { goalsView } from "./world-goals.js";
 import { occupationForPlanet } from "./world-occupation.js";
 import { playerKnowsMini } from "./world-mini.js";
+import { seasonLeaderboardView } from "./world-seasons.js";
 import { getDebris } from "./world-tick.js";
 
 export function highscoresBoard(universe: UniverseState): HighscoreEntry[] {
@@ -384,5 +385,6 @@ export function playerView(
     allianceDirectory: allianceDirectory(universe),
     openAcsGroups: listOpenAcsForAlliance(universe, player.allianceId),
     goals: goalsView(player, now),
+    seasonLeaderboard: seasonLeaderboardView(universe, player, now),
   };
 }

@@ -1347,6 +1347,14 @@ export const GRID_STAKE_ENERGY_PER = 0.04;
 export const GRID_STAKE_ENERGY_CAP = 10;
 export const FRONTIER_BEACON_JUMP_CD = 0.75;
 
+/** Monthly season scoring. Calendar month is UTC `YYYY-MM`. */
+export const SEASON_COMBAT_WIN = 10;
+export const SEASON_COMBAT_PVE_WIN = 3;
+/** Economy points = resources spent on completed buildings and research / this. */
+export const SEASON_ECONOMY_SPEND_DIV = 1000;
+export const SEASON_LEADERBOARD_TOP = 20;
+export const SEASON_REWARD_TOP_N = 5;
+
 /** Foundation Ark bootstrap building levels on successful colonize. */
 export const FOUNDATION_ARK_BOOTSTRAP: Readonly<
   Partial<Record<BuildingId, number>>

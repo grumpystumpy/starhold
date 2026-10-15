@@ -54,3 +54,8 @@ export {
   fleetStrikeTarget,
 } from "./main-actions-alliances.js";
 export { doMarkEventsRead } from "./main-actions-events.js";
+export {
+  doClaimSeason,
+  doSetSeasonSkin,
+  doSetSeasonTitle,
+} from "./main-actions-seasons.js";

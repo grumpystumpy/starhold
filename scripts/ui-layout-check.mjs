@@ -42,6 +42,7 @@ const ROUTES = [
   "officers",
   "skills",
   "highscore",
+  "seasons",
   "messages",
 ];
 

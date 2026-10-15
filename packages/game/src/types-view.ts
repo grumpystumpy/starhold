@@ -299,6 +299,66 @@ export interface EventLogEntry {
   meta?: Record<string, string | number | boolean | null>;
 }
 
+export type SeasonBoardId = "combat" | "economy" | "pirateKills";
+
+/** Live counters for the open UTC month. */
+export interface SeasonPlayerCounters {
+  seasonId: string;
+  combat: number;
+  economy: number;
+  pirateKills: number;
+  /** Resources spent toward the next economy point (below SEASON_ECONOMY_SPEND_DIV). */
+  economyRemainder?: number;
+  claimedBoards?: SeasonBoardId[];
+}
+
+/** Cosmetic unlocks. No shop — earned from sealed-season placement only. */
+export interface SeasonCosmetics {
+  titles: string[];
+  activeTitle: string | null;
+  planetSkinIds: string[];
+  activePlanetSkinId: string | null;
+}
+
+export interface SeasonBoardRow {
+  playerId: string;
+  name: string;
+  score: number;
+}
+
+export interface SeasonSnapshot {
+  id: string;
+  sealedAt: number | null;
+  boards: Record<SeasonBoardId, SeasonBoardRow[]>;
+}
+
+export interface SeasonStanding extends SeasonBoardRow {
+  rank: number;
+}
+
+export interface SeasonClaimOffer {
+  board: SeasonBoardId;
+  score: number;
+  rank: number | null;
+  title: string | null;
+  skinId: string | null;
+  claimed: boolean;
+}
+
+export interface SeasonClaimView {
+  seasonId: string;
+  offers: SeasonClaimOffer[];
+}
+
+/** Current month boards plus sealed seasons the player can claim. */
+export interface SeasonLeaderboardView {
+  seasonId: string;
+  scores: { combat: number; economy: number; pirateKills: number };
+  ranks: Record<SeasonBoardId, number | null>;
+  boards: Record<SeasonBoardId, SeasonStanding[]>;
+  claims: SeasonClaimView[];
+}
+
 export interface PlayerState {
   id: string;
   name: string;
@@ -350,6 +410,15 @@ export interface PlayerState {
   goals?: PlayerGoalState;
   /** Synthetic empire alerts. Missing on old saves — migrate to []. */
   eventLog?: EventLogEntry[];
+  /** Open monthly season counters. Missing on older saves until the next read. */
+  season?: SeasonPlayerCounters;
+  /** Owned titles and planet skins. */
+  cosmetics?: SeasonCosmetics;
+  /**
+   * Personal copy of each sealed season, including claim flags.
+   * The live `season` object is zeroed when the month rolls.
+   */
+  seasonArchive?: Record<string, SeasonPlayerCounters>;
 }
 
 /** UTC period keys + per-goal counters. Rolled lazily on read. */
@@ -417,6 +486,8 @@ export interface UniverseState {
   alliances?: Record<string, AllianceRecord>;
   /** Active ACS / Joint Strike groups (lazy resolve on tick). */
   acsGroups?: Record<string, AcsGroup>;
+  /** Sealed monthly snapshots. Absent until the first month roll. */
+  seasons?: Record<string, SeasonSnapshot>;
 }
 
 export interface PirateBasePublic {
@@ -532,6 +603,8 @@ export interface PlayerView {
   openAcsGroups: AcsGroup[];
   /** Daily and weekly goals for the current UTC periods. */
   goals: GoalView[];
+  /** Current month leaderboard plus sealed claim offers. */
+  seasonLeaderboard: SeasonLeaderboardView;
 }
 
 export interface PublicPlayer {
