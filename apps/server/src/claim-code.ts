@@ -7,13 +7,16 @@ import { createHash, randomBytes } from "node:crypto";
 /** Unambiguous alphabet. 8 chars is 40 bits; 32 symbols so a byte modulo is unbiased. */
 export const CLAIM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 export const CLAIM_CODE_LENGTH = 8;
+/** Emailed codes. The player is at the screen when it is sent. */
 export const CLAIM_CODE_TTL_MS = 30 * 60 * 1000;
 export const CLAIM_CODE_TTL_SEC = CLAIM_CODE_TTL_MS / 1000;
+/** Codes written to claim-codes.txt. Micah hands these out by hand. */
+export const IMPORT_CLAIM_CODE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export const CLAIM_MAIL_MESSAGE =
   "If that account needs a new password, a claim code was sent. It expires in 30 minutes and works once.";
 export const CLAIM_NO_MAIL_MESSAGE =
-  "Email isn't set up. Enter the claim code you were given. It expires in 30 minutes and works once.";
+  "Email isn't set up. Enter the claim code you were given. It lasts 7 days and works once.";
 
 export interface ClaimCodeRecord {
   accountId: string;
@@ -72,7 +75,7 @@ export function buildImportClaimCodes(
 ): ImportClaimCode[] {
   return accounts.map((account) => {
     const code = newClaimCode();
-    const expiresAt = now + CLAIM_CODE_TTL_MS;
+    const expiresAt = now + IMPORT_CLAIM_CODE_TTL_MS;
     return {
       accountId: account.id,
       email: account.email,
@@ -90,7 +93,7 @@ export function buildImportClaimCodes(
 export function formatClaimCodeFile(codes: ImportClaimCode[], now: number): string {
   const lines = [
     "# Starhold one-time claim codes. Hand these out privately.",
-    "# Each code works once and expires 30 minutes after this file was written.",
+    "# Each code works once and expires 7 days after this file was written.",
     "# Do not commit this file.",
     `# written ${new Date(now).toISOString()}`,
     "email\tcode\texpires",

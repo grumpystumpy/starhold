@@ -24,6 +24,7 @@ import {
   buildImportClaimCodes,
   formatClaimCodeFile,
   hashClaimCode,
+  IMPORT_CLAIM_CODE_TTL_MS,
 } from "./claim-code.js";
 
 describe("accounts memory store", () => {
@@ -198,12 +199,15 @@ describe("accounts memory store", () => {
     );
     assert.ok(row);
     assert.equal(row!.code.length, 8);
+    assert.equal(row!.expiresAt, IMPORT_CLAIM_CODE_TTL_MS);
+    assert.equal(IMPORT_CLAIM_CODE_TTL_MS, 7 * 24 * 60 * 60 * 1000);
     assert.equal("code" in row!.record, false);
     assert.notEqual(row!.record.codeHash, row!.code);
     const file = formatClaimCodeFile([row!], 0);
     assert.match(file, /ada@starhold\.test/);
     assert.match(file, new RegExp(row!.code));
     assert.match(file, /Do not commit/);
+    assert.match(file, /7 days/);
   });
 
   it("rate-limits repeated auth attempts", async () => {

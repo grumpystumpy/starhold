@@ -26,7 +26,7 @@ Passwords: Node `crypto.scrypt` (N=16384, r=8, p=1) with per-password salt + `SE
 
 Vercel hashes cannot be checked on Workers (the pepper is unrecoverable). Import sets `needsPasswordReset` and drops the hash. The player sets a new PBKDF2 password:
 
-1. `POST /api/auth/claim-code` `{ email }` → same response whether or not the email exists. When `CLAIM_MAIL_URL` is set, a matching reset account is emailed an 8-character code (30 minutes, single use). When it is unset, no code is minted; Micah hands out `claim-codes.txt` from the import script.
+1. `POST /api/auth/claim-code` `{ email }` → same response whether or not the email exists. When `CLAIM_MAIL_URL` is set, a matching reset account is emailed an 8-character code (30 minutes, single use). When it is unset, no code is minted; Micah hands out `claim-codes.txt` from the import script (7 days, single use). Re-import skips accounts that already have a Workers password unless `--force` is set.
 2. `POST /api/auth/claim-password` `{ email, code, password }` → verify the hashed code, store PBKDF2, clear the flag, set the session cookie.
 
 Codes live at `starhold:claim-code:{accountId}` as `{ accountId, codeHash, expiresAt }`. Rate limit: 10 claim attempts per email+IP per 15 minutes. Workers `SESSION_SECRET` is a new value. Vercel sessions are not imported.

@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
+import { DatabaseSync } from "node:sqlite";
 import { describe, it } from "node:test";
 import { createUniverse, joinUniverse } from "@starhold/game";
-import { planImportRows, summarizeExport } from "./transfer-plan.js";
+import {
+  planImportRows,
+  summarizeExport,
+  upsertClaimCodeUnlessClaimed,
+  upsertPreservingClaimedAccount,
+} from "./transfer-plan.js";
 
 describe("KV to D1 transfer plan", () => {
   it("counts a universe, drops imported password hashes, and skips sessions", () => {
@@ -129,5 +135,90 @@ describe("KV to D1 transfer plan", () => {
       planned.some((row) => row.key.startsWith("starhold:session:")),
       false,
     );
+  });
+
+  it("leaves a claimed Workers password in place and still refreshes a reset account", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec(
+      "CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT NOT NULL, expires_at INTEGER)",
+    );
+    db.prepare("INSERT INTO kv (key, value, expires_at) VALUES (?, ?, NULL)").run(
+      "starhold:account:claimed",
+      JSON.stringify({
+        id: "claimed",
+        email: "claimed@starhold.test",
+        passwordHash: "pbkdf2$kept",
+        needsPasswordReset: false,
+      }),
+    );
+    db.prepare("INSERT INTO kv (key, value, expires_at) VALUES (?, ?, NULL)").run(
+      "starhold:account:waiting",
+      JSON.stringify({
+        id: "waiting",
+        email: "waiting@starhold.test",
+        passwordHash: "",
+        needsPasswordReset: true,
+      }),
+    );
+    const resetPayload = JSON.stringify({
+      id: "claimed",
+      email: "claimed@starhold.test",
+      passwordHash: "",
+      needsPasswordReset: true,
+    });
+    for (const sql of upsertPreservingClaimedAccount(
+      "starhold:account:claimed",
+      resetPayload,
+      null,
+    )) {
+      db.exec(sql);
+    }
+    for (const sql of upsertClaimCodeUnlessClaimed(
+      "starhold:account:claimed",
+      "starhold:claim-code:claimed",
+      JSON.stringify({ accountId: "claimed", codeHash: "abc", expiresAt: 1 }),
+      1,
+    )) {
+      db.exec(sql);
+    }
+    const waitingPayload = JSON.stringify({
+      id: "waiting",
+      email: "waiting@starhold.test",
+      passwordHash: "",
+      needsPasswordReset: true,
+      touched: true,
+    });
+    for (const sql of upsertPreservingClaimedAccount(
+      "starhold:account:waiting",
+      waitingPayload,
+      null,
+    )) {
+      db.exec(sql);
+    }
+    for (const sql of upsertClaimCodeUnlessClaimed(
+      "starhold:account:waiting",
+      "starhold:claim-code:waiting",
+      JSON.stringify({ accountId: "waiting", codeHash: "def", expiresAt: 2 }),
+      2,
+    )) {
+      db.exec(sql);
+    }
+    const claimed = db
+      .prepare("SELECT value FROM kv WHERE key = ?")
+      .get("starhold:account:claimed") as { value: string };
+    assert.equal(JSON.parse(claimed.value).passwordHash, "pbkdf2$kept");
+    assert.equal(
+      db.prepare("SELECT key FROM kv WHERE key = ?").get("starhold:claim-code:claimed"),
+      undefined,
+    );
+    const waiting = db
+      .prepare("SELECT value FROM kv WHERE key = ?")
+      .get("starhold:account:waiting") as { value: string };
+    assert.equal(JSON.parse(waiting.value).touched, true);
+    const code = db
+      .prepare("SELECT value FROM kv WHERE key = ?")
+      .get("starhold:claim-code:waiting") as { value: string };
+    assert.equal(JSON.parse(code.value).codeHash, "def");
+    db.close();
   });
 });

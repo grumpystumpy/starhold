@@ -95,9 +95,11 @@ Workers free plan allows 10 ms of CPU per request. A full scrypt verify (N=16384
 
 New Workers accounts use PBKDF2. Vercel accounts stay scrypt. Imported accounts do not keep either hash: the Vercel pepper cannot be recovered, so the import sets `needsPasswordReset` and stores no password. The player enters their email and a one-time claim code, then sets a new PBKDF2 password.
 
-The code is 8 characters, expires in 30 minutes, and works once. Asking for a code is rate-limited (10 attempts per email and IP per 15 minutes, same bucket as submitting a code). D1 stores `sha256(SESSION_SECRET:code)` at `starhold:claim-code:{accountId}`. The plaintext is not stored.
+The code is 8 characters, works once, and is rate-limited (10 attempts per email and IP per 15 minutes, same bucket as submitting a code). A code from `claim-codes.txt` lasts 7 days. A code sent by email lasts 30 minutes. D1 stores `sha256(SESSION_SECRET:code)` at `starhold:claim-code:{accountId}`. The plaintext is not stored.
 
-If `CLAIM_MAIL_URL` is set, “Email me a code” sends the code there. If it is not set, that button does not mint a code (so it cannot replace the one Micah already has). The import script writes `claim-codes.txt` next to the SQL: one line per account, mode `0600`. Hand that file out privately. Apply the SQL within 30 minutes of writing it. Running the import again rebuilds account rows from the Vercel export, which clears any passwords already set on Workers, so refresh codes only before anyone has claimed. Do not commit the file.
+If `CLAIM_MAIL_URL` is set, “Email me a code” sends the code there. If it is not set, that button does not mint a code (so it cannot replace the one Micah already has). The import script writes `claim-codes.txt` next to the SQL: one line per account, mode `0600`, valid for 7 days. Hand that file out privately. Do not commit it.
+
+Re-running the import leaves an account alone once Workers has a password for it (`needsPasswordReset` is off and `passwordHash` is set). Accounts still waiting for a claim are refreshed, including a new 7-day code. `--force` replaces those passwords. Session rows are still deleted on every import.
 
 `SESSION_SECRET` on Workers is a new pepper. Existing sessions are left out of the import, and the SQL deletes any `starhold:session:*` rows already in D1.
 
@@ -171,7 +173,7 @@ Do these in order. Stop if a dry-run count looks wrong. **Leave the Vercel proje
 1. D1 `database_id` and `account_id` are already in `wrangler.toml`.
 2. Set the GitHub secret `CLOUDFLARE_API_TOKEN`, and a **new** Worker secret `SESSION_SECRET` (`openssl rand -base64 32`). Do not reuse the Vercel pepper.
 3. `export --dry-run`, then `export`, then `import --dry-run`. Confirm players, planets, fleets, messages, alliances, and `needsPasswordReset` (imported accounts that must set a new password). Sessions are counted and are not copied.
-4. Export `SESSION_SECRET` as that same new Worker secret, then `import` the SQL file and `wrangler d1 execute` it. This is the first write to D1. If email is not configured, `claim-codes.txt` is written beside the SQL. Hand it out privately and apply the SQL within 30 minutes. Re-running the import later clears passwords that were already set on Workers.
+4. Export `SESSION_SECRET` as that same new Worker secret, then `import` the SQL file and `wrangler d1 execute` it. This is the first write to D1. If email is not configured, `claim-codes.txt` is written beside the SQL. Hand it out privately. Those codes last 7 days. Re-running the import does not clear passwords already set on Workers. Pass `--force` only when those passwords should be replaced.
 5. Set the repository variable `CLOUDFLARE_DEPLOY_ENABLED=true`. The next push to `main` deploys Workers. Pushes to other branches do not.
 6. On the Workers host, open the join screen, enter the account email, the claim code, and a new password. Confirm a second login with that password and a refresh. The old password does not work.
 7. Point players at the Workers URL only after that claim works.

@@ -59,7 +59,7 @@ export function joinScreenHtml(state: JoinScreenState): string {
       <p class="hint">Sign up with email and password to keep this commander after you close the tab. Guest play stays on this browser only.</p>
       <form id="password-claim-form" data-testid="password-claim-form">
         <label for="claim-email">Set a new password</label>
-        <p class="hint">Imported accounts use a one-time claim code. It expires in 30 minutes and works once.</p>
+        <p class="hint">Imported accounts use a one-time claim code. It works once. A code you were given lasts 7 days. An emailed code lasts 30 minutes.</p>
         <div class="claim-fields">
           <input id="claim-email" name="email" type="email" maxlength="254" placeholder="you@example.com" autocomplete="email" data-testid="claim-email" value="${escapeAttr(state.claimEmailDraft ?? "")}" />
           <input id="claim-code" name="code" type="text" maxlength="8" placeholder="claim code" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" data-testid="claim-code" value="${escapeAttr(state.claimCodeDraft ?? "")}" />

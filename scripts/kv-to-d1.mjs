@@ -5,6 +5,7 @@
  *   node --import tsx scripts/kv-to-d1.mjs export kv-export.json
  *   node --import tsx scripts/kv-to-d1.mjs import --dry-run kv-export.json
  *   node --import tsx scripts/kv-to-d1.mjs import kv-export.json kv-import.sql
+ *   node --import tsx scripts/kv-to-d1.mjs import --force kv-export.json kv-import.sql
  *   npx wrangler d1 execute starhold --remote --file=kv-import.sql
  *
  * Export reads KV_REST_API_URL and KV_REST_API_TOKEN (SCAN/GET/TTL only).
@@ -27,6 +28,8 @@ import {
   formatTransferCounts,
   planImportRows,
   summarizeExport,
+  upsertClaimCodeUnlessClaimed,
+  upsertPreservingClaimedAccount,
 } from "../apps/server/src/transfer-plan.ts";
 
 function creds() {
@@ -157,9 +160,12 @@ function attachClaimCodes(planned, now) {
   return { planned, file: formatClaimCodeFile(codes, now), count: codes.length };
 }
 
-function sqlForPlanned(planned) {
+function sqlForPlanned(planned, force) {
   const lines = [
     "BEGIN TRANSACTION;",
+    force
+      ? "-- --force: account rows replace any password already set on Workers."
+      : "-- Account rows that already have a Workers password are left in place.",
     "DELETE FROM kv WHERE key GLOB 'starhold:universe:*';",
     "DELETE FROM kv WHERE key GLOB 'starhold:session:*';",
     "DELETE FROM kv WHERE key GLOB 'starhold:scrypt-attempt:*';",
@@ -167,6 +173,22 @@ function sqlForPlanned(planned) {
   for (const row of planned) {
     const text = JSON.stringify(row.value);
     const chunked = splitChunkText(text);
+    if (!force && !chunked && row.key.startsWith("starhold:account:")) {
+      lines.push(...upsertPreservingClaimedAccount(row.key, text, row.expiresAt));
+      continue;
+    }
+    if (!force && !chunked && row.key.startsWith("starhold:claim-code:")) {
+      const accountId = row.key.slice("starhold:claim-code:".length);
+      lines.push(
+        ...upsertClaimCodeUnlessClaimed(
+          `starhold:account:${accountId}`,
+          row.key,
+          text,
+          row.expiresAt,
+        ),
+      );
+      continue;
+    }
     if (!chunked) {
       lines.push(...replaceSql(row.key, text, row.expiresAt));
       continue;
@@ -180,30 +202,42 @@ function sqlForPlanned(planned) {
   return lines.join("\n");
 }
 
-async function importSql(inPath, outPath, dryRun) {
+async function importSql(inPath, outPath, dryRun, force) {
   const payload = JSON.parse(await readFile(inPath, "utf8"));
   const rows = payload.keys ?? [];
   printCounts(rows);
   if (dryRun) {
     console.log("Dry run: counted the export file, wrote no SQL and did not touch D1.");
     if (writeClaimCodeFile()) {
-      console.log("A real import would write claim-codes.txt. This dry run does not.");
+      console.log(
+        "A real import would write claim-codes.txt (7 days, single use). This dry run does not.",
+      );
     } else {
       console.log("CLAIM_MAIL_URL is set. Claim codes are emailed on request. No code file.");
     }
+    console.log(
+      force
+        ? "--force: a real import would replace passwords already set on Workers."
+        : "A real import leaves accounts that already have a Workers password unless --force is set.",
+    );
     return;
   }
   const now = Date.now();
   const attached = attachClaimCodes(planImportRows(rows, now), now);
-  const sql = sqlForPlanned(attached.planned);
+  const sql = sqlForPlanned(attached.planned, force);
   await writeFile(outPath, sql);
   if (attached.file) {
     await writeFile("claim-codes.txt", attached.file, { mode: 0o600 });
     console.log(
-      `Wrote ${attached.count} claim codes to claim-codes.txt. Hand them out privately. Do not commit this file. Each code expires in 30 minutes.`,
+      `Wrote ${attached.count} claim codes to claim-codes.txt. Hand them out privately. Do not commit this file. Each code expires in 7 days.`,
     );
   } else {
     console.log("CLAIM_MAIL_URL is set. No claim-code file written.");
+  }
+  if (force) {
+    console.log("--force: this SQL replaces passwords already set on Workers.");
+  } else {
+    console.log("Accounts that already have a Workers password are left in place.");
   }
   console.log(
     `Wrote ${outPath}. Review it, then apply with: npx wrangler d1 execute starhold --remote --file=${outPath}`,
@@ -212,16 +246,17 @@ async function importSql(inPath, outPath, dryRun) {
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
-const positional = args.filter((arg) => arg !== "--dry-run");
+const force = args.includes("--force");
+const positional = args.filter((arg) => arg !== "--dry-run" && arg !== "--force");
 const [command, input, output] = positional;
 
 if (command === "export") {
   await exportKv(input || "kv-export.json", dryRun);
 } else if (command === "import") {
-  await importSql(input || "kv-export.json", output || "kv-import.sql", dryRun);
+  await importSql(input || "kv-export.json", output || "kv-import.sql", dryRun, force);
 } else {
   console.error(
-    "Usage: export [--dry-run] [kv-export.json] | import [--dry-run] [kv-export.json] [kv-import.sql]",
+    "Usage: export [--dry-run] [kv-export.json] | import [--dry-run] [--force] [kv-export.json] [kv-import.sql]",
   );
   process.exit(1);
 }

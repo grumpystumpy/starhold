@@ -63,6 +63,57 @@ export function importedAccountValue(value: unknown): unknown {
   return account;
 }
 
+function sqlLiteral(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
+/**
+ * An account already claimed on Workers: the reset flag is off and a
+ * password hash is stored. Re-import leaves that row in place.
+ */
+function claimedAccountGuard(accountKey: string): string {
+  return [
+    `key = ${sqlLiteral(accountKey)}`,
+    "IFNULL(json_extract(value, '$.needsPasswordReset'), 0) = 0",
+    "length(IFNULL(json_extract(value, '$.passwordHash'), '')) > 0",
+  ].join(" AND ");
+}
+
+/** Replace an account row unless Workers already has a password for it. */
+export function upsertPreservingClaimedAccount(
+  key: string,
+  valueJson: string,
+  expiresAt: number | null,
+): string[] {
+  const exp = expiresAt == null ? "NULL" : String(expiresAt);
+  const guard = claimedAccountGuard(key);
+  const keyMatch = `(key = ${sqlLiteral(key)} OR key GLOB ${sqlLiteral(`${key}#*`)})`;
+  return [
+    `DELETE FROM kv WHERE ${keyMatch} AND NOT (${guard});`,
+    `INSERT INTO kv (key, value, expires_at) SELECT ${sqlLiteral(key)}, ${sqlLiteral(valueJson)}, ${exp} WHERE NOT EXISTS (SELECT 1 FROM kv WHERE ${guard});`,
+  ];
+}
+
+/** Write a handed-out claim code only while that account still needs a password. */
+export function upsertClaimCodeUnlessClaimed(
+  accountKey: string,
+  claimKey: string,
+  valueJson: string,
+  expiresAt: number | null,
+): string[] {
+  const exp = expiresAt == null ? "NULL" : String(expiresAt);
+  const pending = [
+    "EXISTS (SELECT 1 FROM kv AS account",
+    `WHERE account.key = ${sqlLiteral(accountKey)}`,
+    "AND IFNULL(json_extract(account.value, '$.needsPasswordReset'), 0) = 1)",
+  ].join(" ");
+  const keyMatch = `(key = ${sqlLiteral(claimKey)} OR key GLOB ${sqlLiteral(`${claimKey}#*`)})`;
+  return [
+    `DELETE FROM kv WHERE ${keyMatch} AND ${pending};`,
+    `INSERT INTO kv (key, value, expires_at) SELECT ${sqlLiteral(claimKey)}, ${sqlLiteral(valueJson)}, ${exp} WHERE ${pending};`,
+  ];
+}
+
 export interface PlannedRow {
   key: string;
   value: unknown;
