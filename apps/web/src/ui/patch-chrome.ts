@@ -10,7 +10,7 @@ import { escapeHtml } from "./render-escape";
 import { storageFillTitle } from "./render-tooltips";
 
 /**
- * Update top bar + resource bar in place (no remount) so 1s polls
+ * Update top bar + resource bar in place (no remount) so background polls
  * do not flicker or jump layout.
  */
 export function patchLiveChrome(

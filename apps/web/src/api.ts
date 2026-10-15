@@ -20,8 +20,23 @@ async function parse<T>(res: Response): Promise<T> {
   return data;
 }
 
-const credFetch = (input: RequestInfo | URL, init?: RequestInit) =>
-  fetch(input, { credentials: "include", ...init });
+/** Player mutations already return a fresh view. Reset the background poll. */
+let afterPlayerMutation: (() => void) | null = null;
+
+export function setAfterPlayerMutation(fn: () => void): void {
+  afterPlayerMutation = fn;
+}
+
+const credFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+  const method = (
+    init?.method ?? (input instanceof Request ? input.method : "GET")
+  ).toUpperCase();
+  const res = await fetch(input, { credentials: "include", ...init });
+  if (method !== "GET" && method !== "HEAD" && res.ok) {
+    afterPlayerMutation?.();
+  }
+  return res;
+};
 
 export interface AuthAccount {
   id: string;
@@ -48,6 +63,7 @@ export async function signupAccount(
 ): Promise<{
   ok: boolean;
   account: AuthAccount;
+  view?: PlayerView | null;
   error?: string;
 }> {
   const res = await credFetch("/api/auth/signup", {

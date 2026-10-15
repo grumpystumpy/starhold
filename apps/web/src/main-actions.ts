@@ -1,6 +1,8 @@
 export {
+  POLL_INTERVAL_MS,
   startPolling,
   stopPolling,
+  deferBackgroundPoll,
   silentRefresh,
   doJoin,
   doRefresh,

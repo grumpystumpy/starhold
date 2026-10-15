@@ -9,6 +9,7 @@ import {
   relocateMiniFortress,
   renamePlanet,
   selectPlanet,
+  setAfterPlayerMutation,
   signupAccount,
 } from "./api";
 import {
@@ -21,38 +22,132 @@ import {
 } from "./session";
 import { syncSessionUrl } from "./ui/router";
 
-export function startPolling(playerId: string): void {
-  stopPolling();
-  session.pollTimer = window.setInterval(() => {
-    void silentRefresh(playerId);
-  }, 1000);
+/** Background refresh cadence. Actions apply their own response immediately. */
+export const POLL_INTERVAL_MS = 30_000;
+
+let pollPlayerId: string | null = null;
+let pollChain: Promise<void> | null = null;
+let refreshGen = 0;
+let refreshInFlight: { key: string; promise: Promise<void> } | null = null;
+let visibilityBound = false;
+
+function tabHidden(): boolean {
+  return typeof document !== "undefined" && document.visibilityState === "hidden";
 }
 
-export function stopPolling(): void {
+function clearPollTimer(): void {
   if (session.pollTimer !== undefined) {
-    window.clearInterval(session.pollTimer);
+    window.clearTimeout(session.pollTimer);
     session.pollTimer = undefined;
   }
 }
 
-export async function silentRefresh(playerId: string): Promise<void> {
+/** Push the next background poll out. Does not send a request. */
+export function deferBackgroundPoll(): void {
+  schedulePoll(POLL_INTERVAL_MS);
+}
+
+function schedulePoll(delay: number): void {
+  clearPollTimer();
+  if (!pollPlayerId || tabHidden()) return;
+  session.pollTimer = window.setTimeout(() => {
+    session.pollTimer = undefined;
+    void pollNow();
+  }, delay);
+}
+
+function pollNow(): Promise<void> {
+  if (pollChain) return pollChain;
+  const playerId = pollPlayerId;
+  pollChain = (async () => {
+    try {
+      if (!playerId || pollPlayerId !== playerId || tabHidden()) return;
+      await silentRefresh(playerId);
+    } finally {
+      pollChain = null;
+      if (pollPlayerId === playerId) schedulePoll(POLL_INTERVAL_MS);
+    }
+  })();
+  return pollChain;
+}
+
+function onVisibilityChange(): void {
+  if (!pollPlayerId) return;
+  if (tabHidden()) {
+    clearPollTimer();
+    return;
+  }
+  void pollNow();
+}
+
+function ensureVisibilityListener(): void {
+  if (visibilityBound || typeof document === "undefined") return;
+  visibilityBound = true;
+  document.addEventListener("visibilitychange", onVisibilityChange);
+}
+
+export function startPolling(playerId: string): void {
+  pollPlayerId = playerId;
+  ensureVisibilityListener();
+  schedulePoll(POLL_INTERVAL_MS);
+}
+
+export function stopPolling(): void {
+  pollPlayerId = null;
+  clearPollTimer();
+}
+
+function refreshKey(playerId: string): string {
+  const g = session.view?.galaxy.galaxy ?? "";
+  const s = session.galaxySystem ?? session.view?.galaxy.system ?? "";
+  return `${playerId}:${g}:${s}`;
+}
+
+export function silentRefresh(
+  playerId: string,
+  errorLabel = "Server unreachable",
+  prefixLabel = true,
+): Promise<void> {
+  const key = refreshKey(playerId);
+  if (refreshInFlight?.key === key) return refreshInFlight.promise;
+  const promise = refreshOnce(playerId, errorLabel, prefixLabel).finally(() => {
+    if (refreshInFlight?.promise === promise) refreshInFlight = null;
+  });
+  refreshInFlight = { key, promise };
+  return promise;
+}
+
+async function refreshOnce(
+  playerId: string,
+  errorLabel: string,
+  prefixLabel: boolean,
+): Promise<void> {
+  const gen = ++refreshGen;
   try {
     const g = session.view?.galaxy.galaxy;
     const s = session.galaxySystem ?? session.view?.galaxy.system;
-    session.view = await fetchState(playerId, g, s);
+    const view = await fetchState(playerId, g, s);
+    if (gen !== refreshGen) return;
+    session.view = view;
     schedulePaint();
   } catch (err) {
+    if (gen !== refreshGen) return;
     if (!session.error || Date.now() >= session.flashUntil) {
-      setFlash(
-        "error",
+      const message =
         err instanceof Error
-          ? `Server unreachable: ${err.message}`
-          : "Server unreachable.",
-      );
+          ? prefixLabel
+            ? `${errorLabel}: ${err.message}`
+            : err.message
+          : errorLabel;
+      setFlash("error", message);
       schedulePaint();
     }
   }
 }
+
+setAfterPlayerMutation(() => {
+  deferBackgroundPoll();
+});
 
 export async function doJoin(name: string): Promise<void> {
   const trimmed = name.trim();
@@ -153,12 +248,11 @@ export async function doSignup(
       session.view?.player.id ??
       null;
     const res = await signupAccount(trimmed, password, claimPlayerId);
-    const me = await fetchAuthMe();
     await applyAuthSuccess({
-      account: me.account ?? res.account,
-      view: me.view,
-      notice: me.view
-        ? `Signed up — welcome back, ${me.view.player.name}.`
+      account: res.account,
+      view: res.view ?? null,
+      notice: res.view
+        ? `Signed up — welcome back, ${res.view.player.name}.`
         : "Account created — enter a commander name or claim your guest save.",
     });
   } catch (err) {
@@ -260,7 +354,7 @@ export async function resumeFromCookie(): Promise<boolean> {
       startPolling(me.view.player.id);
       setFlash("notice", `Signed in as ${me.view.player.name}.`);
       // Paint immediately — boot() returns early on true and would otherwise
-      // leave the join screen up until the first poll (~1s).
+      // leave the join screen up until the next background poll.
       schedulePaint();
       return true;
     }
@@ -281,19 +375,11 @@ export async function doRefresh(): Promise<void> {
   session.busy = true;
   schedulePaint();
   try {
-    session.view = await fetchState(
-      session.view.player.id,
-      session.view.galaxy.galaxy,
-      session.galaxySystem ?? session.view.galaxy.system,
-    );
-  } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Refresh failed.",
-    );
+    await silentRefresh(session.view.player.id, "Refresh failed.", false);
   } finally {
     session.busy = false;
     schedulePaint();
+    deferBackgroundPoll();
   }
 }
 
@@ -312,19 +398,11 @@ export async function doGalaxyNav(dir: "prev" | "next"): Promise<void> {
   session.busy = true;
   schedulePaint();
   try {
-    session.view = await fetchState(
-      session.view.player.id,
-      session.view.galaxy.galaxy,
-      next,
-    );
-  } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Galaxy nav failed.",
-    );
+    await silentRefresh(session.view.player.id, "Galaxy nav failed.", false);
   } finally {
     session.busy = false;
     schedulePaint();
+    deferBackgroundPoll();
   }
 }
 

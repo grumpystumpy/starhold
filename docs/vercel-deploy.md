@@ -6,9 +6,24 @@ Agents do **not** create accounts. No credit card.
 
 API is serverless (`api/index.js`, with `/api/*` rewritten to `/api`). Shared multiplayer needs Redis REST credentials.
 
-**Deploys:** Only `main` deploys to Vercel (`git.deploymentEnabled`: `*` false, `main` true). PR checks run on GitHub Actions (`unit-and-e2e`); preview branches must not consume Hobby deploy quota.
+**Deploys:** Only production builds of `main` deploy, and only when the commit changes the game.
 
-**Dashboard (Micah — once):** Vercel → **starhold** → **Settings → Build and Deployment → Ignored Build Step** → set to **Only build production**. This belt-and-suspenders with `vercel.json` so PR/preview branches never build even if `git.deploymentEnabled` is ignored.
+- `git.deploymentEnabled`: `main` true, `*` false. Non-main branches never create a deployment (this does not spend the Hobby deploy quota).
+- `ignoreCommand` (`node scripts/vercel-ignore-build.mjs`): exit 0 skips, exit 1 builds. Skips anything that is not `VERCEL_ENV=production` on `main`. On `main`, skips when the diff is only docs, markdown, `.github/`, tests, or `scripts/` (except `scripts/bundle-api.mjs`, which packages the function). If the diff cannot be read, it builds.
+- GitHub Actions (`.github/workflows/ci.yml`) runs unit tests, typecheck, `build:vercel`, and Playwright against localhost. It must not call the Vercel CLI, a deploy hook, or `VERCEL_TOKEN`.
+
+**Dashboard settings the repo cannot set** (Micah, project **starhold**):
+
+| Setting | What to use |
+|---------|-------------|
+| **Settings → Git → Production Branch** | `main` |
+| **Settings → Build and Deployment → Ignored Build Step** | Leave **Automatic**. `vercel.json` `ignoreCommand` overrides this field. Do not switch it to **Only build production** — that preset still builds every `main` commit, including docs-only ones, and a canceled ignore step can still count toward the daily deployment quota. `git.deploymentEnabled` is what stops non-main branches before a deployment is created. |
+| **Settings → Functions → Function CPU** | Hobby is locked to **1 vCPU / 2 GB**. `memory` in `vercel.json` is ignored under Fluid compute and is not set. There is no lower size on Hobby. |
+| **Settings → Cron Jobs** | None. Do not add one. AI ticks stay lazy on read. |
+| **Analytics** (Web Analytics) and **Speed Insights** | Off. They are not in the repo. |
+| **Image Optimization** | Off. Art is prebuilt WebP/SVG. There is no `images` key in `vercel.json`. |
+| **Settings → Environment Variables** | No `VERCEL_TOKEN` for GitHub Actions. |
+| **Deploy Hooks** | Delete any hook a test or CI job could call. |
 
 **API bundle:** Git contains a small `api/index.js` stub. Vercel checks `functions` patterns against the git tree **before** the build and fails immediately when `api/index.js` is missing ([unmatched function pattern](https://vercel.com/docs/errors/error-list#unmatched-function-pattern)). `buildCommand` (`npm run build:vercel`) builds the static app and overwrites the stub. `@vercel/node` does not run that command for `api/` files; it runs root `vercel-build` (`node scripts/bundle-api.mjs`) after downloading the stub and before it traces the function, so production serves the generated bundle.
 

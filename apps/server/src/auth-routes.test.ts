@@ -2,7 +2,29 @@ import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import { createApp } from "./app.js";
 import { resetMemoryAccounts } from "./accounts.js";
-import { resetMemoryUniverse } from "./store.js";
+import { memoryUniverseLoaded, resetMemoryUniverse } from "./store.js";
+
+describe("health", () => {
+  beforeEach(() => {
+    resetMemoryUniverse();
+  });
+
+  it("does not load or tick the universe", async () => {
+    const app = createApp();
+    const res = await app.request("/api/health");
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get("cache-control"), "private, no-store");
+    const body = (await res.json()) as {
+      ok: boolean;
+      storage: string;
+      auth: { passwordAuth: boolean };
+    };
+    assert.equal(body.ok, true);
+    assert.equal(body.storage, "memory");
+    assert.equal(body.auth.passwordAuth, true);
+    assert.equal(memoryUniverseLoaded(), false);
+  });
+});
 
 describe("auth email+password routes (memory)", () => {
   beforeEach(() => {

@@ -190,3 +190,8 @@ export async function withUniverse<T>(
 export function resetMemoryUniverse(): void {
   memoryUniverse = null;
 }
+
+/** Test helper: true after a memory-mode load created the universe. */
+export function memoryUniverseLoaded(): boolean {
+  return memoryUniverse !== null;
+}

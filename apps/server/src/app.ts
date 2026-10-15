@@ -75,6 +75,7 @@ import {
 import { sessionSecretConfigured } from "./accounts.js";
 import { mountAllianceIntelRoutes } from "./alliance-intel-routes.js";
 import { mountAuthRoutes } from "./auth-routes.js";
+import { staticCacheControl } from "./static-cache.js";
 import { storageMode, withUniverse } from "./store.js";
 
 function allowedOrigins(): Set<string> {
@@ -130,6 +131,11 @@ export function createApp(): Hono {
   const app = new Hono();
 
   app.use("*", simpleCors);
+  app.use("*", async (c, next) => {
+    await next();
+    if (!c.req.path.startsWith("/api")) return;
+    c.header("Cache-Control", staticCacheControl(c.req.path) ?? "private, no-store");
+  });
   mountAuthRoutes(app);
 
   app.notFound((c) =>
@@ -144,35 +150,19 @@ export function createApp(): Hono {
     );
   });
 
-  app.get("/api/health", async (c) => {
-    try {
-      return await withUniverse((universe) => {
-        ensureUniverseShape(universe);
-        return c.json({
-          ok: true,
-          storage: storageMode(),
-          universe: universe.name,
-          players: Object.keys(universe.players).length,
-          speed: universe.speed,
-          fleetSpeed: universe.fleetSpeed,
-          fleets: Object.keys(universe.fleets ?? {}).length,
-          debris: Object.keys(universe.debris ?? {}).length,
-          auth: {
-            sessionSecretConfigured: sessionSecretConfigured(),
-            passwordAuth: true,
-          },
-        });
-      });
-    } catch (err) {
-      return c.json(
-        {
-          ok: false,
-          storage: storageMode(),
-          error: err instanceof Error ? err.message : "Health failed.",
-        },
-        503,
-      );
-    }
+  // Liveness only. Do not load or tick the universe — a health check must
+  // not lock, read, or write the KV document.
+  app.get("/api/health", (c) => {
+    return c.json({
+      ok: true,
+      storage: storageMode(),
+      universe: process.env.STARHOLD_UNIVERSE_NAME ?? "Alpha Drift",
+      speed: Number(process.env.STARHOLD_UNIVERSE_SPEED ?? 8),
+      auth: {
+        sessionSecretConfigured: sessionSecretConfigured(),
+        passwordAuth: true,
+      },
+    });
   });
 
   app.get("/api/universe", async (c) => {

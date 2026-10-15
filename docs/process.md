@@ -20,7 +20,7 @@ Redeploy notes: [hosting.md](./hosting.md) · [vercel-deploy.md](./vercel-deploy
 - Branch names: `cursor/<short-name>-####` when an agent suffix is required.
 - Prefer real `git push`. Never leave `PLACEHOLDER` file contents.
 - Commit the small `api/index.js` **stub** so Vercel’s `functions` pattern matches a file in git. Do not gitignore it and do not commit the generated bundle. `npm run build:vercel` overwrites the stub. On Vercel, root `vercel-build` regenerates the bundle before the function is traced (`buildCommand` alone does not).
-- Vercel: only `main` deploys (`vercel.json` → `git.deploymentEnabled`). No PR preview deploys.
+- Vercel: only production builds of `main` deploy (`vercel.json` → `git.deploymentEnabled` plus `ignoreCommand`). Docs, tests, CI, and scripts-only commits on `main` skip the build. No PR preview deploys. GitHub Actions must not call Vercel.
 - If CI on `main` is red after a merge: open a CI-fix PR from `main` before the next feature batch.
 
 ## Parallel workstreams (post-contract)

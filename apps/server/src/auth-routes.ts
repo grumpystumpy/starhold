@@ -40,15 +40,17 @@ async function sessionAccount(c: Context) {
 async function maybeClaimGuest(
   accountId: string,
   claimPlayerId: string | undefined,
-): Promise<string> {
-  if (!claimPlayerId) return "none";
+): Promise<{ status: string; view: ReturnType<typeof playerView> | null }> {
+  if (!claimPlayerId) return { status: "none", view: null };
   let claimStatus = "none";
+  let view: ReturnType<typeof playerView> | null = null;
   try {
     await withUniverse((universe) => {
       ensureUniverseShape(universe);
       const result = claimPlayerToAccount(universe, claimPlayerId, accountId);
       if (result.ok) {
         claimStatus = "claimed";
+        view = playerView(universe, claimPlayerId);
       } else if (result.code === "already_claimed") {
         claimStatus = "already_claimed";
       } else if (result.code === "conflict") {
@@ -63,8 +65,9 @@ async function maybeClaimGuest(
   } catch (err) {
     console.error("[starhold-auth] claim during signup", err);
     claimStatus = "claim_failed";
+    view = null;
   }
-  return claimStatus;
+  return { status: claimStatus, view };
 }
 
 function publicAccount(account: {
@@ -115,12 +118,14 @@ export function mountAuthRoutes(app: Hono): void {
     }
 
     const account = created.account;
+    let view: ReturnType<typeof playerView> | null = null;
     if (claimPlayerId) {
       const accountFresh = await getAccountById(account.id);
       if (accountFresh?.playerId && accountFresh.playerId !== claimPlayerId) {
         /* skip claim */
       } else {
-        await maybeClaimGuest(account.id, claimPlayerId);
+        const claimed = await maybeClaimGuest(account.id, claimPlayerId);
+        view = claimed.view;
         const refreshed = await getAccountById(account.id);
         if (refreshed) account.playerId = refreshed.playerId;
       }
@@ -131,6 +136,7 @@ export function mountAuthRoutes(app: Hono): void {
     return c.json({
       ok: true,
       account: publicAccount(account),
+      view,
       auth: { sessionSecretConfigured: sessionSecretConfigured() },
     });
   });
@@ -165,36 +171,34 @@ export function mountAuthRoutes(app: Hono): void {
       return c.json({ error: auth.error }, auth.status);
     }
 
-    // Resolve playerId from universe if account index is stale.
-    if (!auth.account.playerId) {
-      try {
-        await withUniverse((universe) => {
-          const linked = playerForAccount(universe, auth.account.id);
-          if (linked) auth.account.playerId = linked.id;
-        });
-        if (auth.account.playerId) {
-          await setAccountPlayerId(auth.account.id, auth.account.playerId);
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-
     const session = await createSession(auth.account.id);
     setSessionCookie(c, session.id);
 
-    let view = null;
-    if (auth.account.playerId) {
-      try {
-        await withUniverse((universe) => {
-          ensureUniverseShape(universe);
-          if (universe.players[auth.account.playerId!]) {
-            view = playerView(universe, auth.account.playerId!);
+    // One universe read: link a stale account index and build the view together.
+    let view: ReturnType<typeof playerView> | null = null;
+    let linkedPlayerId: string | null = null;
+    try {
+      await withUniverse((universe) => {
+        ensureUniverseShape(universe);
+        if (!auth.account.playerId) {
+          const linked = playerForAccount(universe, auth.account.id);
+          if (linked) {
+            auth.account.playerId = linked.id;
+            linkedPlayerId = linked.id;
           }
-        });
-      } catch {
-        /* ignore — client can refresh */
-      }
+        }
+        if (
+          auth.account.playerId &&
+          universe.players[auth.account.playerId]
+        ) {
+          view = playerView(universe, auth.account.playerId);
+        }
+      });
+    } catch {
+      /* ignore — client can refresh */
+    }
+    if (linkedPlayerId) {
+      await setAccountPlayerId(auth.account.id, linkedPlayerId);
     }
 
     return c.json({

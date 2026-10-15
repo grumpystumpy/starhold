@@ -16,7 +16,7 @@ import { pageHtml } from "./render-pages";
 
 /**
  * Render UI. Interactive actions are handled by event delegation in main.ts
- * so 1s poll re-renders do not drop click listeners mid-gesture.
+ * so background poll re-renders do not drop click listeners mid-gesture.
  * Poll refreshes patch the shell and the open page in place so focus,
  * scroll position, and typed field values survive.
  */

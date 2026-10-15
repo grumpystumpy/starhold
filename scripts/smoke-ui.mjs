@@ -7,13 +7,14 @@
  * Steps (manual equivalent):
  * 1. Open http://127.0.0.1:5173/?commander=Smoke
  *    or type a name / run window.starhold.join("Smoke")
- * 2. Click Upgrade on Shipyard — level must rise 0→1 (not silent no-op under 1s polls).
+ * 2. Click Upgrade on Shipyard — level must rise 0→1 (not a silent no-op under polls).
  *    While "Queue busy", click another Upgrade — red flash must survive ~2s of polls.
  * 3. Click Metal Vault when unaffordable — flash "Not enough resources."
  * 4. Bank to ≥220 metal, click Build on Scout — hangar scout increments.
  * 5. Second commander + UI Launch fleet (attack) → combat report with loot path.
  */
 import { createRequire } from "node:module";
+import { runPollCadence } from "./poll-cadence-e2e.mjs";
 
 const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:5173";
 const API = process.env.STARHOLD_API ?? "http://127.0.0.1:3001";
@@ -225,7 +226,7 @@ async function uiSmoke() {
   const logs = [];
 
   const urlName = `Url${Date.now().toString(36).slice(-4)}`;
-  const page = await browser.newPage();
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   await page.goto(`${WEB}/?commander=${encodeURIComponent(urlName)}`, {
     waitUntil: "networkidle",
   });
@@ -458,7 +459,7 @@ async function uiSmoke() {
   }
   logs.push("p1-unaffordable-or-full-flash");
 
-  const typedPage = await browser.newPage();
+  const typedPage = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   await typedPage.goto(WEB, { waitUntil: "networkidle" });
   await typedPage.waitForSelector('[data-testid="commander-input"]');
   const typed = `Type${Date.now().toString(36).slice(-4)}`;
@@ -473,7 +474,7 @@ async function uiSmoke() {
   await typedPage.waitForSelector('[data-testid="resources"]', { timeout: 15_000 });
   logs.push(`typed-join:${typed}`);
 
-  const helpPage = await browser.newPage();
+  const helpPage = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   await helpPage.goto(WEB, { waitUntil: "networkidle" });
   const helperName = `Help${Date.now().toString(36).slice(-4)}`;
   await helpPage.evaluate(async (n) => {
@@ -567,7 +568,7 @@ async function uiSmoke() {
   logs.push("build-feedback-ok");
 
   const rivalName = `Riv${Date.now().toString(36).slice(-4)}`;
-  const rivalPage = await browser.newPage();
+  const rivalPage = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   await rivalPage.goto(`${WEB}/?commander=${encodeURIComponent(rivalName)}`, {
     waitUntil: "networkidle",
   });
@@ -686,7 +687,7 @@ async function authAndGoalsSmoke() {
   const require = createRequire(import.meta.url);
   const playwright = require("playwright");
   const browser = await playwright.chromium.launch({ headless: true });
-  const page = await browser.newPage();
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   const stamp = Date.now().toString(36);
   const email = `goals${stamp}@example.com`;
   const password = "starhold-goals";
@@ -776,4 +777,5 @@ await waitHealthy();
 const api = await apiSmoke();
 const authGoals = await authAndGoalsSmoke();
 const ui = await uiSmoke();
-console.log(JSON.stringify({ ok: true, api, authGoals, ui }, null, 2));
+const poll = await runPollCadence();
+console.log(JSON.stringify({ ok: true, api, authGoals, ui, poll }, null, 2));

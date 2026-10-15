@@ -76,7 +76,7 @@ function unitLossLine(
   return parts.length ? parts.join(", ") : "none";
 }
 
-/** Report id → visible round. Survives the 1s poll remount. */
+/** Report id → visible round. Survives a background poll remount. */
 const openReplayRound = new Map<string, number>();
 
 export function battleReplayRound(reportId: string): number | null {
