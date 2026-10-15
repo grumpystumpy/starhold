@@ -2,6 +2,11 @@
 /**
  * Bundle Hono API + game into Vercel serverless: api/index.js
  *
+ * Overwrites the committed api/index.js stub. Vercel matches
+ * vercel.json `functions` against that committed file before the build.
+ * @vercel/node does not run `buildCommand` for api/ files; it runs the
+ * root `vercel-build` script (this file) after download and before tracing.
+ *
  * Nested paths like /api/auth/me need a rewrite to /api (see vercel.json).
  * The optional catch-all api/[[...route]].js only matched one segment on
  * this Hobby project ( /api/health ok, /api/auth/me → platform NOT_FOUND ).
@@ -43,5 +48,15 @@ await esbuild.build({
     js: "\nmodule.exports = module.exports.default;\n",
   },
 });
+
+const bundled = fs.readFileSync(outFile, "utf8");
+if (!bundled.includes("starhold api bundle")) {
+  console.error("api/index.js is missing the bundle banner");
+  process.exit(1);
+}
+if (bundled.includes("STARHOLD_API_STUB")) {
+  console.error("api/index.js still contains the committed stub marker");
+  process.exit(1);
+}
 
 console.log("Bundled", path.relative(root, outFile));

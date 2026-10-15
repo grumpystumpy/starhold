@@ -18,7 +18,7 @@ Bring **Starhold** (default branch **`main`**) to the friends-multiplayer vision
 
 ## Process (effective now)
 
-See **[process.md](./process.md)** and root **[AGENTS.md](../AGENTS.md)** — branch off `main`, small PR per batch, never push retired `cursor/core-loop-prototype-1093`, Vercel production = `main` → https://starhold-two.vercel.app, Upstash `KV_REST_API_*`, CI required (`build:vercel` generates `api/index.js`; do not commit it), one agent playtest per **merged milestone**.
+See **[process.md](./process.md)** and root **[AGENTS.md](../AGENTS.md)** — branch off `main`, small PR per batch, never push retired `cursor/core-loop-prototype-1093`, Vercel production = `main` → https://starhold-two.vercel.app, Upstash `KV_REST_API_*`, CI required (`api/index.js` stub is committed; `build:vercel` overwrites it with the bundle), one agent playtest per **merged milestone**.
 
 ## Status
 

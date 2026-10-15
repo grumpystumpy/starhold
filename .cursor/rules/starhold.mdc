@@ -9,4 +9,4 @@ See root [AGENTS.md](../../AGENTS.md). Vision/process: `docs/vision.md`, `docs/p
 
 **Gate:** rebase → `test` + `typecheck` + `build:vercel` → local Playwright (no Vercel preview) → UI dual-viewport if UI → KV additive → Micah approve. No auto-merge.
 
-**Never commit** `api/index.js` (generate via `build:vercel`). Deploys: `main` only.
+Commit the small `api/index.js` stub; `build:vercel` overwrites it. Do not commit the generated bundle or gitignore the stub. Deploys: `main` only.

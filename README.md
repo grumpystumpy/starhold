@@ -40,7 +40,7 @@ Micah imports the repo on Vercel and creates free Upstash Redis. Step-by-step + 
 | `packages/game` | Shared types, catalog, formulas, world sim |
 | `apps/server` | Hono API (`app.ts`) + Upstash/memory store |
 | `apps/web` | Vite + TypeScript UI + original SVG assets |
-| `api/` | Vercel serverless — `index.js` **generated** by `npm run build:vercel` (not committed) |
+| `api/` | Vercel serverless — committed `index.js` **stub**, overwritten by `npm run build:vercel` |
 | `AGENTS.md` | Short agent quality gate + doc pointers |
 | `.github/workflows/ci.yml` | Unit + Playwright e2e on every change |
 
