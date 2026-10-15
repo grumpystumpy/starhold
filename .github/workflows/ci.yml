@@ -32,8 +32,13 @@ jobs:
       - name: Production build (incl. Vercel api/index.js bundle)
         run: npm run build:vercel
 
-      - name: Assert api bundle generated (not committed)
-        run: test -f api/index.js && test -s api/index.js
+      - name: Assert build overwrote api stub with bundle
+        run: |
+          grep -q "starhold api bundle" api/index.js
+          if grep -q "STARHOLD_API_STUB" api/index.js; then
+            echo "api/index.js is still the committed stub"
+            exit 1
+          fi
 
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium

@@ -19,7 +19,7 @@ Redeploy notes: [hosting.md](./hosting.md) · [vercel-deploy.md](./vercel-deploy
 - Each feature batch: branch off **`main`**, open a **small PR into `main`**, merge when **CI is green** (unit + Playwright required).
 - Branch names: `cursor/<short-name>-####` when an agent suffix is required.
 - Prefer real `git push`. Never leave `PLACEHOLDER` file contents.
-- **Do not commit `api/index.js`.** Generate it with `npm run build:vercel` (`scripts/bundle-api.mjs`). Vercel `buildCommand` and CI both run `build:vercel`.
+- Commit the small `api/index.js` **stub** so Vercel’s `functions` pattern matches a file in git. Do not gitignore it and do not commit the generated bundle. `npm run build:vercel` overwrites the stub. On Vercel, root `vercel-build` regenerates the bundle before the function is traced (`buildCommand` alone does not).
 - Vercel: only `main` deploys (`vercel.json` → `git.deploymentEnabled`). No PR preview deploys.
 - If CI on `main` is red after a merge: open a CI-fix PR from `main` before the next feature batch.
 

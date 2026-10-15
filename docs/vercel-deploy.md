@@ -10,7 +10,7 @@ API is serverless (`api/index.js`, with `/api/*` rewritten to `/api`). Shared mu
 
 **Dashboard (Micah — once):** Vercel → **starhold** → **Settings → Build and Deployment → Ignored Build Step** → set to **Only build production**. This belt-and-suspenders with `vercel.json` so PR/preview branches never build even if `git.deploymentEnabled` is ignored.
 
-**API bundle:** `api/index.js` is **not** in git. `buildCommand` (`npm run build:vercel`) generates it during each production deploy.
+**API bundle:** Git contains a small `api/index.js` stub. Vercel checks `functions` patterns against the git tree **before** the build and fails immediately when `api/index.js` is missing ([unmatched function pattern](https://vercel.com/docs/errors/error-list#unmatched-function-pattern)). `buildCommand` (`npm run build:vercel`) builds the static app and overwrites the stub. `@vercel/node` does not run that command for `api/` files; it runs root `vercel-build` (`node scripts/bundle-api.mjs`) after downloading the stub and before it traces the function, so production serves the generated bundle.
 
 **Planned (not yet):** staging branch or second Vercel project + ~daily promote to production `main`. Until that lands, keep main-only production as above — do not enable preview deploys for every PR.
 
