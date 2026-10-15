@@ -54,6 +54,7 @@ function advanceCountableQueue<T extends ShipQueueItem | DefenseQueueItem>(
   now: number,
   deliver: (item: T, batch: number) => void,
   onFinished?: (item: T, finishedCount: number) => void,
+  onSpent?: (spent: Resources) => void,
 ): void {
   ensureQueueFrontStarted(queue, now);
   while (queue.length > 0) {
@@ -72,9 +73,16 @@ function advanceCountableQueue<T extends ShipQueueItem | DefenseQueueItem>(
     if (batch < 1) break;
     batch = Math.min(batch, front.count);
     const before = front.count;
+    const original = front.paidCost ?? {
+      metal: 0,
+      crystal: 0,
+      deuterium: 0,
+    };
+    const spent = scalePaidCost(original, batch, before);
     deliver(front, batch);
     front.count -= batch;
-    front.paidCost = scalePaidCost(front.paidCost, front.count, before);
+    front.paidCost = scalePaidCost(original, front.count, before);
+    if (spent.metal + spent.crystal + spent.deuterium > 0) onSpent?.(spent);
     if (front.count <= 0) {
       onFinished?.(front, front.orderedCount ?? before);
       const freedAt = Math.min(now, front.completesAt);
@@ -144,6 +152,10 @@ export function advancePlanet(
     if (owner) addSeasonEconomySpend(owner, item.paidCost, now);
   });
 
+  const scoreSpend = owner
+    ? (spent: Resources) => addSeasonEconomySpend(owner, spent, now)
+    : undefined;
+
   advanceCountableQueue(
     state.shipQueue,
     now,
@@ -159,6 +171,7 @@ export function advancePlanet(
         { shipId: item.shipId, count: finished, planetId: state.id },
       );
     },
+    scoreSpend,
   );
 
   advanceCountableQueue(
@@ -177,6 +190,7 @@ export function advancePlanet(
         { defenseId: item.defenseId, count: finished, planetId: state.id },
       );
     },
+    scoreSpend,
   );
 
   const elapsedMs = Math.max(0, now - state.lastTickAt);

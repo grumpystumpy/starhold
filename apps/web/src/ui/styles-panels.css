@@ -131,6 +131,24 @@
   gap: 0.15rem;
 }
 
+.spy-share {
+  display: inline-block;
+  margin-left: 0.45rem;
+}
+
+.message-detail {
+  margin-top: 0.2rem;
+}
+
+.message-detail summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+
+.message-detail p {
+  margin: 0.25rem 0 0;
+}
+
 .message-head {
   display: flex;
   justify-content: space-between;

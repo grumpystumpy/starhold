@@ -345,6 +345,8 @@ export interface SeasonClaimView {
 export interface SeasonLeaderboardView {
   seasonId: string;
   scores: { combat: number; economy: number; pirateKills: number };
+  /** Resources spent this month that have not yet made a full economy point. */
+  economyRemainder: number;
   ranks: Record<SeasonBoardId, number | null>;
   boards: Record<SeasonBoardId, SeasonStanding[]>;
   claims: SeasonClaimView[];
@@ -575,6 +577,8 @@ export interface PlayerView {
       isMoon: boolean;
       isMini: boolean;
       jumpGateLevel: number;
+      /** Research Lab level on this body (empire research uses the best). */
+      researchLab: number;
     }
   >;
   economy: EconomySnapshot;

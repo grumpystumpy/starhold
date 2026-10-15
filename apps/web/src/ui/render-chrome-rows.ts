@@ -4,7 +4,7 @@ import {
   SHIPS,
   canAfford,
   defenseCost,
-  researchUpgradeCost,
+  previewResearchUpgrade,
   researchUpgradeSeconds,
   type DefenseId,
   type PlayerView,
@@ -120,6 +120,27 @@ export function defenseRow(
   `;
 }
 
+/** Best Research Lab in the empire, including colonies that are not open. */
+export function bestResearchLab(view: PlayerView): number {
+  let best = view.planet.buildings.researchLab ?? 0;
+  for (const owned of view.ownedPlanets) {
+    if (typeof owned.researchLab === "number") {
+      best = Math.max(best, owned.researchLab);
+    }
+  }
+  return best;
+}
+
+function researchButtonLabel(error: string | null): string {
+  if (!error) return "Research";
+  if (error.includes("queue is full")) return "Queue full";
+  const needs = error.match(/Needs Research Lab level (\d+)/);
+  if (needs) return `Needs lab ${fmt(Number(needs[1]))}`;
+  if (error.includes("can only research")) return "Lab cap";
+  if (error.startsWith("Not enough")) return "Can't afford";
+  return "Unavailable";
+}
+
 export function researchRow(
   id: ResearchId,
   view: PlayerView,
@@ -127,44 +148,31 @@ export function researchRow(
 ): string {
   const def = RESEARCH[id];
   const level = view.player.research?.[id] ?? 0;
-  const lab = Math.max(
-    ...view.ownedPlanets.map((p) => {
-      const planet =
-        p.id === view.planet.id
-          ? view.planet
-          : null;
-      return planet ? (planet.buildings.researchLab ?? 0) : 0;
-    }),
-    view.planet.buildings.researchLab ?? 0,
+  const lab = bestResearchLab(view);
+  const preview = previewResearchUpgrade(
+    view.player,
+    view.planet,
+    id,
+    lab,
+    view.now,
   );
-  const locked = lab < def.labLevel || level >= lab;
-  const cost = researchUpgradeCost(id, level);
-  const affordable = canAfford(view.planet.resources, cost);
-  const queueFull = (view.player.researchQueue?.length ?? 0) >= 8;
+  const cost = preview.cost;
   const secs = Math.ceil(
-    researchUpgradeSeconds(id, level, Math.max(1, lab)) / view.universe.speed,
+    researchUpgradeSeconds(id, preview.current, Math.max(1, lab)) /
+      view.universe.speed,
   );
-  let label = "Research";
-  if (lab < def.labLevel) label = "Needs lab";
-  else if (level >= lab) label = "Lab cap";
-  else if (queueFull) label = "Queue full";
-  else if (!affordable) label = "Can't afford";
-  const blocked =
-    lab < def.labLevel
-      ? `Needs Research Lab ${fmt(def.labLevel)}`
-      : level >= lab
-        ? `Lab level ${fmt(lab)} caps research at L${fmt(lab)}`
-        : queueFull
-          ? "Research queue is full."
-          : !affordable
-            ? "Not enough resources on active planet."
-            : null;
+  const blocked = preview.ok ? null : preview.error;
+  const label = researchButtonLabel(blocked);
   const tip = costTooltip({
-    action: `Research ${def.name} → L${fmt(level + 1)}`,
+    action: `Research ${def.name} → L${fmt(preview.current + 1)}`,
     cost,
     timeSecs: secs,
     detail: def.description,
-    requires: [`Research Lab L${fmt(def.labLevel)}+`, `Current L${fmt(level)}`],
+    requires: [
+      `Research Lab L${fmt(def.labLevel)}+`,
+      `Best lab L${fmt(lab)}`,
+      `Current L${fmt(level)}`,
+    ],
     blocked,
   });
   return `
@@ -175,7 +183,7 @@ export function researchRow(
         <div class="meta">Next: ${fmtCost(cost)} · ${fmtEta(secs)}</div>
       </div>
       <div class="actions">
-        <button type="button" data-research="${id}" data-locked="${locked ? "1" : "0"}" data-testid="research-btn-${id}" title="${tip.title}">${label}</button>
+        <button type="button" data-research="${id}" data-locked="${blocked ? "1" : "0"}" data-testid="research-btn-${id}" ${blocked ? "disabled" : ""} title="${tip.title}">${label}</button>
       </div>
     </article>
   `;

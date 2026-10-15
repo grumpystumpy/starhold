@@ -1,23 +1,10 @@
 import { BUILDINGS, DEFENSES, SHIPS } from "./catalog.js";
 import {
-  CHRONO_LATHE_RIG_FOUNDRY_REQ,
-  CHRONO_LATHE_SHIPYARD_REQ,
-  MANTLE_LOOM_LAB_REQ,
-  MANTLE_LOOM_SOLAR_REQ,
-  MOON_FIELDS_BASE,
-  MOON_FIELDS_PER_LUNAR_BASE,
-  RIG_FOUNDRY_SHIPYARD_REQ,
-} from "./catalog.js";
-import {
-  buildingAllowedOn,
-  buildingUpgradeCost,
   buildingUpgradeSeconds,
   canAfford,
   classBonuses,
   defenseCost,
   defenseUnitBuildSeconds,
-  fieldsRemaining,
-  fieldsUsed,
   levelBonuses,
   shipClassAllowed,
   shipCost,
@@ -25,6 +12,7 @@ import {
   shipUnitBuildSeconds,
   spend,
 } from "./formulas.js";
+import { previewBuildingUpgrade } from "./queue-block.js";
 import type {
   BuildingId,
   DefenseId,
@@ -107,113 +95,10 @@ export function queueBuildingUpgrade(
   if (isPlanetOccupied(universe, planet.id, now)) {
     return { ok: false, error: "Construction blocked while planet is occupied." };
   }
-  if (!buildingAllowedOn(planet, buildingId)) {
-    return {
-      ok: false,
-      error: planet.flags?.mini
-        ? "That structure cannot be built on a mini planet."
-        : planet.kind === "moon"
-          ? "That structure cannot be built on a moon."
-          : "That structure can only be built on a moon.",
-    };
-  }
-  const maxLevel = BUILDINGS[buildingId]?.maxLevel;
-  if (typeof maxLevel === "number") {
-    const pendingSame = planet.buildQueue.filter(
-      (q) => q.buildingId === buildingId,
-    ).length;
-    const current = (planet.buildings[buildingId] ?? 0) + pendingSame;
-    if (current >= maxLevel) {
-      return {
-        ok: false,
-        error: `${BUILDINGS[buildingId].name} is maxed at level ${maxLevel}.`,
-      };
-    }
-  }
-  if (buildingId === "sensorArray" && (planet.buildings.lunarBase ?? 0) < 1) {
-    return { ok: false, error: "Horizon Scanner needs Crater Hab level 1." };
-  }
-  if (buildingId === "jumpGate" && (planet.buildings.lunarBase ?? 0) < 1) {
-    return { ok: false, error: "Fold Bridge needs Crater Hab level 1." };
-  }
-  if (buildingId === "rigFoundry") {
-    const yard = planet.buildings.shipyard ?? 0;
-    if (yard < RIG_FOUNDRY_SHIPYARD_REQ) {
-      return {
-        ok: false,
-        error: `Rig Foundry needs Shipyard level ${RIG_FOUNDRY_SHIPYARD_REQ} (you have ${yard}).`,
-      };
-    }
-  }
-  if (buildingId === "mantleLoom") {
-    if (planet.kind === "moon") {
-      return { ok: false, error: "Mantle Loom cannot be built on moons." };
-    }
-    const solar = planet.buildings.solarPlant ?? 0;
-    const lab = planet.buildings.researchLab ?? 0;
-    if (solar < MANTLE_LOOM_SOLAR_REQ) {
-      return {
-        ok: false,
-        error: `Mantle Loom needs Solar Array level ${MANTLE_LOOM_SOLAR_REQ} (you have ${solar}).`,
-      };
-    }
-    if (lab < MANTLE_LOOM_LAB_REQ) {
-      return {
-        ok: false,
-        error: `Mantle Loom needs Research Lab level ${MANTLE_LOOM_LAB_REQ} (you have ${lab}).`,
-      };
-    }
-  }
-  if (buildingId === "chronoLathe") {
-    const yard = planet.buildings.shipyard ?? 0;
-    const foundry = planet.buildings.rigFoundry ?? 0;
-    if (yard < CHRONO_LATHE_SHIPYARD_REQ) {
-      return {
-        ok: false,
-        error: `Chrono Lathe needs Shipyard level ${CHRONO_LATHE_SHIPYARD_REQ} (you have ${yard}).`,
-      };
-    }
-    if (foundry < CHRONO_LATHE_RIG_FOUNDRY_REQ) {
-      return {
-        ok: false,
-        error: `Chrono Lathe needs Rig Foundry level ${CHRONO_LATHE_RIG_FOUNDRY_REQ} (you have ${foundry}).`,
-      };
-    }
-  }
 
-  const cap = yardQueueCap(player, now);
-  if (planet.buildQueue.length >= cap) {
-    return {
-      ok: false,
-      error: `Building queue is full (${planet.buildQueue.length}/${cap}).`,
-    };
-  }
-
-  const pendingSame = planet.buildQueue.filter(
-    (q) => q.buildingId === buildingId,
-  ).length;
-  const current = (planet.buildings[buildingId] ?? 0) + pendingSame;
-  const targetLevel = current + 1;
-
-  if (buildingId === "lunarBase") {
-    const nextCap =
-      MOON_FIELDS_BASE + targetLevel * MOON_FIELDS_PER_LUNAR_BASE;
-    if (nextCap < fieldsUsed(planet) + 1) {
-      return { ok: false, error: "No free planet fields remaining." };
-    }
-  } else {
-    const pendingFieldUsers = planet.buildQueue.filter(
-      (q) => q.buildingId !== "lunarBase",
-    ).length;
-    if (fieldsRemaining(planet) < pendingFieldUsers + 1) {
-      return { ok: false, error: "No free planet fields remaining." };
-    }
-  }
-
-  const cost = buildingUpgradeCost(buildingId, current);
-  if (!canAfford(planet.resources, cost)) {
-    return { ok: false, error: "Not enough resources." };
-  }
+  const preview = previewBuildingUpgrade(planet, player, buildingId, now);
+  if (!preview.ok) return { ok: false, error: preview.error };
+  const { current, targetLevel, cost } = preview;
 
   const lb = levelBonuses(player.level ?? 1);
   const cls = classBonuses(player.playerClass?.classId);

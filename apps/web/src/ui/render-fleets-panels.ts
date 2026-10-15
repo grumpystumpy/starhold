@@ -265,7 +265,7 @@ export function spyReportsHtml(
           const share = inAlliance
             ? `<button type="button" data-share-intel="${escapeAttr(r.id)}" data-testid="share-intel-${escapeAttr(r.id)}">Share with alliance</button>`
             : "";
-          return `<li data-testid="spy-${r.id}"><strong>Spy L${fmt(r.detail)}</strong> ${escapeHtml(r.targetName)} @ ${fmtCoords(r.targetCoords)}<br/><span class="meta">${escapeHtml(r.summary)}${bits.length ? ` · ${escapeHtml(bits.join(" · "))}` : ""}</span>${share}</li>`;
+          return `<li data-testid="spy-${r.id}"><strong>Spy L${fmt(r.detail)}</strong> ${escapeHtml(r.targetName)} @ ${fmtCoords(r.targetCoords)}<br/><span class="meta">${escapeHtml(r.summary)}${bits.length ? ` · ${escapeHtml(bits.join(" · "))}` : ""}</span>${share ? `<span class="spy-share">&nbsp;${share}</span>` : ""}</li>`;
         })
         .join("")}
     </ul>

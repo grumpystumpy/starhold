@@ -184,9 +184,9 @@ function buildingsPage(view: PlayerView, busy: boolean): string {
           : ""
       }
       <h3 class="subhead">Extraction &amp; storage</h3>
-      ${resourceIds.map((id) => buildingRow(id, planet, universe.speed, now, busy)).join("")}
+      ${resourceIds.map((id) => buildingRow(id, planet, view.player, universe.speed, now, busy)).join("")}
       <h3 class="subhead">${isMini ? "Structures &amp; anomaly specials" : "Structures"}</h3>
-      ${facilityIds.map((id) => buildingRow(id, planet, universe.speed, now, busy)).join("")}
+      ${facilityIds.map((id) => buildingRow(id, planet, view.player, universe.speed, now, busy)).join("")}
       ${
         buildQueueHtml(planet, now) ||
         (isMini
@@ -234,7 +234,10 @@ function researchPage(view: PlayerView, busy: boolean): string {
       ${RESEARCH_ORDER.map((id) => researchRow(id, view, busy)).join("")}
       ${
         researchQueueHtml(player, now) ||
-        `<p class="hint">Build a Research Lab first. One empire-wide project at a time.</p>`
+        ((view.planet.buildings.researchLab ?? 0) < 1 &&
+        view.ownedPlanets.every((p) => (p.researchLab ?? 0) < 1)
+          ? `<p class="hint">Build a Research Lab first. One empire-wide project at a time.</p>`
+          : `<p class="hint">One empire-wide project at a time.</p>`)
       }
     </section>`;
 }

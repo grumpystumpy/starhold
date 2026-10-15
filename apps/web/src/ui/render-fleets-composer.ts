@@ -1,5 +1,6 @@
 import {
   EXPEDITION_SLOT,
+  NEWBIE_PROTECTION_POINTS,
   SHIP_ORDER,
   SHIPS,
   fuelCostOneWay,
@@ -22,6 +23,13 @@ export function fleetComposer(
 ): string {
   const mission = draft?.mission ?? "deploy";
   const rivals = view.roster.filter((r) => r.id !== view.player.id);
+  const attackableRivals = rivals.filter(
+    (r) => r.pointsHint >= NEWBIE_PROTECTION_POINTS,
+  );
+  const canAttack = (playerId: string): boolean => {
+    const row = view.roster.find((r) => r.id === playerId);
+    return row != null && row.pointsHint >= NEWBIE_PROTECTION_POINTS;
+  };
   const ownOther = view.ownedPlanets.filter((p) => p.id !== view.planet.id);
   const emptySlots = view.galaxy.slots.filter((s) => !s.planetId);
   const debrisSlots = view.galaxy.slots.filter((s) => s.debris);
@@ -49,15 +57,20 @@ export function fleetComposer(
         `<option value="planet:${escapeAttr(p.id)}">Park @ ${escapeHtml(p.name)}${p.isMoon ? " Moon" : ""} · ${fmtCoords(p.coords)}</option>`,
       );
     }
-    for (const r of rivals) {
+    for (const r of attackableRivals) {
       options.push(
-        `<option value="planet:${escapeAttr(r.planetId)}">Attack ${escapeHtml(r.name)} · ${fmtCoords(r.coords)}</option>`,
+        `<option value="planet:${escapeAttr(r.planetId)}" data-target-role="attack">Attack ${escapeHtml(r.name)} · ${fmtCoords(r.coords)}</option>`,
       );
     }
     for (const s of view.galaxy.slots) {
-      if (s.moonId && s.playerId && s.playerId !== view.player.id) {
+      if (
+        s.moonId &&
+        s.playerId &&
+        s.playerId !== view.player.id &&
+        canAttack(s.playerId)
+      ) {
         options.push(
-          `<option value="planet:${escapeAttr(s.moonId)}">Attack moon @ ${fmtCoords(s.coords)}</option>`,
+          `<option value="planet:${escapeAttr(s.moonId)}" data-target-role="attack">Attack moon @ ${fmtCoords(s.coords)}</option>`,
         );
       }
     }
@@ -108,19 +121,40 @@ export function fleetComposer(
         `<option value="alien:${escapeAttr(alien.id)}">${escapeHtml(alien.name)} · Aliens · Lv ${alien.level ?? alien.tier} · ${alien.threatHint} · ${fmtCoords(alien.coords)}</option>`,
       );
     }
-  } else {
+  } else if (mission === "espionage") {
     for (const r of rivals) {
       options.push(
-        `<option value="planet:${escapeAttr(r.planetId)}">${escapeHtml(r.name)} · ${fmtCoords(r.coords)}</option>`,
+        `<option value="planet:${escapeAttr(r.planetId)}" data-target-role="spy">Spy ${escapeHtml(r.name)} · ${fmtCoords(r.coords)}</option>`,
       );
     }
     for (const s of view.galaxy.slots) {
       if (s.moonId && s.playerId && s.playerId !== view.player.id) {
         options.push(
-          `<option value="planet:${escapeAttr(s.moonId)}" data-has-moon="1">Moon @ ${fmtCoords(s.coords)}</option>`,
+          `<option value="planet:${escapeAttr(s.moonId)}" data-target-role="spy" data-has-moon="1">Spy moon @ ${fmtCoords(s.coords)}</option>`,
         );
       }
     }
+  } else if (mission === "raid") {
+    for (const r of attackableRivals) {
+      options.push(
+        `<option value="planet:${escapeAttr(r.planetId)}" data-target-role="attack">Attack ${escapeHtml(r.name)} · ${fmtCoords(r.coords)}</option>`,
+      );
+    }
+    for (const s of view.galaxy.slots) {
+      if (
+        s.moonId &&
+        s.playerId &&
+        s.playerId !== view.player.id &&
+        canAttack(s.playerId)
+      ) {
+        options.push(
+          `<option value="planet:${escapeAttr(s.moonId)}" data-target-role="attack" data-has-moon="1">Attack moon @ ${fmtCoords(s.coords)}</option>`,
+        );
+      }
+    }
+  } else {
+    const _exhaustive: never = mission;
+    void _exhaustive;
   }
 
   if (
@@ -194,8 +228,14 @@ export function fleetComposer(
   const expeditionCap = maxExpeditions(view.player.research.astrophysics ?? 0);
   const expeditionActive = view.fleets.filter((f) => f.mission === "expedition")
     .length;
-  const needHint =
-    mission === "expedition" && expeditionActive >= expeditionCap
+  const protectedFromAttack =
+    (mission === "raid" || mission === "deploy") &&
+    options.length === 0 &&
+    rivals.length > 0 &&
+    attackableRivals.length === 0;
+  const needHint = protectedFromAttack
+    ? `<p class="hint" data-testid="fleet-targets-protected">No attack targets. Commanders under ${fmt(NEWBIE_PROTECTION_POINTS)} points are protected.</p>`
+    : mission === "expedition" && expeditionActive >= expeditionCap
       ? `<p class="hint" data-testid="fleet-need-expedition-slot">Expedition slots full (${fmt(expeditionActive)}/${fmt(expeditionCap)}). Research Stellar Cartography for more.</p>`
       : options.length === 0
         ? mission === "transport"

@@ -374,6 +374,7 @@ export function playerView(
           isMoon: p.kind === "moon",
           isMini: isMiniBody(universe, p),
           jumpGateLevel: p.buildings.jumpGate ?? 0,
+          researchLab: p.buildings.researchLab ?? 0,
           ...art,
         };
       })

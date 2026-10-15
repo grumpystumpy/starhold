@@ -1,7 +1,14 @@
 import {
+  BUILDING_ORDER,
+  BUILDINGS,
+  DEFENSE_ORDER,
+  DEFENSES,
+  RESEARCH,
+  RESEARCH_ORDER,
   SHIP_ORDER,
   SHIPS,
   type CombatReport,
+  type EspionageReport,
   type EventLogEntry,
   type PlayerView,
 } from "@starhold/game";
@@ -18,7 +25,18 @@ export type InboxKind =
   | "raidAlert"
   | "miniNearby";
 
-export type InboxFilter = "all" | "combat" | "alerts";
+export type InboxFilter = "all" | "combat" | "spy" | "alerts";
+
+const INBOX_FILTERS: readonly InboxFilter[] = [
+  "all",
+  "combat",
+  "spy",
+  "alerts",
+];
+
+export function isInboxFilter(value: string | null): value is InboxFilter {
+  return value != null && (INBOX_FILTERS as readonly string[]).includes(value);
+}
 
 export interface InboxItem {
   kind: InboxKind;
@@ -77,12 +95,13 @@ function kindLabel(kind: InboxKind): string {
   }
 }
 
-export function inboxBucket(kind: InboxKind): "combat" | "alerts" {
+export function inboxBucket(kind: InboxKind): "combat" | "spy" | "alerts" {
   switch (kind) {
     case "combat":
-    case "spy":
     case "expedition":
       return "combat";
+    case "spy":
+      return "spy";
     case "buildComplete":
     case "fleetReturn":
     case "raidAlert":
@@ -93,6 +112,55 @@ export function inboxBucket(kind: InboxKind): "combat" | "alerts" {
       return _exhaustive;
     }
   }
+}
+
+function namedLevels(
+  order: readonly string[],
+  names: { [id: string]: { name: string } | undefined },
+  levels: object | null | undefined,
+): string {
+  if (!levels) return "";
+  const bag = levels as Record<string, number | undefined>;
+  const parts = order
+    .filter((id) => (bag[id] ?? 0) > 0 && names[id])
+    .map((id) => `${names[id]!.name} L${fmt(bag[id] ?? 0)}`);
+  return parts.join(", ");
+}
+
+function namedCounts(
+  order: readonly string[],
+  names: { [id: string]: { name: string } | undefined },
+  counts: object | null | undefined,
+): string {
+  if (!counts) return "";
+  const bag = counts as Record<string, number | undefined>;
+  const parts = order
+    .filter((id) => (bag[id] ?? 0) > 0 && names[id])
+    .map((id) => `${fmt(bag[id] ?? 0)}× ${names[id]!.name}`);
+  return parts.join(", ");
+}
+
+/** Full espionage layers, using display names. Closed until the player opens it. */
+export function spyReportDetailsHtml(report: EspionageReport): string {
+  const lines: string[] = [];
+  if (report.resources) {
+    lines.push(
+      `Metal ${fmt(report.resources.metal)} · Crystal ${fmt(report.resources.crystal)} · Deut ${fmt(report.resources.deuterium)}`,
+    );
+  }
+  const ships = namedCounts(SHIP_ORDER, SHIPS, report.ships);
+  if (ships) lines.push(`Ships: ${ships}`);
+  const defenses = namedCounts(DEFENSE_ORDER, DEFENSES, report.defenses);
+  if (defenses) lines.push(`Defenses: ${defenses}`);
+  const buildings = namedLevels(BUILDING_ORDER, BUILDINGS, report.buildings);
+  if (buildings) lines.push(`Buildings: ${buildings}`);
+  const research = namedLevels(RESEARCH_ORDER, RESEARCH, report.research);
+  if (research) lines.push(`Research: ${research}`);
+  const body =
+    lines.length > 0
+      ? lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("")
+      : `<p>No further detail in this scan.</p>`;
+  return `<details class="message-detail" data-testid="spy-detail-${escapeAttr(report.id)}"><summary>Full report</summary>${body}</details>`;
 }
 
 function safeHref(href: string | undefined): string | null {
@@ -212,6 +280,7 @@ export function messagesPageHtml(
   const visible =
     filter === "all" ? items : items.filter((item) => inboxBucket(item.kind) === filter);
   const combatCount = items.filter((item) => inboxBucket(item.kind) === "combat").length;
+  const spyCount = items.filter((item) => inboxBucket(item.kind) === "spy").length;
   const alertCount = items.filter((item) => inboxBucket(item.kind) === "alerts").length;
   const unread = items.filter((item) => item.unread).length;
   const emptyAll = items.length === 0;
@@ -236,6 +305,11 @@ export function messagesPageHtml(
                 ? (view.reports ?? []).find((r) => r.id === item.id)
                 : undefined;
             const extras = report ? combatBattleExtrasHtml(report) : "";
+            const spy =
+              item.kind === "spy"
+                ? (view.spyReports ?? []).find((r) => r.id === item.id)
+                : undefined;
+            const spyDetail = spy ? spyReportDetailsHtml(spy) : "";
             return `<li class="message-row${item.unread ? " message-unread" : ""}" id="msg-${escapeAttr(item.kind)}-${escapeAttr(item.id)}" data-testid="message-${escapeAttr(item.kind)}-${escapeAttr(item.id)}" data-kind="${escapeAttr(item.kind)}" data-bucket="${inboxBucket(item.kind)}"${item.unread ? ' data-unread="1"' : ""}>
               <div class="message-head">
                 <span class="message-kind" data-testid="message-kind">${escapeHtml(kindLabel(item.kind))}</span>
@@ -244,6 +318,7 @@ export function messagesPageHtml(
               ${title}
               <span class="meta message-body">${escapeHtml(item.body)}</span>
               ${extras}
+              ${spyDetail}
               ${readBtn}
             </li>`;
           })
@@ -258,10 +333,11 @@ export function messagesPageHtml(
   return `
     <section class="panel" data-testid="messages-panel" data-inbox-filter="${filter}">
       <h2>Messages</h2>
-      <p class="hint" data-testid="messages-summary">All · Combat · Alerts — ${fmt(items.length)} item${items.length === 1 ? "" : "s"} (${fmt(combatCount)} combat · ${fmt(alertCount)} alerts${unread > 0 ? ` · ${fmt(unread)} unread` : ""}).</p>
+      <p class="hint" data-testid="messages-summary">All · Combat · Spy · Alerts — ${fmt(items.length)} item${items.length === 1 ? "" : "s"} (${fmt(combatCount)} combat · ${fmt(spyCount)} spy · ${fmt(alertCount)} alerts${unread > 0 ? ` · ${fmt(unread)} unread` : ""}).</p>
       <div class="inbox-filters" role="tablist" aria-label="Message filters">
         ${filterButton("all", "All", filter)}
         ${filterButton("combat", "Combat", filter)}
+        ${filterButton("spy", "Spy", filter)}
         ${filterButton("alerts", "Alerts", filter)}
         ${markAll}
       </div>

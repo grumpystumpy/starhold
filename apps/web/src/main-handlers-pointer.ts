@@ -87,8 +87,16 @@ export function bindPointerHandlers(): void {
       const researchBtn = closestActionEl(ev.target, "[data-research]");
       const readAllBtn = closestActionEl(ev.target, "[data-event-read-all]");
       const readOneBtn = closestActionEl(ev.target, "[data-event-read]");
-      session.armedUpgrade =
-        (upgradeBtn?.getAttribute("data-upgrade") as BuildingId | null) ?? null;
+      if (
+        upgradeBtn?.getAttribute("data-locked") === "1" ||
+        upgradeBtn?.hasAttribute("disabled")
+      ) {
+        session.armedUpgrade = null;
+      } else {
+        session.armedUpgrade =
+          (upgradeBtn?.getAttribute("data-upgrade") as BuildingId | null) ??
+          null;
+      }
       if (shipBtn?.getAttribute("data-locked") === "1") {
         session.armedShip = null;
       } else {

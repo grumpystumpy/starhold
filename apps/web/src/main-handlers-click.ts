@@ -67,7 +67,7 @@ import {
   doUnlockSkill,
   doUpgrade,
 } from "./main-actions";
-import { setInboxFilter } from "./ui/render-messages";
+import { isInboxFilter, setInboxFilter } from "./ui/render-messages";
 import {
   setBattleReplayRound,
   toggleBattleReplay,
@@ -105,7 +105,7 @@ export function bindClickHandlers(): void {
       if (filterBtn) {
         ev.preventDefault();
         const raw = filterBtn.getAttribute("data-inbox-filter");
-        if (raw === "all" || raw === "combat" || raw === "alerts") {
+        if (isInboxFilter(raw)) {
           setInboxFilter(raw);
           schedulePaint();
         }
@@ -206,9 +206,20 @@ export function bindClickHandlers(): void {
 
       const upgradeBtn = closestActionEl(target, "[data-upgrade]");
       const upgradeId = upgradeBtn?.getAttribute("data-upgrade");
-      if (upgradeId) {
+      if (upgradeId && upgradeBtn) {
         ev.preventDefault();
         ev.stopPropagation();
+        if (
+          upgradeBtn.getAttribute("data-locked") === "1" ||
+          upgradeBtn.hasAttribute("disabled")
+        ) {
+          setFlash(
+            "error",
+            upgradeBtn.getAttribute("title") || "Cannot upgrade that structure.",
+          );
+          schedulePaint();
+          return;
+        }
         void doUpgrade(upgradeId as BuildingId);
         return;
       }
@@ -263,6 +274,17 @@ export function bindClickHandlers(): void {
         if (researchId) {
           ev.preventDefault();
           ev.stopPropagation();
+          if (
+            researchBtn.getAttribute("data-locked") === "1" ||
+            researchBtn.hasAttribute("disabled")
+          ) {
+            setFlash(
+              "error",
+              researchBtn.getAttribute("title") || "Cannot start that research.",
+            );
+            schedulePaint();
+            return;
+          }
           void doResearch(researchId);
           return;
         }

@@ -30,6 +30,10 @@ export {
   yardQueueCap,
 } from "./world-queue-caps.js";
 export {
+  previewBuildingUpgrade,
+  previewResearchUpgrade,
+} from "./queue-block.js";
+export {
   migrateUniverseV2ToV3,
   migrateUniverseV3ToV4,
   migrateUniverseV4ToV5,

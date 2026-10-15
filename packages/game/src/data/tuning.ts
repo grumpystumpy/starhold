@@ -772,7 +772,7 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
     id: "mantleLoom",
     name: "Mantle Loom",
     description:
-      "Field expansion — occupies 1 field; +5 fieldsCap per level. Very high energy use. Planet only.",
+      "Field expansion — occupies 1 field and adds 5 fields per level. Very high energy use. Planet only.",
     baseCost: { metal: 50_000, crystal: 100_000, deuterium: 30_000 },
     costGrowth: 2.0,
     baseBuildSeconds: 120,
@@ -1350,7 +1350,7 @@ export const FRONTIER_BEACON_JUMP_CD = 0.75;
 /** Monthly season scoring. Calendar month is UTC `YYYY-MM`. */
 export const SEASON_COMBAT_WIN = 10;
 export const SEASON_COMBAT_PVE_WIN = 3;
-/** Economy points = resources spent on completed buildings and research / this. */
+/** Economy points = resources spent on completed buildings, ships, defenses, and research / this. */
 export const SEASON_ECONOMY_SPEND_DIV = 1000;
 export const SEASON_LEADERBOARD_TOP = 20;
 export const SEASON_REWARD_TOP_N = 5;
