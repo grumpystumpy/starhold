@@ -25,23 +25,17 @@ A GET or HEAD whose only changes are accrued resources and `lastTickAt` does not
 
 ## One-time setup
 
-Micah does this once. The placeholder `database_id` in `wrangler.toml` cannot deploy until the database exists.
+Micah does this once. D1 database `starhold` already exists. `wrangler.toml` has `account_id` `0de4d3787cea977fbe8952ba924adea7` and `database_id` `d3d8d52e-9272-40cd-b8ae-3012cef6c8ca`. Neither is a secret. The API token is not in the repo.
 
 1. Install the CLI from the repo (`npm ci` brings in Wrangler 4).
-2. `npx wrangler login` (or export `CLOUDFLARE_API_TOKEN` — see permissions below).
-3. Create the database and paste the id into `wrangler.toml` (`database_id`, not a secret):
-
-   ```bash
-   npx wrangler d1 create starhold
-   ```
-
-4. Apply the schema:
+2. `npx wrangler login` (or export `CLOUDFLARE_API_TOKEN` — see permissions below). Add that token as the GitHub secret `CLOUDFLARE_API_TOKEN` at deploy time. Do not commit it.
+3. Apply the schema when the cut-over checklist says to. Do not run this as part of a normal PR:
 
    ```bash
    npx wrangler d1 migrations apply starhold --remote
    ```
 
-5. Set the session pepper (do not commit it). Use the **same** value as Vercel or exported password hashes will not verify:
+4. Set the session pepper (do not commit it). Use the **same** value as Vercel or exported password hashes will not verify:
 
    ```bash
    npx wrangler secret put SESSION_SECRET
@@ -49,7 +43,7 @@ Micah does this once. The placeholder `database_id` in `wrangler.toml` cannot de
 
    Generate with `openssl rand -base64 32` only if this is a brand-new universe with no imported accounts.
 
-6. Build the client. Deploy only through the GitHub Action on `main` after `CLOUDFLARE_DEPLOY_ENABLED=true`. Do not `wrangler deploy` from a laptop for a branch, and do not turn on Cloudflare’s Git integration (that creates preview URLs).
+5. Build the client. Deploy only through the GitHub Action on `main` after `CLOUDFLARE_DEPLOY_ENABLED=true`. Do not `wrangler deploy` from a laptop for a branch, and do not turn on Cloudflare’s Git integration (that creates preview URLs).
 
 Local:
 
@@ -68,8 +62,9 @@ GitHub Actions secrets (repository, not in git):
 
 | Name | Purpose |
 | --- | --- |
-| `CLOUDFLARE_API_TOKEN` | Deploy + D1 migrations |
-| `CLOUDFLARE_ACCOUNT_ID` | Account the token belongs to |
+| `CLOUDFLARE_API_TOKEN` | Deploy + D1 migrations. The only GitHub secret. |
+
+The account id is `account_id` in `wrangler.toml`. Wrangler reads it from that file. Do not also set `CLOUDFLARE_ACCOUNT_ID` in the Action, or an empty secret would override the file.
 
 Repository variable (not a secret): `CLOUDFLARE_DEPLOY_ENABLED=true` is the approval switch. Leave it unset until cut-over.
 
@@ -87,7 +82,7 @@ No other permissions. Do not use a global API key.
 
 `.github/workflows/cloudflare-workers.yml` runs on **push to `main` only**. It does not run on pull requests, other branches, or `workflow_dispatch`.
 
-The job does not start unless `github.ref` is `refs/heads/main` and `CLOUDFLARE_DEPLOY_ENABLED` is `true`. If the token or account id is missing, the job succeeds and skips deploy. There is no preview or branch deploy.
+The job does not start unless `github.ref` is `refs/heads/main` and `CLOUDFLARE_DEPLOY_ENABLED` is `true`. If `CLOUDFLARE_API_TOKEN` is missing, the job succeeds and skips deploy. The account id comes from `wrangler.toml`. There is no preview or branch deploy.
 
 Vercel’s own deploy is unchanged and still follows `main` only, until the checklist below.
 
@@ -166,8 +161,8 @@ Budgets (per request, then the next request continues): 2 raids, 40 pirate level
 
 Do these in order. Stop if a dry-run count looks wrong. **Leave the Vercel project, `vercel.json`, `api/index.js`, and `npm run build:vercel` in place until the last step.**
 
-1. Paste the real D1 `database_id` into `wrangler.toml`.
-2. Set GitHub secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, and the Worker secret `SESSION_SECRET` to the Vercel pepper.
+1. D1 `database_id` and `account_id` are already in `wrangler.toml`.
+2. Set the GitHub secret `CLOUDFLARE_API_TOKEN`, and the Worker secret `SESSION_SECRET` to the Vercel pepper.
 3. `export --dry-run`, then `export`, then `import --dry-run`. Confirm players, planets, fleets, messages, alliances, and scrypt hashes match production.
 4. `import` the SQL file and `wrangler d1 execute` it. This is the first write to D1.
 5. Set the repository variable `CLOUDFLARE_DEPLOY_ENABLED=true`. The next push to `main` deploys Workers. Pushes to other branches do not.
