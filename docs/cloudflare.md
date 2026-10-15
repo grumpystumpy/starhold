@@ -11,7 +11,7 @@ Nothing here uses Workers KV. Saves go to **D1** (5 million reads/day, 100,000 w
 | Static client | Vercel static | Workers static assets (`apps/web/dist`) |
 | API | `api/index.js` Node bundle | `worker/index.ts` → same Hono app |
 | Universe + accounts | Upstash / Vercel KV, one JSON document | D1 rows: world, asteroids, pirates, aliens, one document per player |
-| Password | scrypt (`scrypt$…`) | PBKDF2-SHA-256, 10,000 iterations. Imported scrypt is verified once, then replaced |
+| Password | scrypt (`scrypt$…`) | PBKDF2-SHA-256, 10,000 iterations. Imported accounts set a new password with a claim code |
 | Tick | Full catch-up | Per-request budgets in `packages/game/src/data/tuning.ts` (`WORKERS_TICK_*`) |
 | Poll | 30 seconds, and the tab sleeps when it is hidden or idle | Same client |
 
@@ -35,13 +35,14 @@ Micah does this once. D1 database `starhold` already exists. `wrangler.toml` has
    npx wrangler d1 migrations apply starhold --remote
    ```
 
-4. Set the session pepper (do not commit it). Use the **same** value as Vercel or exported password hashes will not verify:
+4. Set a **new** session pepper (do not commit it). Do not reuse the Vercel `SESSION_SECRET`. That value is unrecoverable, and imported hashes were peppered with it, so they are dropped on import.
 
    ```bash
+   openssl rand -base64 32
    npx wrangler secret put SESSION_SECRET
    ```
 
-   Generate with `openssl rand -base64 32` only if this is a brand-new universe with no imported accounts.
+   Use this same new value when you run the import, so claim-code hashes match the Worker. Existing Vercel sessions are not copied.
 
 5. Build the client. Deploy only through the GitHub Action on `main` after `CLOUDFLARE_DEPLOY_ENABLED=true`. Do not `wrangler deploy` from a laptop for a branch, and do not turn on Cloudflare’s Git integration (that creates preview URLs).
 
@@ -68,7 +69,9 @@ The account id is `account_id` in `wrangler.toml`. Wrangler reads it from that f
 
 Repository variable (not a secret): `CLOUDFLARE_DEPLOY_ENABLED=true` is the approval switch. Leave it unset until cut-over.
 
-Worker secret (Cloudflare, not GitHub): `SESSION_SECRET`.
+Worker secret (Cloudflare, not GitHub): `SESSION_SECRET`. Generate a new one. It is not the Vercel pepper.
+
+Optional Worker secret: `CLAIM_MAIL_URL`. When set, “Email me a code” POSTs `{ email, code, expiresInMinutes }` to that URL. When it is unset, the import script writes `claim-codes.txt` instead. Do not commit that file.
 
 API token permissions, created under My Profile → API Tokens → Custom token:
 
@@ -88,15 +91,21 @@ Vercel’s own deploy is unchanged and still follows `main` only, until the chec
 
 ## Passwords
 
-Workers free plan allows 10 ms of CPU per request. A full scrypt verify (N=16384, r=8, p=1) is about 30 ms in Node and about 170 ms in the sliced JavaScript implementation, so it cannot run inside one request. PBKDF2-SHA-256 at **10,000** iterations is about 2 ms. OWASP’s 600,000 iterations do not fit in 10 ms.
+Workers free plan allows 10 ms of CPU per request. A full scrypt verify (N=16384, r=8, p=1) is about 30 ms in Node and does not fit in one request. PBKDF2-SHA-256 at **10,000** iterations is about 2 ms. OWASP’s 600,000 iterations do not fit in 10 ms.
 
-New Workers accounts use PBKDF2. Vercel accounts stay scrypt. A successful Vercel login also writes `passwordHashPbkdf2` (additive). After import, a scrypt-only account is checked by the `ScryptMigrate` Durable Object in slices of about 6 ms (about 30 requests, once). The client loops on HTTP 202. When the password matches, the account row is rewritten to PBKDF2 and later logins stay on that hash. The 16 MB SMix buffer stays in the Durable Object’s memory, not in D1.
+New Workers accounts use PBKDF2. Vercel accounts stay scrypt. Imported accounts do not keep either hash: the Vercel pepper cannot be recovered, so the import sets `needsPasswordReset` and stores no password. The player enters their email and a one-time claim code, then sets a new PBKDF2 password.
 
-`SESSION_SECRET` is the pepper. It must match Vercel for imported hashes.
+The code is 8 characters, expires in 30 minutes, and works once. Asking for a code is rate-limited (10 attempts per email and IP per 15 minutes, same bucket as submitting a code). D1 stores `sha256(SESSION_SECRET:code)` at `starhold:claim-code:{accountId}`. The plaintext is not stored.
+
+If `CLAIM_MAIL_URL` is set, “Email me a code” sends the code there. If it is not set, that button does not mint a code (so it cannot replace the one Micah already has). The import script writes `claim-codes.txt` next to the SQL: one line per account, mode `0600`. Hand that file out privately. Apply the SQL within 30 minutes of writing it. Running the import again rebuilds account rows from the Vercel export, which clears any passwords already set on Workers, so refresh codes only before anyone has claimed. Do not commit the file.
+
+`SESSION_SECRET` on Workers is a new pepper. Existing sessions are left out of the import, and the SQL deletes any `starhold:session:*` rows already in D1.
 
 ## Transfer (do not run against production yet)
 
 Export is read-only (`SCAN`, `GET`, `TTL`) using `KV_REST_API_URL` and `KV_REST_API_TOKEN`. `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are accepted aliases. Import writes a SQL file. Applying that file is a separate command. The SQL is idempotent: it replaces the same keys, and running it twice leaves the same rows. Players, planets, fleets, messages, alliances, and password hashes are kept. Lock and version keys are dropped. The universe blob is split into the D1 rows the worker reads.
+
+The import drops scrypt and PBKDF2 password hashes, marks those accounts `needsPasswordReset`, and does not copy sessions. When `CLAIM_MAIL_URL` is unset, a real import also writes hashed claim codes into the SQL and the plaintext list to `claim-codes.txt`. A dry run only prints counts.
 
 Dry run (prints counts, writes nothing, and the import dry run does not touch D1):
 
@@ -116,7 +125,7 @@ node --import tsx scripts/kv-to-d1.mjs import kv-export.json kv-import.sql
 npx wrangler d1 execute starhold --remote --file=kv-import.sql
 ```
 
-`kv-export.json` and `kv-import.sql` are gitignored. Do not commit them. The counts line lists keys, accounts, players, planets, fleets, messages, alliances, scrypt hashes, pbkdf2 hashes, sessions, and planned D1 rows.
+`kv-export.json`, `kv-import.sql`, and `claim-codes.txt` are gitignored. Do not commit them. The counts line lists keys, accounts, players, planets, fleets, messages, alliances, scrypt hashes, pbkdf2 hashes, needsPasswordReset, sessions, and planned D1 rows. `needsPasswordReset` is how many imported accounts must set a new password. Sessions are counted in the export and are not copied. When claim codes are part of the import, `d1Rows` includes one claim-code row per reset account.
 
 ## CPU budget
 
@@ -136,8 +145,6 @@ Node `performance.now()` on the synchronous game work (one commander, Workers bu
 | Highscores, 200 players, cold / warm | 8.7 ms / 2.2 ms |
 | `JSON.parse` of a full legacy save | about 4 ms |
 | `JSON.stringify` of a full legacy save | about 5–6 ms |
-| Scrypt verify, Node, N=16384 | about 34 ms (does not fit one request) |
-| Scrypt verify, sliced JavaScript | about 170 ms across ~29 steps, each under 10 ms |
 
 `wrangler dev --local` with `cpu_ms = 10`, header `x-starhold-cpu-ms`, from the first pass on this branch:
 
@@ -155,17 +162,17 @@ A quiet poll no longer writes the universe or the lock. A 200-player cold highsc
 
 Budgets (per request, then the next request continues): 2 raids, 40 pirate level-ups, 2 fleets, 8 drift steps, 8 systems / 1 new mini of bootstrap, 4 pirate placements. Vercel does not use these caps.
 
-`STARHOLD_E2E=1` is for local Playwright only. It is not in `wrangler.toml`.
+`STARHOLD_E2E=1` is for local Playwright only. It is not in `wrangler.toml`. While it is set, `POST /api/e2e/prepare-password-claim` can mint a claim code for an account. Do not set it on the deployed Worker.
 
 ## Cut-over checklist
 
 Do these in order. Stop if a dry-run count looks wrong. **Leave the Vercel project, `vercel.json`, `api/index.js`, and `npm run build:vercel` in place until the last step.**
 
 1. D1 `database_id` and `account_id` are already in `wrangler.toml`.
-2. Set the GitHub secret `CLOUDFLARE_API_TOKEN`, and the Worker secret `SESSION_SECRET` to the Vercel pepper.
-3. `export --dry-run`, then `export`, then `import --dry-run`. Confirm players, planets, fleets, messages, alliances, and scrypt hashes match production.
-4. `import` the SQL file and `wrangler d1 execute` it. This is the first write to D1.
+2. Set the GitHub secret `CLOUDFLARE_API_TOKEN`, and a **new** Worker secret `SESSION_SECRET` (`openssl rand -base64 32`). Do not reuse the Vercel pepper.
+3. `export --dry-run`, then `export`, then `import --dry-run`. Confirm players, planets, fleets, messages, alliances, and `needsPasswordReset` (imported accounts that must set a new password). Sessions are counted and are not copied.
+4. Export `SESSION_SECRET` as that same new Worker secret, then `import` the SQL file and `wrangler d1 execute` it. This is the first write to D1. If email is not configured, `claim-codes.txt` is written beside the SQL. Hand it out privately and apply the SQL within 30 minutes. Re-running the import later clears passwords that were already set on Workers.
 5. Set the repository variable `CLOUDFLARE_DEPLOY_ENABLED=true`. The next push to `main` deploys Workers. Pushes to other branches do not.
-6. Log in on the Workers host with an imported account. The first login rehashes scrypt to PBKDF2. Confirm a second login and a refresh.
-7. Point players at the Workers URL only after that login works.
+6. On the Workers host, open the join screen, enter the account email, the claim code, and a new password. Confirm a second login with that password and a refresh. The old password does not work.
+7. Point players at the Workers URL only after that claim works.
 8. **Only then** remove the Vercel deploy: disconnect the Vercel project (or set `git.deploymentEnabled` false for every branch, which is already the case off `main`), delete the Upstash / `KV_REST_API_*` env vars, and retire `api/index.js` plus `scripts/bundle-api.mjs` if nothing else calls them. Do not do this step in the same change as the Workers port.

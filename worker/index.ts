@@ -6,14 +6,7 @@
 import { bindTickBudget, workersTickBudget } from "@starhold/game";
 import { app } from "../apps/server/src/app.js";
 import { createD1Store, type D1Like } from "../apps/server/src/d1-store.js";
-import {
-  currentScope,
-  runWithScope,
-  type ScryptMigrateResult,
-} from "../apps/server/src/request-context.js";
-import { ScryptMigrate } from "./scrypt-do.js";
-
-export { ScryptMigrate };
+import { currentScope, runWithScope } from "../apps/server/src/request-context.js";
 
 bindTickBudget(() => currentScope()?.budget);
 
@@ -29,19 +22,12 @@ const STRING_VARS = [
   "STARHOLD_CPU_PROFILE",
   "ALLOWED_ORIGINS",
   "APP_URL",
+  "CLAIM_MAIL_URL",
 ] as const;
-
-interface ScryptNamespace {
-  idFromName(name: string): unknown;
-  get(id: unknown): {
-    fetch(input: RequestInfo, init?: RequestInit): Promise<Response>;
-  };
-}
 
 export interface WorkerEnv {
   DB: D1Like;
   ASSETS: { fetch(input: Request): Promise<Response> };
-  SCRYPT?: ScryptNamespace;
   SESSION_SECRET?: string;
   STARHOLD_UNIVERSE_NAME?: string;
   STARHOLD_UNIVERSE_SPEED?: string;
@@ -53,28 +39,7 @@ export interface WorkerEnv {
   STARHOLD_CPU_PROFILE?: string;
   ALLOWED_ORIGINS?: string;
   APP_URL?: string;
-}
-
-async function migrateScrypt(
-  namespace: ScryptNamespace,
-  step: { attemptId?: string; password: string; encoded: string },
-): Promise<ScryptMigrateResult> {
-  const attemptId = step.attemptId || crypto.randomUUID();
-  const stub = namespace.get(namespace.idFromName(attemptId));
-  const response = await stub.fetch("https://scrypt.internal/step", {
-    method: "POST",
-    body: JSON.stringify({
-      password: step.password,
-      encoded: step.encoded,
-      attemptId,
-    }),
-  });
-  const body = (await response.json()) as { done?: boolean; match?: boolean };
-  return {
-    done: body.done === true,
-    match: body.match === true,
-    attemptId,
-  };
+  CLAIM_MAIL_URL?: string;
 }
 
 function applyEnv(env: WorkerEnv): void {
@@ -107,9 +72,6 @@ export default {
         method: request.method,
         budget: workersTickBudget(),
         cpuMs: 0,
-        migrateScrypt: env.SCRYPT
-          ? (step) => migrateScrypt(env.SCRYPT!, step)
-          : undefined,
       },
       () => app.fetch(request),
     );

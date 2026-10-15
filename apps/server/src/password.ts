@@ -2,8 +2,9 @@
  * WebCrypto PBKDF2-SHA-256 for the Workers free plan.
  * 10,000 iterations is about 2 ms on Node. OWASP's 600,000 does not fit
  * inside a 10 ms CPU budget, so Workers hashes are intentionally weaker
- * than the Vercel scrypt hashes. Vercel keeps scrypt as the primary hash
- * and stamps a PBKDF2 copy on login so a later KV export can sign in here.
+ * than the Vercel scrypt hashes. Vercel keeps scrypt. Imported accounts
+ * do not reuse either hash: the Vercel pepper is unrecoverable, so they
+ * set a new PBKDF2 password with a claim code.
  */
 
 import { addCpu } from "./request-context.js";

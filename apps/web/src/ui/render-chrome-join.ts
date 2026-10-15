@@ -18,6 +18,9 @@ export type JoinScreenState = {
   joinDraft: string;
   emailDraft?: string;
   passwordDraft?: string;
+  claimEmailDraft?: string;
+  claimCodeDraft?: string;
+  claimPasswordDraft?: string;
   accountEmail?: string | null;
   claimablePlayerId?: string | null;
 };
@@ -53,7 +56,20 @@ export function joinScreenHtml(state: JoinScreenState): string {
           <button type="submit" id="auth-signup-btn" data-testid="auth-signup-btn" data-auth-action="signup" ${state.busy ? "disabled" : ""}>Sign up</button>
         </div>
       </form>
-      <p class="hint">Sign up with email and password to keep this commander after you close the tab. Guest play stays on this browser only.</p>`;
+      <p class="hint">Sign up with email and password to keep this commander after you close the tab. Guest play stays on this browser only.</p>
+      <form id="password-claim-form" data-testid="password-claim-form">
+        <label for="claim-email">Set a new password</label>
+        <p class="hint">Imported accounts use a one-time claim code. It expires in 30 minutes and works once.</p>
+        <div class="claim-fields">
+          <input id="claim-email" name="email" type="email" maxlength="254" placeholder="you@example.com" autocomplete="email" data-testid="claim-email" value="${escapeAttr(state.claimEmailDraft ?? "")}" />
+          <input id="claim-code" name="code" type="text" maxlength="8" placeholder="claim code" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" data-testid="claim-code" value="${escapeAttr(state.claimCodeDraft ?? "")}" />
+          <input id="claim-password" name="password" type="password" minlength="8" maxlength="128" placeholder="new password (8+)" autocomplete="new-password" data-testid="claim-password" value="${escapeAttr(state.claimPasswordDraft ?? "")}" />
+        </div>
+        <div class="join-row" style="margin-top:0.5rem;gap:0.5rem">
+          <button type="submit" id="claim-password-btn" data-testid="claim-password-btn" ${state.busy ? "disabled" : ""}>Set password</button>
+          <button type="button" id="claim-code-request" data-testid="claim-code-request" data-request-claim-code ${state.busy ? "disabled" : ""}>Email me a code</button>
+        </div>
+      </form>`;
 
   return `
     <header class="join-hero">
@@ -85,6 +101,9 @@ export function renderJoin(root: HTMLElement, state: JoinScreenState): void {
   const existingInput = root.querySelector<HTMLInputElement>("#commander");
   const emailInput = root.querySelector<HTMLInputElement>("#auth-email");
   const passwordInput = root.querySelector<HTMLInputElement>("#auth-password");
+  const claimEmailInput = root.querySelector<HTMLInputElement>("#claim-email");
+  const claimCodeInput = root.querySelector<HTMLInputElement>("#claim-code");
+  const claimPasswordInput = root.querySelector<HTMLInputElement>("#claim-password");
   const hasAuthForm = Boolean(root.querySelector("#auth-form"));
   const hasAccountLine = Boolean(
     root.querySelector("[data-testid='account-email']"),
@@ -103,7 +122,12 @@ export function renderJoin(root: HTMLElement, state: JoinScreenState): void {
     patchFlash(root, state.error, state.notice);
     const btn = root.querySelector<HTMLButtonElement>("#join-btn");
     if (btn) btn.disabled = state.busy;
-    for (const id of ["auth-login-btn", "auth-signup-btn"]) {
+    for (const id of [
+      "auth-login-btn",
+      "auth-signup-btn",
+      "claim-password-btn",
+      "claim-code-request",
+    ]) {
       const authBtn = root.querySelector<HTMLButtonElement>(`#${id}`);
       if (authBtn) authBtn.disabled = state.busy;
     }
@@ -129,6 +153,9 @@ export function renderJoin(root: HTMLElement, state: JoinScreenState): void {
     ) {
       passwordInput.value = state.passwordDraft ?? "";
     }
+    syncInput(claimEmailInput, state.claimEmailDraft ?? "");
+    syncInput(claimCodeInput, state.claimCodeDraft ?? "");
+    syncInput(claimPasswordInput, state.claimPasswordDraft ?? "");
     return;
   }
 
@@ -139,6 +166,12 @@ export function renderJoin(root: HTMLElement, state: JoinScreenState): void {
   if (input && state.joinDraft) {
     input.selectionStart = input.selectionEnd = input.value.length;
   }
+}
+
+function syncInput(input: HTMLInputElement | null, value: string): void {
+  if (!input) return;
+  if (document.activeElement === input) return;
+  if (input.value !== value) input.value = value;
 }
 
 export function patchFlash(

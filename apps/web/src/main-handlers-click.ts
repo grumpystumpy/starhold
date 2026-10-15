@@ -37,6 +37,8 @@ import {
   doDisbandAlliance,
   doGalaxyNav,
   doClaimAnonymous,
+  doClaimPassword,
+  doRequestClaimCode,
   doInviteAlliance,
   doJoin,
   doJoinAlliance,
@@ -104,6 +106,16 @@ export function bindClickHandlers(): void {
       if (closestActionEl(target, "[data-claim-anonymous]")) {
         ev.preventDefault();
         void doClaimAnonymous();
+        return;
+      }
+
+      if (closestActionEl(target, "[data-request-claim-code]")) {
+        ev.preventDefault();
+        const email =
+          root.querySelector<HTMLInputElement>("#claim-email")?.value ??
+          session.claimEmailDraft;
+        session.claimEmailDraft = email;
+        void doRequestClaimCode(email);
         return;
       }
 
@@ -611,6 +623,24 @@ export function bindClickHandlers(): void {
       const value = input?.value ?? session.joinDraft;
       session.joinDraft = value;
       void doJoin(value);
+      return;
+    }
+
+    if (form.id === "password-claim-form") {
+      ev.preventDefault();
+      const email =
+        form.querySelector<HTMLInputElement>("#claim-email")?.value ??
+        session.claimEmailDraft;
+      const code =
+        form.querySelector<HTMLInputElement>("#claim-code")?.value ??
+        session.claimCodeDraft;
+      const password =
+        form.querySelector<HTMLInputElement>("#claim-password")?.value ??
+        session.claimPasswordDraft;
+      session.claimEmailDraft = email;
+      session.claimCodeDraft = code;
+      session.claimPasswordDraft = password;
+      void doClaimPassword(email, code, password);
       return;
     }
 

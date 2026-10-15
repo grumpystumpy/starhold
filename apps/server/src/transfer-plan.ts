@@ -25,8 +25,42 @@ export interface TransferCounts {
   alliances: number;
   scryptHashes: number;
   pbkdf2Hashes: number;
+  /** Imported accounts whose password hash is dropped. */
+  needsPasswordReset: number;
   sessions: number;
   d1Rows: number;
+}
+
+export function importedAccountNeedsPasswordReset(account: {
+  passwordHash?: string;
+  passwordHashPbkdf2?: string;
+  needsPasswordReset?: boolean;
+}): boolean {
+  if (account.needsPasswordReset) return true;
+  const hash = account.passwordHash ?? "";
+  if (hash.startsWith("scrypt$") || hash.startsWith("pbkdf2$")) return true;
+  return (account.passwordHashPbkdf2 ?? "").startsWith("pbkdf2$");
+}
+
+/** Drop peppered hashes. The Vercel SESSION_SECRET cannot verify them. */
+export function importedAccountValue(value: unknown): unknown {
+  if (!value || typeof value !== "object") return value;
+  const account = { ...(value as Record<string, unknown>) };
+  if (
+    !importedAccountNeedsPasswordReset(
+      account as {
+        passwordHash?: string;
+        passwordHashPbkdf2?: string;
+        needsPasswordReset?: boolean;
+      },
+    )
+  ) {
+    return value;
+  }
+  delete account.passwordHashPbkdf2;
+  account.passwordHash = "";
+  account.needsPasswordReset = true;
+  return account;
 }
 
 export interface PlannedRow {
@@ -55,7 +89,10 @@ function countMessages(universe: UniverseState): number {
   return n;
 }
 
-export function summarizeExport(rows: KvExportRow[]): TransferCounts {
+export function summarizeExport(
+  rows: KvExportRow[],
+  opts?: { claimCodeRows?: boolean },
+): TransferCounts {
   const counts: TransferCounts = {
     keys: rows.length,
     accounts: 0,
@@ -66,19 +103,27 @@ export function summarizeExport(rows: KvExportRow[]): TransferCounts {
     alliances: 0,
     scryptHashes: 0,
     pbkdf2Hashes: 0,
+    needsPasswordReset: 0,
     sessions: 0,
     d1Rows: 0,
   };
   for (const row of rows) {
     if (row.key.startsWith("starhold:account:")) {
       counts.accounts += 1;
-      const account = row.value as { passwordHash?: string; passwordHashPbkdf2?: string };
+      const account = row.value as {
+        passwordHash?: string;
+        passwordHashPbkdf2?: string;
+        needsPasswordReset?: boolean;
+      };
       if (account?.passwordHash?.startsWith("scrypt$")) counts.scryptHashes += 1;
       if (
         account?.passwordHash?.startsWith("pbkdf2$") ||
         account?.passwordHashPbkdf2?.startsWith("pbkdf2$")
       ) {
         counts.pbkdf2Hashes += 1;
+      }
+      if (account && importedAccountNeedsPasswordReset(account)) {
+        counts.needsPasswordReset += 1;
       }
     } else if (row.key.startsWith("starhold:session:")) {
       counts.sessions += 1;
@@ -93,6 +138,7 @@ export function summarizeExport(rows: KvExportRow[]): TransferCounts {
     }
   }
   counts.d1Rows = planImportRows(rows, 0).length;
+  if (opts?.claimCodeRows) counts.d1Rows += counts.needsPasswordReset;
   return counts;
 }
 
@@ -101,8 +147,19 @@ export function planImportRows(rows: KvExportRow[], now: number): PlannedRow[] {
   const planned: PlannedRow[] = [];
   for (const row of rows) {
     if (row.key.endsWith(":lock") || row.key.endsWith(":ver")) continue;
+    // Vercel sessions were minted under the old secret. Do not copy them.
+    if (row.key.startsWith("starhold:session:")) continue;
+    if (row.key.startsWith("starhold:scrypt-attempt:")) continue;
     const expiresAt =
       row.ttlSec != null && row.ttlSec > 0 ? now + row.ttlSec * 1000 : null;
+    if (row.key.startsWith("starhold:account:")) {
+      planned.push({
+        key: row.key,
+        value: importedAccountValue(row.value),
+        expiresAt,
+      });
+      continue;
+    }
     if (isUniverseDocumentKey(row.key)) {
       const universe = asUniverse(row.value);
       if (!universe) continue;
@@ -140,6 +197,7 @@ export function formatTransferCounts(counts: TransferCounts): string {
     `alliances ${counts.alliances}`,
     `scrypt ${counts.scryptHashes}`,
     `pbkdf2 ${counts.pbkdf2Hashes}`,
+    `needsPasswordReset ${counts.needsPasswordReset}`,
     `sessions ${counts.sessions}`,
     `d1Rows ${counts.d1Rows}`,
   ].join("\n");

@@ -14,6 +14,8 @@ export {
   doSignup,
   doLogin,
   doClaimAnonymous,
+  doClaimPassword,
+  doRequestClaimCode,
   resumeFromCookie,
 } from "./main-actions-session.js";
 export {

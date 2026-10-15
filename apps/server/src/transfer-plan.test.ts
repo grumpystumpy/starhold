@@ -4,7 +4,7 @@ import { createUniverse, joinUniverse } from "@starhold/game";
 import { planImportRows, summarizeExport } from "./transfer-plan.js";
 
 describe("KV to D1 transfer plan", () => {
-  it("counts a universe and splits it into player rows without dropping hashes", () => {
+  it("counts a universe, drops imported password hashes, and skips sessions", () => {
     const universe = createUniverse("Transfer", 1, 1, { lazySeed: true });
     const { player } = joinUniverse(universe, "Ada");
     universe.planets[player.homePlanetId]!.resources.metal = 1234;
@@ -52,6 +52,7 @@ describe("KV to D1 transfer plan", () => {
           id: "acct_1",
           email: "ada@starhold.test",
           passwordHash: "scrypt$salt$hash",
+          passwordHashPbkdf2: "pbkdf2$10000$salt$hash",
           playerId: player.id,
         },
         ttlSec: null,
@@ -62,22 +63,36 @@ describe("KV to D1 transfer plan", () => {
         ttlSec: null,
       },
       {
+        key: "starhold:account:acct_2",
+        value: {
+          id: "acct_2",
+          email: "bee@starhold.test",
+          passwordHash: "pbkdf2$10000$salt$hash",
+        },
+        ttlSec: null,
+      },
+      {
         key: "starhold:session:abc",
         value: { id: "abc", accountId: "acct_1" },
         ttlSec: 100,
       },
       { key: "starhold:universe:v5:lock", value: "1", ttlSec: 8 },
     ];
-    const counts = summarizeExport(rows);
-    assert.equal(counts.accounts, 1);
+    const counts = summarizeExport(rows, { claimCodeRows: true });
+    assert.equal(counts.accounts, 2);
     assert.equal(counts.players, 1);
     assert.equal(counts.planets, Object.keys(universe.planets).length);
     assert.equal(counts.fleets, 1);
     assert.equal(counts.messages, 1);
     assert.equal(counts.alliances, 1);
     assert.equal(counts.scryptHashes, 1);
-    assert.equal(counts.pbkdf2Hashes, 0);
+    assert.equal(counts.pbkdf2Hashes, 2);
+    assert.equal(counts.needsPasswordReset, 2);
     assert.equal(counts.sessions, 1);
+    assert.equal(
+      counts.d1Rows,
+      planImportRows(rows, 0).length + counts.needsPasswordReset,
+    );
 
     const planned = planImportRows(rows, 1_000);
     const again = planImportRows(rows, 1_000);
@@ -96,15 +111,23 @@ describe("KV to D1 transfer plan", () => {
     assert.equal(slice.player.eventLog.length, 1);
     assert.equal(Object.keys(slice.fleets).length, 1);
     const account = planned.find((row) => row.key === "starhold:account:acct_1");
-    assert.equal(
-      (account!.value as { passwordHash: string }).passwordHash,
-      "scrypt$salt$hash",
-    );
+    const imported = account!.value as {
+      passwordHash: string;
+      needsPasswordReset?: boolean;
+      passwordHashPbkdf2?: string;
+      playerId: string;
+    };
+    assert.equal(imported.passwordHash, "");
+    assert.equal(imported.needsPasswordReset, true);
+    assert.equal(imported.passwordHashPbkdf2, undefined);
+    assert.equal(imported.playerId, player.id);
     assert.equal(
       planned.some((row) => row.key.endsWith(":lock")),
       false,
     );
-    const session = planned.find((row) => row.key === "starhold:session:abc");
-    assert.equal(session?.expiresAt, 1_000 + 100_000);
+    assert.equal(
+      planned.some((row) => row.key.startsWith("starhold:session:")),
+      false,
+    );
   });
 });

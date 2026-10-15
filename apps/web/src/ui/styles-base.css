@@ -119,6 +119,18 @@ body {
   flex-wrap: wrap;
 }
 
+.claim-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.claim-fields input {
+  width: 100%;
+  min-width: 0;
+}
+
 input[type="text"],
 input[type="number"],
 input[type="email"],

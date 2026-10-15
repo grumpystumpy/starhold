@@ -27,14 +27,6 @@ database_name = "starhold"
 database_id = "d3d8d52e-9272-40cd-b8ae-3012cef6c8ca"
 migrations_dir = "migrations"
 
-[[durable_objects.bindings]]
-name = "SCRYPT"
-class_name = "ScryptMigrate"
-
-[[migrations]]
-tag = "v1"
-new_classes = ["ScryptMigrate"]
-
 [vars]
 STARHOLD_RUNTIME = "workers"
 STARHOLD_PASSWORD_KDF = "pbkdf2"

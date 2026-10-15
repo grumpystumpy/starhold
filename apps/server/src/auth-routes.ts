@@ -9,18 +9,26 @@ import {
 import {
   authenticateEmailPassword,
   checkAuthRateLimit,
+  claimNewPassword,
   clientIp,
   createAccountWithPassword,
   createSession,
   deleteSession,
   getAccountById,
   getSession,
-  isScryptAttempt,
   normalizeEmail,
+  preparePasswordClaim,
+  requestClaimCode,
   requireSessionSecret,
   sessionSecretConfigured,
   setAccountPlayerId,
+  type AccountRecord,
 } from "./accounts.js";
+import {
+  CLAIM_MAIL_MESSAGE,
+  CLAIM_NO_MAIL_MESSAGE,
+  claimMailConfigured,
+} from "./claim-code.js";
 import {
   clearSessionCookie,
   readSessionId,
@@ -81,6 +89,42 @@ function publicAccount(account: {
     email: account.email,
     playerId: account.playerId,
   };
+}
+
+/** Session cookie plus the linked commander view, shared by login and claim. */
+async function startSession(c: Context, account: AccountRecord) {
+  const session = await createSession(account.id);
+  setSessionCookie(c, session.id);
+
+  let view: ReturnType<typeof playerView> | null = null;
+  let linkedPlayerId: string | null = null;
+  try {
+    await withUniverse((universe) => {
+      ensureUniverseShape(universe);
+      if (!account.playerId) {
+        const linked = playerForAccount(universe, account.id);
+        if (linked) {
+          account.playerId = linked.id;
+          linkedPlayerId = linked.id;
+        }
+      }
+      if (account.playerId && universe.players[account.playerId]) {
+        view = playerView(universe, account.playerId);
+      }
+    });
+  } catch {
+    /* ignore — client can refresh */
+  }
+  if (linkedPlayerId) {
+    await setAccountPlayerId(account.id, linkedPlayerId);
+  }
+
+  return c.json({
+    ok: true,
+    account: publicAccount(account),
+    view,
+    auth: { sessionSecretConfigured: sessionSecretConfigured() },
+  });
 }
 
 /** Mount email+password + session routes on the shared Hono app. */
@@ -149,79 +193,94 @@ export function mountAuthRoutes(app: Hono): void {
     const body = (await c.req.json().catch(() => ({}))) as {
       email?: string;
       password?: string;
-      attemptId?: string;
     };
     const email = normalizeEmail(body.email ?? "");
     const password = body.password ?? "";
-    const continuing =
-      typeof body.attemptId === "string" &&
-      body.attemptId.length > 0 &&
-      (await isScryptAttempt(body.attemptId));
-    if (!continuing) {
-      const rate = await checkAuthRateLimit(
-        "login",
-        email,
-        clientIp(c.req.raw.headers),
+    const rate = await checkAuthRateLimit(
+      "login",
+      email,
+      clientIp(c.req.raw.headers),
+    );
+    if (rate.limited) {
+      return c.json(
+        {
+          error: `Too many login attempts. Try again in ${rate.retryAfterSec}s.`,
+        },
+        429,
       );
-      if (rate.limited) {
-        return c.json(
-          {
-            error: `Too many login attempts. Try again in ${rate.retryAfterSec}s.`,
-          },
-          429,
-        );
-      }
     }
 
-    const auth = await authenticateEmailPassword(
-      email,
-      password,
-      Date.now(),
-      body.attemptId,
-    );
+    const auth = await authenticateEmailPassword(email, password, Date.now());
     if (!auth.ok) {
-      if ("pending" in auth && auth.pending) {
-        return c.json({ pending: true, attemptId: auth.attemptId }, 202);
-      }
       return c.json({ error: auth.error }, auth.status);
     }
+    return startSession(c, auth.account);
+  });
 
-    const session = await createSession(auth.account.id);
-    setSessionCookie(c, session.id);
+  app.post("/api/auth/claim-code", async (c) => {
+    const secretErr = requireSessionSecret();
+    if (secretErr) return c.json({ error: secretErr }, 503);
 
-    // One universe read: link a stale account index and build the view together.
-    let view: ReturnType<typeof playerView> | null = null;
-    let linkedPlayerId: string | null = null;
-    try {
-      await withUniverse((universe) => {
-        ensureUniverseShape(universe);
-        if (!auth.account.playerId) {
-          const linked = playerForAccount(universe, auth.account.id);
-          if (linked) {
-            auth.account.playerId = linked.id;
-            linkedPlayerId = linked.id;
-          }
-        }
-        if (
-          auth.account.playerId &&
-          universe.players[auth.account.playerId]
-        ) {
-          view = playerView(universe, auth.account.playerId);
-        }
-      });
-    } catch {
-      /* ignore — client can refresh */
+    const body = (await c.req.json().catch(() => ({}))) as { email?: string };
+    const email = normalizeEmail(body.email ?? "");
+    const rate = await checkAuthRateLimit(
+      "claim",
+      email || "invalid",
+      clientIp(c.req.raw.headers),
+    );
+    if (rate.limited) {
+      return c.json(
+        { error: `Too many attempts. Try again in ${rate.retryAfterSec}s.` },
+        429,
+      );
     }
-    if (linkedPlayerId) {
-      await setAccountPlayerId(auth.account.id, linkedPlayerId);
+    if (!claimMailConfigured()) {
+      return c.json({ ok: true, message: CLAIM_NO_MAIL_MESSAGE });
     }
+    await requestClaimCode(email);
+    return c.json({ ok: true, message: CLAIM_MAIL_MESSAGE });
+  });
 
-    return c.json({
-      ok: true,
-      account: publicAccount(auth.account),
-      view,
-      auth: { sessionSecretConfigured: sessionSecretConfigured() },
-    });
+  app.post("/api/auth/claim-password", async (c) => {
+    const secretErr = requireSessionSecret();
+    if (secretErr) return c.json({ error: secretErr }, 503);
+
+    const body = (await c.req.json().catch(() => ({}))) as {
+      email?: string;
+      code?: string;
+      password?: string;
+    };
+    const email = normalizeEmail(body.email ?? "");
+    const rate = await checkAuthRateLimit(
+      "claim",
+      email || "invalid",
+      clientIp(c.req.raw.headers),
+    );
+    if (rate.limited) {
+      return c.json(
+        { error: `Too many attempts. Try again in ${rate.retryAfterSec}s.` },
+        429,
+      );
+    }
+    const claimed = await claimNewPassword(
+      email,
+      body.code ?? "",
+      body.password ?? "",
+    );
+    if (!claimed.ok) {
+      return c.json({ error: claimed.error }, claimed.status);
+    }
+    return startSession(c, claimed.account);
+  });
+
+  app.post("/api/e2e/prepare-password-claim", async (c) => {
+    if (process.env.STARHOLD_E2E !== "1") {
+      return c.json({ error: "Not found" }, 404);
+    }
+    const body = (await c.req.json().catch(() => ({}))) as { email?: string };
+    const prepared = await preparePasswordClaim(body.email ?? "");
+    if (!prepared.ok) return c.json({ error: prepared.error }, 404);
+    return c.json({ ok: true, code: prepared.code });
   });
 
   app.get("/api/auth/me", async (c) => {

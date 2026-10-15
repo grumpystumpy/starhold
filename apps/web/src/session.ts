@@ -33,6 +33,9 @@ export const session = {
   joinDraft: "",
   emailDraft: "",
   passwordDraft: "",
+  claimEmailDraft: "",
+  claimCodeDraft: "",
+  claimPasswordDraft: "",
   /** Cookie session account (null = guest / anonymous). */
   account: null as AuthAccount | null,
   /** Pending anonymous playerId offer for claim UI. */

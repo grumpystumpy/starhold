@@ -20,3 +20,4 @@ playtest-reports/
 .dev.vars
 kv-export.json
 kv-import.sql
+claim-codes.txt

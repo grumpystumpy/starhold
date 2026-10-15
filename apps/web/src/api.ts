@@ -126,24 +126,41 @@ export async function loginAccount(
   view: PlayerView | null;
   error?: string;
 }> {
-  let attemptId: string | undefined;
-  for (let step = 0; step < 40; step++) {
-    const res = await credFetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, attemptId }),
-    });
-    if (res.status === 202) {
-      const body = (await res.json()) as { attemptId?: string };
-      if (!body.attemptId) {
-        throw new Error("Login did not finish.");
-      }
-      attemptId = body.attemptId;
-      continue;
-    }
-    return parse(res);
-  }
-  throw new Error("Login did not finish.");
+  const res = await credFetch("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  return parse(res);
+}
+
+export async function requestClaimCode(
+  email: string,
+): Promise<{ ok: boolean; message: string }> {
+  const res = await credFetch("/api/auth/claim-code", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  return parse(res);
+}
+
+export async function claimPassword(
+  email: string,
+  code: string,
+  password: string,
+): Promise<{
+  ok: boolean;
+  account: AuthAccount;
+  view: PlayerView | null;
+  error?: string;
+}> {
+  const res = await credFetch("/api/auth/claim-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, code, password }),
+  });
+  return parse(res);
 }
 
 export async function claimAnonymousPlayer(

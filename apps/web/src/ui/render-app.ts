@@ -30,6 +30,9 @@ export function renderApp(
     joinDraft: string;
     emailDraft?: string;
     passwordDraft?: string;
+    claimEmailDraft?: string;
+    claimCodeDraft?: string;
+    claimPasswordDraft?: string;
     accountEmail?: string | null;
     claimablePlayerId?: string | null;
     activePage: NavPage;

@@ -6,8 +6,10 @@ import {
   fetchState,
   invalidateCachedState,
   joinGame,
+  claimPassword,
   loginAccount,
   relocateMiniFortress,
+  requestClaimCode,
   renamePlanet,
   selectPlanet,
   setAfterPlayerMutation,
@@ -380,6 +382,75 @@ export async function doLogin(
     setFlash(
       "error",
       err instanceof Error ? err.message : "Log in failed.",
+    );
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doRequestClaimCode(email: string): Promise<void> {
+  const trimmed = email.trim();
+  session.claimEmailDraft = email;
+  if (!trimmed) {
+    setFlash("error", "Email is required.");
+    schedulePaint();
+    return;
+  }
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    const res = await requestClaimCode(trimmed);
+    setFlash("notice", res.message);
+  } catch (err) {
+    setFlash(
+      "error",
+      err instanceof Error ? err.message : "Could not send a claim code.",
+    );
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doClaimPassword(
+  email: string,
+  code: string,
+  password: string,
+): Promise<void> {
+  session.claimEmailDraft = email;
+  session.claimCodeDraft = code;
+  session.claimPasswordDraft = password;
+  const trimmed = email.trim();
+  if (!trimmed || !code.trim()) {
+    setFlash("error", "Email and claim code are required.");
+    schedulePaint();
+    return;
+  }
+  if (!password || password.length < 8) {
+    setFlash("error", "Password must be at least 8 characters.");
+    schedulePaint();
+    return;
+  }
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    const res = await claimPassword(trimmed, code.trim(), password);
+    session.claimCodeDraft = "";
+    session.claimPasswordDraft = "";
+    await applyAuthSuccess({
+      account: res.account,
+      view: res.view,
+      notice: res.view
+        ? `Password set. Signed in as ${res.view.player.name}.`
+        : "Password set. Enter a commander name to enter.",
+    });
+  } catch (err) {
+    setFlash(
+      "error",
+      err instanceof Error ? err.message : "Could not set the password.",
     );
   } finally {
     session.busy = false;

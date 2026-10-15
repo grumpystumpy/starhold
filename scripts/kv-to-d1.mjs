@@ -9,10 +9,19 @@
  *
  * Export reads KV_REST_API_URL and KV_REST_API_TOKEN (SCAN/GET/TTL only).
  * UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are accepted as aliases.
- * Do not commit the JSON or SQL. Do not run this against production until
- * the cut-over checklist in docs/cloudflare.md says to.
+ * Set SESSION_SECRET to the new Workers secret before a real import so
+ * claim-code hashes match the Worker. Do not commit the JSON, SQL, or
+ * claim-codes.txt. Do not run this against production until the cut-over
+ * checklist in docs/cloudflare.md says to.
  */
 import { readFile, writeFile } from "node:fs/promises";
+import { sessionSecret, sessionSecretConfigured } from "../apps/server/src/accounts.ts";
+import {
+  buildImportClaimCodes,
+  claimCodeKey,
+  claimMailConfigured,
+  formatClaimCodeFile,
+} from "../apps/server/src/claim-code.ts";
 import { chunkKey, splitChunkText } from "../apps/server/src/d1-codec.ts";
 import {
   formatTransferCounts,
@@ -94,8 +103,19 @@ async function readKv() {
   return rows;
 }
 
+function writeClaimCodeFile() {
+  return !claimMailConfigured();
+}
+
 function printCounts(rows) {
-  console.log(formatTransferCounts(summarizeExport(rows)));
+  console.log(
+    formatTransferCounts(
+      summarizeExport(rows, { claimCodeRows: writeClaimCodeFile() }),
+    ),
+  );
+  console.log(
+    "Sessions are counted above and are not copied. Imported password hashes are dropped.",
+  );
 }
 
 async function exportKv(outPath, dryRun) {
@@ -110,11 +130,39 @@ async function exportKv(outPath, dryRun) {
   console.log(`Wrote ${rows.length} keys to ${outPath}`);
 }
 
-function sqlForRows(rows) {
-  const planned = planImportRows(rows, Date.now());
+function attachClaimCodes(planned, now) {
+  if (!writeClaimCodeFile()) {
+    return { planned, file: null, count: 0 };
+  }
+  if (!sessionSecretConfigured()) {
+    throw new Error(
+      "Set SESSION_SECRET to the new Workers secret before import. Claim codes are hashed with it. Generate one with: openssl rand -base64 32",
+    );
+  }
+  const accounts = [];
+  for (const row of planned) {
+    if (!row.key.startsWith("starhold:account:")) continue;
+    const account = row.value;
+    if (!account?.needsPasswordReset || !account.id || !account.email) continue;
+    accounts.push({ id: account.id, email: account.email });
+  }
+  const codes = buildImportClaimCodes(accounts, sessionSecret(), now);
+  for (const code of codes) {
+    planned.push({
+      key: claimCodeKey(code.accountId),
+      value: code.record,
+      expiresAt: code.expiresAt,
+    });
+  }
+  return { planned, file: formatClaimCodeFile(codes, now), count: codes.length };
+}
+
+function sqlForPlanned(planned) {
   const lines = [
     "BEGIN TRANSACTION;",
     "DELETE FROM kv WHERE key GLOB 'starhold:universe:*';",
+    "DELETE FROM kv WHERE key GLOB 'starhold:session:*';",
+    "DELETE FROM kv WHERE key GLOB 'starhold:scrypt-attempt:*';",
   ];
   for (const row of planned) {
     const text = JSON.stringify(row.value);
@@ -129,7 +177,7 @@ function sqlForRows(rows) {
     });
   }
   lines.push("COMMIT;");
-  return { planned, sql: lines.join("\n") };
+  return lines.join("\n");
 }
 
 async function importSql(inPath, outPath, dryRun) {
@@ -138,10 +186,25 @@ async function importSql(inPath, outPath, dryRun) {
   printCounts(rows);
   if (dryRun) {
     console.log("Dry run: counted the export file, wrote no SQL and did not touch D1.");
+    if (writeClaimCodeFile()) {
+      console.log("A real import would write claim-codes.txt. This dry run does not.");
+    } else {
+      console.log("CLAIM_MAIL_URL is set. Claim codes are emailed on request. No code file.");
+    }
     return;
   }
-  const { sql } = sqlForRows(rows);
+  const now = Date.now();
+  const attached = attachClaimCodes(planImportRows(rows, now), now);
+  const sql = sqlForPlanned(attached.planned);
   await writeFile(outPath, sql);
+  if (attached.file) {
+    await writeFile("claim-codes.txt", attached.file, { mode: 0o600 });
+    console.log(
+      `Wrote ${attached.count} claim codes to claim-codes.txt. Hand them out privately. Do not commit this file. Each code expires in 30 minutes.`,
+    );
+  } else {
+    console.log("CLAIM_MAIL_URL is set. No claim-code file written.");
+  }
   console.log(
     `Wrote ${outPath}. Review it, then apply with: npx wrangler d1 execute starhold --remote --file=${outPath}`,
   );
