@@ -49,6 +49,7 @@ export interface InboxItem {
 }
 
 let inboxFilter: InboxFilter = "all";
+let confirmDelete: InboxFilter | null = null;
 
 export function setInboxFilter(next: InboxFilter): void {
   inboxFilter = next;
@@ -56,6 +57,14 @@ export function setInboxFilter(next: InboxFilter): void {
 
 export function currentInboxFilter(): InboxFilter {
   return inboxFilter;
+}
+
+export function setConfirmDelete(next: InboxFilter | null): void {
+  confirmDelete = next;
+}
+
+export function currentConfirmDelete(): InboxFilter | null {
+  return confirmDelete;
 }
 
 function fmtWhen(at: number): string {
@@ -270,6 +279,26 @@ function filterButton(id: InboxFilter, label: string, active: InboxFilter): stri
   return `<button type="button" class="ghost inbox-filter${pressed ? " active" : ""}" data-inbox-filter="${id}" data-testid="inbox-filter-${id}" aria-pressed="${pressed ? "true" : "false"}">${label}</button>`;
 }
 
+function deleteControl(
+  id: InboxFilter,
+  count: number,
+  busy: boolean,
+): string {
+  if (confirmDelete === id) {
+    const noun =
+      id === "all"
+        ? "every message"
+        : id === "combat"
+          ? "every combat message"
+          : id === "spy"
+            ? "every spy message"
+            : "every alert";
+    return `<span class="inbox-delete-confirm" data-testid="delete-confirm-${id}">Delete ${noun}? <button type="button" data-delete-messages-confirm="${id}" data-testid="delete-all-${id}-confirm" ${busy ? "disabled" : ""}>Confirm</button> <button type="button" class="ghost" data-delete-messages-cancel data-testid="delete-all-cancel" ${busy ? "disabled" : ""}>Cancel</button></span>`;
+  }
+  const disabled = busy || count < 1;
+  return `<button type="button" class="ghost" data-delete-messages="${id}" data-testid="delete-all-${id}" ${disabled ? "disabled" : ""}>Delete all</button>`;
+}
+
 export function messagesPageHtml(
   view: PlayerView,
   opts?: { busy?: boolean; filter?: InboxFilter },
@@ -340,6 +369,12 @@ export function messagesPageHtml(
         ${filterButton("spy", "Spy", filter)}
         ${filterButton("alerts", "Alerts", filter)}
         ${markAll}
+      </div>
+      <div class="inbox-filters" aria-label="Delete messages">
+        ${deleteControl("all", items.length, busy)}
+        ${deleteControl("combat", combatCount, busy)}
+        ${deleteControl("spy", spyCount, busy)}
+        ${deleteControl("alerts", alertCount, busy)}
       </div>
       ${list}
     </section>`;

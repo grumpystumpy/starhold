@@ -46,6 +46,7 @@ import {
   doLeaveAlliance,
   doPostAllianceChat,
   doProposeJointStrike,
+  doRaiseOfficer,
   doRefresh,
   doRenamePlanet,
   doRelocateFortress,
@@ -56,6 +57,7 @@ import {
   doScanSystem,
   doClaimSeason,
   doSelectPlanet,
+  doDeleteMessages,
   doMarkEventsRead,
   doSetAllianceJoinMode,
   doSetAllianceRole,
@@ -67,7 +69,11 @@ import {
   doUnlockSkill,
   doUpgrade,
 } from "./main-actions";
-import { isInboxFilter, setInboxFilter } from "./ui/render-messages";
+import {
+  isInboxFilter,
+  setConfirmDelete,
+  setInboxFilter,
+} from "./ui/render-messages";
 import {
   setBattleReplayRound,
   toggleBattleReplay,
@@ -374,6 +380,49 @@ export function bindClickHandlers(): void {
         return;
       }
 
+      const raiseOfficerBtn = closestActionEl(target, "[data-raise-officer]");
+      if (raiseOfficerBtn) {
+        ev.preventDefault();
+        const officerId = raiseOfficerBtn.getAttribute(
+          "data-raise-officer",
+        ) as OfficerId | null;
+        if (officerId) void doRaiseOfficer(officerId);
+        return;
+      }
+
+      const deleteMessages = closestActionEl(target, "[data-delete-messages]");
+      if (deleteMessages) {
+        ev.preventDefault();
+        const category = deleteMessages.getAttribute("data-delete-messages");
+        if (isInboxFilter(category)) {
+          setConfirmDelete(category);
+          schedulePaint();
+        }
+        return;
+      }
+
+      const confirmDelete = closestActionEl(
+        target,
+        "[data-delete-messages-confirm]",
+      );
+      if (confirmDelete) {
+        ev.preventDefault();
+        const category = confirmDelete.getAttribute(
+          "data-delete-messages-confirm",
+        );
+        setConfirmDelete(null);
+        if (isInboxFilter(category)) void doDeleteMessages(category);
+        else schedulePaint();
+        return;
+      }
+
+      if (closestActionEl(target, "[data-delete-messages-cancel]")) {
+        ev.preventDefault();
+        setConfirmDelete(null);
+        schedulePaint();
+        return;
+      }
+
       const chooseClassBtn = closestActionEl(target, "[data-choose-class]");
       if (chooseClassBtn) {
         ev.preventDefault();
@@ -671,6 +720,13 @@ export function bindClickHandlers(): void {
 
   root.addEventListener("input", (ev) => {
     const el = ev.target;
+    if (
+      el instanceof HTMLInputElement ||
+      el instanceof HTMLTextAreaElement ||
+      el instanceof HTMLSelectElement
+    ) {
+      el.dataset.userEdited = "1";
+    }
     if (el instanceof HTMLInputElement && el.id === "commander") {
       session.joinDraft = el.value;
     }

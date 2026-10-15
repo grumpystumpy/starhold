@@ -694,7 +694,8 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   metalStorage: {
     id: "metalStorage",
     name: "Metal Vault",
-    description: "Raises metal storage cap.",
+    description:
+      "Raises the metal storage cap. Capacity starts at 30,000 and doubles with each level.",
     baseCost: { metal: 1000, crystal: 0, deuterium: 0 },
     costGrowth: 2,
     baseBuildSeconds: 6,
@@ -702,7 +703,8 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   crystalStorage: {
     id: "crystalStorage",
     name: "Crystal Vault",
-    description: "Raises crystal storage cap.",
+    description:
+      "Raises the crystal storage cap. Capacity starts at 30,000 and doubles with each level.",
     baseCost: { metal: 1000, crystal: 500, deuterium: 0 },
     costGrowth: 2,
     baseBuildSeconds: 6,
@@ -710,7 +712,8 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   deutTank: {
     id: "deutTank",
     name: "Deut Tank",
-    description: "Raises deuterium storage cap.",
+    description:
+      "Raises the deuterium storage cap. Capacity starts at 30,000 and doubles with each level.",
     baseCost: { metal: 1000, crystal: 1000, deuterium: 0 },
     costGrowth: 2,
     baseBuildSeconds: 6,
@@ -1030,6 +1033,22 @@ export const MINI_RELIC_PIRATE_WEIGHT = 4;
 export const RIFT_SIPHON_MINE_PER = 0.15;
 /** Echo Vault: +25% storage caps per level. */
 export const ECHO_VAULT_STORAGE_PER = 0.25;
+/**
+ * Vault capacity before the level doubling: `STORAGE_CAP_BASE * 2^level`.
+ * `STORAGE_CAP_MULT` is 3 — a 200% increase, so every level holds triple
+ * the previous formula.
+ */
+export const STORAGE_CAP_BASE = 10_000;
+export const STORAGE_CAP_MULT = 3;
+/** Skills and officers each train from level 1 through this cap. */
+export const SKILL_MAX_LEVEL = 10;
+export const OFFICER_MAX_LEVEL = 10;
+/**
+ * Flat bonuses (fleet slots, espionage detail, queue slots) stay at the
+ * level-1 amount for this many levels, then step up by the same amount.
+ * Level 1 matches the old single unlock. Level 10 is four steps.
+ */
+export const FLAT_BONUS_LEVELS_PER_STEP = 3;
 /** Anomaly Forge: −8% ship build time per level. */
 export const ANOMALY_FORGE_SHIP_TIME_PER = 0.08;
 

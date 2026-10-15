@@ -331,23 +331,24 @@ function highscorePage(view: PlayerView): string {
   return `
     <section class="panel" data-testid="highscores">
       <h2>Highscores</h2>
-      <p class="hint">Empire points — buildings, fleets, defenses, and research (once). Level and lifetime XP shown.</p>
+      <p class="hint">One row per commander — their home planet only. Points still count the whole empire.</p>
       <ol class="highscores" data-testid="highscores-list">
         ${(view.highscores ?? [])
           .map(
             (h) =>
-              `<li data-testid="highscore-${h.rank}" data-player-id="${escapeAttr(h.playerId)}"><span class="row-with-thumb"><span class="hs-rank">#${fmt(h.rank)}</span>${planetDiscHtml({ src: h.artThumbUrl, artId: h.artId, size: 32 })}${h.allianceTag ? `[${escapeHtml(h.allianceTag)}] ` : ""}${escapeHtml(h.name)}${h.playerId === view.player.id ? " (you)" : ""}</span><span>${fmt(h.points)} pts · Lv ${fmt(h.level ?? 1)} · ${fmt(h.xpTotal ?? 0)} XP · ${fmtCoords(h.coords)} · ${fmt(h.planetCount)} world${h.planetCount === 1 ? "" : "s"}</span></li>`,
+              `<li data-testid="highscore-${h.rank}" data-player-id="${escapeAttr(h.playerId)}" data-home-planet="${escapeAttr(h.homePlanetId)}"><span class="row-with-thumb"><span class="hs-rank">#${fmt(h.rank)}</span>${planetDiscHtml({ src: h.artThumbUrl, artId: h.artId, size: 32 })}${h.allianceTag ? `[${escapeHtml(h.allianceTag)}] ` : ""}${escapeHtml(h.name)}${h.playerId === view.player.id ? " (you)" : ""}</span><span>Home ${escapeHtml(h.planetName || "world")} · ${fmtCoords(h.coords)} · ${fmt(h.points)} pts · Lv ${fmt(h.level ?? 1)} · ${fmt(h.xpTotal ?? 0)} XP</span></li>`,
           )
           .join("")}
       </ol>
     </section>
     <section class="panel">
       <h2>Universe roster</h2>
+      <p class="hint">Home planets only.</p>
       <ul class="roster" data-testid="roster">
         ${view.roster
           .map(
             (r) =>
-              `<li><span class="row-with-thumb">${planetDiscHtml({ src: r.artThumbUrl, artId: r.artId, size: 32 })}${r.allianceTag ? `[${escapeHtml(r.allianceTag)}] ` : ""}${escapeHtml(r.name)}${r.id === view.player.id ? " (you)" : ""}</span><span>${fmtCoords(r.coords)} · ${fmt(r.pointsHint)} pts</span></li>`,
+              `<li data-home-planet="${escapeAttr(r.planetId)}"><span class="row-with-thumb">${planetDiscHtml({ src: r.artThumbUrl, artId: r.artId, size: 32 })}${r.allianceTag ? `[${escapeHtml(r.allianceTag)}] ` : ""}${escapeHtml(r.name)}${r.id === view.player.id ? " (you)" : ""}</span><span>Home ${escapeHtml(r.planetName || "world")} · ${fmtCoords(r.coords)} · ${fmt(r.pointsHint)} pts</span></li>`,
           )
           .join("")}
       </ul>

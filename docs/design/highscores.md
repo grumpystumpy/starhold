@@ -40,7 +40,7 @@ Galaxy slot `pointsHint` stays **planet-local** (no research) so multi-colony sy
 
 ## UI
 
-- Panel **Highscores** (`data-testid="highscores"`): ranked list `#rank · name · pts · home coords · N worlds`
+- Panel **Highscores** (`data-testid="highscores"`): one row per commander, showing that commander's **home planet** name and coords. Colonies and moons are not separate rows. Points stay empire-wide.
 - Mark the viewing player `(you)`
 - Universe roster panel can remain as a compact alias or fold into highscores — v1: highscores is the ranked board; roster list shows the same empire `pointsHint`
 

@@ -84,6 +84,8 @@ export function highscoresBoard(universe: UniverseState): HighscoreEntry[] {
       points: empirePoints(universe, p),
       coords: home?.coords ?? { galaxy: 0, system: 0, slot: 0 },
       planetCount: ownedPlanetCount(universe, p.id),
+      planetName: home?.name ?? "",
+      homePlanetId: p.homePlanetId,
       level: p.level ?? 1,
       xpTotal: p.xpTotal ?? 0,
       allianceTag: allianceTagForPlayer(universe, p),
@@ -110,6 +112,7 @@ export function publicRoster(universe: UniverseState): PublicPlayer[] {
       coords: planet?.coords ?? { galaxy: 0, system: 0, slot: 0 },
       pointsHint: empirePoints(universe, p),
       planetId: p.homePlanetId,
+      planetName: planet?.name ?? "",
       allianceTag: allianceTagForPlayer(universe, p),
       ...artFields(universe, planet, artCtx),
     };
@@ -292,10 +295,12 @@ export function playerView(
     .filter((f) => f.ownerPlayerId === playerId)
     .sort((a, b) => a.arrivesAt - b.arrivesAt);
 
+  const hiddenReports = new Set(player.hiddenReportIds ?? []);
   const reports = Object.values(universe.reports)
     .filter(
       (r) =>
-        r.attackerPlayerId === playerId || r.defenderPlayerId === playerId,
+        (r.attackerPlayerId === playerId || r.defenderPlayerId === playerId) &&
+        !hiddenReports.has(r.id),
     )
     .sort((a, b) => b.at - a.at)
     .slice(0, 12);
@@ -403,6 +408,8 @@ export function playerView(
     starshards: player.starshards ?? 0,
     officers: player.officers ?? [],
     skillsUnlocked: player.skillsUnlocked ?? [],
+    skillLevels: { ...(player.skillLevels ?? {}) },
+    officerLevels: { ...(player.officerLevels ?? {}) },
     officerCatalog: OFFICER_ORDER.map((id) => OFFICERS[id]),
     skillCatalog: SKILL_ORDER.map((id) => SKILLS[id]),
     dailyLoginAvailable: canClaimDailyLogin(player, now),

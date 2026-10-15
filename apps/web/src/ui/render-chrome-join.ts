@@ -2,6 +2,7 @@ import {
   BUILDINGS,
   buildingUpgradeSeconds,
   previewBuildingUpgrade,
+  storageCap,
   type BuildingId,
   type PlayerView,
 } from "@starhold/game";
@@ -186,13 +187,21 @@ export function resBlock(
   `;
 }
 
+function isRequirementLock(error: string): boolean {
+  return (
+    /needs /i.test(error) ||
+    error.includes("cannot be built") ||
+    error.includes("can only be built")
+  );
+}
+
 function upgradeButtonLabel(error: string | null): string {
   if (!error) return "Upgrade";
+  if (isRequirementLock(error)) return "Locked";
   if (error.startsWith("Not enough")) return "Can't afford";
   if (error.includes("queue is full")) return "Queue full";
   if (error.includes("fields")) return "No fields";
   if (error.includes("maxed")) return "Maxed";
-  if (error.includes("needs") || error.includes("Needs")) return "Needs more";
   return "Unavailable";
 }
 
@@ -213,15 +222,19 @@ export function buildingRow(
   // so a second tap surfaces "Still applying…" instead of a silent no-op.
   const blocked = preview.ok ? null : preview.error;
   const label = upgradeButtonLabel(blocked);
+  const storageLine =
+    id === "metalStorage" || id === "crystalStorage" || id === "deutTank"
+      ? `Capacity ${fmt(storageCap(level))} now, ${fmt(storageCap(preview.current + 1))} at the next level. Each level doubles the cap.`
+      : null;
   const tip = costTooltip({
-    action: `Upgrade ${def.name} → L${preview.current + 1}`,
+    action: `Upgrade ${def.name} → L${fmt(preview.current + 1)}`,
     cost,
     timeSecs: secs,
-    detail: def.description,
+    detail: [def.description, storageLine].filter(Boolean).join(" "),
     requires: [
-      `Current L${level}`,
+      `Current L${fmt(level)}`,
       ...(def.energyUsePerLevel
-        ? [`Energy use +${def.energyUsePerLevel}/level`]
+        ? [`Energy use +${fmt(def.energyUsePerLevel)}/level`]
         : []),
     ],
     blocked,
@@ -232,7 +245,7 @@ export function buildingRow(
       <div>
         <h3>${escapeHtml(def.name)} <span class="meta" data-testid="building-level-${id}">L${fmt(level)}</span> ${tip.html}</h3>
         <p>${escapeHtml(def.description)}</p>
-        <div class="meta">Next: ${fmtCost(cost)} · ${fmtEta(secs)}</div>
+        <div class="meta">Next: ${fmtCost(cost)} · ${fmtEta(secs)}${storageLine ? ` · ${escapeHtml(storageLine)}` : ""}</div>
       </div>
       <div class="actions">
         <button type="button" data-upgrade="${id}" data-building-id="${id}" data-locked="${blocked ? "1" : "0"}" data-testid="upgrade-${id}" ${blocked ? "disabled" : ""} title="${tip.title}">${label}</button>

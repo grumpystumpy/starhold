@@ -15,6 +15,8 @@ import {
   type ShipId,
   abandonOccupation,
   activateOfficer,
+  deletePlayerMessages,
+  isMessageCategory,
   advanceUniverse,
   batchScanSystem,
   cancelQueueItem,
@@ -28,6 +30,8 @@ import {
   discoverMiniPlanet,
   disbandAlliance,
   empirePoints,
+  emptyDefenses,
+  emptyFleetShips,
   ensureUniverseShape,
   graduateNewbieProtection,
   inviteToAlliance,
@@ -42,6 +46,7 @@ import {
   leaveAlliance,
   markEventsRead,
   playerView,
+  pushEventLog,
   queueBuildingUpgrade,
   queueDefenseBuild,
   queueResearch,
@@ -50,6 +55,7 @@ import {
   claimSeasonReward,
   grantSeasonPoints,
   isSeasonBoard,
+  raiseOfficer,
   renamePlanet,
   relocateMovingFortress,
   resolveMiniPlanetChoice,
@@ -665,6 +671,44 @@ export function createApp(): Hono {
     });
   });
 
+  app.post("/api/raise-officer", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      officerId?: OfficerId;
+    };
+    if (!body.playerId || !body.officerId) {
+      return c.json({ error: "playerId and officerId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = raiseOfficer(
+        universe,
+        body.playerId!,
+        body.officerId!,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  app.post("/api/delete-messages", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      category?: string;
+    };
+    if (!body.playerId || !body.category || !isMessageCategory(body.category)) {
+      return c.json({ error: "playerId and category required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = deletePlayerMessages(
+        universe,
+        body.playerId!,
+        body.category as "all" | "combat" | "spy" | "alerts",
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
   app.post("/api/unlock-skill", async (c) => {
     const body = (await c.req.json().catch(() => ({}))) as {
       playerId?: string;
@@ -1189,6 +1233,10 @@ export function createApp(): Hono {
         playerId?: string;
         ships?: Partial<FleetShips>;
         resources?: Partial<Resources>;
+        buildings?: Partial<Record<BuildingId, number>>;
+        starshards?: number;
+        colonySlot?: number;
+        inbox?: boolean;
       };
       if (!body.playerId) {
         return c.json({ error: "playerId required." }, 400);
@@ -1215,6 +1263,106 @@ export function createApp(): Hono {
               planet.resources[key] = Math.floor(n);
             }
           }
+        }
+        if (body.buildings) {
+          for (const [id, n] of Object.entries(body.buildings)) {
+            if (typeof n === "number" && n >= 0) {
+              planet.buildings[id as BuildingId] = Math.floor(n);
+            }
+          }
+        }
+        if (typeof body.starshards === "number" && body.starshards >= 0) {
+          player.starshards = Math.floor(body.starshards);
+        }
+        if (typeof body.colonySlot === "number") {
+          const slot = Math.floor(body.colonySlot);
+          const coords = { ...planet.coords, slot };
+          const taken = Object.values(universe.planets).some(
+            (p) =>
+              p.kind !== "moon" &&
+              p.coords.galaxy === coords.galaxy &&
+              p.coords.system === coords.system &&
+              p.coords.slot === coords.slot,
+          );
+          if (!taken && slot >= 1 && slot <= 15 && slot !== planet.coords.slot) {
+            const id = `e2e_col_${player.id}_${slot}`;
+            const colony = structuredClone(planet);
+            colony.id = id;
+            colony.name = "Far Holding";
+            colony.coords = coords;
+            colony.kind = "planet";
+            colony.parentPlanetId = null;
+            colony.moonId = null;
+            colony.buildQueue = [];
+            colony.shipQueue = [];
+            colony.defenseQueue = [];
+            colony.resources = { metal: 0, crystal: 0, deuterium: 0 };
+            universe.planets[id] = colony;
+            if (!player.planetIds.includes(id)) player.planetIds.push(id);
+          }
+        }
+        if (body.inbox) {
+          const now = Date.now();
+          pushEventLog(player, {
+            kind: "fleetReturn",
+            title: "Fleet returned to Home",
+            body: "A hauler is home.",
+            createdAt: now,
+          });
+          const ships = emptyFleetShips();
+          const defenses = emptyDefenses();
+          const combatId = `e2e_combat_${player.id}`;
+          universe.reports[combatId] = {
+            id: combatId,
+            at: now,
+            missionId: "e2e",
+            attackerPlayerId: player.id,
+            defenderPlayerId: player.id,
+            attackerName: player.name,
+            defenderName: player.name,
+            targetCoords: planet.coords,
+            attackerBefore: ships,
+            attackerAfter: ships,
+            defenderBefore: ships,
+            defenderAfter: ships,
+            defensesBefore: defenses,
+            defensesAfter: defenses,
+            loot: { metal: 0, crystal: 0, deuterium: 0 },
+            debrisCreated: { metal: 0, crystal: 0, deuterium: 0 },
+            outcome: "draw",
+            rounds: 1,
+            summary: "Drill report",
+          };
+          const spyId = `e2e_spy_${player.id}`;
+          universe.spyReports[spyId] = {
+            id: spyId,
+            at: now - 1,
+            missionId: "e2e",
+            spyPlayerId: player.id,
+            targetPlayerId: player.id,
+            targetName: player.name,
+            targetCoords: planet.coords,
+            detail: 1,
+            resources: { metal: 1, crystal: 0, deuterium: 0 },
+            buildings: null,
+            ships: null,
+            defenses: null,
+            research: null,
+            summary: "Practice scan",
+          };
+          if (!universe.expeditionReports) universe.expeditionReports = {};
+          const expId = `e2e_exp_${player.id}`;
+          universe.expeditionReports[expId] = {
+            id: expId,
+            at: now - 2,
+            missionId: "e2e",
+            playerId: player.id,
+            targetCoords: planet.coords,
+            kind: "nothing",
+            cargoGained: { metal: 0, crystal: 0, deuterium: 0 },
+            shipsDelta: {},
+            summary: "Empty expedition",
+          };
         }
         return c.json(playerView(universe, body.playerId!));
       });

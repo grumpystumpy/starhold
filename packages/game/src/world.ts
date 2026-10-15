@@ -199,6 +199,7 @@ export {
   grantStarshards,
   playerBoosts,
   pruneExpiredOfficers,
+  raiseOfficer,
   unlockSkill,
   utcDayKey,
   type PlayerBoosts,
@@ -271,6 +272,16 @@ export {
   recordMiniPlanetSighting,
   unreadEventCount,
 } from "./world-event-log.js";
+export {
+  deletePlayerMessages,
+  isMessageCategory,
+  type MessageCategory,
+} from "./world-inbox.js";
+export {
+  ensureProgressionLevels,
+  officerLevelOf,
+  skillLevelOf,
+} from "./world-progression.js";
 export {
   PLANET_NAME_MAX_LEN,
   PLANET_NAME_MIN_LEN,

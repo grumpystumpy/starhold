@@ -32,6 +32,7 @@ export {
   doClaimDaily,
   doClaimGoal,
   doActivateOfficer,
+  doRaiseOfficer,
   doUnlockSkill,
   doChooseClass,
   doChangeClass,
@@ -53,7 +54,7 @@ export {
   doUpsertAllianceMarker,
   fleetStrikeTarget,
 } from "./main-actions-alliances.js";
-export { doMarkEventsRead } from "./main-actions-events.js";
+export { doDeleteMessages, doMarkEventsRead } from "./main-actions-events.js";
 export {
   doClaimSeason,
   doSetSeasonSkin,

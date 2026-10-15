@@ -1,5 +1,6 @@
 import { OFFICERS } from "./catalog-officers.js";
 import { SKILLS } from "./catalog-skills.js";
+import { scaleEffect } from "./formulas-levels.js";
 import {
   PIRATE_DEFENSE_WIN_STARSHARDS,
   PIRATE_DESTROY_STARSHARDS_BASE,
@@ -10,6 +11,7 @@ import type {
   OfficerState,
   PlayerState,
 } from "./types.js";
+import { officerLevelOf, skillLevelOf } from "./world-progression.js";
 
 /** Aggregated officer + skill multipliers / flat adds for the player. */
 export interface PlayerBoosts {
@@ -75,12 +77,23 @@ export function playerBoosts(
   for (const o of officers) {
     const def = OFFICERS[o.officerId];
     if (!def) continue;
-    for (const effect of def.effects) applyEffect(boosts, effect);
+    const level = Math.max(1, officerLevelOf(player, o.officerId));
+    for (const effect of def.effects) {
+      applyEffect(boosts, scaleEffect(effect, level));
+    }
   }
-  for (const id of player.skillsUnlocked ?? []) {
+  const skillIds = new Set<string>([
+    ...Object.keys(player.skillLevels ?? {}),
+    ...(player.skillsUnlocked ?? []),
+  ]);
+  for (const id of skillIds) {
+    const level = skillLevelOf(player, id);
+    if (level < 1) continue;
     const def = SKILLS[id];
     if (!def) continue;
-    for (const effect of def.effects) applyEffect(boosts, effect);
+    for (const effect of def.effects) {
+      applyEffect(boosts, scaleEffect(effect, level));
+    }
   }
   return boosts;
 }

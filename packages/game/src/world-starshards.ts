@@ -1,6 +1,7 @@
 import { OFFICERS } from "./catalog-officers.js";
 import { SKILLS } from "./catalog-skills.js";
-import { STARSHARDS_DAILY_LOGIN } from "./catalog.js";
+import { OFFICER_MAX_LEVEL, SKILL_MAX_LEVEL, STARSHARDS_DAILY_LOGIN } from "./catalog.js";
+import { levelUpCost } from "./formulas-levels.js";
 import type { OfficerId, UniverseState } from "./types.js";
 import { advanceUniverse } from "./world-arrival.js";
 import { claimGoal, type GoalActionResult } from "./world-goals.js";
@@ -10,6 +11,11 @@ import {
   pruneExpiredOfficers,
   utcDayKey,
 } from "./world-boosts.js";
+import {
+  ensureProgressionLevels,
+  officerLevelOf,
+  skillLevelOf,
+} from "./world-progression.js";
 export type StarshardActionResult =
   | { ok: true; starshardsGranted?: number }
   | { ok: false; error: string };
@@ -95,6 +101,49 @@ export function activateOfficer(
     expiresAt: now + def.durationMs,
   });
   player.officers = others;
+  ensureProgressionLevels(player);
+  if ((player.officerLevels?.[officerId] ?? 0) < 1) {
+    player.officerLevels = { ...(player.officerLevels ?? {}), [officerId]: 1 };
+  }
+  universe.players[player.id] = player;
+  return { ok: true };
+}
+
+function fmtShards(n: number): string {
+  return Math.floor(n).toLocaleString("en-US");
+}
+
+/** Raise a hired officer's permanent level (max 10). Does not extend duty. */
+export function raiseOfficer(
+  universe: UniverseState,
+  playerId: string,
+  officerId: OfficerId,
+  now = Date.now(),
+): StarshardActionResult {
+  const player = universe.players[playerId];
+  if (!player) return { ok: false, error: "Unknown player." };
+  const def = OFFICERS[officerId];
+  if (!def) return { ok: false, error: "Unknown officer." };
+
+  advanceUniverse(universe, now);
+  ensureProgressionLevels(player);
+  const level = officerLevelOf(player, officerId);
+  if (level < 1) {
+    return { ok: false, error: `Hire ${def.name} before raising their level.` };
+  }
+  if (level >= OFFICER_MAX_LEVEL) {
+    return { ok: false, error: `${def.name} is already at max level.` };
+  }
+  const cost = levelUpCost(def.cost, level);
+  const balance = Math.floor(player.starshards ?? 0);
+  if (balance < cost) {
+    return {
+      ok: false,
+      error: `Need ${fmtShards(cost)} Starshards (have ${fmtShards(balance)}).`,
+    };
+  }
+  player.starshards = balance - cost;
+  player.officerLevels = { ...(player.officerLevels ?? {}), [officerId]: level + 1 };
   universe.players[player.id] = player;
   return { ok: true };
 }
@@ -112,25 +161,33 @@ export function unlockSkill(
   if (!def) return { ok: false, error: "Unknown skill." };
 
   advanceUniverse(universe, now);
-  const unlocked = new Set(player.skillsUnlocked ?? []);
-  if (unlocked.has(skillId)) {
-    return { ok: false, error: "Skill already unlocked." };
+  ensureProgressionLevels(player);
+  const level = skillLevelOf(player, skillId);
+  if (level >= SKILL_MAX_LEVEL) {
+    return { ok: false, error: `${def.name} is already at max level.` };
   }
-  for (const req of def.requires) {
-    if (!unlocked.has(req)) {
-      return { ok: false, error: `Requires skill ${req} first.` };
+  if (level < 1) {
+    for (const req of def.requires) {
+      if (skillLevelOf(player, req) < 1) {
+        const reqName = SKILLS[req]?.name ?? "the previous skill";
+        return { ok: false, error: `Requires ${reqName} first.` };
+      }
     }
   }
+  const cost = levelUpCost(def.cost, level);
   const balance = Math.floor(player.starshards ?? 0);
-  if (balance < def.cost) {
+  if (balance < cost) {
     return {
       ok: false,
-      error: `Need ${def.cost} Starshards (have ${balance}).`,
+      error: `Need ${fmtShards(cost)} Starshards (have ${fmtShards(balance)}).`,
     };
   }
 
-  player.starshards = balance - def.cost;
-  player.skillsUnlocked = [...unlocked, skillId];
+  player.starshards = balance - cost;
+  player.skillLevels = { ...(player.skillLevels ?? {}), [skillId]: level + 1 };
+  const unlocked = new Set(player.skillsUnlocked ?? []);
+  unlocked.add(skillId);
+  player.skillsUnlocked = [...unlocked];
   universe.players[player.id] = player;
   return { ok: true };
 }

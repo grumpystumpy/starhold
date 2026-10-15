@@ -51,6 +51,47 @@ describe("playtest fixes", () => {
     assert.match(html, /data-testid="upgrade-solarPlant"[^>]*disabled/);
     assert.match(html, />Can't afford</);
     assert.doesNotMatch(html, />Upgrade</);
+    assert.doesNotMatch(html, />Locked</);
+  });
+
+  it("labels unmet building requirements as Locked", () => {
+    const rich = planet();
+    rich.resources = { metal: 9_000_000, crystal: 9_000_000, deuterium: 9_000_000 };
+    const foundry = buildingRow(
+      "rigFoundry",
+      rich,
+      player(),
+      1,
+      1_700_000_000_000,
+      false,
+    );
+    assert.match(foundry, /data-testid="upgrade-rigFoundry"[^>]*disabled/);
+    assert.match(foundry, />Locked</);
+    assert.doesNotMatch(foundry, />Can't afford</);
+    assert.doesNotMatch(foundry, />Upgrade</);
+
+    const moonOnly = buildingRow(
+      "sensorArray",
+      rich,
+      player(),
+      1,
+      1_700_000_000_000,
+      false,
+    );
+    assert.match(moonOnly, />Locked</);
+    assert.match(moonOnly, /disabled/);
+
+    const vault = buildingRow(
+      "metalStorage",
+      rich,
+      player(),
+      1,
+      1_700_000_000_000,
+      false,
+    );
+    assert.match(vault, /30,000/);
+    assert.match(vault, /60,000/);
+    assert.match(vault, /Capacity starts at 30,000/);
   });
 
   it("shows queue-full and the real lab requirement", () => {

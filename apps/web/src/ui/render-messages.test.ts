@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { PlayerView } from "@starhold/game";
-import { collectInbox, messagesPageHtml } from "./render-messages";
+import {
+  collectInbox,
+  messagesPageHtml,
+  setConfirmDelete,
+} from "./render-messages";
 
 function baseView(overrides: Partial<PlayerView> = {}): PlayerView {
   return {
@@ -197,5 +201,38 @@ describe("messages inbox", () => {
     );
     assert.match(combat, /Raid at 2:3:4 — victory/);
     assert.match(combat, /message-combat-c9/);
+  });
+
+  it("asks before deleting a category", () => {
+    setConfirmDelete(null);
+    const view = baseView({
+      player: {
+        id: "p1",
+        name: "Alpha",
+        eventLog: [
+          {
+            id: "evt1",
+            kind: "raidAlert",
+            createdAt: 5,
+            readAt: 6,
+            title: "Raid incoming",
+            body: "Hold",
+          },
+        ],
+      } as PlayerView["player"],
+    });
+    const html = messagesPageHtml(view);
+    assert.match(html, /data-testid="delete-all-alerts"/);
+    assert.match(html, /data-testid="delete-all-combat"[^>]*disabled/);
+    assert.doesNotMatch(html, /delete-all-alerts-confirm/);
+
+    setConfirmDelete("alerts");
+    const confirm = messagesPageHtml(view);
+    assert.match(confirm, /data-testid="delete-confirm-alerts"/);
+    assert.match(confirm, /Delete every alert\?/);
+    assert.match(confirm, /data-testid="delete-all-alerts-confirm"/);
+    assert.match(confirm, />Confirm</);
+    assert.match(confirm, />Cancel</);
+    setConfirmDelete(null);
   });
 });

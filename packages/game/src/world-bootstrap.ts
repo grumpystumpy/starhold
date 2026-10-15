@@ -25,6 +25,7 @@ import { emptyPlayerClass } from "./formulas-round3.js";
 import { seedUniverseAsteroids } from "./world-asteroids.js";
 import { ensurePlayerFleetPresets } from "./world-fleet-presets.js";
 import { ensureEventLog } from "./world-event-log.js";
+import { ensureProgressionLevels } from "./world-progression.js";
 import { seedUniverseMinis } from "./world-mini.js";
 import {
   ensurePirateBaseShape,
@@ -201,6 +202,7 @@ export function ensureUniverseShape(universe: UniverseState): void {
     if (player.starshards === undefined) player.starshards = 0;
     if (!player.officers) player.officers = [];
     if (!player.skillsUnlocked) player.skillsUnlocked = [];
+    ensureProgressionLevels(player);
     if (player.highscoreStarshardsClaimed === undefined) {
       player.highscoreStarshardsClaimed = false;
     }

@@ -383,6 +383,30 @@ export async function setCosmeticSkin(
   return parse<PlayerView>(res);
 }
 
+export async function raiseOfficerLevel(
+  playerId: string,
+  officerId: OfficerId,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/raise-officer", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, officerId }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function deleteMessages(
+  playerId: string,
+  category: "all" | "combat" | "spy" | "alerts",
+): Promise<PlayerView> {
+  const res = await credFetch("/api/delete-messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, category }),
+  });
+  return parse<PlayerView>(res);
+}
+
 export async function unlockSkillNode(
   playerId: string,
   skillId: string,
