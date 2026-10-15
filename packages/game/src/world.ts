@@ -60,6 +60,11 @@ export {
   setAllianceJoinMode,
   setAllianceRole,
 } from "./world-alliances.js";
+export {
+  leaveAcsFleet,
+  listOpenAcsForAlliance,
+  lockAcsEarly,
+} from "./world-acs.js";
 export type { LaunchFleetOpts } from "./world-launch.js";
 export { launchFleet } from "./world-launch.js";
 export type {

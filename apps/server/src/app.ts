@@ -487,6 +487,8 @@ export function createApp(): Hono {
       ships?: Partial<FleetShips>;
       cargo?: Partial<Resources>;
       originPlanetId?: string;
+      openAcs?: boolean;
+      acsGroupId?: string;
     };
     if (!body.playerId || !body.mission) {
       return c.json({ error: "playerId and mission required." }, 400);
@@ -503,6 +505,8 @@ export function createApp(): Hono {
         alienBaseId: body.alienBaseId,
         cargo: body.cargo,
         originPlanetId: body.originPlanetId,
+        openAcs: body.openAcs,
+        acsGroupId: body.acsGroupId,
       });
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));

@@ -1,4 +1,5 @@
 import type {
+  AcsGroup,
   AsteroidField,
   BodyKind,
   BuildingId,
@@ -76,6 +77,10 @@ export interface CombatReport {
   xpAwarded?: { attacker: number; defender: number };
   /** Short opaque token for chat paste / future alliance intel. */
   shareCode?: string;
+  /** Joint Strike (ACS) group id when this report is a combined attack. */
+  acsGroupId?: string;
+  /** All attacking player ids in an ACS resolve. */
+  acsParticipantIds?: string[];
 }
 
 export interface EspionageReport {
@@ -212,6 +217,59 @@ export interface AllianceListEntry {
   maxMembers: number;
 }
 
+export type AllianceRole = "founder" | "officer" | "member";
+export type AllianceJoinMode = "open" | "invite";
+
+export interface AllianceMember {
+  playerId: string;
+  role: AllianceRole;
+  joinedAt: number;
+}
+
+export interface AllianceRecord {
+  id: string;
+  name: string;
+  /** Short uppercase tag shown in galaxy / highscores. */
+  tag: string;
+  joinMode: AllianceJoinMode;
+  createdAt: number;
+  founderPlayerId: string;
+  members: Record<string, AllianceMember>;
+  /** Pending invite player ids (invite mode). */
+  pendingInvites?: string[];
+}
+
+export interface AllianceMemberView {
+  playerId: string;
+  name: string;
+  role: AllianceRole;
+  joinedAt: number;
+  pointsHint: number;
+}
+
+export interface AllianceView {
+  id: string;
+  name: string;
+  tag: string;
+  joinMode: AllianceJoinMode;
+  createdAt: number;
+  founderPlayerId: string;
+  myRole: AllianceRole;
+  members: AllianceMemberView[];
+  pendingInvites: Array<{ playerId: string; name: string }>;
+  memberCount: number;
+  maxMembers: number;
+}
+
+export interface AllianceListEntry {
+  id: string;
+  name: string;
+  tag: string;
+  joinMode: AllianceJoinMode;
+  memberCount: number;
+  maxMembers: number;
+}
+
 export interface PlayerState {
   id: string;
   name: string;
@@ -291,6 +349,8 @@ export interface UniverseState {
   miniPlanetIds?: string[];
   /** Alliances keyed by id (lazy; no tick). */
   alliances?: Record<string, AllianceRecord>;
+  /** Active ACS / Joint Strike groups (lazy resolve on tick). */
+  acsGroups?: Record<string, AcsGroup>;
 }
 
 export interface PirateBasePublic {
@@ -396,6 +456,8 @@ export interface PlayerView {
   alliance: AllianceView | null;
   /** Lightweight directory of alliances (for join UI). */
   allianceDirectory: AllianceListEntry[];
+  /** Open Joint Strike (ACS) groups for the player's alliance. */
+  openAcsGroups: AcsGroup[];
 }
 
 export interface PublicPlayer {

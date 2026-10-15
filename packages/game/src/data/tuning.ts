@@ -1386,3 +1386,10 @@ export const NEWBIE_PROTECTION_POINTS = 2500;
 export const PIRATE_FAIRNESS_POINTS_MAX = 100_000;
 /** Additive penalty per successful pirate raid that day (1% of original). */
 export const PIRATE_FAIRNESS_PENALTY_PER_RAID = 0.01;
+/** ACS / Joint Strike (backlog #8) — same-alliance synced raids. */
+export const ACS_MAX_FLEETS = 8;
+export const ACS_JOIN_WINDOW_MS = 15 * 60 * 1000;
+export const ACS_HOLD_MAX_MS = 30 * 60 * 1000;
+export const ACS_MIN_FLEETS_TO_RESOLVE = 1;
+/** Drop resolved/cancelled ACS groups after this age on tick. */
+export const ACS_GROUP_PRUNE_MS = 24 * 60 * 60 * 1000;

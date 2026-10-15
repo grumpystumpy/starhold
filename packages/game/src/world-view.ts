@@ -33,6 +33,7 @@ import {
   allianceTagForPlayer,
   allianceViewFor,
 } from "./world-alliances.js";
+import { listOpenAcsForAlliance } from "./world-acs.js";
 import { advanceUniverse } from "./world-arrival.js";
 import { asteroidsInSystem } from "./world-asteroids.js";
 import {
@@ -373,5 +374,6 @@ export function playerView(
     occupation: occupationForPlanet(universe, planet.id, now),
     alliance: allianceViewFor(universe, playerId),
     allianceDirectory: allianceDirectory(universe),
+    openAcsGroups: listOpenAcsForAlliance(universe, player.allianceId),
   };
 }
