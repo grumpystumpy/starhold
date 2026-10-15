@@ -35,6 +35,7 @@ import {
   silentRefresh,
   startPolling,
 } from "./main-actions";
+import { wireJointStrikeForm } from "./main-actions-alliances";
 import { ensureDelegatedHandlers } from "./main-handlers";
 import {
   ensurePopstateHandler,
@@ -77,6 +78,11 @@ function paint(): void {
     },
   );
   ensureDelegatedHandlers();
+  if (session.pendingAcsPrefill && session.activePage === "fleet") {
+    if (wireJointStrikeForm(session.pendingAcsPrefill)) {
+      session.pendingAcsPrefill = null;
+    }
+  }
 }
 
 setPaintImpl(paint);

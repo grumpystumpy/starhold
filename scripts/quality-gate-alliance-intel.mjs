@@ -265,7 +265,12 @@ async function main() {
     ),
     pageA.getByTestId("galaxy-propose-1").click(),
   ]);
-  await pageA.getByText("coming with Joint Strike").waitFor({ timeout: 10_000 });
+  await pageA.getByText("Joint Strike armed").waitFor({ timeout: 10_000 });
+  const openAcs = pageA.getByTestId("fleet-open-acs");
+  await openAcs.waitFor({ timeout: 10_000 });
+  if (!(await openAcs.isChecked())) {
+    throw new Error("Joint Strike deep-link did not arm Open ACS");
+  }
   await pageA.getByTestId("nav-alliances").click();
   await pageA.getByText(/proposed Joint Strike on 1:1:1/).waitFor({
     timeout: 10_000,

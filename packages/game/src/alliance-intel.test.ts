@@ -14,6 +14,7 @@ import {
   joinAlliance,
   joinUniverse,
   jointStrikeHelpersAvailable,
+  launchFleet,
   listAllianceChat,
   playerView,
   postAllianceChat,
@@ -302,27 +303,66 @@ describe("alliance chat, intel, markers", () => {
     );
   });
 
-  it("proposes Joint Strike in chat and omits ACS prefill without helpers", () => {
+  it("proposes Joint Strike in chat and returns an ACS prefill", () => {
     const universe = createUniverse("Strike", 1);
     const founder = joinUniverse(universe, "Vesper");
+    const wing = joinUniverse(universe, "Wing");
     assert.equal(createAlliance(universe, founder.player.id, "Strike", "stk").ok, true);
-    assert.equal(jointStrikeHelpersAvailable(), false);
+    const allyId = playerView(universe, founder.player.id).alliance!.id;
+    assert.equal(joinAlliance(universe, wing.player.id, { allianceId: allyId }).ok, true);
+    assert.equal(jointStrikeHelpersAvailable(), true);
+    const target = joinUniverse(universe, "Mark");
+    const coords = universe.planets[target.player.homePlanetId]!.coords;
     const proposed = proposeAllianceStrike(
       universe,
       founder.player.id,
-      { galaxy: 2, system: 4, slot: 6 },
+      coords,
       "dawn",
       "raid",
       9_000,
     );
     assert.equal(proposed.ok, true);
     if (!proposed.ok) return;
-    assert.equal(proposed.acsPrefill, null);
+    assert.deepEqual(proposed.acsPrefill, {
+      coords,
+      mission: "raid",
+      note: "dawn",
+      openAcs: true,
+    });
     assert.ok(proposed.planId.startsWith("chat_"));
+    const home = universe.planets[founder.player.homePlanetId]!;
+    const wingHome = universe.planets[wing.player.homePlanetId]!;
+    home.ships.interceptor = 8;
+    wingHome.ships.interceptor = 8;
+    home.resources.deuterium = 20_000;
+    wingHome.resources.deuterium = 20_000;
+    const lead = launchFleet(universe, {
+      playerId: founder.player.id,
+      mission: proposed.acsPrefill!.mission,
+      ships: { interceptor: 2 },
+      targetPlanetId: target.planet.id,
+      openAcs: proposed.acsPrefill!.openAcs,
+      now: 9_100,
+    });
+    assert.equal(lead.ok, true);
+    if (!lead.ok) return;
+    const acsId = lead.fleet?.acsGroupId;
+    assert.ok(acsId);
+    const join = launchFleet(universe, {
+      playerId: wing.player.id,
+      mission: "raid",
+      ships: { interceptor: 2 },
+      targetPlanetId: target.planet.id,
+      acsGroupId: acsId,
+      now: 9_200,
+    });
+    assert.equal(join.ok, true);
+    assert.equal(join.ok && join.fleet?.acsGroupId, acsId);
     const chat = playerView(universe, founder.player.id, 9_000).alliance?.chat ?? [];
+    const label = `${coords.galaxy}:${coords.system}:${coords.slot}`;
     assert.match(
       chat[0]?.body ?? "",
-      /Vesper proposed Joint Strike on 2:4:6 — dawn/,
+      new RegExp(`Vesper proposed Joint Strike on ${label} — dawn`),
     );
     const outsider = joinUniverse(universe, "Lone");
     assert.equal(

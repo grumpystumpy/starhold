@@ -1,4 +1,5 @@
 import type {
+  AcsPrefill,
   BuildingId,
   DefenseId,
   PlayerView,
@@ -55,6 +56,8 @@ export const session = {
   galaxySystem: null as number | null,
   /** Active routed page (synced to URL pathname). */
   activePage: "overview" as NavPage,
+  /** Fleet deep-link from Propose Joint Strike. Cleared once the form is armed. */
+  pendingAcsPrefill: null as AcsPrefill | null,
   /** Ignore duplicate click after pointerup already dispatched the armed action. */
   suppressClickUntil: 0,
 };

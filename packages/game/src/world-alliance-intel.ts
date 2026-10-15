@@ -37,12 +37,11 @@ export function resetAllianceChatRateLimit(): void {
 }
 
 /**
- * Joint Strike engine (`world-acs`) is optional.
- * This build has no ACS helpers, so plan-strike omits `acsPrefill`
- * and the client shows the coming-with-Joint-Strike path.
+ * Joint Strike engine (`world-acs`) is on this tip.
+ * plan-strike returns `acsPrefill` so Fleet can open or join a real ACS group.
  */
 export function jointStrikeHelpersAvailable(): boolean {
-  return false;
+  return true;
 }
 
 function makeId(prefix: string, now: number): string {

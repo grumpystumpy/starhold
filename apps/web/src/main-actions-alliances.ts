@@ -36,10 +36,17 @@ export function wireJointStrikeForm(prefill: AcsPrefill): boolean {
   if (mission) mission.checked = true;
   open.checked = true;
   const key = `${prefill.coords.galaxy}:${prefill.coords.system}:${prefill.coords.slot}`;
-  const match = [...target.options].find(
-    (option) => option.value.includes(key) || option.text.includes(key),
+  const value = `coords:${key}`;
+  let match = [...target.options].find(
+    (option) => option.value === value || option.value.includes(key) || option.text.includes(key),
   );
-  if (match) target.value = match.value;
+  if (!match) {
+    match = document.createElement("option");
+    match.value = value;
+    match.text = `Joint Strike ${key}`;
+    target.append(match);
+  }
+  target.value = match.value;
   return true;
 }
 
@@ -306,16 +313,18 @@ export async function doProposeJointStrike(
     session.view = result.view;
     const label = fmtCoords(coords);
     if (result.acsPrefill) {
+      session.pendingAcsPrefill = result.acsPrefill;
       navigateTo("fleet");
       if (wireJointStrikeForm(result.acsPrefill)) {
-        setFlash("notice", `Joint Strike armed for ${label}.`);
-        return;
+        session.pendingAcsPrefill = null;
       }
+      setFlash(
+        "notice",
+        `Joint Strike armed for ${label}. Launch to open it for alliance mates.`,
+      );
+      return;
     }
-    setFlash(
-      "notice",
-      `Proposed Joint Strike on ${label}. Synced launch is coming with Joint Strike.`,
-    );
+    setFlash("notice", `Proposed Joint Strike on ${label}.`);
   }, "Joint Strike proposal failed.");
 }
 

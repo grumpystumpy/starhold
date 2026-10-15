@@ -123,6 +123,19 @@ export function fleetComposer(
     }
   }
 
+  if (
+    draft?.targetCoords &&
+    (mission === "raid" || mission === "pirateRaid")
+  ) {
+    const c = draft.targetCoords;
+    const value = `coords:${c.galaxy}:${c.system}:${c.slot}`;
+    if (!options.some((o) => o.includes(`value="${value}"`))) {
+      options.push(
+        `<option value="${value}">Joint Strike ${fmtCoords(c)}</option>`,
+      );
+    }
+  }
+
   let selected =
     draft?.pirateBaseId != null
       ? `pirate:${draft.pirateBaseId}`
@@ -330,7 +343,7 @@ export function fleetComposer(
       ${cargoBlock}
       <div class="fleet-ships" data-testid="fleet-orbit-ships">${shipInputs}</div>
       ${needHint}
-      ${acsBlock(view, mission, busy)}
+      ${acsBlock(view, mission, busy, draft)}
       <p class="hint">Ships shown are in orbit on the selected colony. Example one-way ETA ~${fmtEta(sampleEta)} · fuel ~${fmt(sampleFuel)} deut (1 scout). Fleet slots: ${fmt(1 + (view.player.research.computerTech ?? 0))}${mission === "expedition" ? ` · expeditions ${fmt(expeditionActive)}/${fmt(expeditionCap)}` : ""}.</p>
       <button type="submit" data-testid="launch-fleet" ${launchBlocked || orbitShipIds.length === 0 ? "disabled" : ""}>Launch fleet</button>
       ${
@@ -346,6 +359,7 @@ function acsBlock(
   view: PlayerView,
   mission: MissionType,
   busy: boolean,
+  draft: FleetDraft | null,
 ): string {
   if (mission !== "raid" && mission !== "pirateRaid") return "";
   if (!view.alliance) {
@@ -363,7 +377,7 @@ function acsBlock(
     <fieldset class="acs-pick" data-testid="acs-pick">
       <legend>Joint Strike (ACS)</legend>
       <label>
-        <input type="checkbox" id="fleet-open-acs" data-testid="fleet-open-acs" ${busy ? "disabled" : ""} />
+        <input type="checkbox" id="fleet-open-acs" data-testid="fleet-open-acs" ${draft?.openAcs ? "checked" : ""} ${busy ? "disabled" : ""} />
         Open Joint Strike for alliance mates
       </label>
       <label>

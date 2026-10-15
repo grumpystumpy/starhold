@@ -29,6 +29,8 @@ export type FleetDraft = {
   mission: MissionType;
   counts: Partial<FleetShips>;
   cargo: Partial<Resources>;
+  /** Joint Strike checkbox — kept across repaints. */
+  openAcs: boolean;
 };
 
 function parseMission(raw: string | null | undefined): MissionType {
@@ -106,5 +108,8 @@ export function salvageFleetForm(root: HTMLElement): FleetDraft | null {
     mission: parseMission(missionEl?.value),
     counts,
     cargo,
+    openAcs: Boolean(
+      form.querySelector<HTMLInputElement>("#fleet-open-acs")?.checked,
+    ),
   };
 }
