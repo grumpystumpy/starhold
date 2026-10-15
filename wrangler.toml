@@ -1,16 +1,14 @@
 # Cloudflare Workers host. No secrets in this file.
 # SESSION_SECRET is a Worker secret (`wrangler secret put`) or .dev.vars locally.
 # CLOUDFLARE_API_TOKEN is a GitHub secret, set at deploy time. Not in this file.
-# Deploy only from the GitHub Action on push to main. No branch previews.
+# Deploy only main (box wrangler or GitHub Action). No branch previews.
+# No [limits] block: the free plan rejects cpu_ms and enforces its own limit.
 name = "starhold"
 account_id = "0de4d3787cea977fbe8952ba924adea7"
 main = "worker/index.ts"
 compatibility_date = "2026-10-01"
 compatibility_flags = ["nodejs_compat"]
 preview_urls = false
-
-[limits]
-cpu_ms = 10
 
 [alias]
 "@starhold/game" = "./packages/game/src/index.ts"
