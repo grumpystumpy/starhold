@@ -1,4 +1,5 @@
 import type {
+  AcsPrefill,
   BuildingId,
   Coordinates,
   DefenseId,
@@ -488,4 +489,69 @@ export async function disbandAllianceRequest(
     body: JSON.stringify({ playerId }),
   });
   return parse<PlayerView>(res);
+}
+
+export async function postAllianceChatRequest(body: string): Promise<PlayerView> {
+  const res = await credFetch("/api/alliance/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ body }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function shareAllianceIntelRequest(
+  spyReportId: string,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/alliance/intel/share", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ spyReportId }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function deleteAllianceIntelRequest(
+  intelId: string,
+): Promise<PlayerView> {
+  const res = await credFetch(
+    `/api/alliance/intel/${encodeURIComponent(intelId)}`,
+    { method: "DELETE" },
+  );
+  return parse<PlayerView>(res);
+}
+
+export async function upsertAllianceMarkerRequest(
+  coords: Coordinates,
+  note: string,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/alliance/markers", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ coords, note }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function deleteAllianceMarkerRequest(
+  markerId: string,
+): Promise<PlayerView> {
+  const res = await credFetch(
+    `/api/alliance/markers/${encodeURIComponent(markerId)}`,
+    { method: "DELETE" },
+  );
+  return parse<PlayerView>(res);
+}
+
+export async function proposeAllianceStrikeRequest(opts: {
+  coords: Coordinates;
+  note?: string;
+  mission?: "raid" | "pirateRaid";
+}): Promise<{ planId: string; acsPrefill: AcsPrefill | null; view: PlayerView }> {
+  const res = await credFetch("/api/alliance/plan-strike", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(opts),
+  });
+  return parse(res);
 }

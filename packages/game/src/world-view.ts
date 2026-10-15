@@ -33,6 +33,7 @@ import {
   allianceTagForPlayer,
   allianceViewFor,
 } from "./world-alliances.js";
+import { galaxyMarkerOverlay } from "./world-alliance-intel.js";
 import { listOpenAcsForAlliance } from "./world-acs.js";
 import { advanceUniverse } from "./world-arrival.js";
 import { asteroidsInSystem } from "./world-asteroids.js";
@@ -98,6 +99,7 @@ export function galaxyViewFor(
   playerId: string,
   galaxy: number,
   system: number,
+  now = Date.now(),
 ): GalaxyView {
   ensureUniverseShape(universe);
   const g = Math.min(MAP_GALAXIES, Math.max(1, Math.floor(galaxy)));
@@ -189,6 +191,11 @@ export function galaxyViewFor(
 
   const pirateLevel = pirate ? (pirate.level ?? pirate.tier) : 0;
   const alienLevel = alien ? (alien.level ?? alien.tier) : 0;
+
+  const markerOverlay = galaxyMarkerOverlay(universe, playerId, g, s, now);
+  for (const slot of slots) {
+    slot.allianceMarker = markerOverlay.get(slot.coords.slot) ?? null;
+  }
 
   return {
     galaxy: g,
@@ -358,7 +365,7 @@ export function playerView(
     ),
     roster: publicRoster(universe),
     highscores: highscoresBoard(universe),
-    galaxy: galaxyViewFor(universe, playerId, g, s),
+    galaxy: galaxyViewFor(universe, playerId, g, s, now),
     fleets,
     reports,
     spyReports,
@@ -373,7 +380,7 @@ export function playerView(
     dailyLoginAvailable: canClaimDailyLogin(player, now),
     progress: playerProgressView(player),
     occupation: occupationForPlanet(universe, planet.id, now),
-    alliance: allianceViewFor(universe, playerId),
+    alliance: allianceViewFor(universe, playerId, now),
     allianceDirectory: allianceDirectory(universe),
     openAcsGroups: listOpenAcsForAlliance(universe, player.allianceId),
     goals: goalsView(player, now),

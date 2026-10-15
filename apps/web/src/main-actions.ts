@@ -41,9 +41,16 @@ export {
   doDisbandAlliance,
   doInviteAlliance,
   doJoinAlliance,
+  doDeleteAllianceIntel,
+  doDeleteAllianceMarker,
   doKickAllianceMember,
   doLeaveAlliance,
+  doPostAllianceChat,
+  doProposeJointStrike,
   doSetAllianceJoinMode,
   doSetAllianceRole,
+  doShareAllianceIntel,
+  doUpsertAllianceMarker,
+  fleetStrikeTarget,
 } from "./main-actions-alliances.js";
 export { doMarkEventsRead } from "./main-actions-events.js";

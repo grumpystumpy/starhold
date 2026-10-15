@@ -1484,3 +1484,13 @@ export const EVENT_LOG_MAX = 100;
 export const EVENT_LOG_MINI_NEARBY_SYSTEM_RADIUS = 5;
 /** Show an unread count on the Messages nav item. */
 export const EVENT_LOG_UNREAD_BADGE = true;
+/** Alliance chat + shared intel (backlog #12). */
+export const ALLIANCE_CHAT_MAX_MESSAGES = 200;
+export const ALLIANCE_CHAT_MAX_CHARS = 500;
+export const ALLIANCE_CHAT_RATE_PER_MIN = 20;
+export const ALLIANCE_INTEL_MAX_REPORTS = 50;
+export const ALLIANCE_MARKERS_MAX = 30;
+/** Galaxy marker lifetime. Lazy purge on read — no cron. */
+export const ALLIANCE_MARKER_TTL_MS = 72 * 60 * 60 * 1000;
+/** Marker / strike note cap. */
+export const ALLIANCE_MARKER_NOTE_MAX = 80;

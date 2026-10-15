@@ -173,6 +173,53 @@ export interface AllianceMember {
   joinedAt: number;
 }
 
+export interface AllianceChatMessage {
+  id: string;
+  playerId: string;
+  displayName: string;
+  body: string;
+  createdAt: number;
+}
+
+/** Read-only copy of a spy outcome at the moment it was shared. */
+export interface AllianceIntelSnapshot {
+  detail: number;
+  summary: string;
+  resources: Resources | null;
+  ships: Partial<FleetShips> | null;
+  defenses: Partial<DefenseStock> | null;
+}
+
+export interface AllianceIntelStamp {
+  id: string;
+  sharedByPlayerId: string;
+  sharedByName: string;
+  spyReportId: string;
+  targetCoords: Coordinates;
+  targetLabel: string;
+  createdAt: number;
+  expiresAt: number | null;
+  snapshot: AllianceIntelSnapshot;
+}
+
+export interface AllianceGalaxyMarker {
+  id: string;
+  coords: Coordinates;
+  note: string;
+  createdByPlayerId: string;
+  createdByName: string;
+  createdAt: number;
+  expiresAt: number;
+}
+
+/** Fleet deep-link when Joint Strike helpers are present in this build. */
+export interface AcsPrefill {
+  coords: Coordinates;
+  mission: "raid" | "pirateRaid";
+  note: string;
+  openAcs: true;
+}
+
 export interface AllianceRecord {
   id: string;
   name: string;
@@ -184,6 +231,12 @@ export interface AllianceRecord {
   members: Record<string, AllianceMember>;
   /** Pending invite player ids (invite mode). */
   pendingInvites?: string[];
+  /** Ring buffer. Missing on older saves — treat as []. */
+  chat?: AllianceChatMessage[];
+  /** Shared spy stamps. Missing on older saves — treat as []. */
+  intel?: AllianceIntelStamp[];
+  /** Galaxy markers. Missing on older saves — treat as []. */
+  markers?: AllianceGalaxyMarker[];
 }
 
 export interface AllianceMemberView {
@@ -206,6 +259,9 @@ export interface AllianceView {
   pendingInvites: Array<{ playerId: string; name: string }>;
   memberCount: number;
   maxMembers: number;
+  chat: AllianceChatMessage[];
+  intel: AllianceIntelStamp[];
+  markers: AllianceGalaxyMarker[];
 }
 
 export interface AllianceListEntry {
@@ -224,50 +280,6 @@ export interface AllianceMember {
   playerId: string;
   role: AllianceRole;
   joinedAt: number;
-}
-
-export interface AllianceRecord {
-  id: string;
-  name: string;
-  /** Short uppercase tag shown in galaxy / highscores. */
-  tag: string;
-  joinMode: AllianceJoinMode;
-  createdAt: number;
-  founderPlayerId: string;
-  members: Record<string, AllianceMember>;
-  /** Pending invite player ids (invite mode). */
-  pendingInvites?: string[];
-}
-
-export interface AllianceMemberView {
-  playerId: string;
-  name: string;
-  role: AllianceRole;
-  joinedAt: number;
-  pointsHint: number;
-}
-
-export interface AllianceView {
-  id: string;
-  name: string;
-  tag: string;
-  joinMode: AllianceJoinMode;
-  createdAt: number;
-  founderPlayerId: string;
-  myRole: AllianceRole;
-  members: AllianceMemberView[];
-  pendingInvites: Array<{ playerId: string; name: string }>;
-  memberCount: number;
-  maxMembers: number;
-}
-
-export interface AllianceListEntry {
-  id: string;
-  name: string;
-  tag: string;
-  joinMode: AllianceJoinMode;
-  memberCount: number;
-  maxMembers: number;
 }
 
 export type EventLogKind =
@@ -439,6 +451,12 @@ export interface GalaxySlot {
   hasMoon: boolean;
   moonId: string | null;
   activity: "empty" | "planet" | "pirate" | "alien" | null;
+  /** Set for alliance members when this slot has a live marker. */
+  allianceMarker?: {
+    id: string;
+    note: string;
+    markedBy: string;
+  } | null;
 }
 
 export interface GalaxyView {

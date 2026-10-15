@@ -333,6 +333,11 @@ export function fleetComposer(
       ${acsBlock(view, mission, busy)}
       <p class="hint">Ships shown are in orbit on the selected colony. Example one-way ETA ~${fmtEta(sampleEta)} · fuel ~${fmt(sampleFuel)} deut (1 scout). Fleet slots: ${fmt(1 + (view.player.research.computerTech ?? 0))}${mission === "expedition" ? ` · expeditions ${fmt(expeditionActive)}/${fmt(expeditionCap)}` : ""}.</p>
       <button type="submit" data-testid="launch-fleet" ${launchBlocked || orbitShipIds.length === 0 ? "disabled" : ""}>Launch fleet</button>
+      ${
+        view.alliance
+          ? `<button type="button" data-propose-strike data-testid="propose-joint-strike" ${busy ? "disabled" : ""}>Propose Joint Strike</button>`
+          : ""
+      }
     </form>
   `;
 }

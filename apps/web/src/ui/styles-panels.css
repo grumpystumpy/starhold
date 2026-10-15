@@ -293,7 +293,70 @@ a.message-title:hover {
   margin: 0.75rem 0 1rem;
 }
 
+.alliance-section {
+  margin-top: 1rem;
+}
+
+.alliance-chat-log {
+  max-height: 14rem;
+  overflow: auto;
+  margin: 0 0 0.75rem;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  border-radius: 3px;
+}
+
+.alliance-chat-line {
+  margin: 0;
+  padding: 0.28rem 0;
+  font-size: 0.9rem;
+}
+
+.alliance-chat-form input[name="alliance-chat-body"] {
+  min-width: 12rem;
+  flex: 1;
+}
+
+.galaxy-slot {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.galaxy-slot-marked {
+  background: color-mix(in srgb, var(--warn) 22%, transparent);
+  box-shadow: inset 3px 0 0 var(--accent);
+  padding-left: 0.45rem;
+}
+
+.galaxy-marker-pin {
+  color: var(--accent);
+  font-weight: 700;
+  margin-right: 0.25rem;
+}
+
+.galaxy-slot-side,
+.galaxy-slot-actions,
+.galaxy-alliance-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.galaxy-slot-actions button,
+.alliance-section button {
+  font-size: 0.82rem;
+  padding: 0.25rem 0.5rem;
+}
+
 @media (max-width: 560px) {
+  .alliance-chat-form,
+  .galaxy-alliance-tools,
+  .galaxy-slot-side {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   .item-thumb {
     grid-template-columns: auto 1fr;
   }

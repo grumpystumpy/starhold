@@ -30,9 +30,12 @@ import { escapeAttr, escapeHtml } from "./render-escape";
 import {
   fleetComposer,
   fleetsInFlight,
+  expeditionReportsHtml,
   galaxyPanel,
   hostileInboundHtml,
+  reportsHtml,
   sensorContactsHtml,
+  spyReportsHtml,
   type FleetDraft,
 } from "./render-fleets";
 import { alliancesPageHtml } from "./render-alliances";
@@ -293,6 +296,9 @@ function fleetPage(
       ${fleetsInFlight(fleets, view.roster, view.now)}
       ${hostileInboundHtml(view.hostileInbound ?? [], view.roster, view.now)}
       ${sensorContactsHtml(view.sensorContacts ?? [], view.roster, view.now)}
+      ${reportsHtml(view.reports ?? [], view.player.id)}
+      ${spyReportsHtml(view.spyReports ?? [], Boolean(view.alliance))}
+      ${expeditionReportsHtml(view.expeditionReports ?? [])}
       <p class="hint" data-testid="fleet-messages-link">Reports and alerts (${fmt(mailCount)}) live in <a href="${escapeAttr(mailHref)}" data-nav="messages" data-testid="fleet-open-messages">Messages</a>.</p>
     </section>`;
 }

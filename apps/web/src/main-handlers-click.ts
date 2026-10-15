@@ -31,6 +31,8 @@ import {
   doClaimDaily,
   doClaimGoal,
   doCreateAlliance,
+  doDeleteAllianceIntel,
+  doDeleteAllianceMarker,
   doDeleteFleetPreset,
   doDisbandAlliance,
   doGalaxyNav,
@@ -42,6 +44,8 @@ import {
   doLaunchFleet,
   doLaunchMaxExpeditions,
   doLeaveAlliance,
+  doPostAllianceChat,
+  doProposeJointStrike,
   doRefresh,
   doRenamePlanet,
   doRelocateFortress,
@@ -54,6 +58,9 @@ import {
   doMarkEventsRead,
   doSetAllianceJoinMode,
   doSetAllianceRole,
+  doShareAllianceIntel,
+  doUpsertAllianceMarker,
+  fleetStrikeTarget,
   doUnlockSkill,
   doUpgrade,
 } from "./main-actions";
@@ -389,6 +396,88 @@ export function bindClickHandlers(): void {
         if (id) void doSetAllianceRole(id, "founder");
         return;
       }
+
+      const shareBtn = closestActionEl(target, "[data-share-intel]");
+      if (shareBtn) {
+        ev.preventDefault();
+        const id = shareBtn.getAttribute("data-share-intel");
+        if (id) void doShareAllianceIntel(id);
+        return;
+      }
+
+      const intelDelete = closestActionEl(target, "[data-alliance-intel-delete]");
+      if (intelDelete) {
+        ev.preventDefault();
+        const id = intelDelete.getAttribute("data-alliance-intel-delete");
+        if (id) void doDeleteAllianceIntel(id);
+        return;
+      }
+
+      const markerDelete = closestActionEl(
+        target,
+        "[data-alliance-marker-remove]",
+      );
+      if (markerDelete) {
+        ev.preventDefault();
+        const id = markerDelete.getAttribute("data-alliance-marker-remove");
+        if (id) void doDeleteAllianceMarker(id);
+        return;
+      }
+
+      const markBtn = closestActionEl(target, "[data-galaxy-mark]");
+      if (markBtn) {
+        ev.preventDefault();
+        const slot = Number(markBtn.getAttribute("data-galaxy-mark"));
+        const galaxy = session.view?.galaxy;
+        if (galaxy && Number.isInteger(slot)) {
+          const note =
+            root.querySelector<HTMLInputElement>("#galaxy-marker-note")?.value ??
+            "";
+          void doUpsertAllianceMarker(
+            { galaxy: galaxy.galaxy, system: galaxy.system, slot },
+            note,
+          );
+        }
+        return;
+      }
+
+      const proposeSlot = closestActionEl(target, "[data-galaxy-propose]");
+      if (proposeSlot) {
+        ev.preventDefault();
+        const slot = Number(proposeSlot.getAttribute("data-galaxy-propose"));
+        const galaxy = session.view?.galaxy;
+        if (galaxy && Number.isInteger(slot)) {
+          const note =
+            root.querySelector<HTMLInputElement>("#galaxy-marker-note")?.value ??
+            "";
+          const pirate = galaxy.pirateBase;
+          const mission =
+            pirate &&
+            pirate.coords.galaxy === galaxy.galaxy &&
+            pirate.coords.system === galaxy.system &&
+            pirate.coords.slot === slot
+              ? "pirateRaid"
+              : "raid";
+          void doProposeJointStrike(
+            { galaxy: galaxy.galaxy, system: galaxy.system, slot },
+            note,
+            mission,
+          );
+        }
+        return;
+      }
+
+      if (closestActionEl(target, "[data-propose-strike]")) {
+        ev.preventDefault();
+        const picked = fleetStrikeTarget();
+        if (!picked) {
+          setFlash("error", "Pick a planet or coordinates for Joint Strike.");
+          schedulePaint();
+          return;
+        }
+        void doProposeJointStrike(picked.coords, undefined, picked.mission);
+        return;
+      }
     },
     true,
   );
@@ -509,6 +598,15 @@ export function bindClickHandlers(): void {
         '[name="alliance-invite-id"]',
       );
       void doInviteAlliance(input?.value?.trim() ?? "");
+      return;
+    }
+
+    if (form.id === "alliance-chat-form") {
+      ev.preventDefault();
+      const input = form.querySelector<HTMLInputElement>(
+        '[name="alliance-chat-body"]',
+      );
+      void doPostAllianceChat(input?.value ?? "");
       return;
     }
   });

@@ -24,6 +24,7 @@ import type {
   UniverseState,
 } from "./types.js";
 import { advanceUniverse } from "./world-arrival.js";
+import { allianceSharedView } from "./world-alliance-intel.js";
 import { ensureUniverseShape } from "./world-bootstrap.js";
 
 /** Local points helper — avoid importing world-view (cycle). */
@@ -170,6 +171,7 @@ export function allianceDirectory(
 export function allianceViewFor(
   universe: UniverseState,
   playerId: string,
+  now = Date.now(),
 ): AllianceView | null {
   ensureUniverseShape(universe);
   const player = universe.players[playerId];
@@ -206,6 +208,7 @@ export function allianceViewFor(
       return p ? { playerId: id, name: p.name } : null;
     })
     .filter((x): x is { playerId: string; name: string } => x !== null);
+  const shared = allianceSharedView(universe, alliance, now);
   return {
     id: alliance.id,
     name: alliance.name,
@@ -218,6 +221,9 @@ export function allianceViewFor(
     pendingInvites,
     memberCount: members.length,
     maxMembers: ALLIANCE_MAX_MEMBERS,
+    chat: shared.chat,
+    intel: shared.intel,
+    markers: shared.markers,
   };
 }
 
