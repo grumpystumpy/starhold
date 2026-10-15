@@ -22,6 +22,7 @@ import {
   playerView,
   queueBuildingUpgrade,
   queueResearch,
+  queueShipBuild,
   rollSeasons,
   setSeasonSkin,
   setSeasonTitle,
@@ -179,6 +180,29 @@ describe("monthly seasons", () => {
       universe.players[player.id]!.season!.economyRemainder,
       nextBank % SEASON_ECONOMY_SPEND_DIV,
     );
+  });
+
+  it("counts finished ships toward the economy score", () => {
+    const universe = createUniverse("Season Ships", 8);
+    const { player, planet } = joinUniverse(universe, "Yard", OCT);
+    const body = universe.planets[planet.id]!;
+    body.buildings.shipyard = 1;
+    body.resources = { metal: 20_000, crystal: 20_000, deuterium: 5_000 };
+    const queued = queueShipBuild(universe, player.id, "scout", 4, OCT + 5);
+    assert.equal(queued.ok, true);
+    const completesAt = universe.planets[planet.id]!.shipQueue[0]!.completesAt;
+    const before = universe.players[player.id]!.season!.economy;
+    advanceUniverse(universe, completesAt);
+    const spend = 4 * (220 + 80);
+    assert.equal(
+      universe.players[player.id]!.season!.economy,
+      before + Math.floor(spend / SEASON_ECONOMY_SPEND_DIV),
+    );
+    assert.equal(
+      universe.players[player.id]!.season!.economyRemainder,
+      spend % SEASON_ECONOMY_SPEND_DIV,
+    );
+    assert.equal(universe.planets[planet.id]!.ships.scout, 4);
   });
 
   it("seals the previous month once, then claims each placement once", () => {

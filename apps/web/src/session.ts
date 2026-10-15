@@ -10,11 +10,11 @@ import type { AuthAccount } from "./api";
 import type { NavPage } from "./ui/nav";
 
 export const SESSION_KEY = "starhold.playerId";
-/** Keep reject/success flashes readable across 1s polls. */
+/** Keep reject/success flashes readable across background polls. */
 export const FLASH_TTL_MS = 12_000;
 /**
  * After pointerup, keep deferring full paints briefly so a click (or armed
- * pointerup action) can land before 1s poll innerHTML replaces the button.
+ * pointerup action) can land before a background poll replaces the button.
  */
 export const GESTURE_PAINT_GRACE_MS = 200;
 
@@ -33,11 +33,16 @@ export const session = {
   joinDraft: "",
   emailDraft: "",
   passwordDraft: "",
+  claimEmailDraft: "",
+  claimCodeDraft: "",
+  claimPasswordDraft: "",
   /** Cookie session account (null = guest / anonymous). */
   account: null as AuthAccount | null,
   /** Pending anonymous playerId offer for claim UI. */
   claimablePlayerId: null as string | null,
   pollTimer: undefined as number | undefined,
+  /** No pointer, key, touch, scroll, or focus for the idle window. */
+  idlePaused: false,
   flashTimer: undefined as number | undefined,
   /** Defer full paints while a pointer is down so polls cannot swallow clicks. */
   pointersDown: 0,

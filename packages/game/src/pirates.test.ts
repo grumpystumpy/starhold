@@ -29,6 +29,7 @@ import {
   activeAlienBases,
   activePirateBases,
   advanceUniverse,
+  bindTickBudget,
   createAlienBase,
   createUniverse,
   ensurePiratePopulation,
@@ -46,6 +47,7 @@ import {
   tickPirates,
   tryAlienExpeditionFind,
 } from "./world.js";
+import type { TickBudget } from "./tick-budget.js";
 import type { FleetMission, UniverseState } from "./types.js";
 
 describe("pirate balance helpers", () => {
@@ -495,6 +497,64 @@ describe("NPC soft raids", () => {
     } finally {
       if (prev == null) delete process.env.STARHOLD_E2E;
       else process.env.STARHOLD_E2E = prev;
+    }
+  });
+});
+
+describe("workers tick budget", () => {
+  it("closed-form free spawn matches interval steps at the current level", () => {
+    const universe = createUniverse("Spawn Exact", 8);
+    const base = activePirateBases(universe)[0]!;
+    const steps = 5;
+    const now = PIRATE_FREE_SPAWN_INTERVAL_MS * steps + 10;
+    base.level = 4;
+    base.tier = 4;
+    base.ships = emptyFleetShips();
+    base.defenses = emptyDefenses();
+    base.lastFreeSpawnAt = 0;
+    base.lastGrewAt = now + 1;
+    base.nextRaidAt = now + 1;
+    const grant = fleetShipCount(pirateFreeSpawnShips(4));
+    tickPirates(universe, now);
+    const after = universe.pirateBases![base.id]!;
+    assert.equal(fleetShipCount(after.ships), grant * steps);
+    assert.equal(after.lastFreeSpawnAt, PIRATE_FREE_SPAWN_INTERVAL_MS * steps);
+  });
+
+  it("raid budget stops early and the next call continues", () => {
+    let budget: TickBudget | undefined;
+    bindTickBudget(() => budget);
+    try {
+      const universe = createUniverse("Raid Budget", 8);
+      const now = PIRATE_RAID_PERIOD_MS * 4;
+      for (const base of activePirateBases(universe)) {
+        base.lastGrewAt = now + 1;
+        base.lastFreeSpawnAt = now + 1;
+        base.nextRaidAt = now + 1;
+      }
+      const base = activePirateBases(universe)[0]!;
+      // 0 is treated as "unset" and rescheduled into the future.
+      base.nextRaidAt = 1;
+      const step = (): TickBudget => ({
+        raids: 1,
+        levelUps: 50,
+        fleets: 5,
+        driftSteps: 20,
+        seedSystems: 0,
+        seedMinis: 0,
+        seedPirates: 0,
+        lazyPlanets: true,
+      });
+      budget = step();
+      tickPirates(universe, now);
+      const mid = universe.pirateBases![base.id]!.nextRaidAt;
+      assert.ok(mid > 0);
+      assert.ok(mid <= now);
+      budget = step();
+      tickPirates(universe, now);
+      assert.ok(universe.pirateBases![base.id]!.nextRaidAt > mid);
+    } finally {
+      bindTickBudget(() => undefined);
     }
   });
 });

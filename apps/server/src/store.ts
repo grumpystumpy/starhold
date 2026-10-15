@@ -1,3 +1,4 @@
+import { Redis } from "@upstash/redis";
 import {
   archiveUniverseKey,
   createUniverse,
@@ -6,36 +7,77 @@ import {
   UNIVERSE_SCHEMA_VERSION,
   type UniverseState,
 } from "@starhold/game";
-import { Redis } from "@upstash/redis";
+import type { KvSetOptions, KvStore, StorageMode } from "./kv.js";
+import { addCpu, currentMethod, currentScope } from "./request-context.js";
+import {
+  assembleUniverse,
+  emptyStamps,
+  sliceStamps,
+  splitUniverse,
+  stampsEqual,
+  type PlayerSlice,
+  type SliceStamps,
+} from "./universe-docs.js";
 
 /**
  * Universe persistence.
  * - Local / CI: in-memory (process lifetime).
- * - Vercel: Upstash Redis / Vercel KV REST:
- *     UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN
- *     OR KV_REST_API_URL + KV_REST_API_TOKEN (Vercel Upstash integration)
+ * - Vercel: Upstash Redis / Vercel KV REST.
+ * - Workers: D1 injected per request (see worker/index.ts). Not Workers KV.
  *
  * Schema: one JSON document at STARHOLD_UNIVERSE_KEY
  * (default `starhold:universe:v3` for Round 2).
  * Lock key: `${key}:lock` (NX + short TTL) for critical sections.
+ * Version key: `${key}:ver` lets a warm isolate skip JSON.parse.
  *
  * Schema 2→3 migrates additively (levels/queues backfill). Older / missing
  * schema archives the blob and writes a fresh universe — never remap
  * 1×9×8 coords in place.
  */
 
-const UNIVERSE_NAME = process.env.STARHOLD_UNIVERSE_NAME ?? "Alpha Drift";
-const UNIVERSE_SPEED = Number(process.env.STARHOLD_UNIVERSE_SPEED ?? 8);
-const REDIS_KEY =
-  process.env.STARHOLD_UNIVERSE_KEY ??
-  `starhold:universe:v${UNIVERSE_SCHEMA_VERSION}`;
-const LOCK_KEY = `${REDIS_KEY}:lock`;
+export type { StorageMode } from "./kv.js";
 
-export type StorageMode = "upstash" | "kv" | "memory";
+interface UniverseCache {
+  key: string;
+  version: string;
+  universe: UniverseState;
+  slices: SliceStamps;
+  /** True when this copy was loaded from the single legacy JSON document. */
+  legacyBlob: boolean;
+}
 
 let memoryUniverse: UniverseState | null = null;
+let universeCache: UniverseCache | null = null;
 let redis: Redis | null | undefined;
+let redisKvStore: KvStore | null = null;
 let resolvedMode: StorageMode | undefined;
+
+function universeName(): string {
+  return process.env.STARHOLD_UNIVERSE_NAME ?? "Alpha Drift";
+}
+
+function universeSpeed(): number {
+  return Number(process.env.STARHOLD_UNIVERSE_SPEED ?? 8);
+}
+
+function universeKey(): string {
+  return (
+    process.env.STARHOLD_UNIVERSE_KEY ??
+    `starhold:universe:v${UNIVERSE_SCHEMA_VERSION}`
+  );
+}
+
+function versionKey(): string {
+  return `${universeKey()}:ver`;
+}
+
+function lockKey(): string {
+  return `${universeKey()}:lock`;
+}
+
+function workersRuntime(): boolean {
+  return process.env.STARHOLD_RUNTIME === "workers";
+}
 
 /** Pure env resolver — prefer UPSTASH_*, else Vercel integration KV_*. */
 export function redisCredentials(
@@ -60,43 +102,124 @@ export function redisCredentials(
   return null;
 }
 
+function redisAsKv(client: Redis): KvStore {
+  return {
+    async get<T>(key: string): Promise<T | null> {
+      const data = await client.get<T>(key);
+      return data ?? null;
+    },
+    async set(
+      key: string,
+      value: unknown,
+      opts?: KvSetOptions,
+    ): Promise<"OK" | null> {
+      let result: unknown;
+      if (opts?.nx && opts.px != null) {
+        result = await client.set(key, value, { nx: true, px: opts.px });
+      } else if (opts?.nx && opts.exSec != null) {
+        result = await client.set(key, value, { nx: true, ex: opts.exSec });
+      } else if (opts?.nx) {
+        result = await client.set(key, value, { nx: true });
+      } else if (opts?.px != null) {
+        result = await client.set(key, value, { px: opts.px });
+      } else if (opts?.exSec != null) {
+        result = await client.set(key, value, { ex: opts.exSec });
+      } else {
+        result = await client.set(key, value);
+      }
+      return result === "OK" ? "OK" : null;
+    },
+    async del(key: string): Promise<void> {
+      await client.del(key);
+    },
+  };
+}
+
 function getRedis(): Redis | null {
   if (redis !== undefined) return redis;
   const creds = redisCredentials(process.env);
   if (!creds) {
     redis = null;
+    redisKvStore = null;
     resolvedMode = "memory";
     return null;
   }
   resolvedMode = creds.mode;
   redis = new Redis({ url: creds.url, token: creds.token });
+  redisKvStore = redisAsKv(redis);
   return redis;
 }
 
-/** Shared Redis/KV client for accounts + universe (null → memory mode). */
-export function getKvClient(): Redis | null {
-  return getRedis();
+/** Shared client for accounts + universe. Null means the in-memory tables. */
+export function getKvClient(): KvStore | null {
+  const scope = currentScope();
+  if (scope) return scope.kv;
+  getRedis();
+  return redisKvStore;
 }
 
 export function storageMode(): StorageMode {
+  const scope = currentScope();
+  if (scope?.mode) return scope.mode;
   if (resolvedMode) return resolvedMode;
   const creds = redisCredentials(process.env);
   return creds?.mode ?? "memory";
 }
 
 function freshUniverse(): UniverseState {
-  return createUniverse(UNIVERSE_NAME, UNIVERSE_SPEED);
+  return createUniverse(
+    universeName(),
+    universeSpeed(),
+    undefined,
+    workersRuntime() ? { lazySeed: true } : undefined,
+  );
 }
 
-async function loadUniverse(client: Redis | null): Promise<UniverseState> {
+function remember(
+  universe: UniverseState,
+  version: string,
+  slices: SliceStamps,
+  legacyBlob: boolean,
+): void {
+  universeCache = {
+    key: universeKey(),
+    version,
+    universe,
+    slices,
+    legacyBlob,
+  };
+}
+
+function quietRead(): boolean {
+  const method = currentMethod();
+  return method === "GET" || method === "HEAD";
+}
+
+async function loadUniverse(client: KvStore | null): Promise<UniverseState> {
   if (!client) {
     if (!memoryUniverse) memoryUniverse = freshUniverse();
     ensureUniverseShape(memoryUniverse);
     return memoryUniverse;
   }
 
-  // Prefer versioned key; also probe legacy v1 key once for archive/reset.
-  let data = await client.get<UniverseState>(REDIS_KEY);
+  const key = universeKey();
+  const version = await client.get<string>(versionKey());
+  if (
+    version &&
+    universeCache &&
+    universeCache.key === key &&
+    universeCache.version === version
+  ) {
+    ensureUniverseShape(universeCache.universe);
+    return universeCache.universe;
+  }
+
+  if (client.list && storageMode() === "d1") {
+    const fromRows = await loadD1Rows(client, key, version);
+    if (fromRows) return fromRows;
+  }
+
+  let data = await client.get<UniverseState>(key);
   if (!data || typeof data !== "object" || !data.id) {
     const legacy = await client.get<UniverseState>("starhold:universe:v1");
     if (legacy && typeof legacy === "object" && legacy.id) {
@@ -106,76 +229,233 @@ async function loadUniverse(client: Redis | null): Promise<UniverseState> {
 
   if (data && typeof data === "object" && data.id) {
     const migrated = migrateOrResetUniverse(data, {
-      name: UNIVERSE_NAME,
-      speed: UNIVERSE_SPEED,
+      name: universeName(),
+      speed: universeSpeed(),
     });
     if (migrated.didReset && migrated.archived) {
-      const archiveKey = archiveUniverseKey(
-        migrated.archived.id,
-        Date.now(),
-      );
+      const archiveKey = archiveUniverseKey(migrated.archived.id, Date.now());
       await client.set(archiveKey, migrated.archived);
-      await client.set(REDIS_KEY, migrated.universe);
-      // Drop legacy key so partial deploys do not re-read prototype map.
+      await client.set(key, migrated.universe);
       await client.del("starhold:universe:v1").catch(() => undefined);
+      const next = String(Date.now());
+      await client.set(versionKey(), next);
+      remember(migrated.universe, next, sliceStamps(migrated.universe), true);
       return migrated.universe;
     }
     ensureUniverseShape(migrated.universe);
+    const next = version ?? String(Date.now());
+    if (!version) await client.set(versionKey(), next);
+    remember(migrated.universe, next, sliceStamps(migrated.universe), true);
     return migrated.universe;
   }
 
   const created = freshUniverse();
   ensureUniverseShape(created);
-  await client.set(REDIS_KEY, created);
+  await client.set(key, created);
+  const next = String(Date.now());
+  await client.set(versionKey(), next);
+  remember(created, next, sliceStamps(created), true);
   return created;
 }
 
-async function saveUniverse(
-  client: Redis | null,
-  state: UniverseState,
-): Promise<void> {
-  if (!client) {
-    memoryUniverse = state;
-    return;
+async function loadD1Rows(
+  client: KvStore,
+  key: string,
+  version: string | null,
+): Promise<UniverseState | null> {
+  if (!client.list) return null;
+  const rows = await client.list(`${key}:`);
+  const byKey = new Map(rows.map((row) => [row.key, row.value]));
+  const world = byKey.get(`${key}:world`);
+  if (!world || typeof world !== "object" || !("id" in world)) return null;
+  const slices: PlayerSlice[] = [];
+  for (const [rowKey, value] of byKey) {
+    if (!rowKey.startsWith(`${key}:player:`)) continue;
+    if (value && typeof value === "object" && "player" in value) {
+      slices.push(value as PlayerSlice);
+    }
   }
-  await client.set(REDIS_KEY, state);
+  const universe = assembleUniverse(
+    world as UniverseState,
+    byKey.get(`${key}:asteroids`) as UniverseState["asteroids"],
+    byKey.get(`${key}:pirates`) as UniverseState["pirateBases"],
+    byKey.get(`${key}:aliens`) as UniverseState["alienBases"],
+    slices,
+  );
+  const migrated = migrateOrResetUniverse(universe, {
+    name: universeName(),
+    speed: universeSpeed(),
+  });
+  ensureUniverseShape(migrated.universe);
+  const next = version ?? String(Date.now());
+  if (!version) await client.set(versionKey(), next);
+  remember(migrated.universe, next, sliceStamps(migrated.universe), false);
+  return migrated.universe;
 }
 
-async function acquireLock(client: Redis): Promise<boolean> {
-  const result = await client.set(LOCK_KEY, String(Date.now()), {
+async function writeChangedSlices(
+  client: KvStore,
+  state: UniverseState,
+  before: SliceStamps,
+  after: SliceStamps,
+  legacyBlob: boolean,
+): Promise<void> {
+  const parts = splitUniverse(state);
+  const base = universeKey();
+  const writeAll = legacyBlob;
+  if (writeAll || before.world !== after.world) {
+    await client.set(`${base}:world`, parts.world);
+  }
+  if (writeAll || before.asteroids !== after.asteroids) {
+    await client.set(`${base}:asteroids`, parts.asteroids);
+  }
+  if (writeAll || before.pirates !== after.pirates) {
+    await client.set(`${base}:pirates`, parts.pirates);
+  }
+  if (writeAll || before.aliens !== after.aliens) {
+    await client.set(`${base}:aliens`, parts.aliens);
+  }
+  const ids = new Set([
+    ...Object.keys(before.players),
+    ...Object.keys(after.players),
+  ]);
+  for (const id of ids) {
+    const next = after.players[id];
+    const prev = before.players[id];
+    if (!next) {
+      if (prev) await client.del(`${base}:player:${id}`);
+      continue;
+    }
+    if (writeAll || prev !== next) {
+      await client.set(`${base}:player:${id}`, parts.players[id]);
+    }
+  }
+  if (writeAll) await client.del(base);
+}
+
+async function saveUniverse(
+  client: KvStore,
+  state: UniverseState,
+  before: SliceStamps,
+): Promise<void> {
+  const after = sliceStamps(state);
+  if (stampsEqual(before, after)) {
+    if (universeCache?.universe === state) universeCache.slices = after;
+    return;
+  }
+  if (storageMode() === "d1") {
+    await writeChangedSlices(
+      client,
+      state,
+      before,
+      after,
+      universeCache?.legacyBlob === true,
+    );
+    const version = String(Date.now());
+    await client.set(versionKey(), version);
+    remember(state, version, after, false);
+    return;
+  }
+  await client.set(universeKey(), state);
+  const version = String(Date.now());
+  await client.set(versionKey(), version);
+  remember(state, version, after, true);
+}
+
+async function acquireLock(client: KvStore): Promise<boolean> {
+  const result = await client.set(lockKey(), String(Date.now()), {
     nx: true,
     px: 8_000,
   });
   return result === "OK";
 }
 
-async function releaseLock(client: Redis): Promise<void> {
-  await client.del(LOCK_KEY);
+async function releaseLock(client: KvStore): Promise<void> {
+  await client.del(lockKey());
 }
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/**
- * Run work against the shared universe, persisting afterward when using Redis.
- * Read-only callers should still use this so tick-on-read advances consistently.
- */
-export async function withUniverse<T>(
+async function runUniverse<T>(
+  universe: UniverseState,
   fn: (universe: UniverseState) => T | Promise<T>,
 ): Promise<T> {
-  const client = getRedis();
+  const started = performance.now();
+  try {
+    return await fn(universe);
+  } finally {
+    addCpu(performance.now() - started);
+  }
+}
+
+/** Serializes requests in this isolate so two polls cannot tick the same object. */
+let localTail: Promise<void> = Promise.resolve();
+
+function withLocalLock<T>(fn: () => Promise<T>): Promise<T> {
+  const run = localTail.then(fn, fn);
+  localTail = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+/**
+ * Run work against the shared universe, persisting afterward when using Redis or D1.
+ * A GET/HEAD whose only changes are accrued resources (and `lastTickAt`) skips
+ * the lock and the save. Those stocks are recomputed from the clocks on the
+ * next cold load. D1 then writes the changed player or world rows, not the
+ * whole universe. Vercel still stores one JSON document when something
+ * structural did change.
+ */
+async function withUniverseBody<T>(
+  fn: (universe: UniverseState) => T | Promise<T>,
+): Promise<T> {
+  const client = getKvClient();
   if (!client) {
     const universe = await loadUniverse(null);
-    return await fn(universe);
+    return runUniverse(universe, fn);
+  }
+
+  if (quietRead()) {
+    const universe = await loadUniverse(client);
+    const version = universeCache?.version ?? null;
+    if (universeCache?.universe === universe) {
+      universeCache.slices = sliceStamps(universe);
+    }
+    const before = universeCache?.slices ?? sliceStamps(universe);
+    const result = await runUniverse(universe, fn);
+    const after = sliceStamps(universe);
+    if (stampsEqual(before, after)) {
+      if (universeCache) universeCache.slices = after;
+      return result;
+    }
+    if (await acquireLock(client)) {
+      try {
+        const current = await client.get<string>(versionKey());
+        if (current === version) {
+          await saveUniverse(client, universe, before);
+          return result;
+        }
+      } finally {
+        await releaseLock(client);
+      }
+    }
+    universeCache = null;
   }
 
   for (let attempt = 0; attempt < 12; attempt++) {
     if (await acquireLock(client)) {
       try {
         const universe = await loadUniverse(client);
-        const result = await fn(universe);
-        await saveUniverse(client, universe);
+        if (universeCache?.universe === universe) {
+          universeCache.slices = sliceStamps(universe);
+        }
+        const before = universeCache?.slices ?? emptyStamps();
+        const result = await runUniverse(universe, fn);
+        await saveUniverse(client, universe, before);
         return result;
       } finally {
         await releaseLock(client);
@@ -186,7 +466,19 @@ export async function withUniverse<T>(
   throw new Error("Universe busy — retry in a moment.");
 }
 
-/** Test helper: wipe in-memory universe (no-op for Redis). */
+export async function withUniverse<T>(
+  fn: (universe: UniverseState) => T | Promise<T>,
+): Promise<T> {
+  return withLocalLock(() => withUniverseBody(fn));
+}
+
+/** Test helper: wipe in-memory universe (no-op for the Redis document). */
 export function resetMemoryUniverse(): void {
   memoryUniverse = null;
+  universeCache = null;
+}
+
+/** Test helper: true after a memory-mode load created the universe. */
+export function memoryUniverseLoaded(): boolean {
+  return memoryUniverse !== null;
 }

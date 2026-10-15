@@ -20,8 +20,62 @@ async function parse<T>(res: Response): Promise<T> {
   return data;
 }
 
-const credFetch = (input: RequestInfo | URL, init?: RequestInit) =>
-  fetch(input, { credentials: "include", ...init });
+/** Player mutations already return a fresh view. Reset the background poll. */
+let afterPlayerMutation: (() => void) | null = null;
+
+interface StateCacheEntry {
+  etag: string | null;
+  view: PlayerView;
+}
+
+const stateCache = new Map<string, StateCacheEntry>();
+
+/**
+ * A successful mutation changed the empire. Drop ETags so the next poll
+ * cannot treat a pre-mutation fingerprint as current.
+ */
+export function invalidateCachedState(): void {
+  for (const entry of stateCache.values()) entry.etag = null;
+}
+
+function stateCacheKey(
+  playerId: string,
+  galaxy?: number,
+  system?: number,
+): string {
+  return `${playerId}:${galaxy ?? ""}:${system ?? ""}`;
+}
+
+interface UnchangedStateBody {
+  unchanged: true;
+  now: number;
+  resources: Resources;
+}
+
+function isUnchangedState(
+  data: PlayerView | UnchangedStateBody | CatalogOmittedBody,
+): data is UnchangedStateBody {
+  return "unchanged" in data && data.unchanged === true;
+}
+
+interface CatalogOmittedBody extends PlayerView {
+  catalogsOmitted: true;
+}
+
+export function setAfterPlayerMutation(fn: () => void): void {
+  afterPlayerMutation = fn;
+}
+
+const credFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+  const method = (
+    init?.method ?? (input instanceof Request ? input.method : "GET")
+  ).toUpperCase();
+  const res = await fetch(input, { credentials: "include", ...init });
+  if (method !== "GET" && method !== "HEAD" && res.ok) {
+    afterPlayerMutation?.();
+  }
+  return res;
+};
 
 export interface AuthAccount {
   id: string;
@@ -48,6 +102,7 @@ export async function signupAccount(
 ): Promise<{
   ok: boolean;
   account: AuthAccount;
+  view?: PlayerView | null;
   error?: string;
 }> {
   const res = await credFetch("/api/auth/signup", {
@@ -75,6 +130,35 @@ export async function loginAccount(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
+  });
+  return parse(res);
+}
+
+export async function requestClaimCode(
+  email: string,
+): Promise<{ ok: boolean; message: string }> {
+  const res = await credFetch("/api/auth/claim-code", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  return parse(res);
+}
+
+export async function claimPassword(
+  email: string,
+  code: string,
+  password: string,
+): Promise<{
+  ok: boolean;
+  account: AuthAccount;
+  view: PlayerView | null;
+  error?: string;
+}> {
+  const res = await credFetch("/api/auth/claim-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, code, password }),
   });
   return parse(res);
 }
@@ -121,8 +205,46 @@ export async function fetchState(
   params.set("playerId", playerId);
   if (galaxy) params.set("galaxy", String(galaxy));
   if (system) params.set("system", String(system));
-  const res = await credFetch(`/api/state?${params.toString()}`);
-  return parse<PlayerView>(res);
+  const key = stateCacheKey(playerId, galaxy, system);
+  const cached = stateCache.get(key);
+  const headers: Record<string, string> = {};
+  if (cached?.etag) headers["If-None-Match"] = cached.etag;
+  if ((cached?.view.officerCatalog?.length ?? 0) > 0) {
+    headers["X-Starhold-Have-Catalogs"] = "1";
+  }
+  const res = await credFetch(`/api/state?${params.toString()}`, { headers });
+  const etag = res.headers.get("ETag");
+  const data = await parse<
+    PlayerView | UnchangedStateBody | CatalogOmittedBody
+  >(res);
+  if (isUnchangedState(data)) {
+    if (!cached) throw new Error("State unchanged without a cached view.");
+    const view: PlayerView = {
+      ...cached.view,
+      now: data.now,
+      planet: {
+        ...cached.view.planet,
+        resources: data.resources,
+        lastTickAt: data.now,
+      },
+    };
+    stateCache.set(key, { etag: etag ?? cached.etag, view });
+    return view;
+  }
+  let view: PlayerView = data;
+  if ("catalogsOmitted" in data && data.catalogsOmitted) {
+    if (!cached?.view.officerCatalog || !cached.view.skillCatalog) {
+      throw new Error("Catalogs omitted without a cached catalog.");
+    }
+    const { catalogsOmitted: _omitted, ...rest } = data;
+    view = {
+      ...rest,
+      officerCatalog: cached.view.officerCatalog,
+      skillCatalog: cached.view.skillCatalog,
+    };
+  }
+  stateCache.set(key, { etag, view });
+  return view;
 }
 
 export async function markEventsRead(
@@ -379,6 +501,30 @@ export async function setCosmeticSkin(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ playerId, skinId }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function raiseOfficerLevel(
+  playerId: string,
+  officerId: OfficerId,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/raise-officer", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, officerId }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function deleteMessages(
+  playerId: string,
+  category: "all" | "combat" | "spy" | "alerts",
+): Promise<PlayerView> {
+  const res = await credFetch("/api/delete-messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, category }),
   });
   return parse<PlayerView>(res);
 }

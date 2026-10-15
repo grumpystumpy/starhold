@@ -282,9 +282,10 @@ export function rollSeasons(universe: UniverseState, now: number): void {
 
 export function addSeasonEconomySpend(
   player: PlayerState,
-  cost: Resources,
+  cost: Resources | null | undefined,
   now: number,
 ): void {
+  if (!cost) return;
   if (!player.season || !isSeasonId(player.season.seasonId)) {
     player.season = emptySeason(seasonIdFromTime(now));
   }
@@ -497,6 +498,7 @@ export function seasonLeaderboardView(
       economy: mine.economy,
       pirateKills: mine.pirateKills,
     },
+    economyRemainder: mine.economyRemainder ?? 0,
     ranks: {
       combat: rankOf(full.combat, player.id),
       economy: rankOf(full.economy, player.id),

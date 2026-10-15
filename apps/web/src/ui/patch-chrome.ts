@@ -5,12 +5,13 @@ import {
 } from "@starhold/game";
 import { fmt, fmtCoords } from "./format";
 import { NAV_LABELS } from "./nav";
+import { session } from "../session";
 import { patchFlash } from "./render-chrome-join.js";
 import { escapeHtml } from "./render-escape";
 import { storageFillTitle } from "./render-tooltips";
 
 /**
- * Update top bar + resource bar in place (no remount) so 1s polls
+ * Update top bar + resource bar in place (no remount) so background polls
  * do not flicker or jump layout.
  */
 export function patchLiveChrome(
@@ -134,6 +135,10 @@ export function patchLiveChrome(
   shell.dataset.busy = state.busy ? "1" : "0";
 
   patchFlash(root, state.error, state.notice);
+  const idle = root.querySelector<HTMLButtonElement>(
+    '[data-testid="idle-pause"]',
+  );
+  if (idle) idle.hidden = !session.idlePaused;
   patchMessagesBadge(root, view);
 
   // Keep empire rail labels in sync without remounting chips.

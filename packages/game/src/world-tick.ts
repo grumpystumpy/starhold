@@ -1,4 +1,4 @@
-import { BUILDINGS, DEFENSES, RESEARCH, SHIPS, SHIP_ORDER } from "./catalog.js";
+import { DEFENSES, RESEARCH, SHIPS, SHIP_ORDER } from "./catalog.js";
 import {
   clampToStorage,
   coordsKey,
@@ -54,6 +54,7 @@ function advanceCountableQueue<T extends ShipQueueItem | DefenseQueueItem>(
   now: number,
   deliver: (item: T, batch: number) => void,
   onFinished?: (item: T, finishedCount: number) => void,
+  onSpent?: (spent: Resources) => void,
 ): void {
   ensureQueueFrontStarted(queue, now);
   while (queue.length > 0) {
@@ -72,9 +73,16 @@ function advanceCountableQueue<T extends ShipQueueItem | DefenseQueueItem>(
     if (batch < 1) break;
     batch = Math.min(batch, front.count);
     const before = front.count;
+    const original = front.paidCost ?? {
+      metal: 0,
+      crystal: 0,
+      deuterium: 0,
+    };
+    const spent = scalePaidCost(original, batch, before);
     deliver(front, batch);
     front.count -= batch;
-    front.paidCost = scalePaidCost(front.paidCost, front.count, before);
+    front.paidCost = scalePaidCost(original, front.count, before);
+    if (spent.metal + spent.crystal + spent.deuterium > 0) onSpent?.(spent);
     if (front.count <= 0) {
       onFinished?.(front, front.orderedCount ?? before);
       const freedAt = Math.min(now, front.completesAt);
@@ -128,21 +136,16 @@ export function advancePlanet(
   };
 
   // Buildings grant no XP (Micah amendment / Round 2 rebalance).
+  // Finished upgrades are not mailed: they complete often enough to bury alerts.
+  // Ship, defense, and research completions still notify. Saved rows stay put.
   advanceBuildingQueue(state.buildQueue, now, (item) => {
     state.buildings[item.buildingId] = item.targetLevel;
-    noteBuildComplete(
-      owner,
-      `${BUILDINGS[item.buildingId].name} → level ${formatEventCount(item.targetLevel)}`,
-      `Finished on ${state.name}.`,
-      item.completesAt,
-      {
-        buildingId: item.buildingId,
-        targetLevel: item.targetLevel,
-        planetId: state.id,
-      },
-    );
     if (owner) addSeasonEconomySpend(owner, item.paidCost, now);
   });
+
+  const scoreSpend = owner
+    ? (spent: Resources) => addSeasonEconomySpend(owner, spent, now)
+    : undefined;
 
   advanceCountableQueue(
     state.shipQueue,
@@ -159,6 +162,7 @@ export function advancePlanet(
         { shipId: item.shipId, count: finished, planetId: state.id },
       );
     },
+    scoreSpend,
   );
 
   advanceCountableQueue(
@@ -177,6 +181,7 @@ export function advancePlanet(
         { defenseId: item.defenseId, count: finished, planetId: state.id },
       );
     },
+    scoreSpend,
   );
 
   const elapsedMs = Math.max(0, now - state.lastTickAt);

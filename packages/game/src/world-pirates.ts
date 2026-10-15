@@ -106,6 +106,7 @@ import {
 } from "./world-boosts.js";
 import { noteGoalMetric } from "./world-goals.js";
 import { emptyCargo, planetAtCoords } from "./world-bootstrap.js";
+import { consumeTickBudget, syncPlanetForTick } from "./tick-budget.js";
 import { pushEventLog } from "./world-event-log.js";
 import {
   pirateRaidPickWeight,
@@ -138,14 +139,17 @@ const ALIEN_NAMES = [
 const PIRATE_EXCLUDED = new Set<string>(PIRATE_EXCLUDED_SHIP_IDS);
 const ALIEN_EXCLUDED = new Set<string>(ALIEN_EXCLUDED_SHIP_IDS);
 
+const PIRATE_ELIGIBLE_LIST: ShipId[] = SHIP_ORDER.filter((id) => {
+  if (PIRATE_EXCLUDED.has(id)) return false;
+  const def = SHIPS[id];
+  if (def.classExclusive) return false;
+  if (def.stationary) return false;
+  return true;
+});
+const PIRATE_ELIGIBLE = new Set<ShipId>(PIRATE_ELIGIBLE_LIST);
+
 export function pirateEligibleShipIds(): ShipId[] {
-  return SHIP_ORDER.filter((id) => {
-    if (PIRATE_EXCLUDED.has(id)) return false;
-    const def = SHIPS[id];
-    if (def.classExclusive) return false;
-    if (def.stationary) return false;
-    return true;
-  });
+  return PIRATE_ELIGIBLE_LIST;
 }
 
 export function pirateTechsForLevel(level: number): PirateTechs {
@@ -257,12 +261,29 @@ export function npcFreeSpawnDefenses(
   return distributeByComposition(total, comp, true) as DefenseStock;
 }
 
-function stripExcludedShips(ships: FleetShips, alien = false): FleetShips {
-  const out = normalizeFleetShips(ships);
-  const banned = alien ? ALIEN_EXCLUDED : PIRATE_EXCLUDED;
-  const eligible = new Set(pirateEligibleShipIds());
+function shipsLookStripped(ships: FleetShips, banned: Set<string>): boolean {
   for (const id of SHIP_ORDER) {
-    if (banned.has(id) || !eligible.has(id)) out[id] = 0;
+    const n = ships[id] ?? 0;
+    if ((banned.has(id) || !PIRATE_ELIGIBLE.has(id)) && n !== 0) return false;
+  }
+  return true;
+}
+
+function defensesLookNormalized(stock: DefenseStock | undefined): boolean {
+  if (!stock) return false;
+  for (const id of DEFENSE_ORDER) {
+    const n = stock[id];
+    if (typeof n !== "number" || n < 0 || n !== Math.floor(n)) return false;
+  }
+  return true;
+}
+
+function stripExcludedShips(ships: FleetShips, alien = false): FleetShips {
+  const banned = alien ? ALIEN_EXCLUDED : PIRATE_EXCLUDED;
+  if (shipsLookStripped(ships, banned)) return ships;
+  const out = normalizeFleetShips(ships);
+  for (const id of SHIP_ORDER) {
+    if (banned.has(id) || !PIRATE_ELIGIBLE.has(id)) out[id] = 0;
   }
   return out;
 }
@@ -285,8 +306,11 @@ export function ensurePirateBaseShape(
       (base as { hasSplit?: boolean }).hasSplit ??
       base.level > PIRATE_SPLIT_LEVEL;
   }
-  base.defenses = normalizeDefenses(base.defenses);
-  base.ships = stripExcludedShips(base.ships ?? emptyFleetShips(), false);
+  if (!defensesLookNormalized(base.defenses)) {
+    base.defenses = normalizeDefenses(base.defenses);
+  }
+  const ships = base.ships ?? emptyFleetShips();
+  base.ships = stripExcludedShips(ships, false);
   if (base.nextRaidAt == null || base.nextRaidAt <= 0) {
     base.nextRaidAt = rollNextRaidAt(base.id, now, PIRATE_RAID_PERIOD_MS);
   }
@@ -396,8 +420,32 @@ function mergeHangarAtLeast(current: FleetShips, template: FleetShips): FleetShi
 }
 
 function addShips(into: FleetShips, add: FleetShips): FleetShips {
+  return addShipsTimes(into, add, 1);
+}
+
+function addShipsTimes(
+  into: FleetShips,
+  add: FleetShips,
+  times: number,
+): FleetShips {
   const out = normalizeFleetShips(into);
-  for (const id of SHIP_ORDER) out[id] = (out[id] ?? 0) + (add[id] ?? 0);
+  if (times <= 0) return out;
+  for (const id of SHIP_ORDER) {
+    out[id] = (out[id] ?? 0) + (add[id] ?? 0) * times;
+  }
+  return out;
+}
+
+function addDefensesTimes(
+  into: DefenseStock,
+  add: DefenseStock,
+  times: number,
+): DefenseStock {
+  const out = normalizeDefenses(into);
+  if (times <= 0) return out;
+  for (const id of DEFENSE_ORDER) {
+    out[id] = (out[id] ?? 0) + (add[id] ?? 0) * times;
+  }
   return out;
 }
 
@@ -738,6 +786,41 @@ function collectPirateSpawnSites(
 }
 
 /**
+ * Place the next `limit` pirates from an already-sorted rank list.
+ * Skips systems that already have an NPC, so repeated calls resume.
+ * Returns how many were created.
+ */
+export function placePiratesFromRanked(
+  universe: UniverseState,
+  ranked: { key: number; galaxy: number; system: number }[],
+  limit: number,
+  now: number,
+): { placed: number; scanned: number } {
+  const seed = universe.seed ?? universe.id;
+  if (!universe.pirateBases) universe.pirateBases = {};
+  let placed = 0;
+  let scanned = 0;
+  let living = activePirateBases(universe).length;
+  for (const row of ranked) {
+    if (placed >= limit || living >= PIRATE_TARGET_BASE_COUNT) break;
+    scanned += 1;
+    if (systemOccupiedByNpc(universe, row.galaxy, row.system)) continue;
+    const slot = pickEmptySlot(
+      universe,
+      row.galaxy,
+      row.system,
+      `${seed}:pirate-slot:${row.galaxy}:${row.system}`,
+    );
+    if (slot == null) continue;
+    const base = createPirateBase(seed, row.galaxy, row.system, slot, now, 0);
+    universe.pirateBases[base.id] = base;
+    placed += 1;
+    living += 1;
+  }
+  return { placed, scanned };
+}
+
+/**
  * Bootstrap seed to PIRATE_TARGET_BASE_COUNT. Aliens stay empty
  * (ALIEN_INITIAL_BASE_COUNT = 0). Never wipes players.
  */
@@ -779,6 +862,7 @@ export function ensurePiratePopulation(
   universe: UniverseState,
   now = Date.now(),
 ): void {
+  if (universe.seedCursor && !universe.seedCursor.done) return;
   if (!universe.pirateBases) universe.pirateBases = {};
   if (!universe.alienBases) universe.alienBases = {};
   for (const base of Object.values(universe.pirateBases)) {
@@ -838,26 +922,31 @@ export function scalePirateRaidFleet(
 
 function applyFreeSpawnsPirate(base: PirateBase, now: number): void {
   if (base.destroyedAt != null) return;
-  while (now - base.lastFreeSpawnAt >= PIRATE_FREE_SPAWN_INTERVAL_MS) {
-    base.lastFreeSpawnAt += PIRATE_FREE_SPAWN_INTERVAL_MS;
-    base.ships = addShips(base.ships, pirateFreeSpawnShips(base.level));
-    base.defenses = addDefenses(
-      base.defenses,
-      npcFreeSpawnDefenses(base.level, false),
-    );
-  }
+  const interval = PIRATE_FREE_SPAWN_INTERVAL_MS;
+  const steps = Math.floor((now - base.lastFreeSpawnAt) / interval);
+  if (steps <= 0) return;
+  // Growth runs first, so every missed interval uses the post-growth level.
+  base.ships = addShipsTimes(base.ships, pirateFreeSpawnShips(base.level), steps);
+  base.defenses = addDefensesTimes(
+    base.defenses,
+    npcFreeSpawnDefenses(base.level, false),
+    steps,
+  );
+  base.lastFreeSpawnAt += steps * interval;
 }
 
 function applyFreeSpawnsAlien(base: AlienBase, now: number): void {
   if (base.destroyedAt != null) return;
-  while (now - base.lastFreeSpawnAt >= ALIEN_FREE_SPAWN_INTERVAL_MS) {
-    base.lastFreeSpawnAt += ALIEN_FREE_SPAWN_INTERVAL_MS;
-    base.ships = addShips(base.ships, alienFreeSpawnShips(base.level));
-    base.defenses = addDefenses(
-      base.defenses,
-      npcFreeSpawnDefenses(base.level, true),
-    );
-  }
+  const interval = ALIEN_FREE_SPAWN_INTERVAL_MS;
+  const steps = Math.floor((now - base.lastFreeSpawnAt) / interval);
+  if (steps <= 0) return;
+  base.ships = addShipsTimes(base.ships, alienFreeSpawnShips(base.level), steps);
+  base.defenses = addDefensesTimes(
+    base.defenses,
+    npcFreeSpawnDefenses(base.level, true),
+    steps,
+  );
+  base.lastFreeSpawnAt += steps * interval;
 }
 
 function tryPirateSplit(
@@ -941,6 +1030,7 @@ function growPirateBase(
     base.level < PIRATE_MAX_LEVEL &&
     now - base.lastGrewAt >= PIRATE_LEVEL_GROWTH_INTERVAL_MS
   ) {
+    if (!consumeTickBudget("levelUps")) return;
     base.level += 1;
     base.tier = base.level;
     base.lastGrewAt += PIRATE_LEVEL_GROWTH_INTERVAL_MS;
@@ -977,6 +1067,7 @@ function growAlienBase(
     base.level < ALIEN_MAX_LEVEL &&
     now - base.lastGrewAt >= PIRATE_LEVEL_GROWTH_INTERVAL_MS
   ) {
+    if (!consumeTickBudget("levelUps")) return;
     base.level += 1;
     base.tier = base.level;
     base.lastGrewAt += PIRATE_LEVEL_GROWTH_INTERVAL_MS;
@@ -1160,6 +1251,22 @@ export function pickRaidTarget(
   return npcPool[roll % npcPool.length]!;
 }
 
+function pirateGrowthDue(base: PirateBase, now: number): boolean {
+  return (
+    base.destroyedAt == null &&
+    base.level < PIRATE_MAX_LEVEL &&
+    now - base.lastGrewAt >= PIRATE_LEVEL_GROWTH_INTERVAL_MS
+  );
+}
+
+function alienGrowthDue(base: AlienBase, now: number): boolean {
+  return (
+    base.destroyedAt == null &&
+    base.level < ALIEN_MAX_LEVEL &&
+    now - base.lastGrewAt >= PIRATE_LEVEL_GROWTH_INTERVAL_MS
+  );
+}
+
 function applyNpcRaidOnPlanet(
   universe: UniverseState,
   base: PirateBase | AlienBase,
@@ -1168,6 +1275,9 @@ function applyNpcRaidOnPlanet(
   faction: "pirate" | "alien",
   markDestroyed: (b: PirateBase | AlienBase, n: number) => void,
 ): void {
+  syncPlanetForTick(universe, planet.id, now);
+  const live = universe.planets[planet.id] ?? planet;
+  planet = live;
   const owner = universe.players[planet.ownerPlayerId];
   if (!owner) return;
   const npcResearch = pirateCombatResearch(base);
@@ -1332,9 +1442,11 @@ function npcCombatEnabled(): boolean {
   return process.env.STARHOLD_E2E !== "1";
 }
 
-function catchUpRaidsPirate(universe: UniverseState, base: PirateBase, now: number): void {
+/** `true` when the global per-request raid budget stopped this base early. */
+function catchUpRaidsPirate(universe: UniverseState, base: PirateBase, now: number): boolean {
   let fired = 0;
   while (base.destroyedAt == null && base.nextRaidAt <= now && fired < NPC_RAID_CATCHUP_MAX) {
+    if (!consumeTickBudget("raids")) return true;
     const at = base.nextRaidAt;
     if (npcCombatEnabled()) {
       fireRaid(universe, base, at, "pirate");
@@ -1342,20 +1454,23 @@ function catchUpRaidsPirate(universe: UniverseState, base: PirateBase, now: numb
     base.nextRaidAt = rollNextRaidAt(base.id, at, PIRATE_RAID_PERIOD_MS);
     fired += 1;
   }
+  return false;
 }
 
-function catchUpRaidsAlien(universe: UniverseState, base: AlienBase, now: number): void {
-  if (now < base.buildupEndsAt) return;
+function catchUpRaidsAlien(universe: UniverseState, base: AlienBase, now: number): boolean {
+  if (now < base.buildupEndsAt) return false;
   let fired = 0;
   while (base.destroyedAt == null && base.nextRaidAt <= now && fired < NPC_RAID_CATCHUP_MAX) {
     const at = Math.max(base.nextRaidAt, base.buildupEndsAt);
     if (at > now) break;
+    if (!consumeTickBudget("raids")) return true;
     if (npcCombatEnabled()) {
       fireRaid(universe, base, at, "alien");
     }
     base.nextRaidAt = rollNextRaidAt(base.id, at, ALIEN_RAID_PERIOD_MS);
     fired += 1;
   }
+  return false;
 }
 
 /**
@@ -1369,17 +1484,28 @@ export function tickPirates(universe: UniverseState, now: number): void {
   ensureAlienDailySeed(universe, now);
   ensurePiratePopulation(universe, now);
 
+  let paused = false;
   for (const base of Object.values(universe.pirateBases)) {
     ensurePirateBaseShape(base, now);
     growPirateBase(universe, base, now);
+    if (pirateGrowthDue(base, now)) {
+      paused = true;
+      break;
+    }
     applyFreeSpawnsPirate(base, now);
-    catchUpRaidsPirate(universe, base, now);
+    if (catchUpRaidsPirate(universe, base, now)) {
+      paused = true;
+      break;
+    }
   }
-  for (const base of Object.values(universe.alienBases)) {
-    ensureAlienBaseShape(base, universe, now);
-    growAlienBase(universe, base, now);
-    applyFreeSpawnsAlien(base, now);
-    catchUpRaidsAlien(universe, base, now);
+  if (!paused) {
+    for (const base of Object.values(universe.alienBases)) {
+      ensureAlienBaseShape(base, universe, now);
+      growAlienBase(universe, base, now);
+      if (alienGrowthDue(base, now)) break;
+      applyFreeSpawnsAlien(base, now);
+      if (catchUpRaidsAlien(universe, base, now)) break;
+    }
   }
   respawnDestroyedPirates(universe, now);
   universe.lastAiSimAt = now;

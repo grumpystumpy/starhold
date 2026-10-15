@@ -135,19 +135,23 @@ async function main() {
   logs.push("queued_builds");
 
   await page.waitForFunction(
-    () => {
-      const log = window.starhold?.getState()?.eventLog ?? [];
-      return log.some(
+    () => (window.starhold?.getState()?.buildings?.metalMine ?? 0) >= 2,
+    undefined,
+    { timeout: 40_000 },
+  );
+  const buildingMail = await page.evaluate(
+    () =>
+      (window.starhold?.getState()?.eventLog ?? []).some(
         (entry) =>
           entry.kind === "buildComplete" &&
           typeof entry.title === "string" &&
           entry.title.includes("Ore Extractor"),
-      );
-    },
-    undefined,
-    { timeout: 40_000 },
+      ),
   );
-  logs.push("build_complete_event");
+  if (buildingMail) {
+    throw new Error("building upgrade still mailed the inbox");
+  }
+  logs.push("build_complete_silent");
 
   await page.waitForFunction(
     () => (window.starhold?.getState()?.buildings?.shipyard ?? 0) >= 1,

@@ -12,6 +12,7 @@ import type {
   FleetShips,
   OccupationState,
   OfficerDef,
+  OfficerId,
   OfficerState,
   AlienBase,
   PirateBase,
@@ -345,6 +346,8 @@ export interface SeasonClaimView {
 export interface SeasonLeaderboardView {
   seasonId: string;
   scores: { combat: number; economy: number; pirateKills: number };
+  /** Resources spent this month that have not yet made a full economy point. */
+  economyRemainder: number;
   ranks: Record<SeasonBoardId, number | null>;
   boards: Record<SeasonBoardId, SeasonStanding[]>;
   claims: SeasonClaimView[];
@@ -370,8 +373,23 @@ export interface PlayerState {
   starshards?: number;
   /** Active officers. */
   officers?: OfficerState[];
-  /** Unlocked skill node ids. */
+  /**
+   * Permanent officer training, 1–10. Survives the hire expiring.
+   * Missing on old saves — a live hire migrates to level 1.
+   */
+  officerLevels?: Partial<Record<OfficerId, number>>;
+  /** Unlocked skill node ids. Kept in sync with skillLevels ≥ 1. */
   skillsUnlocked?: string[];
+  /**
+   * Permanent skill training, 1–10. Missing on old saves — each
+   * skillsUnlocked id migrates to level 1.
+   */
+  skillLevels?: Record<string, number>;
+  /**
+   * Combat reports hidden from this commander's inbox. The report stays
+   * for the other participant until they delete it too.
+   */
+  hiddenReportIds?: string[];
   /** UTC day key `YYYY-MM-DD` of last daily Starshard claim. */
   lastDailyLoginUtc?: string;
   /** Once-only top-3 highscore Starshard grant. */
@@ -442,6 +460,19 @@ export interface GoalView {
   reward: GoalRewardView;
 }
 
+export interface UniverseSeedCursor {
+  /** Next system ordinal in `[0, MAP_GALAXIES * MAP_SYSTEMS]`. */
+  at: number;
+  /** Pirate placement rank rows. Dropped once pirates are placed. */
+  ranks?: { g: number; s: number; k: number }[];
+  /** True after `ranks` has been sorted once. */
+  sorted?: boolean;
+  /** Next index in the sorted rank list. */
+  rankAt?: number;
+  pirates: number;
+  done?: boolean;
+}
+
 export interface UniverseState {
   id: string;
   name: string;
@@ -468,6 +499,12 @@ export interface UniverseState {
   /** Lazy AI catch-up cursor (Hobby bounded batch). */
   lastAiSimAt?: number;
   aiCatchUpCursor?: string | null;
+  /**
+   * Workers bootstrap. Absent on Vercel universes that were seeded in one
+   * shot. `done` means minis, asteroids, and the pirate roster match a
+   * full seed.
+   */
+  seedCursor?: UniverseSeedCursor;
   /** Active Mothership occupations keyed by planetId. */
 
   occupations?: Record<string, OccupationState>;
@@ -575,6 +612,8 @@ export interface PlayerView {
       isMoon: boolean;
       isMini: boolean;
       jumpGateLevel: number;
+      /** Research Lab level on this body (empire research uses the best). */
+      researchLab: number;
     }
   >;
   economy: EconomySnapshot;
@@ -592,8 +631,12 @@ export interface PlayerView {
   starshards: number;
   /** Active (non-expired) officers. */
   officers: OfficerState[];
-  /** Unlocked skills. */
+  /** Unlocked skills (level ≥ 1). */
   skillsUnlocked: string[];
+  /** Skill id → level (1–10). Absent ids are level 0. */
+  skillLevels: Record<string, number>;
+  /** Officer id → permanent level (1–10). Absent ids are level 0. */
+  officerLevels: Partial<Record<OfficerId, number>>;
   /** Officer catalog for UI. */
   officerCatalog: OfficerDef[];
   /** Skill tree catalog for UI. */
@@ -627,6 +670,8 @@ export interface PublicPlayer extends PlanetArtFields {
   coords: Coordinates;
   pointsHint: number;
   planetId: string;
+  /** Home planet display name. */
+  planetName?: string;
   allianceTag?: string | null;
 }
 
@@ -637,6 +682,9 @@ export interface HighscoreEntry extends PlanetArtFields {
   points: number;
   coords: Coordinates;
   planetCount: number;
+  /** Home planet display name. Other colonies are not separate rows. */
+  planetName: string;
+  homePlanetId: string;
   /** Player level (Round 2). */
   level: number;
   /** Lifetime XP (Round 2). */

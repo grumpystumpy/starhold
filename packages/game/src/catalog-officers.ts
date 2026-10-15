@@ -17,7 +17,8 @@ export const OFFICERS: Record<OfficerId, OfficerDef> = {
   quartermaster: {
     id: "quartermaster",
     name: "Quartermaster",
-    description: "Boosts mine output and +1 building/ship/defense queue slot while on duty.",
+    description:
+      "While on duty, +10% mine output per level and extra build queue slots.",
     cost: 50,
     durationMs: OFFICER_DURATION_MS,
     effects: [{ kind: "mineOutput", value: 1.1 }],
@@ -25,7 +26,8 @@ export const OFFICERS: Record<OfficerId, OfficerDef> = {
   archivist: {
     id: "archivist",
     name: "Archivist",
-    description: "Speeds empire research and +1 research queue slot while on duty.",
+    description:
+      "While on duty, +15% research speed per level and extra research queue slots.",
     cost: 50,
     durationMs: OFFICER_DURATION_MS,
     effects: [{ kind: "researchSpeed", value: 1.15 }],
@@ -33,7 +35,8 @@ export const OFFICERS: Record<OfficerId, OfficerDef> = {
   navigator: {
     id: "navigator",
     name: "Navigator",
-    description: "Faster fleets and one extra fleet slot.",
+    description:
+      "While on duty, +10% fleet speed per level and extra fleet slots.",
     cost: 60,
     durationMs: OFFICER_DURATION_MS,
     effects: [
@@ -44,7 +47,7 @@ export const OFFICERS: Record<OfficerId, OfficerDef> = {
   warden: {
     id: "warden",
     name: "Warden",
-    description: "Hardens planetary defenses in combat.",
+    description: "While on duty, +15% defense power per level.",
     cost: 60,
     durationMs: OFFICER_DURATION_MS,
     effects: [{ kind: "defensePower", value: 1.15 }],
@@ -52,7 +55,7 @@ export const OFFICERS: Record<OfficerId, OfficerDef> = {
   engineer: {
     id: "engineer",
     name: "Engineer",
-    description: "Increases solar / energy output.",
+    description: "While on duty, +15% energy output per level.",
     cost: 40,
     durationMs: OFFICER_DURATION_MS,
     effects: [{ kind: "energyOutput", value: 1.15 }],
@@ -60,7 +63,7 @@ export const OFFICERS: Record<OfficerId, OfficerDef> = {
   spymaster: {
     id: "spymaster",
     name: "Spymaster",
-    description: "Raises espionage detail floor.",
+    description: "While on duty, extra espionage detail. Level 1 adds 1.",
     cost: 70,
     durationMs: OFFICER_DURATION_MS,
     effects: [{ kind: "espionageLevel", value: 1 }],

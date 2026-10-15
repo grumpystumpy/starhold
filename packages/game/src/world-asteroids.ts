@@ -68,19 +68,27 @@ export function createAsteroidField(
 }
 
 /** Populate asteroids for the whole map from universe.seed (idempotent replace). */
-export function seedUniverseAsteroids(universe: UniverseState): void {
+export function seedAsteroidsInSystem(
+  universe: UniverseState,
+  galaxy: number,
+  system: number,
+): void {
   const seed = universe.seed ?? universe.id;
-  const asteroids: Record<string, AsteroidField> = {};
+  if (!universe.asteroids) universe.asteroids = {};
+  const count = rollAsteroidCount(seed, galaxy, system);
+  for (let i = 0; i < count; i++) {
+    const field = createAsteroidField(seed, galaxy, system, i);
+    universe.asteroids[field.id] = field;
+  }
+}
+
+export function seedUniverseAsteroids(universe: UniverseState): void {
+  universe.asteroids = {};
   for (let galaxy = 1; galaxy <= MAP_GALAXIES; galaxy++) {
     for (let system = 1; system <= MAP_SYSTEMS; system++) {
-      const count = rollAsteroidCount(seed, galaxy, system);
-      for (let i = 0; i < count; i++) {
-        const field = createAsteroidField(seed, galaxy, system, i);
-        asteroids[field.id] = field;
-      }
+      seedAsteroidsInSystem(universe, galaxy, system);
     }
   }
-  universe.asteroids = asteroids;
 }
 
 export function asteroidsInSystem(

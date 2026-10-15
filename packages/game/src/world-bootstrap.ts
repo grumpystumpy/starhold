@@ -25,6 +25,7 @@ import { emptyPlayerClass } from "./formulas-round3.js";
 import { seedUniverseAsteroids } from "./world-asteroids.js";
 import { ensurePlayerFleetPresets } from "./world-fleet-presets.js";
 import { ensureEventLog } from "./world-event-log.js";
+import { ensureProgressionLevels } from "./world-progression.js";
 import { seedUniverseMinis } from "./world-mini.js";
 import {
   ensurePirateBaseShape,
@@ -75,6 +76,7 @@ export function createUniverse(
   name = "Alpha Drift",
   speed = 1,
   fleetSpeed = speed,
+  opts?: { lazySeed?: boolean },
 ): UniverseState {
   const now = Date.now();
   const id = `uni_${now.toString(36)}`;
@@ -101,9 +103,17 @@ export function createUniverse(
     acsGroups: {},
     miniPlanetIds: [],
   };
-  seedUniverseAsteroids(universe);
-  seedUniversePirates(universe, now);
-  seedUniverseMinis(universe, now);
+  if (opts?.lazySeed) {
+    universe.asteroids = {};
+    universe.pirateBases = {};
+    universe.alienBases = {};
+    universe.miniPlanetIds = [];
+    universe.seedCursor = { at: 0, ranks: [], pirates: 0 };
+  } else {
+    seedUniverseAsteroids(universe);
+    seedUniversePirates(universe, now);
+    seedUniverseMinis(universe, now);
+  }
   return universe;
 }
 
@@ -127,29 +137,15 @@ export function nextCoords(universe: UniverseState): Coordinates {
   throw new Error("Universe planet slots are full.");
 }
 
-export function planetAtCoords(
-  universe: UniverseState,
-  coords: Coordinates,
-): PlanetState | null {
-  const key = coordsKey(coords);
-  return (
-    Object.values(universe.planets).find(
-      (p) => p.kind !== "moon" && coordsKey(p.coords) === key,
-    ) ?? null
-  );
-}
+export {
+  invalidatePlanetIndex,
+  moonAtCoords,
+  notePlanetAdded,
+  notePlanetMoved,
+  planetAtCoords,
+} from "./planet-index.js";
 
-export function moonAtCoords(
-  universe: UniverseState,
-  coords: Coordinates,
-): PlanetState | null {
-  const key = coordsKey(coords);
-  return (
-    Object.values(universe.planets).find(
-      (p) => p.kind === "moon" && coordsKey(p.coords) === key,
-    ) ?? null
-  );
-}
+const shapedUniverses = new WeakSet<UniverseState>();
 
 export function ensureUniverseShape(universe: UniverseState): void {
   if (!universe.fleets) universe.fleets = {};
@@ -160,9 +156,6 @@ export function ensureUniverseShape(universe: UniverseState): void {
   if (!universe.asteroids) universe.asteroids = {};
   if (!universe.pirateBases) universe.pirateBases = {};
   if (!universe.alienBases) universe.alienBases = {};
-  for (const base of Object.values(universe.pirateBases)) {
-    ensurePirateBaseShape(base);
-  }
   if (!universe.occupations) universe.occupations = {};
   if (!universe.miniPlanetIds) universe.miniPlanetIds = [];
   if (!universe.alliances) universe.alliances = {};
@@ -175,7 +168,10 @@ export function ensureUniverseShape(universe: UniverseState): void {
   if (!universe.seasons) universe.seasons = {};
   if (!universe.fleetSpeed) universe.fleetSpeed = universe.speed || 1;
   if (!universe.seed) universe.seed = `seed_${universe.id}`;
-  if (universe.miniPlanetIds.length === 0) {
+  // A Workers bootstrap cursor fills minis across requests. Do not
+  // dump the full 10×399 scan into the request that first touches it.
+  const bootstrapping = Boolean(universe.seedCursor && !universe.seedCursor.done);
+  if (universe.miniPlanetIds.length === 0 && !bootstrapping) {
     seedUniverseMinis(universe);
   }
   for (const player of Object.values(universe.players)) {
@@ -201,6 +197,7 @@ export function ensureUniverseShape(universe: UniverseState): void {
     if (player.starshards === undefined) player.starshards = 0;
     if (!player.officers) player.officers = [];
     if (!player.skillsUnlocked) player.skillsUnlocked = [];
+    ensureProgressionLevels(player);
     if (player.highscoreStarshardsClaimed === undefined) {
       player.highscoreStarshardsClaimed = false;
     }
@@ -210,6 +207,13 @@ export function ensureUniverseShape(universe: UniverseState): void {
     if (player.allianceId === undefined) player.allianceId = null;
     ensureEventLog(player);
     ensurePlayerFleetPresets(player);
+  }
+  // Planet and pirate walks dominate CPU. Skip them once a universe has
+  // been shaped in this isolate. Cheap field fills above still run so a
+  // deleted chat log or event log is restored.
+  if (shapedUniverses.has(universe)) return;
+  for (const base of Object.values(universe.pirateBases)) {
+    ensurePirateBaseShape(base);
   }
   const seed = universe.seed ?? universe.id;
   for (const planet of Object.values(universe.planets)) {
@@ -260,6 +264,7 @@ export function ensureUniverseShape(universe: UniverseState): void {
       planet.ownerPlayerId = owner?.id ?? "";
     }
   }
+  shapedUniverses.add(universe);
 }
 
 export function joinUniverse(

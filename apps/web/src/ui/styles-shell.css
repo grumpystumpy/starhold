@@ -12,6 +12,24 @@
   gap: 0.65rem;
 }
 
+.idle-pause {
+  align-self: flex-start;
+  margin: 0;
+  padding: 0.2rem 0.6rem;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text);
+  background: color-mix(in srgb, var(--bg2) 86%, var(--accent, #8fd));
+  border: 1px solid color-mix(in srgb, var(--muted) 55%, transparent);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.idle-pause[hidden] {
+  display: none;
+}
+
 .shell-top {
   margin-bottom: 0;
   display: flex;

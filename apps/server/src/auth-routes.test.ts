@@ -1,8 +1,30 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import { createApp } from "./app.js";
-import { resetMemoryAccounts } from "./accounts.js";
-import { resetMemoryUniverse } from "./store.js";
+import { preparePasswordClaim, resetMemoryAccounts } from "./accounts.js";
+import { memoryUniverseLoaded, resetMemoryUniverse } from "./store.js";
+
+describe("health", () => {
+  beforeEach(() => {
+    resetMemoryUniverse();
+  });
+
+  it("does not load or tick the universe", async () => {
+    const app = createApp();
+    const res = await app.request("/api/health");
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get("cache-control"), "private, no-store");
+    const body = (await res.json()) as {
+      ok: boolean;
+      storage: string;
+      auth: { passwordAuth: boolean };
+    };
+    assert.equal(body.ok, true);
+    assert.equal(body.storage, "memory");
+    assert.equal(body.auth.passwordAuth, true);
+    assert.equal(memoryUniverseLoaded(), false);
+  });
+});
 
 describe("auth email+password routes (memory)", () => {
   beforeEach(() => {
@@ -10,6 +32,9 @@ describe("auth email+password routes (memory)", () => {
     resetMemoryUniverse();
     delete process.env.VERCEL;
     delete process.env.SESSION_SECRET;
+    delete process.env.CLAIM_MAIL_URL;
+    delete process.env.STARHOLD_E2E;
+    delete process.env.STARHOLD_RUNTIME;
   });
 
   it("signup sets session cookie and auth/me resumes player after join", async () => {
@@ -152,6 +177,87 @@ describe("auth email+password routes (memory)", () => {
     assert.equal(body.account.playerId, guestView.player.id);
     assert.equal(body.view?.player.id, guestView.player.id);
     assert.ok(body.view?.player.accountId);
+  });
+
+  it("sets a new password from a claim code without echoing the code", async () => {
+    const app = createApp();
+    const hidden = await app.request("/api/e2e/prepare-password-claim", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "reset@example.com" }),
+    });
+    assert.equal(hidden.status, 404);
+
+    const signup = await app.request("/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "reset@example.com",
+        password: "old-password",
+      }),
+    });
+    assert.equal(signup.status, 200);
+
+    const prepared = await preparePasswordClaim("reset@example.com");
+    assert.equal(prepared.ok, true);
+    if (!prepared.ok) return;
+
+    const ask = await app.request("/api/auth/claim-code", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "reset@example.com" }),
+    });
+    assert.equal(ask.status, 200);
+    const askBody = (await ask.json()) as { message?: string; code?: string };
+    assert.equal(askBody.code, undefined);
+    assert.match(askBody.message ?? "", /claim code you were given/);
+
+    const oldLogin = await app.request("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "reset@example.com",
+        password: "old-password",
+      }),
+    });
+    assert.equal(oldLogin.status, 401);
+
+    const set = await app.request("/api/auth/claim-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "reset@example.com",
+        code: prepared.code,
+        password: "new-password",
+      }),
+    });
+    assert.equal(set.status, 200);
+    const cookie = (set.headers.get("set-cookie") ?? "").split(";")[0]!;
+    assert.ok(cookie.includes("starhold_session="));
+    const me = await app.request("/api/auth/me", { headers: { Cookie: cookie } });
+    const meBody = (await me.json()) as { account: { email: string } | null };
+    assert.equal(meBody.account?.email, "reset@example.com");
+
+    const reused = await app.request("/api/auth/claim-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "reset@example.com",
+        code: prepared.code,
+        password: "another-password",
+      }),
+    });
+    assert.equal(reused.status, 401);
+
+    const login = await app.request("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "reset@example.com",
+        password: "new-password",
+      }),
+    });
+    assert.equal(login.status, 200);
   });
 
   it("requires SESSION_SECRET on Vercel", async () => {

@@ -1,5 +1,6 @@
 import {
   SEASON_BOARDS,
+  SEASON_ECONOMY_SPEND_DIV,
   type PlayerView,
   type SeasonBoardId,
   type SeasonClaimView,
@@ -7,6 +8,7 @@ import {
 } from "@starhold/game";
 import { fmt } from "./format";
 import { escapeAttr, escapeHtml } from "./render-escape";
+import { infoTooltip } from "./render-tooltips";
 
 function boardLabel(board: SeasonBoardId): string {
   switch (board) {
@@ -28,7 +30,7 @@ function boardHint(board: SeasonBoardId): string {
     case "combat":
       return "Raid wins against commanders, and wins against pirates.";
     case "economy":
-      return "Buildings and research finished this month.";
+      return `1 point for every ${fmt(SEASON_ECONOMY_SPEND_DIV)} resources spent on buildings, ships, defenses, and research that finish this month.`;
     case "pirateKills":
       return "Pirate bases destroyed.";
     default: {
@@ -134,10 +136,21 @@ export function seasonsPage(view: PlayerView, busy: boolean): string {
       ? board.claims.map((claim, index) => claimCard(claim, index, busy)).join("")
       : `<p class="hint" data-testid="season-claim-locked">Claims open after this month seals.</p>`;
 
+  const economyTip = infoTooltip({
+    title: "Economy score",
+    lines: [
+      `1 point for every ${fmt(SEASON_ECONOMY_SPEND_DIV)} metal, crystal, and deuterium spent on buildings, ships, defenses, and research that finish this month.`,
+      board.economyRemainder > 0
+        ? `${fmt(board.economyRemainder)} resources are banked toward the next point.`
+        : "Leftover spend is banked until it reaches the next point.",
+    ],
+    testId: "season-economy-tip",
+  });
   const boards = SEASON_BOARDS.map((id) => {
     const rank = board.ranks[id];
+    const tip = id === "economy" ? economyTip.html : "";
     return `<article class="season-board" data-testid="season-board-${id}">
-      <h3>${escapeHtml(boardLabel(id))}</h3>
+      <h3>${escapeHtml(boardLabel(id))} ${tip}</h3>
       <p class="hint">${escapeHtml(boardHint(id))}</p>
       <p data-testid="season-score-${id}">You · ${rank == null ? "unranked" : `#${fmt(rank)}`} · ${fmt(board.scores[id])}</p>
       ${standingRows(board.boards[id], view.player.id, id)}

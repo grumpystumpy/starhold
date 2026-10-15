@@ -1,0 +1,32 @@
+# Cloudflare Workers host. No secrets in this file.
+# SESSION_SECRET is a Worker secret (`wrangler secret put`) or .dev.vars locally.
+# CLOUDFLARE_API_TOKEN is a GitHub secret, set at deploy time. Not in this file.
+# Deploy only from the GitHub Action on push to main. No branch previews.
+name = "starhold"
+account_id = "0de4d3787cea977fbe8952ba924adea7"
+main = "worker/index.ts"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+preview_urls = false
+
+[limits]
+cpu_ms = 10
+
+[alias]
+"@starhold/game" = "./packages/game/src/index.ts"
+
+[assets]
+directory = "./apps/web/dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = [ "/api/*" ]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "starhold"
+database_id = "d3d8d52e-9272-40cd-b8ae-3012cef6c8ca"
+migrations_dir = "migrations"
+
+[vars]
+STARHOLD_RUNTIME = "workers"
+STARHOLD_PASSWORD_KDF = "pbkdf2"

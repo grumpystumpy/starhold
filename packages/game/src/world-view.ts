@@ -84,6 +84,8 @@ export function highscoresBoard(universe: UniverseState): HighscoreEntry[] {
       points: empirePoints(universe, p),
       coords: home?.coords ?? { galaxy: 0, system: 0, slot: 0 },
       planetCount: ownedPlanetCount(universe, p.id),
+      planetName: home?.name ?? "",
+      homePlanetId: p.homePlanetId,
       level: p.level ?? 1,
       xpTotal: p.xpTotal ?? 0,
       allianceTag: allianceTagForPlayer(universe, p),
@@ -100,7 +102,10 @@ export function highscoresBoard(universe: UniverseState): HighscoreEntry[] {
   return rows.map((r, i) => ({ ...r, rank: i + 1 }));
 }
 
-export function publicRoster(universe: UniverseState): PublicPlayer[] {
+export function publicRoster(
+  universe: UniverseState,
+  pointsById?: ReadonlyMap<string, number>,
+): PublicPlayer[] {
   const artCtx = createPlanetArtContext(universe);
   return Object.values(universe.players).map((p) => {
     const planet = universe.planets[p.homePlanetId];
@@ -108,8 +113,9 @@ export function publicRoster(universe: UniverseState): PublicPlayer[] {
       id: p.id,
       name: p.name,
       coords: planet?.coords ?? { galaxy: 0, system: 0, slot: 0 },
-      pointsHint: empirePoints(universe, p),
+      pointsHint: pointsById?.get(p.id) ?? empirePoints(universe, p),
       planetId: p.homePlanetId,
+      planetName: planet?.name ?? "",
       allianceTag: allianceTagForPlayer(universe, p),
       ...artFields(universe, planet, artCtx),
     };
@@ -256,11 +262,11 @@ export function galaxyViewFor(
 function maybeGrantHighscoreStarshards(
   universe: UniverseState,
   playerId: string,
+  board: HighscoreEntry[],
 ): void {
   const player = universe.players[playerId];
   if (!player || player.highscoreStarshardsClaimed) return;
   if (Object.keys(universe.players).length < 2) return;
-  const board = highscoresBoard(universe);
   const row = board.find((e) => e.playerId === playerId);
   if (!row || row.rank > 3) return;
   player.highscoreStarshardsClaimed = true;
@@ -280,7 +286,11 @@ export function playerView(
   const player = universe.players[playerId];
   if (!player) throw new Error("Unknown player.");
   pruneExpiredOfficers(player, now);
-  maybeGrantHighscoreStarshards(universe, playerId);
+  const highscores = highscoresBoard(universe);
+  maybeGrantHighscoreStarshards(universe, playerId, highscores);
+  const pointsById = new Map(
+    highscores.map((row) => [row.playerId, row.points]),
+  );
   const planet = activePlanet(universe, player);
   if (!planet) throw new Error("Planet missing.");
   stampQueueView(player, planet, now);
@@ -292,10 +302,12 @@ export function playerView(
     .filter((f) => f.ownerPlayerId === playerId)
     .sort((a, b) => a.arrivesAt - b.arrivesAt);
 
+  const hiddenReports = new Set(player.hiddenReportIds ?? []);
   const reports = Object.values(universe.reports)
     .filter(
       (r) =>
-        r.attackerPlayerId === playerId || r.defenderPlayerId === playerId,
+        (r.attackerPlayerId === playerId || r.defenderPlayerId === playerId) &&
+        !hiddenReports.has(r.id),
     )
     .sort((a, b) => b.at - a.at)
     .slice(0, 12);
@@ -374,6 +386,7 @@ export function playerView(
           isMoon: p.kind === "moon",
           isMini: isMiniBody(universe, p),
           jumpGateLevel: p.buildings.jumpGate ?? 0,
+          researchLab: p.buildings.researchLab ?? 0,
           ...art,
         };
       })
@@ -390,8 +403,8 @@ export function playerView(
         energyOutput: boosts.energyOutput,
       },
     ),
-    roster: publicRoster(universe),
-    highscores: highscoresBoard(universe),
+    roster: publicRoster(universe, pointsById),
+    highscores,
     galaxy: galaxyViewFor(universe, playerId, g, s, now),
     fleets,
     reports,
@@ -402,6 +415,8 @@ export function playerView(
     starshards: player.starshards ?? 0,
     officers: player.officers ?? [],
     skillsUnlocked: player.skillsUnlocked ?? [],
+    skillLevels: { ...(player.skillLevels ?? {}) },
+    officerLevels: { ...(player.officerLevels ?? {}) },
     officerCatalog: OFFICER_ORDER.map((id) => OFFICERS[id]),
     skillCatalog: SKILL_ORDER.map((id) => SKILLS[id]),
     dailyLoginAvailable: canClaimDailyLogin(player, now),

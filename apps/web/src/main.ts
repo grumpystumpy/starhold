@@ -32,6 +32,8 @@ import {
   doSelectPlanet,
   doUpgrade,
   resumeFromCookie,
+  IDLE_PAUSE_MS,
+  POLL_INTERVAL_MS,
   silentRefresh,
   startPolling,
 } from "./main-actions";
@@ -54,6 +56,9 @@ function paint(): void {
       joinDraft: session.joinDraft,
       emailDraft: session.emailDraft,
       passwordDraft: session.passwordDraft,
+      claimEmailDraft: session.claimEmailDraft,
+      claimCodeDraft: session.claimCodeDraft,
+      claimPasswordDraft: session.claimPasswordDraft,
       accountEmail: session.account?.email ?? null,
       claimablePlayerId: session.claimablePlayerId,
       activePage: session.activePage,
@@ -218,6 +223,8 @@ declare global {
       }) => Promise<void>;
       refresh: () => Promise<void>;
       poll: () => Promise<void>;
+      pollIntervalMs: number;
+      idlePauseMs: number;
       getState: () => {
         playerId: string | null;
         name: string | null;
@@ -251,6 +258,8 @@ window.starhold = {
   refresh: () => doRefresh(),
   poll: () =>
     session.view ? silentRefresh(session.view.player.id) : Promise.resolve(),
+  pollIntervalMs: POLL_INTERVAL_MS,
+  idlePauseMs: IDLE_PAUSE_MS,
   getState: () => ({
     playerId: session.view?.player.id ?? null,
     name: session.view?.player.name ?? null,

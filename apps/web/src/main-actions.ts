@@ -1,6 +1,9 @@
 export {
+  POLL_INTERVAL_MS,
+  IDLE_PAUSE_MS,
   startPolling,
   stopPolling,
+  deferBackgroundPoll,
   silentRefresh,
   doJoin,
   doRefresh,
@@ -11,6 +14,8 @@ export {
   doSignup,
   doLogin,
   doClaimAnonymous,
+  doClaimPassword,
+  doRequestClaimCode,
   resumeFromCookie,
 } from "./main-actions-session.js";
 export {
@@ -32,6 +37,7 @@ export {
   doClaimDaily,
   doClaimGoal,
   doActivateOfficer,
+  doRaiseOfficer,
   doUnlockSkill,
   doChooseClass,
   doChangeClass,
@@ -53,7 +59,7 @@ export {
   doUpsertAllianceMarker,
   fleetStrikeTarget,
 } from "./main-actions-alliances.js";
-export { doMarkEventsRead } from "./main-actions-events.js";
+export { doDeleteMessages, doMarkEventsRead } from "./main-actions-events.js";
 export {
   doClaimSeason,
   doSetSeasonSkin,

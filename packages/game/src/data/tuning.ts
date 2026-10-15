@@ -694,7 +694,8 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   metalStorage: {
     id: "metalStorage",
     name: "Metal Vault",
-    description: "Raises metal storage cap.",
+    description:
+      "Raises the metal storage cap. Capacity starts at 30,000 and doubles with each level.",
     baseCost: { metal: 1000, crystal: 0, deuterium: 0 },
     costGrowth: 2,
     baseBuildSeconds: 6,
@@ -702,7 +703,8 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   crystalStorage: {
     id: "crystalStorage",
     name: "Crystal Vault",
-    description: "Raises crystal storage cap.",
+    description:
+      "Raises the crystal storage cap. Capacity starts at 30,000 and doubles with each level.",
     baseCost: { metal: 1000, crystal: 500, deuterium: 0 },
     costGrowth: 2,
     baseBuildSeconds: 6,
@@ -710,7 +712,8 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   deutTank: {
     id: "deutTank",
     name: "Deut Tank",
-    description: "Raises deuterium storage cap.",
+    description:
+      "Raises the deuterium storage cap. Capacity starts at 30,000 and doubles with each level.",
     baseCost: { metal: 1000, crystal: 1000, deuterium: 0 },
     costGrowth: 2,
     baseBuildSeconds: 6,
@@ -772,7 +775,7 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
     id: "mantleLoom",
     name: "Mantle Loom",
     description:
-      "Field expansion — occupies 1 field; +5 fieldsCap per level. Very high energy use. Planet only.",
+      "Field expansion — occupies 1 field and adds 5 fields per level. Very high energy use. Planet only.",
     baseCost: { metal: 50_000, crystal: 100_000, deuterium: 30_000 },
     costGrowth: 2.0,
     baseBuildSeconds: 120,
@@ -1030,6 +1033,22 @@ export const MINI_RELIC_PIRATE_WEIGHT = 4;
 export const RIFT_SIPHON_MINE_PER = 0.15;
 /** Echo Vault: +25% storage caps per level. */
 export const ECHO_VAULT_STORAGE_PER = 0.25;
+/**
+ * Vault capacity before the level doubling: `STORAGE_CAP_BASE * 2^level`.
+ * `STORAGE_CAP_MULT` is 3 — a 200% increase, so every level holds triple
+ * the previous formula.
+ */
+export const STORAGE_CAP_BASE = 10_000;
+export const STORAGE_CAP_MULT = 3;
+/** Skills and officers each train from level 1 through this cap. */
+export const SKILL_MAX_LEVEL = 10;
+export const OFFICER_MAX_LEVEL = 10;
+/**
+ * Flat bonuses (fleet slots, espionage detail, queue slots) stay at the
+ * level-1 amount for this many levels, then step up by the same amount.
+ * Level 1 matches the old single unlock. Level 10 is four steps.
+ */
+export const FLAT_BONUS_LEVELS_PER_STEP = 3;
 /** Anomaly Forge: −8% ship build time per level. */
 export const ANOMALY_FORGE_SHIP_TIME_PER = 0.08;
 
@@ -1277,6 +1296,22 @@ export const NPC_RAID_CATCHUP_MAX = 24;
 /** Max AI bases processed per lazy tick batch (bounded Hobby maxDuration). */
 export const NPC_AI_BATCH_SIZE = 200;
 
+/**
+ * Workers free plan allows 10ms of CPU per request. These caps spread a
+ * long-idle catch-up across later requests. Vercel does not install a
+ * tick budget, so it still runs the full tick. See docs/cloudflare.md.
+ */
+export const WORKERS_TICK_RAID_BUDGET = 2;
+export const WORKERS_TICK_LEVELUP_BUDGET = 40;
+export const WORKERS_TICK_FLEET_BUDGET = 2;
+export const WORKERS_TICK_DRIFT_BUDGET = 8;
+/** Systems of asteroids + minis visited per Workers request. */
+export const WORKERS_TICK_SEED_SYSTEMS = 8;
+/** Stop a seed slice after this many new mini bodies. */
+export const WORKERS_TICK_SEED_MINIS = 1;
+/** Pirate bases placed per Workers request once the map scan finishes. */
+export const WORKERS_TICK_SEED_PIRATES = 4;
+
 /* ---- Aliens ---- */
 
 export const ALIEN_INITIAL_BASE_COUNT = 0;
@@ -1350,7 +1385,7 @@ export const FRONTIER_BEACON_JUMP_CD = 0.75;
 /** Monthly season scoring. Calendar month is UTC `YYYY-MM`. */
 export const SEASON_COMBAT_WIN = 10;
 export const SEASON_COMBAT_PVE_WIN = 3;
-/** Economy points = resources spent on completed buildings and research / this. */
+/** Economy points = resources spent on completed buildings, ships, defenses, and research / this. */
 export const SEASON_ECONOMY_SPEND_DIV = 1000;
 export const SEASON_LEADERBOARD_TOP = 20;
 export const SEASON_REWARD_TOP_N = 5;

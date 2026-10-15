@@ -111,10 +111,12 @@ describe("Thread D Starshards / officers / skills", () => {
     );
 
     const again = unlockSkill(universe, a.player.id, "eco_mines_1", 162_000_300);
-    assert.equal(again.ok, false);
+    assert.equal(again.ok, true);
+    assert.equal(universe.players[a.player.id].skillLevels?.eco_mines_1, 2);
 
     const boosts = playerBoosts(universe.players[a.player.id], 162_000_300);
-    assert.ok(Math.abs(boosts.mineOutput - 1.05 * 1.05) < 1e-9);
+    // Strip Mining I at level 2 is +10%, Strip Mining II at level 1 is +5%.
+    assert.ok(Math.abs(boosts.mineOutput - 1.1 * 1.05) < 1e-9);
   });
 
   it("pirate destroy / defense-win hooks match live pirateRaid amounts", () => {

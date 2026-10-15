@@ -17,6 +17,8 @@ import {
   RESEARCH,
   RIFT_SIPHON_MINE_PER,
   SHIPS,
+  STORAGE_CAP_BASE,
+  STORAGE_CAP_MULT,
 } from "./catalog.js";
 import type {
   BuildingId,
@@ -291,7 +293,10 @@ export function researchUpgradeSeconds(
 
 export function storageCap(level: number): number {
   // Level 0 still holds a starter pile; each vault level doubles capacity.
-  return Math.floor(10_000 * Math.pow(2, level));
+  // STORAGE_CAP_MULT (3) is a 200% increase over the previous base.
+  return Math.floor(
+    STORAGE_CAP_BASE * Math.pow(2, Math.max(0, level)) * STORAGE_CAP_MULT,
+  );
 }
 
 export function mineOutputPerHour(

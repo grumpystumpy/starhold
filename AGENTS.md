@@ -27,5 +27,5 @@ Big addenda (`universe-contract`, `round2-contract`, `round3-contract`) are refe
 - Branch `cursor/<name>-####` off `main`; small PR; never push `cursor/core-loop-prototype-1093`.
 - Tuning numbers only in `packages/game/src/data/tuning.ts`.
 - Commit the small `api/index.js` stub (do not gitignore it). `build:vercel` overwrites it; do not commit the generated bundle.
-- Vercel deploys **`main` only** (`vercel.json` `git.deploymentEnabled`).
+- Vercel deploys **`main` only** (`vercel.json` `git.deploymentEnabled` + `ignoreCommand`). Docs/tests/scripts-only commits skip the build. CI must not call Vercel.
 - Real `git push` when available; do not invent credentials/accounts.

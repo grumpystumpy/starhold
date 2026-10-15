@@ -5,6 +5,7 @@ import {
   chooseClass,
   claimDaily,
   claimGoalReward,
+  raiseOfficerLevel,
   unlockSkillNode,
 } from "./api";
 import { clearFlash, schedulePaint, session, setFlash } from "./session";
@@ -64,6 +65,25 @@ export async function doActivateOfficer(officerId: OfficerId): Promise<void> {
     setFlash(
       "error",
       err instanceof Error ? err.message : "Officer hire failed.",
+    );
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doRaiseOfficer(officerId: OfficerId): Promise<void> {
+  if (!session.view || session.busy) return;
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    session.view = await raiseOfficerLevel(session.view.player.id, officerId);
+    setFlash("notice", "Officer level raised.");
+  } catch (err) {
+    setFlash(
+      "error",
+      err instanceof Error ? err.message : "Could not raise officer level.",
     );
   } finally {
     session.busy = false;

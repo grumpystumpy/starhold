@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { Context, Next } from "hono";
+import { compress } from "hono/compress";
 import {
   type BuildingId,
   type Coordinates,
@@ -15,6 +16,8 @@ import {
   type ShipId,
   abandonOccupation,
   activateOfficer,
+  deletePlayerMessages,
+  isMessageCategory,
   advanceUniverse,
   batchScanSystem,
   cancelQueueItem,
@@ -28,6 +31,8 @@ import {
   discoverMiniPlanet,
   disbandAlliance,
   empirePoints,
+  emptyDefenses,
+  emptyFleetShips,
   ensureUniverseShape,
   graduateNewbieProtection,
   inviteToAlliance,
@@ -42,6 +47,7 @@ import {
   leaveAlliance,
   markEventsRead,
   playerView,
+  pushEventLog,
   queueBuildingUpgrade,
   queueDefenseBuild,
   queueResearch,
@@ -50,6 +56,7 @@ import {
   claimSeasonReward,
   grantSeasonPoints,
   isSeasonBoard,
+  raiseOfficer,
   renamePlanet,
   relocateMovingFortress,
   resolveMiniPlanetChoice,
@@ -69,6 +76,10 @@ import {
 import { sessionSecretConfigured } from "./accounts.js";
 import { mountAllianceIntelRoutes } from "./alliance-intel-routes.js";
 import { mountAuthRoutes } from "./auth-routes.js";
+import { mountCpuRoutes } from "./cpu-routes.js";
+import { readCpuMs } from "./request-context.js";
+import { respondWithPlayerView } from "./state-response.js";
+import { staticCacheControl } from "./static-cache.js";
 import { storageMode, withUniverse } from "./store.js";
 
 function allowedOrigins(): Set<string> {
@@ -104,7 +115,7 @@ async function simpleCors(c: Context, next: Next): Promise<Response | void> {
       );
       res.headers.set(
         "Access-Control-Allow-Headers",
-        "Content-Type, Cookie",
+        "Content-Type, Cookie, If-None-Match, X-Starhold-Have-Catalogs",
       );
       res.headers.set("Access-Control-Allow-Credentials", "true");
       res.headers.set("Vary", "Origin");
@@ -123,8 +134,30 @@ async function simpleCors(c: Context, next: Next): Promise<Response | void> {
 export function createApp(): Hono {
   const app = new Hono();
 
+  // Gzip JSON when the caller asks. Browsers send Accept-Encoding; unit
+  // tests do not, so they still see plain JSON. Vercel will not recompress
+  // a response that already has Content-Encoding. Workers skip this: the
+  // edge compresses, and doing it in the isolate spends the 10 ms CPU budget.
+  // A Worker response that is gzipped without Content-Encoding cannot be parsed.
+  const gzip = compress({ encoding: "gzip" });
+  app.use("/api/*", (c, next) => {
+    if (process.env.STARHOLD_RUNTIME === "workers") return next();
+    return gzip(c, next);
+  });
   app.use("*", simpleCors);
+  app.use("*", async (c, next) => {
+    await next();
+    if (!c.req.path.startsWith("/api")) return;
+    c.header("Cache-Control", staticCacheControl(c.req.path) ?? "private, no-store");
+    if (
+      process.env.STARHOLD_RUNTIME === "workers" ||
+      process.env.STARHOLD_CPU_PROFILE === "1"
+    ) {
+      c.res.headers.set("x-starhold-cpu-ms", readCpuMs().toFixed(2));
+    }
+  });
   mountAuthRoutes(app);
+  mountCpuRoutes(app);
 
   app.notFound((c) =>
     c.json({ error: "Not found", path: c.req.path }, 404),
@@ -138,35 +171,19 @@ export function createApp(): Hono {
     );
   });
 
-  app.get("/api/health", async (c) => {
-    try {
-      return await withUniverse((universe) => {
-        ensureUniverseShape(universe);
-        return c.json({
-          ok: true,
-          storage: storageMode(),
-          universe: universe.name,
-          players: Object.keys(universe.players).length,
-          speed: universe.speed,
-          fleetSpeed: universe.fleetSpeed,
-          fleets: Object.keys(universe.fleets ?? {}).length,
-          debris: Object.keys(universe.debris ?? {}).length,
-          auth: {
-            sessionSecretConfigured: sessionSecretConfigured(),
-            passwordAuth: true,
-          },
-        });
-      });
-    } catch (err) {
-      return c.json(
-        {
-          ok: false,
-          storage: storageMode(),
-          error: err instanceof Error ? err.message : "Health failed.",
-        },
-        503,
-      );
-    }
+  // Liveness only. Do not load or tick the universe — a health check must
+  // not lock, read, or write the KV document.
+  app.get("/api/health", (c) => {
+    return c.json({
+      ok: true,
+      storage: storageMode(),
+      universe: process.env.STARHOLD_UNIVERSE_NAME ?? "Alpha Drift",
+      speed: Number(process.env.STARHOLD_UNIVERSE_SPEED ?? 8),
+      auth: {
+        sessionSecretConfigured: sessionSecretConfigured(),
+        passwordAuth: true,
+      },
+    });
   });
 
   app.get("/api/universe", async (c) => {
@@ -218,7 +235,10 @@ export function createApp(): Hono {
       const galaxy = Number(c.req.query("galaxy") || 0) || undefined;
       const system = Number(c.req.query("system") || 0) || undefined;
       return await withUniverse((universe) =>
-        c.json(playerView(universe, playerId, Date.now(), galaxy, system)),
+        respondWithPlayerView(
+          c,
+          playerView(universe, playerId, Date.now(), galaxy, system),
+        ),
       );
     } catch (err) {
       return c.json(
@@ -659,6 +679,44 @@ export function createApp(): Hono {
         universe,
         body.playerId!,
         body.officerId!,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  app.post("/api/raise-officer", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      officerId?: OfficerId;
+    };
+    if (!body.playerId || !body.officerId) {
+      return c.json({ error: "playerId and officerId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = raiseOfficer(
+        universe,
+        body.playerId!,
+        body.officerId!,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
+  app.post("/api/delete-messages", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      category?: string;
+    };
+    if (!body.playerId || !body.category || !isMessageCategory(body.category)) {
+      return c.json({ error: "playerId and category required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = deletePlayerMessages(
+        universe,
+        body.playerId!,
+        body.category as "all" | "combat" | "spy" | "alerts",
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
@@ -1182,13 +1240,22 @@ export function createApp(): Hono {
     });
   });
 
-  /** Local quality-gate seed hook — disabled unless STARHOLD_E2E=1. */
-  if (process.env.STARHOLD_E2E === "1") {
-    app.post("/api/e2e/grant", async (c) => {
+  /**
+   * Local quality-gate seed hook. Registered always so a Workers isolate
+   * can see STARHOLD_E2E set at request time; the handler 404s otherwise.
+   */
+  app.post("/api/e2e/grant", async (c) => {
+    if (process.env.STARHOLD_E2E !== "1") {
+      return c.json({ error: "Not found", path: c.req.path }, 404);
+    }
       const body = (await c.req.json().catch(() => ({}))) as {
         playerId?: string;
         ships?: Partial<FleetShips>;
         resources?: Partial<Resources>;
+        buildings?: Partial<Record<BuildingId, number>>;
+        starshards?: number;
+        colonySlot?: number;
+        inbox?: boolean;
       };
       if (!body.playerId) {
         return c.json({ error: "playerId required." }, 400);
@@ -1216,17 +1283,119 @@ export function createApp(): Hono {
             }
           }
         }
+        if (body.buildings) {
+          for (const [id, n] of Object.entries(body.buildings)) {
+            if (typeof n === "number" && n >= 0) {
+              planet.buildings[id as BuildingId] = Math.floor(n);
+            }
+          }
+        }
+        if (typeof body.starshards === "number" && body.starshards >= 0) {
+          player.starshards = Math.floor(body.starshards);
+        }
+        if (typeof body.colonySlot === "number") {
+          const slot = Math.floor(body.colonySlot);
+          const coords = { ...planet.coords, slot };
+          const taken = Object.values(universe.planets).some(
+            (p) =>
+              p.kind !== "moon" &&
+              p.coords.galaxy === coords.galaxy &&
+              p.coords.system === coords.system &&
+              p.coords.slot === coords.slot,
+          );
+          if (!taken && slot >= 1 && slot <= 15 && slot !== planet.coords.slot) {
+            const id = `e2e_col_${player.id}_${slot}`;
+            const colony = structuredClone(planet);
+            colony.id = id;
+            colony.name = "Far Holding";
+            colony.coords = coords;
+            colony.kind = "planet";
+            colony.parentPlanetId = null;
+            colony.moonId = null;
+            colony.buildQueue = [];
+            colony.shipQueue = [];
+            colony.defenseQueue = [];
+            colony.resources = { metal: 0, crystal: 0, deuterium: 0 };
+            universe.planets[id] = colony;
+            if (!player.planetIds.includes(id)) player.planetIds.push(id);
+          }
+        }
+        if (body.inbox) {
+          const now = Date.now();
+          pushEventLog(player, {
+            kind: "fleetReturn",
+            title: "Fleet returned to Home",
+            body: "A hauler is home.",
+            createdAt: now,
+          });
+          const ships = emptyFleetShips();
+          const defenses = emptyDefenses();
+          const combatId = `e2e_combat_${player.id}`;
+          universe.reports[combatId] = {
+            id: combatId,
+            at: now,
+            missionId: "e2e",
+            attackerPlayerId: player.id,
+            defenderPlayerId: player.id,
+            attackerName: player.name,
+            defenderName: player.name,
+            targetCoords: planet.coords,
+            attackerBefore: ships,
+            attackerAfter: ships,
+            defenderBefore: ships,
+            defenderAfter: ships,
+            defensesBefore: defenses,
+            defensesAfter: defenses,
+            loot: { metal: 0, crystal: 0, deuterium: 0 },
+            debrisCreated: { metal: 0, crystal: 0, deuterium: 0 },
+            outcome: "draw",
+            rounds: 1,
+            summary: "Drill report",
+          };
+          const spyId = `e2e_spy_${player.id}`;
+          universe.spyReports[spyId] = {
+            id: spyId,
+            at: now - 1,
+            missionId: "e2e",
+            spyPlayerId: player.id,
+            targetPlayerId: player.id,
+            targetName: player.name,
+            targetCoords: planet.coords,
+            detail: 1,
+            resources: { metal: 1, crystal: 0, deuterium: 0 },
+            buildings: null,
+            ships: null,
+            defenses: null,
+            research: null,
+            summary: "Practice scan",
+          };
+          if (!universe.expeditionReports) universe.expeditionReports = {};
+          const expId = `e2e_exp_${player.id}`;
+          universe.expeditionReports[expId] = {
+            id: expId,
+            at: now - 2,
+            missionId: "e2e",
+            playerId: player.id,
+            targetCoords: planet.coords,
+            kind: "nothing",
+            cargoGained: { metal: 0, crystal: 0, deuterium: 0 },
+            shipsDelta: {},
+            summary: "Empty expedition",
+          };
+        }
         return c.json(playerView(universe, body.playerId!));
       });
-    });
-  }
+  });
 
   /**
    * CI / local Playwright only. Raises storage so empire points clear
    * newbie protection without combat ships. Never enabled in production.
+   * Checked per request so Workers env applied in fetch is visible.
    */
-  if (process.env.ALLOW_E2E_HOOKS === "1") {
-    app.post("/api/e2e/graduate-newbie", async (c) => {
+  app.post("/api/e2e/graduate-newbie", async (c) => {
+    if (process.env.ALLOW_E2E_HOOKS !== "1") {
+      return c.json({ error: "Not found", path: c.req.path }, 404);
+    }
       const body = (await c.req.json().catch(() => ({}))) as {
         playerId?: string;
       };
@@ -1242,8 +1411,7 @@ export function createApp(): Hono {
           points: empirePoints(universe, player),
         });
       });
-    });
-  }
+  });
 
   return app;
 }

@@ -9,6 +9,7 @@ import {
 import {
   authenticateEmailPassword,
   checkAuthRateLimit,
+  claimNewPassword,
   clientIp,
   createAccountWithPassword,
   createSession,
@@ -16,10 +17,18 @@ import {
   getAccountById,
   getSession,
   normalizeEmail,
+  preparePasswordClaim,
+  requestClaimCode,
   requireSessionSecret,
   sessionSecretConfigured,
   setAccountPlayerId,
+  type AccountRecord,
 } from "./accounts.js";
+import {
+  CLAIM_MAIL_MESSAGE,
+  CLAIM_NO_MAIL_MESSAGE,
+  claimMailConfigured,
+} from "./claim-code.js";
 import {
   clearSessionCookie,
   readSessionId,
@@ -40,15 +49,17 @@ async function sessionAccount(c: Context) {
 async function maybeClaimGuest(
   accountId: string,
   claimPlayerId: string | undefined,
-): Promise<string> {
-  if (!claimPlayerId) return "none";
+): Promise<{ status: string; view: ReturnType<typeof playerView> | null }> {
+  if (!claimPlayerId) return { status: "none", view: null };
   let claimStatus = "none";
+  let view: ReturnType<typeof playerView> | null = null;
   try {
     await withUniverse((universe) => {
       ensureUniverseShape(universe);
       const result = claimPlayerToAccount(universe, claimPlayerId, accountId);
       if (result.ok) {
         claimStatus = "claimed";
+        view = playerView(universe, claimPlayerId);
       } else if (result.code === "already_claimed") {
         claimStatus = "already_claimed";
       } else if (result.code === "conflict") {
@@ -63,8 +74,9 @@ async function maybeClaimGuest(
   } catch (err) {
     console.error("[starhold-auth] claim during signup", err);
     claimStatus = "claim_failed";
+    view = null;
   }
-  return claimStatus;
+  return { status: claimStatus, view };
 }
 
 function publicAccount(account: {
@@ -77,6 +89,42 @@ function publicAccount(account: {
     email: account.email,
     playerId: account.playerId,
   };
+}
+
+/** Session cookie plus the linked commander view, shared by login and claim. */
+async function startSession(c: Context, account: AccountRecord) {
+  const session = await createSession(account.id);
+  setSessionCookie(c, session.id);
+
+  let view: ReturnType<typeof playerView> | null = null;
+  let linkedPlayerId: string | null = null;
+  try {
+    await withUniverse((universe) => {
+      ensureUniverseShape(universe);
+      if (!account.playerId) {
+        const linked = playerForAccount(universe, account.id);
+        if (linked) {
+          account.playerId = linked.id;
+          linkedPlayerId = linked.id;
+        }
+      }
+      if (account.playerId && universe.players[account.playerId]) {
+        view = playerView(universe, account.playerId);
+      }
+    });
+  } catch {
+    /* ignore — client can refresh */
+  }
+  if (linkedPlayerId) {
+    await setAccountPlayerId(account.id, linkedPlayerId);
+  }
+
+  return c.json({
+    ok: true,
+    account: publicAccount(account),
+    view,
+    auth: { sessionSecretConfigured: sessionSecretConfigured() },
+  });
 }
 
 /** Mount email+password + session routes on the shared Hono app. */
@@ -115,12 +163,14 @@ export function mountAuthRoutes(app: Hono): void {
     }
 
     const account = created.account;
+    let view: ReturnType<typeof playerView> | null = null;
     if (claimPlayerId) {
       const accountFresh = await getAccountById(account.id);
       if (accountFresh?.playerId && accountFresh.playerId !== claimPlayerId) {
         /* skip claim */
       } else {
-        await maybeClaimGuest(account.id, claimPlayerId);
+        const claimed = await maybeClaimGuest(account.id, claimPlayerId);
+        view = claimed.view;
         const refreshed = await getAccountById(account.id);
         if (refreshed) account.playerId = refreshed.playerId;
       }
@@ -131,6 +181,7 @@ export function mountAuthRoutes(app: Hono): void {
     return c.json({
       ok: true,
       account: publicAccount(account),
+      view,
       auth: { sessionSecretConfigured: sessionSecretConfigured() },
     });
   });
@@ -145,7 +196,6 @@ export function mountAuthRoutes(app: Hono): void {
     };
     const email = normalizeEmail(body.email ?? "");
     const password = body.password ?? "";
-
     const rate = await checkAuthRateLimit(
       "login",
       email,
@@ -160,49 +210,77 @@ export function mountAuthRoutes(app: Hono): void {
       );
     }
 
-    const auth = await authenticateEmailPassword(email, password);
+    const auth = await authenticateEmailPassword(email, password, Date.now());
     if (!auth.ok) {
       return c.json({ error: auth.error }, auth.status);
     }
+    return startSession(c, auth.account);
+  });
 
-    // Resolve playerId from universe if account index is stale.
-    if (!auth.account.playerId) {
-      try {
-        await withUniverse((universe) => {
-          const linked = playerForAccount(universe, auth.account.id);
-          if (linked) auth.account.playerId = linked.id;
-        });
-        if (auth.account.playerId) {
-          await setAccountPlayerId(auth.account.id, auth.account.playerId);
-        }
-      } catch {
-        /* ignore */
-      }
+  app.post("/api/auth/claim-code", async (c) => {
+    const secretErr = requireSessionSecret();
+    if (secretErr) return c.json({ error: secretErr }, 503);
+
+    const body = (await c.req.json().catch(() => ({}))) as { email?: string };
+    const email = normalizeEmail(body.email ?? "");
+    const rate = await checkAuthRateLimit(
+      "claim",
+      email || "invalid",
+      clientIp(c.req.raw.headers),
+    );
+    if (rate.limited) {
+      return c.json(
+        { error: `Too many attempts. Try again in ${rate.retryAfterSec}s.` },
+        429,
+      );
     }
-
-    const session = await createSession(auth.account.id);
-    setSessionCookie(c, session.id);
-
-    let view = null;
-    if (auth.account.playerId) {
-      try {
-        await withUniverse((universe) => {
-          ensureUniverseShape(universe);
-          if (universe.players[auth.account.playerId!]) {
-            view = playerView(universe, auth.account.playerId!);
-          }
-        });
-      } catch {
-        /* ignore — client can refresh */
-      }
+    if (!claimMailConfigured()) {
+      return c.json({ ok: true, message: CLAIM_NO_MAIL_MESSAGE });
     }
+    await requestClaimCode(email);
+    return c.json({ ok: true, message: CLAIM_MAIL_MESSAGE });
+  });
 
-    return c.json({
-      ok: true,
-      account: publicAccount(auth.account),
-      view,
-      auth: { sessionSecretConfigured: sessionSecretConfigured() },
-    });
+  app.post("/api/auth/claim-password", async (c) => {
+    const secretErr = requireSessionSecret();
+    if (secretErr) return c.json({ error: secretErr }, 503);
+
+    const body = (await c.req.json().catch(() => ({}))) as {
+      email?: string;
+      code?: string;
+      password?: string;
+    };
+    const email = normalizeEmail(body.email ?? "");
+    const rate = await checkAuthRateLimit(
+      "claim",
+      email || "invalid",
+      clientIp(c.req.raw.headers),
+    );
+    if (rate.limited) {
+      return c.json(
+        { error: `Too many attempts. Try again in ${rate.retryAfterSec}s.` },
+        429,
+      );
+    }
+    const claimed = await claimNewPassword(
+      email,
+      body.code ?? "",
+      body.password ?? "",
+    );
+    if (!claimed.ok) {
+      return c.json({ error: claimed.error }, claimed.status);
+    }
+    return startSession(c, claimed.account);
+  });
+
+  app.post("/api/e2e/prepare-password-claim", async (c) => {
+    if (process.env.STARHOLD_E2E !== "1") {
+      return c.json({ error: "Not found" }, 404);
+    }
+    const body = (await c.req.json().catch(() => ({}))) as { email?: string };
+    const prepared = await preparePasswordClaim(body.email ?? "");
+    if (!prepared.ok) return c.json({ error: prepared.error }, 404);
+    return c.json({ ok: true, code: prepared.code });
   });
 
   app.get("/api/auth/me", async (c) => {

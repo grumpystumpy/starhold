@@ -1,8 +1,8 @@
 import {
   BUILDINGS,
-  buildingUpgradeCost,
   buildingUpgradeSeconds,
-  canAfford,
+  previewBuildingUpgrade,
+  storageCap,
   type BuildingId,
   type PlayerView,
 } from "@starhold/game";
@@ -11,34 +11,110 @@ import { fmt, fmtCost, fmtEta } from "./format";
 import { escapeAttr, escapeHtml } from "./render-escape";
 import { costTooltip } from "./render-tooltips";
 
+export type JoinScreenState = {
+  error: string | null;
+  notice: string | null;
+  busy: boolean;
+  joinDraft: string;
+  emailDraft?: string;
+  passwordDraft?: string;
+  claimEmailDraft?: string;
+  claimCodeDraft?: string;
+  claimPasswordDraft?: string;
+  accountEmail?: string | null;
+  claimablePlayerId?: string | null;
+};
+
+/** Join / sign-in markup. Auth fields stay off once an account exists. */
+export function joinScreenHtml(state: JoinScreenState): string {
+  const signedIn = Boolean(state.accountEmail);
+  const accountLine = state.accountEmail
+    ? `<p class="hint" data-testid="account-email">Signed in as <strong>${escapeHtml(state.accountEmail)}</strong> — pick a commander name to enter, or claim a guest save below.</p>`
+    : "";
+  const claimBlock =
+    state.accountEmail && state.claimablePlayerId
+      ? `<div class="join-row" style="margin-top:0.75rem">
+          <button type="button" id="claim-btn" data-testid="claim-btn" data-claim-anonymous ${state.busy ? "disabled" : ""}>Claim guest save</button>
+        </div>
+        <p class="hint">Links local guest <code>${escapeHtml(state.claimablePlayerId)}</code> to this account. Closing the tab will keep progress via your sign-in cookie.</p>`
+      : "";
+  const joinLabel = signedIn
+    ? "Commander name (linked to your account)"
+    : "Commander name (guest)";
+  const joinBtn = signedIn ? "Enter as signed-in" : "Enter universe";
+  const authBlock = signedIn
+    ? ""
+    : `<hr style="margin:1.25rem 0;border:none;border-top:1px solid rgba(255,255,255,0.12)" />
+      <form id="auth-form" data-testid="auth-form">
+        <label for="auth-email">Email + password</label>
+        <div class="join-row" style="margin-top:0.5rem;flex-wrap:wrap;gap:0.5rem">
+          <input id="auth-email" name="email" type="email" maxlength="254" placeholder="you@example.com" autocomplete="email" data-testid="auth-email" value="${escapeAttr(state.emailDraft ?? "")}" />
+          <input id="auth-password" name="password" type="password" minlength="8" maxlength="128" placeholder="password (8+)" autocomplete="current-password" data-testid="auth-password" value="${escapeAttr(state.passwordDraft ?? "")}" />
+        </div>
+        <div class="join-row" style="margin-top:0.5rem;gap:0.5rem">
+          <button type="submit" id="auth-login-btn" data-testid="auth-login-btn" data-auth-action="login" ${state.busy ? "disabled" : ""}>Log in</button>
+          <button type="submit" id="auth-signup-btn" data-testid="auth-signup-btn" data-auth-action="signup" ${state.busy ? "disabled" : ""}>Sign up</button>
+        </div>
+      </form>
+      <p class="hint">Sign up with email and password to keep this commander after you close the tab. Guest play stays on this browser only.</p>
+      <form id="password-claim-form" data-testid="password-claim-form">
+        <label for="claim-email">Set a new password</label>
+        <p class="hint">Imported accounts use a one-time claim code. It works once. A code you were given lasts 7 days. An emailed code lasts 30 minutes.</p>
+        <div class="claim-fields">
+          <input id="claim-email" name="email" type="email" maxlength="254" placeholder="you@example.com" autocomplete="email" data-testid="claim-email" value="${escapeAttr(state.claimEmailDraft ?? "")}" />
+          <input id="claim-code" name="code" type="text" maxlength="8" placeholder="claim code" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" data-testid="claim-code" value="${escapeAttr(state.claimCodeDraft ?? "")}" />
+          <input id="claim-password" name="password" type="password" minlength="8" maxlength="128" placeholder="new password (8+)" autocomplete="new-password" data-testid="claim-password" value="${escapeAttr(state.claimPasswordDraft ?? "")}" />
+        </div>
+        <div class="join-row" style="margin-top:0.5rem;gap:0.5rem">
+          <button type="submit" id="claim-password-btn" data-testid="claim-password-btn" ${state.busy ? "disabled" : ""}>Set password</button>
+          <button type="button" id="claim-code-request" data-testid="claim-code-request" data-request-claim-code ${state.busy ? "disabled" : ""}>Email me a code</button>
+        </div>
+      </form>`;
+
+  return `
+    <header class="join-hero">
+      <img class="thumb thumb-hero" src="${PLANET_ART.rocky}" alt="" width="72" height="72" />
+      <div>
+        <h1 class="brand">Starhold</h1>
+        <p class="tagline">Mine the crust, raise the yard, launch hulls — and raid rival colonies. One shared universe — open another tab for attacking another rival.</p>
+      </div>
+    </header>
+    <div data-flash-slot>${flashHtml(state.error, state.notice)}</div>
+    <section class="join-panel">
+      ${accountLine}
+      <form id="join-form" data-testid="join-form">
+        <label for="commander">${joinLabel}</label>
+        <div class="join-row" style="margin-top:0.5rem">
+          <input id="commander" name="commander" type="text" maxlength="24" placeholder="e.g. Mira Vale" autocomplete="nickname" data-testid="commander-input" value="${escapeAttr(state.joinDraft)}" />
+          <button type="submit" id="join-btn" data-testid="join-btn" ${state.busy ? "disabled" : ""}>${joinBtn}</button>
+        </div>
+      </form>
+      ${claimBlock}
+      ${authBlock}
+    </section>
+  `;
+}
+
 /** Keep the commander input mounted so automation / IME is not wiped by re-paints. */
-export function renderJoin(
-  root: HTMLElement,
-  state: {
-    error: string | null;
-    notice: string | null;
-    busy: boolean;
-    joinDraft: string;
-    emailDraft?: string;
-    passwordDraft?: string;
-    accountEmail?: string | null;
-    claimablePlayerId?: string | null;
-  },
-): void {
+export function renderJoin(root: HTMLElement, state: JoinScreenState): void {
   const existingForm = root.querySelector<HTMLFormElement>("#join-form");
   const existingInput = root.querySelector<HTMLInputElement>("#commander");
   const emailInput = root.querySelector<HTMLInputElement>("#auth-email");
   const passwordInput = root.querySelector<HTMLInputElement>("#auth-password");
+  const claimEmailInput = root.querySelector<HTMLInputElement>("#claim-email");
+  const claimCodeInput = root.querySelector<HTMLInputElement>("#claim-code");
+  const claimPasswordInput = root.querySelector<HTMLInputElement>("#claim-password");
   const hasAuthForm = Boolean(root.querySelector("#auth-form"));
   const hasAccountLine = Boolean(
     root.querySelector("[data-testid='account-email']"),
   );
   const hasClaimBtn = Boolean(root.querySelector("#claim-btn"));
   const wantClaim = Boolean(state.accountEmail && state.claimablePlayerId);
+  const wantAuth = !state.accountEmail;
   const structureOk =
     existingForm &&
     existingInput &&
-    hasAuthForm &&
+    hasAuthForm === wantAuth &&
     Boolean(state.accountEmail) === hasAccountLine &&
     wantClaim === hasClaimBtn;
 
@@ -46,7 +122,12 @@ export function renderJoin(
     patchFlash(root, state.error, state.notice);
     const btn = root.querySelector<HTMLButtonElement>("#join-btn");
     if (btn) btn.disabled = state.busy;
-    for (const id of ["auth-login-btn", "auth-signup-btn"]) {
+    for (const id of [
+      "auth-login-btn",
+      "auth-signup-btn",
+      "claim-password-btn",
+      "claim-code-request",
+    ]) {
       const authBtn = root.querySelector<HTMLButtonElement>(`#${id}`);
       if (authBtn) authBtn.disabled = state.busy;
     }
@@ -72,64 +153,25 @@ export function renderJoin(
     ) {
       passwordInput.value = state.passwordDraft ?? "";
     }
+    syncInput(claimEmailInput, state.claimEmailDraft ?? "");
+    syncInput(claimCodeInput, state.claimCodeDraft ?? "");
+    syncInput(claimPasswordInput, state.claimPasswordDraft ?? "");
     return;
   }
 
-  const accountLine = state.accountEmail
-    ? `<p class="hint" data-testid="account-email">Signed in as <strong>${escapeHtml(state.accountEmail)}</strong> — pick a commander name to enter, or claim a guest save below.</p>`
-    : "";
-  const claimBlock =
-    state.accountEmail && state.claimablePlayerId
-      ? `<div class="join-row" style="margin-top:0.75rem">
-          <button type="button" id="claim-btn" data-testid="claim-btn" data-claim-anonymous ${state.busy ? "disabled" : ""}>Claim guest save</button>
-        </div>
-        <p class="hint">Links local guest <code>${escapeHtml(state.claimablePlayerId)}</code> to this account. Closing the tab will keep progress via your sign-in cookie.</p>`
-      : "";
-  const joinLabel = state.accountEmail
-    ? "Commander name (linked to your account)"
-    : "Commander name (guest)";
-  const joinBtn = state.accountEmail ? "Enter as signed-in" : "Enter universe";
-
-  root.innerHTML = `
-    <header class="join-hero">
-      <img class="thumb thumb-hero" src="${PLANET_ART.rocky}" alt="" width="72" height="72" />
-      <div>
-        <h1 class="brand">Starhold</h1>
-        <p class="tagline">Mine the crust, raise the yard, launch hulls — and raid rival colonies. One shared universe — open another tab for attacking another rival.</p>
-      </div>
-    </header>
-    <div data-flash-slot>${flashHtml(state.error, state.notice)}</div>
-    <section class="join-panel">
-      ${accountLine}
-      <form id="join-form" data-testid="join-form">
-        <label for="commander">${joinLabel}</label>
-        <div class="join-row" style="margin-top:0.5rem">
-          <input id="commander" name="commander" type="text" maxlength="24" placeholder="e.g. Mira Vale" autocomplete="nickname" data-testid="commander-input" value="${escapeAttr(state.joinDraft)}" />
-          <button type="submit" id="join-btn" data-testid="join-btn" ${state.busy ? "disabled" : ""}>${joinBtn}</button>
-        </div>
-      </form>
-      ${claimBlock}
-      <hr style="margin:1.25rem 0;border:none;border-top:1px solid rgba(255,255,255,0.12)" />
-      <form id="auth-form" data-testid="auth-form">
-        <label for="auth-email">Email + password</label>
-        <div class="join-row" style="margin-top:0.5rem;flex-wrap:wrap;gap:0.5rem">
-          <input id="auth-email" name="email" type="email" maxlength="254" placeholder="you@example.com" autocomplete="email" data-testid="auth-email" value="${escapeAttr(state.emailDraft ?? "")}" />
-          <input id="auth-password" name="password" type="password" minlength="8" maxlength="128" placeholder="password (8+)" autocomplete="current-password" data-testid="auth-password" value="${escapeAttr(state.passwordDraft ?? "")}" />
-        </div>
-        <div class="join-row" style="margin-top:0.5rem;gap:0.5rem">
-          <button type="submit" id="auth-login-btn" data-testid="auth-login-btn" data-auth-action="login" ${state.busy ? "disabled" : ""}>Log in</button>
-          <button type="submit" id="auth-signup-btn" data-testid="auth-signup-btn" data-auth-action="signup" ${state.busy ? "disabled" : ""}>Sign up</button>
-        </div>
-      </form>
-      <p class="hint">Guest play still works for quick tests. Sign up with email + password to keep progress after closing the tab (secure cookie — not localStorage alone). Automation: <code>/?commander=Name</code> or <code>window.starhold.join("Name")</code>.</p>
-    </section>
-  `;
+  root.innerHTML = joinScreenHtml(state);
 
   const input = root.querySelector<HTMLInputElement>("#commander");
   input?.focus();
   if (input && state.joinDraft) {
     input.selectionStart = input.selectionEnd = input.value.length;
   }
+}
+
+function syncInput(input: HTMLInputElement | null, value: string): void {
+  if (!input) return;
+  if (document.activeElement === input) return;
+  if (input.value !== value) input.value = value;
 }
 
 export function patchFlash(
@@ -178,38 +220,54 @@ export function resBlock(
   `;
 }
 
+function isRequirementLock(error: string): boolean {
+  return (
+    /needs /i.test(error) ||
+    error.includes("cannot be built") ||
+    error.includes("can only be built")
+  );
+}
+
+function upgradeButtonLabel(error: string | null): string {
+  if (!error) return "Upgrade";
+  if (isRequirementLock(error)) return "Locked";
+  if (error.startsWith("Not enough")) return "Can't afford";
+  if (error.includes("queue is full")) return "Queue full";
+  if (error.includes("fields")) return "No fields";
+  if (error.includes("maxed")) return "Maxed";
+  return "Unavailable";
+}
+
 export function buildingRow(
   id: BuildingId,
   planet: PlayerView["planet"],
+  player: PlayerView["player"],
   speed: number,
-  _now: number,
+  now: number,
   _busy: boolean,
 ): string {
   const def = BUILDINGS[id];
+  const preview = previewBuildingUpgrade(planet, player, id, now);
   const level = planet.buildings[id] ?? 0;
-  const cost = buildingUpgradeCost(id, level);
-  const secs = Math.ceil(buildingUpgradeSeconds(id, level) / speed);
-  const queueFull = (planet.buildQueue?.length ?? 0) >= 8;
-  const affordable = canAfford(planet.resources, cost);
-  // Never disable Upgrade for client busy — disabled buttons swallow clicks
-  // (silent no-op). doUpgrade surfaces "Still applying…" instead.
-  let label = "Upgrade";
-  if (queueFull) label = "Queue full";
-  else if (!affordable) label = "Can't afford";
-  const blocked = queueFull
-    ? "Building queue is full."
-    : !affordable
-      ? "Not enough resources."
+  const cost = preview.cost;
+  const secs = Math.ceil(buildingUpgradeSeconds(id, preview.current) / speed);
+  // Disable only when the server would reject. Client busy stays clickable
+  // so a second tap surfaces "Still applying…" instead of a silent no-op.
+  const blocked = preview.ok ? null : preview.error;
+  const label = upgradeButtonLabel(blocked);
+  const storageLine =
+    id === "metalStorage" || id === "crystalStorage" || id === "deutTank"
+      ? `Capacity ${fmt(storageCap(level))} now, ${fmt(storageCap(preview.current + 1))} at the next level. Each level doubles the cap.`
       : null;
   const tip = costTooltip({
-    action: `Upgrade ${def.name} → L${level + 1}`,
+    action: `Upgrade ${def.name} → L${fmt(preview.current + 1)}`,
     cost,
     timeSecs: secs,
-    detail: def.description,
+    detail: [def.description, storageLine].filter(Boolean).join(" "),
     requires: [
-      `Current L${level}`,
+      `Current L${fmt(level)}`,
       ...(def.energyUsePerLevel
-        ? [`Energy use +${def.energyUsePerLevel}/level`]
+        ? [`Energy use +${fmt(def.energyUsePerLevel)}/level`]
         : []),
     ],
     blocked,
@@ -218,12 +276,12 @@ export function buildingRow(
     <article class="item item-thumb" data-building-id="${id}" data-testid="building-${id}">
       <img class="thumb" src="${BUILDING_ART[id]}" alt="" width="48" height="48" />
       <div>
-        <h3>${escapeHtml(def.name)} <span class="meta" data-testid="building-level-${id}">L${level}</span> ${tip.html}</h3>
+        <h3>${escapeHtml(def.name)} <span class="meta" data-testid="building-level-${id}">L${fmt(level)}</span> ${tip.html}</h3>
         <p>${escapeHtml(def.description)}</p>
-        <div class="meta">Next: ${fmtCost(cost)} · ${fmtEta(secs)}</div>
+        <div class="meta">Next: ${fmtCost(cost)} · ${fmtEta(secs)}${storageLine ? ` · ${escapeHtml(storageLine)}` : ""}</div>
       </div>
       <div class="actions">
-        <button type="button" data-upgrade="${id}" data-building-id="${id}" data-testid="upgrade-${id}" title="${tip.title}">${label}</button>
+        <button type="button" data-upgrade="${id}" data-building-id="${id}" data-locked="${blocked ? "1" : "0"}" data-testid="upgrade-${id}" ${blocked ? "disabled" : ""} title="${tip.title}">${label}</button>
       </div>
     </article>
   `;

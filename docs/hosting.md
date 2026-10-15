@@ -15,6 +15,8 @@ Summary:
 
 Repo pieces: `vercel.json`, `api/index.ts`, Upstash-backed `apps/server/src/store.ts`, `.env.example`.
 
+**Cloudflare Workers + D1** will replace this host once the cut-over checklist in [cloudflare.md](./cloudflare.md) is done. Until that checklist is finished, Vercel stays the live site and `npm run build:vercel` must keep passing.
+
 ## Local / CI
 
 Without Upstash env vars the API uses **in-memory** state (fine for `npm run dev` and GitHub Actions e2e).

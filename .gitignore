@@ -14,3 +14,10 @@ packages/game/dist
 ui-review-out/
 playtest-reports/
 **/playtest-report*
+
+# Cloudflare local state and one-time KV export (contains password hashes)
+.wrangler/
+.dev.vars
+kv-export.json
+kv-import.sql
+claim-codes.txt

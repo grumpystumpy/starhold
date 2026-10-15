@@ -2,6 +2,7 @@ import type { PlayerView } from "@starhold/game";
 import { session } from "../session";
 import { startCountdownTick } from "./countdown";
 import type { NavPage } from "./nav";
+import { morphHtml } from "./morph-dom";
 import { canPatchShell, patchLiveChrome } from "./patch-chrome";
 import { renderJoin } from "./render-chrome";
 import {
@@ -15,8 +16,9 @@ import { pageHtml } from "./render-pages";
 
 /**
  * Render UI. Interactive actions are handled by event delegation in main.ts
- * so 1s poll re-renders do not drop click listeners mid-gesture.
- * Poll refreshes patch the top bar / resource bar in place (no remount).
+ * so background poll re-renders do not drop click listeners mid-gesture.
+ * Poll refreshes patch the shell and the open page in place so focus,
+ * scroll position, and typed field values survive.
  */
 export function renderApp(
   root: HTMLElement,
@@ -28,6 +30,9 @@ export function renderApp(
     joinDraft: string;
     emailDraft?: string;
     passwordDraft?: string;
+    claimEmailDraft?: string;
+    claimCodeDraft?: string;
+    claimPasswordDraft?: string;
     accountEmail?: string | null;
     claimablePlayerId?: string | null;
     activePage: NavPage;
@@ -45,11 +50,9 @@ export function renderApp(
     patchLiveChrome(root, state.view, state);
     const main = root.querySelector<HTMLElement>("#page-main");
     if (main) {
-      main.innerHTML = pageHtml(
-        state.activePage,
-        state.view,
-        state.busy,
-        fleetDraft,
+      morphHtml(
+        main,
+        pageHtml(state.activePage, state.view, state.busy, fleetDraft),
       );
     }
     startCountdownTick();

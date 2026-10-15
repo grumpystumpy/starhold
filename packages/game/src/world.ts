@@ -10,6 +10,8 @@ export {
 } from "./world-accounts.js";
 export { advancePlanet } from "./world-tick.js";
 export { advanceUniverse } from "./world-arrival.js";
+export { bindTickBudget, workersTickBudget } from "./tick-budget.js";
+export type { TickBudget } from "./tick-budget.js";
 export type { ActionResult, FleetActionResult } from "./world-queues.js";
 export {
   setActivePlanet,
@@ -29,6 +31,10 @@ export {
   researchQueueCap,
   yardQueueCap,
 } from "./world-queue-caps.js";
+export {
+  previewBuildingUpgrade,
+  previewResearchUpgrade,
+} from "./queue-block.js";
 export {
   migrateUniverseV2ToV3,
   migrateUniverseV3ToV4,
@@ -195,6 +201,7 @@ export {
   grantStarshards,
   playerBoosts,
   pruneExpiredOfficers,
+  raiseOfficer,
   unlockSkill,
   utcDayKey,
   type PlayerBoosts,
@@ -267,6 +274,16 @@ export {
   recordMiniPlanetSighting,
   unreadEventCount,
 } from "./world-event-log.js";
+export {
+  deletePlayerMessages,
+  isMessageCategory,
+  type MessageCategory,
+} from "./world-inbox.js";
+export {
+  ensureProgressionLevels,
+  officerLevelOf,
+  skillLevelOf,
+} from "./world-progression.js";
 export {
   PLANET_NAME_MAX_LEN,
   PLANET_NAME_MIN_LEN,

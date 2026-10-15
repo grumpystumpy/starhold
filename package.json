@@ -21,7 +21,8 @@
     "e2e:gate:pirates": "node scripts/quality-gate-pirates-aliens.mjs",
     "tuning-diff": "node scripts/tuning-diff.mjs",
     "start": "npm run start -w @starhold/server",
-    "e2e:gate:alliances": "node scripts/quality-gate-alliances.mjs"
+    "e2e:gate:alliances": "node scripts/quality-gate-alliances.mjs",
+    "cf:dev": "wrangler dev --local"
   },
   "dependencies": {
     "@upstash/redis": "^1.34.9",
@@ -30,7 +31,8 @@
   "devDependencies": {
     "concurrently": "^9.1.2",
     "esbuild": "^0.25.12",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "wrangler": "^4.151.0"
   },
   "engines": {
     "node": ">=20"
