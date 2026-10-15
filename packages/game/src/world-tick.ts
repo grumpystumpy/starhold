@@ -1,4 +1,4 @@
-import { BUILDINGS, DEFENSES, RESEARCH, SHIPS, SHIP_ORDER } from "./catalog.js";
+import { DEFENSES, RESEARCH, SHIPS, SHIP_ORDER } from "./catalog.js";
 import {
   clampToStorage,
   coordsKey,
@@ -136,19 +136,10 @@ export function advancePlanet(
   };
 
   // Buildings grant no XP (Micah amendment / Round 2 rebalance).
+  // Finished upgrades are not mailed: they complete often enough to bury alerts.
+  // Ship, defense, and research completions still notify. Saved rows stay put.
   advanceBuildingQueue(state.buildQueue, now, (item) => {
     state.buildings[item.buildingId] = item.targetLevel;
-    noteBuildComplete(
-      owner,
-      `${BUILDINGS[item.buildingId].name} → level ${formatEventCount(item.targetLevel)}`,
-      `Finished on ${state.name}.`,
-      item.completesAt,
-      {
-        buildingId: item.buildingId,
-        targetLevel: item.targetLevel,
-        planetId: state.id,
-      },
-    );
     if (owner) addSeasonEconomySpend(owner, item.paidCost, now);
   });
 

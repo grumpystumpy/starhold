@@ -59,12 +59,21 @@ describe("event log", () => {
     assert.equal(unreadEventCount(player), 0);
   });
 
-  it("emits build, ship, and research completions on catch-up", () => {
+  it("skips building-upgrade mail and still emits ship and research completions", () => {
     const universe = createUniverse("Build Drift", 8);
     const { player, planet } = joinUniverse(universe, "Builder", 50_000_000);
     planet.resources = { metal: 20_000, crystal: 20_000, deuterium: 20_000 };
     planet.buildings.shipyard = 1;
     planet.buildings.researchLab = 1;
+    const saved = {
+      id: "evt_saved_build",
+      kind: "buildComplete" as const,
+      createdAt: 49_000_000,
+      readAt: 49_500_000,
+      title: "Solar Array → level 3",
+      body: "Finished on Home.",
+    };
+    player.eventLog = [saved];
 
     const building = queueBuildingUpgrade(
       universe,
@@ -75,13 +84,19 @@ describe("event log", () => {
     assert.equal(building.ok, true);
     const buildDone = universe.planets[planet.id].buildQueue[0]!.completesAt;
     advanceUniverse(universe, buildDone);
-    const builds = (universe.players[player.id].eventLog ?? []).filter(
-      (entry) => entry.kind === "buildComplete",
+    assert.equal(universe.planets[planet.id].buildings.metalMine, 2);
+    const afterBuild = universe.players[player.id].eventLog ?? [];
+    assert.equal(
+      afterBuild.some((entry) => entry.title === "Ore Extractor → level 2"),
+      false,
     );
-    assert.ok(
-      builds.some((entry) => entry.title === "Ore Extractor → level 2"),
-      JSON.stringify(builds.map((entry) => entry.title)),
-    );
+    const kept = afterBuild.find((entry) => entry.id === saved.id);
+    assert.ok(kept);
+    assert.equal(kept?.kind, saved.kind);
+    assert.equal(kept?.title, saved.title);
+    assert.equal(kept?.body, saved.body);
+    assert.equal(kept?.createdAt, saved.createdAt);
+    assert.equal(kept?.readAt, saved.readAt);
 
     const ship = queueShipBuild(
       universe,
@@ -117,8 +132,15 @@ describe("event log", () => {
     );
 
     const view = playerView(universe, player.id, researchDone + 1);
-    assert.ok((view.player.eventLog ?? []).length >= 3);
-    assert.ok(unreadEventCount(view.player) >= 3);
+    const titles = (view.player.eventLog ?? []).map((entry) => entry.title);
+    assert.ok(titles.includes("Solar Array → level 3"));
+    assert.ok(titles.includes("Scout Skiff × 2"));
+    assert.ok(titles.includes("Power Discipline → level 1"));
+    assert.equal(
+      titles.includes("Ore Extractor → level 2"),
+      false,
+    );
+    assert.ok(unreadEventCount(view.player) >= 2);
   });
 
   it("reports the full ship order when batches finish across ticks", () => {
