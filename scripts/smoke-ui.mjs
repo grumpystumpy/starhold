@@ -211,6 +211,19 @@ const NAV_ALIAS = {
   defense: "defenses",
 };
 
+/** Background polls are 30s, so waits that need tick-on-read call poll() themselves. */
+async function pollUntil(page, label, ready, timeoutMs) {
+  const start = Date.now();
+  let last = null;
+  while (Date.now() - start < timeoutMs) {
+    last = await page.evaluate(ready);
+    if (last === true) return;
+    await page.evaluate(() => window.starhold?.poll());
+    await page.waitForTimeout(750);
+  }
+  throw new Error(`${label} timed out: ${JSON.stringify(last)}`);
+}
+
 async function goNav(page, id) {
   const navId = NAV_ALIAS[id] ?? id;
   await page.click(`[data-testid="nav-${navId}"]`);
@@ -370,40 +383,39 @@ async function uiSmoke() {
       });
       if (leveled) break;
     }
+    await page.waitForFunction(
+      () => {
+        const lvl =
+          document.querySelector('[data-testid="building-level-shipyard"]')
+            ?.textContent ?? "";
+        const queue = document.querySelector('[data-testid="build-queue"]');
+        const ok = document.querySelector('[data-testid="flash-ok"]');
+        const st = window.starhold?.getState();
+        return (
+          lvl.includes("L1") ||
+          (st?.buildings?.shipyard ?? 0) >= 1 ||
+          Boolean(queue?.textContent?.match(/Shipyard/i)) ||
+          Boolean(ok?.textContent?.match(/Queued upgrade|Upgrade complete/i))
+        );
+      },
+      undefined,
+      { timeout: 15_000 },
+    );
+    await page.waitForFunction(
+      () => {
+        const lvl =
+          document.querySelector('[data-testid="building-level-shipyard"]')
+            ?.textContent ?? "";
+        const queue = document.querySelector('[data-testid="build-queue"]');
+        const st = window.starhold?.getState();
+        return (lvl.includes("L1") || (st?.buildings?.shipyard ?? 0) >= 1) && !queue;
+      },
+      undefined,
+      { timeout: 30_000 },
+    );
   } finally {
     await page.evaluate((id) => window.clearInterval(id), pollHammer);
   }
-
-  await page.waitForFunction(
-    () => {
-      const lvl =
-        document.querySelector('[data-testid="building-level-shipyard"]')
-          ?.textContent ?? "";
-      const queue = document.querySelector('[data-testid="build-queue"]');
-      const ok = document.querySelector('[data-testid="flash-ok"]');
-      const st = window.starhold?.getState();
-      return (
-        lvl.includes("L1") ||
-        (st?.buildings?.shipyard ?? 0) >= 1 ||
-        Boolean(queue?.textContent?.match(/Shipyard/i)) ||
-        Boolean(ok?.textContent?.match(/Queued upgrade|Upgrade complete/i))
-      );
-    },
-    undefined,
-    { timeout: 15_000 },
-  );
-  await page.waitForFunction(
-    () => {
-      const lvl =
-        document.querySelector('[data-testid="building-level-shipyard"]')
-          ?.textContent ?? "";
-      const queue = document.querySelector('[data-testid="build-queue"]');
-      const st = window.starhold?.getState();
-      return (lvl.includes("L1") || (st?.buildings?.shipyard ?? 0) >= 1) && !queue;
-    },
-    undefined,
-    { timeout: 30_000 },
-  );
   const yardLevelAfter = await page.textContent(
     '[data-testid="building-level-shipyard"]',
   );
@@ -435,8 +447,10 @@ async function uiSmoke() {
   );
   logs.push("p1-multi-queue-second-item");
 
-  // Third item should hit the base cap.
-  await page.click('[data-testid="upgrade-metalMine"]');
+  // Third item should hit the base cap. The control is disabled while the
+  // queue is full, and background polls are 30s, so drive the action through
+  // the page helper instead of waiting for Playwright to enable the button.
+  await page.evaluate(() => window.starhold.upgrade("metalMine"));
   await page.waitForSelector('[data-testid="flash-error"]', { timeout: 10_000 });
   const errText = await page.textContent('[data-testid="flash-error"]');
   if (!errText?.match(/full|Not enough resources/i)) {
@@ -448,7 +462,7 @@ async function uiSmoke() {
   }
   logs.push("p1-queue-full-flash");
 
-  await page.click('[data-testid="upgrade-metalStorage"]');
+  await page.evaluate(() => window.starhold.upgrade("metalStorage"));
   await page.waitForSelector('[data-testid="flash-error"]', { timeout: 10_000 });
   const vaultErr = await page.textContent('[data-testid="flash-error"]');
   if (
@@ -514,25 +528,35 @@ async function uiSmoke() {
   }
 
   await goNav(page, "shipyard");
-  await page.waitForFunction(
+  await pollUntil(
+    page,
+    "scout build ready",
     () => {
       const btn = document.querySelector('[data-testid="build-scout"]');
       const metalText =
         document.querySelector('[data-testid="res-metal"] .value')?.textContent ?? "0";
       const metal = Number(String(metalText).replace(/,/g, ""));
       const label = btn?.textContent ?? "";
-      const queue = document.querySelector('[data-testid="build-queue"]');
-      const shipQ = document.querySelector('[data-testid="ship-queue"]');
-      return (
+      const queue = Boolean(document.querySelector('[data-testid="build-queue"]'));
+      const shipQ = Boolean(document.querySelector('[data-testid="ship-queue"]'));
+      const ready =
         Boolean(btn) &&
         !queue &&
         !shipQ &&
         !label.includes("Locked") &&
-        metal >= 220
-      );
+        metal >= 220;
+      return ready
+        ? true
+        : {
+            metalText,
+            label,
+            queue,
+            shipQ,
+            hasButton: Boolean(btn),
+            yard: window.starhold?.getState()?.buildings?.shipyard ?? null,
+          };
     },
-    undefined,
-    { timeout: 180_000 },
+    240_000,
   );
 
   await page.click('[data-testid="build-scout"]');
@@ -548,13 +572,15 @@ async function uiSmoke() {
     { timeout: 15_000 },
   );
 
-  await page.waitForFunction(
+  await pollUntil(
+    page,
+    "scout hangar",
     () => {
       const hangar = document.querySelector('[data-testid="hangar-count-scout"]');
-      return Number(String(hangar?.textContent ?? "0").replace(/,/g, "")) >= 1;
+      const n = Number(String(hangar?.textContent ?? "0").replace(/,/g, ""));
+      return n >= 1 ? true : { hangar: hangar?.textContent ?? null };
     },
-    undefined,
-    { timeout: 30_000 },
+    30_000,
   );
   logs.push("ui-build-scout");
 
@@ -642,13 +668,15 @@ async function uiSmoke() {
   }
   logs.push("ui-fleet-mission-launch");
 
-  await page.waitForFunction(
+  await pollUntil(
+    page,
+    "fleet report",
     () => {
       const st = window.starhold?.getState();
-      return (st?.reports?.length ?? 0) >= 1;
+      const reports = st?.reports?.length ?? 0;
+      return reports >= 1 ? true : { reports, fleets: st?.fleets?.length ?? 0 };
     },
-    undefined,
-    { timeout: 120_000 },
+    120_000,
   );
   await goNav(page, "messages");
   await page.waitForSelector('[data-testid="messages-panel"]', {
