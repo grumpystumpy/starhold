@@ -13,6 +13,7 @@ import { SHIP_ART } from "./assets";
 import { fmt, fmtCoords, fmtEta } from "./format";
 import { escapeAttr, escapeHtml } from "./render-escape";
 import { MISSIONS, type FleetDraft } from "./render-fleets-draft.js";
+import { infoTooltip } from "./render-tooltips";
 
 export function fleetComposer(
   view: PlayerView,
@@ -75,7 +76,7 @@ export function fleetComposer(
   } else if (mission === "harvestAsteroid") {
     for (const a of view.galaxy.asteroids ?? []) {
       options.push(
-        `<option value="asteroid:${escapeAttr(a.id)}">Asteroid ${escapeHtml(a.id)} (${fmt(a.metal)}/${fmt(a.crystal)}/${fmt(a.deuterium)} · ${a.richness} left)</option>`,
+        `<option value="asteroid:${escapeAttr(a.id)}">Asteroid ${escapeHtml(a.id)} (${fmt(a.metal)}/${fmt(a.crystal)}/${fmt(a.deuterium)} · ${fmt(a.richness)} left)</option>`,
       );
     }
   } else if (mission === "expedition") {
@@ -97,7 +98,14 @@ export function fleetComposer(
     const pirate = view.galaxy.pirateBase;
     if (pirate) {
       options.push(
-        `<option value="pirate:${escapeAttr(pirate.id)}">${escapeHtml(pirate.name)} · T${pirate.tier} · ${pirate.threatHint} · ${fmtCoords(pirate.coords)}</option>`,
+        `<option value="pirate:${escapeAttr(pirate.id)}">${escapeHtml(pirate.name)} · Lv ${pirate.level ?? pirate.tier} · ${pirate.threatHint} · ${fmtCoords(pirate.coords)}</option>`,
+      );
+    }
+  } else if (mission === "alienRaid") {
+    const alien = view.galaxy.alienBase;
+    if (alien) {
+      options.push(
+        `<option value="alien:${escapeAttr(alien.id)}">${escapeHtml(alien.name)} · Aliens · Lv ${alien.level ?? alien.tier} · ${alien.threatHint} · ${fmtCoords(alien.coords)}</option>`,
       );
     }
   } else {
@@ -115,6 +123,19 @@ export function fleetComposer(
     }
   }
 
+  if (
+    draft?.targetCoords &&
+    (mission === "raid" || mission === "pirateRaid")
+  ) {
+    const c = draft.targetCoords;
+    const value = `coords:${c.galaxy}:${c.system}:${c.slot}`;
+    if (!options.some((o) => o.includes(`value="${value}"`))) {
+      options.push(
+        `<option value="${value}">Joint Strike ${fmtCoords(c)}</option>`,
+      );
+    }
+  }
+
   let selected =
     draft?.pirateBaseId != null
       ? `pirate:${draft.pirateBaseId}`
@@ -129,6 +150,9 @@ export function fleetComposer(
   if (selected && !options.some((o) => o.includes(`value="${selected}"`))) {
     selected = options[0]?.match(/value="([^"]+)"/)?.[1] ?? "";
   }
+  const optionHtml = options
+    .map((html) => markSelectedOption(html, selected))
+    .join("");
 
   const orbitShipIds = SHIP_ORDER.filter(
     (id) => (view.planet.ships[id] ?? 0) > 0 && !SHIPS[id].stationary,
@@ -139,10 +163,19 @@ export function fleetComposer(
           const have = view.planet.ships[id] ?? 0;
           const raw = draft?.counts[id] ?? 0;
           const value = Math.min(have, Math.max(0, raw));
+          const def = SHIPS[id];
+          const tip = infoTooltip({
+            title: def.name,
+            lines: [
+              def.description,
+              `Cargo ${fmt(def.cargo)} · atk ${fmt(def.attack)} · in orbit ${fmt(have)}`,
+            ],
+            testId: `fleet-ship-tip-${id}`,
+          });
           return `
       <label class="fleet-ship">
         <img class="thumb" src="${SHIP_ART[id]}" alt="" width="36" height="36" />
-        <span>${escapeHtml(SHIPS[id].name)} <span class="meta">(in orbit ${fmt(have)})</span></span>
+        <span>${escapeHtml(def.name)} ${tip.html} <span class="meta">(in orbit ${fmt(have)})</span></span>
         <input type="number" min="0" max="${have}" value="${value}" data-fleet-count="${id}" data-testid="fleet-count-${id}" ${busy ? "disabled" : ""} />
       </label>`;
         })
@@ -179,6 +212,8 @@ export function fleetComposer(
                     ? `<p class="hint">No asteroids in this system — browse another system.</p>`
                     : mission === "pirateRaid"
                       ? `<p class="hint">No pirate base in this system — browse the galaxy for NPC activity.</p>`
+                    : mission === "alienRaid"
+                      ? `<p class="hint">No alien base in this system — find them via expedition.</p>`
                       : `<p class="hint" data-testid="fleet-need-rival">Join a second commander (another tab) for attacking another rival / spy targets.</p>`
         : "";
   const launchBlocked =
@@ -201,27 +236,78 @@ export function fleetComposer(
     sampleShips,
   );
 
+  const missionMeta: Record<
+    MissionType,
+    { label: string; detail: string; requires?: string[] }
+  > = {
+    deploy: {
+      label: "Deploy (park own / attack rival)",
+      detail: "Park ships on your worlds or strike a rival colony.",
+    },
+    raid: {
+      label: "Raid / attack",
+      detail: "Combat mission against a rival — winners leave debris.",
+    },
+    espionage: {
+      label: "Spy (Whisper Probe)",
+      detail: "Probe a foreign world for fleet, defense, and resource intel.",
+      requires: ["Whisper Probe in orbit"],
+    },
+    transport: {
+      label: "Transport cargo (own worlds)",
+      detail: "Move metal, crystal, and deuterium between your colonies.",
+      requires: ["Second owned world"],
+    },
+    colonize: {
+      label: "Colonize empty slot",
+      detail: "Found a new colony on an empty galaxy slot.",
+      requires: ["Colonizer in the fleet"],
+    },
+    harvest: {
+      label: "Harvest debris",
+      detail: "Collect metal/crystal from a debris field after combat.",
+      requires: ["Recycler / harvester hull"],
+    },
+    harvestAsteroid: {
+      label: "Harvest asteroid (Salvage Trawler)",
+      detail: "Mine an asteroid field for resources.",
+      requires: ["Salvage Trawler"],
+    },
+    expedition: {
+      label: "Expedition (deep space)",
+      detail: "Send fleets beyond the system for finds and Starshards.",
+      requires: ["Free expedition slot"],
+    },
+    pirateRaid: {
+      label: "Raid pirate base",
+      detail: "Attack the system pirate base — destroy to earn rewards.",
+    },
+    alienRaid: {
+      label: "Raid alien base",
+      detail: "Strike the system alien base while it is active.",
+    },
+    jump: {
+      label: "Fold Bridge (moon → moon)",
+      detail: "Instant transfer between your moons with Fold Bridges.",
+      requires: ["Fold Bridge on both moons"],
+    },
+  };
   const missionRadios = MISSIONS.map((m) => {
-    const labels: Record<MissionType, string> = {
-      deploy: "Deploy (park own / attack rival)",
-      raid: "Raid / attack",
-      espionage: "Spy (Whisper Probe)",
-      transport: "Transport cargo (own worlds)",
-      colonize: "Colonize empty slot",
-      harvest: "Harvest debris",
-      harvestAsteroid: "Harvest asteroid (Salvage Trawler)",
-      expedition: "Expedition (deep space)",
-      pirateRaid: "Raid pirate base",
-      jump: "Fold Bridge (moon → moon)",
-    };
-    return `<label><input type="radio" name="fleet-mission" value="${m}" data-testid="mission-${m}" ${mission === m ? "checked" : ""} ${busy ? "disabled" : ""} /> ${labels[m]}</label>`;
+    const meta = missionMeta[m];
+    const tip = infoTooltip({
+      title: meta.label,
+      lines: [meta.detail],
+      requires: meta.requires,
+      testId: `mission-tip-${m}`,
+    });
+    return `<label><input type="radio" name="fleet-mission" value="${m}" data-testid="mission-${m}" ${mission === m ? "checked" : ""} ${busy ? "disabled" : ""} /> ${meta.label} ${tip.html}</label>`;
   }).join("");
 
   const presets = view.player.fleetPresets ?? [];
   const presetOptions = presets
     .map((p) => {
       const ships = SHIP_ORDER.filter((id) => (p.ships[id] ?? 0) > 0)
-        .map((id) => `${p.ships[id]}×${SHIPS[id].name}`)
+        .map((id) => `${fmt(p.ships[id] ?? 0)}×${SHIPS[id].name}`)
         .join(", ");
       return `<option value="${escapeAttr(p.id)}">${escapeHtml(p.name)}${ships ? ` — ${escapeHtml(ships)}` : ""}</option>`;
     })
@@ -254,14 +340,63 @@ export function fleetComposer(
       <label>
         Target
         <select id="fleet-target" data-testid="fleet-target" ${launchBlocked ? "disabled" : ""}>
-          ${options.join("") || `<option value="">No targets</option>`}
+          ${optionHtml || `<option value="">No targets</option>`}
         </select>
       </label>
       ${cargoBlock}
       <div class="fleet-ships" data-testid="fleet-orbit-ships">${shipInputs}</div>
       ${needHint}
+      ${acsBlock(view, mission, busy, draft)}
       <p class="hint">Ships shown are in orbit on the selected colony. Example one-way ETA ~${fmtEta(sampleEta)} · fuel ~${fmt(sampleFuel)} deut (1 scout). Fleet slots: ${fmt(1 + (view.player.research.computerTech ?? 0))}${mission === "expedition" ? ` · expeditions ${fmt(expeditionActive)}/${fmt(expeditionCap)}` : ""}.</p>
       <button type="submit" data-testid="launch-fleet" ${launchBlocked || orbitShipIds.length === 0 ? "disabled" : ""}>Launch fleet</button>
+      ${
+        view.alliance
+          ? `<button type="button" data-propose-strike data-testid="propose-joint-strike" ${busy ? "disabled" : ""}>Propose Joint Strike</button>`
+          : ""
+      }
     </form>
+  `;
+}
+
+function markSelectedOption(html: string, selected: string): string {
+  if (!selected) return html;
+  const needle = `value="${selected}"`;
+  if (!html.includes(needle)) return html;
+  return html.replace(needle, `${needle} selected`);
+}
+
+function acsBlock(
+  view: PlayerView,
+  mission: MissionType,
+  busy: boolean,
+  draft: FleetDraft | null,
+): string {
+  if (mission !== "raid" && mission !== "pirateRaid") return "";
+  if (!view.alliance) {
+    return `<p class="hint" data-testid="acs-need-alliance">Joint Strike (ACS) requires an alliance.</p>`;
+  }
+  const open = view.openAcsGroups ?? [];
+  const joinOpts = open
+    .filter((g) => g.mission === mission)
+    .map(
+      (g) =>
+        `<option value="${escapeAttr(g.id)}">${escapeHtml(g.id.slice(0, 12))} · ${g.fleetIds.length} fleets · closes ${fmtEta(Math.max(0, (g.joinClosesAt - view.now) / 1000))}</option>`,
+    )
+    .join("");
+  return `
+    <fieldset class="acs-pick" data-testid="acs-pick">
+      <legend>Joint Strike (ACS)</legend>
+      <label>
+        <input type="checkbox" id="fleet-open-acs" data-testid="fleet-open-acs" ${draft?.openAcs ? "checked" : ""} ${busy ? "disabled" : ""} />
+        Open Joint Strike for alliance mates
+      </label>
+      <label>
+        Or join open ACS
+        <select id="fleet-acs-join" data-testid="fleet-acs-join" ${busy ? "disabled" : ""}>
+          <option value="">— solo / open new —</option>
+          ${joinOpts}
+        </select>
+      </label>
+    </fieldset>
   `;
 }

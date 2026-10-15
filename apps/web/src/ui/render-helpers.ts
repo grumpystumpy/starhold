@@ -28,6 +28,29 @@ export function recommendedNext(view: PlayerView): string {
     }
     return "Recommended next: park fleets here, jump to another moon, or watch Horizon Scanner contacts.";
   }
+  if (planet.flags?.mini) {
+    const siphon = planet.buildings.riftSiphon ?? 0;
+    const vault = planet.buildings.echoVault ?? 0;
+    const forge = planet.buildings.anomalyForge ?? 0;
+    const beacon = planet.buildings.driftBeacon ?? 0;
+    const yard = planet.buildings.shipyard ?? 0;
+    if (siphon < 1) {
+      return "Recommended next: raise a Rift Siphon to boost this mini's output.";
+    }
+    if (vault < 1) {
+      return "Recommended next: raise an Echo Vault for storage headroom.";
+    }
+    if (forge < 1) {
+      return "Recommended next: raise an Anomaly Forge to speed ship builds here.";
+    }
+    if (beacon < 1) {
+      return "Recommended next: raise a Drift Beacon for +1 expedition slot.";
+    }
+    if (yard < 1) {
+      return "Recommended next: raise the Shipyard on this mini colony.";
+    }
+    return "Recommended next: defend this mini or use World Eaters carefully — rivals can capture or destroy it.";
+  }
   const yard = planet.buildings.shipyard ?? 0;
   const lab = planet.buildings.researchLab ?? 0;
   const scouts = planet.ships.scout ?? 0;

@@ -1,3 +1,4 @@
+import { mintCombatShareCode } from "./combat-share.js";
 import {
   classBonuses,
   computeRaidLoot,
@@ -23,7 +24,23 @@ import { playerBoosts } from "./world-boosts.js";
 import { emptyCargo } from "./world-bootstrap.js";
 import { tryFormMoon } from "./world-moons.js";
 import { clearOccupationIfRecaptured } from "./world-occupation.js";
+import {
+  canDestroyMiniPlanet,
+  canDirectCaptureMini,
+} from "./formulas-round2.js";
+import {
+  MINI_FORTRESS_ARMOR_MULT,
+  MINI_FORTRESS_ATTACK_MULT,
+  MINI_FORTRESS_SHIELD_MULT,
+} from "./catalog.js";
+import {
+  isMiniPlanet,
+  isMovingFortress,
+  vacateMiniPlanet,
+} from "./world-mini.js";
 import { maybeDestroyMoonWithTitans } from "./world-round2.js";
+import { pushEventLog } from "./world-event-log.js";
+import { awardSeasonPvpWin, isSeasonPvpMission } from "./world-seasons.js";
 import { addDebris, subtractCargo } from "./world-tick.js";
 
 /** Resolve outbound raid at target; mutates fleet cargo/ships/reportId. */
@@ -41,6 +58,13 @@ export function resolveRaidArrival(
   const defCls = classBonuses(defenderOwner?.playerClass?.classId);
   const defensePower =
     playerBoosts(defenderOwner, now).defensePower * defCls.defensePower;
+  const fortressField = isMovingFortress(target)
+    ? {
+        shieldMult: MINI_FORTRESS_SHIELD_MULT,
+        attackMult: MINI_FORTRESS_ATTACK_MULT,
+        armorMult: MINI_FORTRESS_ARMOR_MULT,
+      }
+    : undefined;
   const combat = resolveCombat(
     fleet.ships,
     defenderBefore,
@@ -51,6 +75,7 @@ export function resolveRaidArrival(
       defensePower,
       attackMult: atkCls.attack,
       defenseSlot: target.coords.slot,
+      battlefield: fortressField,
     },
   );
   target.ships = combat.defenderAfter;
@@ -82,29 +107,38 @@ export function resolveRaidArrival(
   }
   addDebris(universe, target.coords, debrisCreated);
 
-  // XP: winner gets combat-win formula vs destroyed enemy ships; loser +8.
+  // XP: winner gets combat-win formula vs destroyed enemy ships; loser base.
   const atkDestroyed = resourcesCostTotal(
     destroyedShipResources(defenderBefore, combat.defenderAfter),
   );
   const defDestroyed = resourcesCostTotal(
     destroyedShipResources(fleet.ships, combat.attackerAfter),
   );
+  let attackerXp = 0;
+  let defenderXp = 0;
   if (owner) {
     if (combat.outcome === "attacker_win") {
-      grantPlayerXp(owner, xpForCombatWin(atkDestroyed));
+      attackerXp = xpForCombatWin(atkDestroyed);
+      if (
+        defenderOwner &&
+        defenderOwner.id !== owner.id &&
+        isSeasonPvpMission(fleet.mission)
+      ) {
+        awardSeasonPvpWin(universe, owner, now);
+      }
     } else {
-      grantPlayerXp(owner, xpForCombatLose());
+      attackerXp = xpForCombatLose();
     }
+    grantPlayerXp(owner, attackerXp);
     universe.players[owner.id] = owner;
   }
   if (defenderOwner && defenderOwner.id !== owner?.id) {
     if (combat.outcome === "defender_win") {
-      grantPlayerXp(defenderOwner, xpForCombatWin(defDestroyed));
-    } else if (combat.outcome === "attacker_win") {
-      grantPlayerXp(defenderOwner, xpForCombatLose());
+      defenderXp = xpForCombatWin(defDestroyed);
     } else {
-      grantPlayerXp(defenderOwner, xpForCombatLose());
+      defenderXp = xpForCombatLose();
     }
+    grantPlayerXp(defenderOwner, defenderXp);
     universe.players[defenderOwner.id] = defenderOwner;
   }
 
@@ -141,6 +175,26 @@ export function resolveRaidArrival(
     clearOccupationIfRecaptured(universe, target.id, target.ownerPlayerId);
   }
 
+  let miniResolveAvailable = false;
+  let miniPlanetId: string | undefined;
+  if (
+    combat.outcome === "attacker_win" &&
+    isMiniPlanet(target) &&
+    Boolean(target.ownerPlayerId) &&
+    target.ownerPlayerId !== fleet.ownerPlayerId
+  ) {
+    miniPlanetId = target.id;
+    if (canDirectCaptureMini(combat.attackerAfter)) {
+      miniResolveAvailable = true;
+      summary = canDestroyMiniPlanet(combat.attackerAfter)
+        ? `${summary} Mini contested — capture directly or destroy with World Eater.`
+        : `${summary} Mini contested — capital ships can capture on resolve.`;
+    } else {
+      vacateMiniPlanet(universe, target);
+      summary = `${summary} Owner cleared — mini unoccupied. Reclaim with a Colonizer (this fleet cannot capture).`;
+    }
+  }
+
   const report: CombatReport = {
     id: reportId,
     at: now,
@@ -164,8 +218,32 @@ export function resolveRaidArrival(
     moonFormed,
     moonDestroyed: moonDestroyed || undefined,
     moonKillChancePct,
+    miniResolveAvailable: miniResolveAvailable || undefined,
+    miniPlanetId,
+    roundLog: combat.roundLog.length ? combat.roundLog : undefined,
+    xpAwarded: { attacker: attackerXp, defender: defenderXp },
+    shareCode: mintCombatShareCode(universe),
   };
   universe.reports[reportId] = report;
+
+  if (defenderOwner && defenderOwner.id !== fleet.ownerPlayerId) {
+    pushEventLog(defenderOwner, {
+      kind: "raidAlert",
+      createdAt: fleet.arrivesAt,
+      title: `Hostile raid resolved at ${target.name}`,
+      body: summary,
+      href: `#msg-combat-${reportId}`,
+      meta: {
+        reportId,
+        outcome: combat.outcome,
+        planetId: target.id,
+        galaxy: target.coords.galaxy,
+        system: target.coords.system,
+        slot: target.coords.slot,
+      },
+    });
+    universe.players[defenderOwner.id] = defenderOwner;
+  }
 
   fleet.ships = combat.attackerAfter;
   fleet.cargo = loot;

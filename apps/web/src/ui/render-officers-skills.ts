@@ -1,6 +1,7 @@
 import type { OfficerId, PlayerView } from "@starhold/game";
 import { fmt, fmtEta, fmtLabel, remainingSeconds } from "./format";
 import { escapeAttr, escapeHtml } from "./render-escape";
+import { infoTooltip } from "./render-tooltips";
 
 function effectLabel(kind: string, value: number): string {
   switch (kind) {
@@ -50,14 +51,24 @@ export function officersPanelHtml(
         ? `Active · ${fmtEta(remainingSeconds(hire.expiresAt, view.now))} left`
         : "Off duty";
       const canAfford = balance >= def.cost;
+      const tip = infoTooltip({
+        title: def.name,
+        lines: [
+          def.description,
+          effects,
+          `${hire ? "Renew" : "Hire"}: ${fmt(def.cost)} Starshards · lasts 7 days`,
+        ],
+        blocked: canAfford ? null : "Not enough Starshards.",
+        testId: `officer-tip-${def.id}`,
+      });
       return `<li class="officer-row" data-testid="officer-${escapeAttr(def.id)}">
         <div>
-          <strong>${escapeHtml(def.name)}</strong>
+          <strong>${escapeHtml(def.name)} ${tip.html}</strong>
           <span class="hint">${escapeHtml(def.description)}</span>
           <span class="hint">${escapeHtml(effects)}</span>
           <span class="hint" data-testid="officer-status-${escapeAttr(def.id)}">${escapeHtml(status)}</span>
         </div>
-        <button type="button" data-activate-officer="${escapeAttr(def.id)}" data-testid="activate-officer-${escapeAttr(def.id)}" ${busy || !canAfford ? "disabled" : ""}>${hire ? "Renew" : "Hire"} · ${fmt(def.cost)} ✦</button>
+        <button type="button" data-activate-officer="${escapeAttr(def.id)}" data-testid="activate-officer-${escapeAttr(def.id)}" ${busy || !canAfford ? "disabled" : ""} title="${tip.title}">${hire ? "Renew" : "Hire"} · ${fmt(def.cost)} ✦</button>
       </li>`;
     })
     .join("");
@@ -91,9 +102,30 @@ export function skillsPanelHtml(view: PlayerView, busy: boolean): string {
               ? `Requires ${def.requires.map((r) => skillDisplayName(catalog, r)).join(", ")}`
               : "Root node";
           const name = fmtLabel(def.name);
+          const tip = infoTooltip({
+            title: name,
+            lines: [
+              def.description,
+              effects,
+              have
+                ? "Already unlocked (permanent)."
+                : `Unlock: ${fmt(def.cost)} Starshards`,
+            ],
+            requires: def.requires.length
+              ? def.requires.map((r) => skillDisplayName(catalog, r))
+              : ["Root node"],
+            blocked: have
+              ? null
+              : !reqOk
+                ? "Unlock prerequisite skills first."
+                : balance < def.cost
+                  ? "Not enough Starshards."
+                  : null,
+            testId: `skill-tip-${def.id}`,
+          });
           return `<li class="skill-row ${have ? "unlocked" : ""}" data-testid="skill-${escapeAttr(def.id)}">
             <div>
-              <strong>${escapeHtml(name)}</strong>
+              <strong>${escapeHtml(name)} ${tip.html}</strong>
               <span class="hint">${escapeHtml(def.description)}</span>
               <span class="hint">${escapeHtml(effects)}</span>
               <span class="hint">${escapeHtml(req)}</span>
@@ -101,7 +133,7 @@ export function skillsPanelHtml(view: PlayerView, busy: boolean): string {
             ${
               have
                 ? `<span class="badge" data-testid="skill-owned-${escapeAttr(def.id)}">Unlocked</span>`
-                : `<button type="button" data-unlock-skill="${escapeAttr(def.id)}" data-testid="unlock-skill-${escapeAttr(def.id)}" ${busy || !canBuy ? "disabled" : ""}>Unlock · ${fmt(def.cost)} ✦</button>`
+                : `<button type="button" data-unlock-skill="${escapeAttr(def.id)}" data-testid="unlock-skill-${escapeAttr(def.id)}" ${busy || !canBuy ? "disabled" : ""} title="${tip.title}">Unlock · ${fmt(def.cost)} ✦</button>`
             }
           </li>`;
         })

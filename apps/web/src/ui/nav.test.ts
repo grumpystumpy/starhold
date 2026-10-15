@@ -11,6 +11,7 @@ describe("nav routes", () => {
   it("maps contract paths to pages", () => {
     assert.equal(pageFromPath("/"), "overview");
     assert.equal(pageFromPath("/overview"), "overview");
+    assert.equal(pageFromPath("/goals"), "goals");
     assert.equal(pageFromPath("/buildings"), "buildings");
     assert.equal(pageFromPath("/defenses"), "defenses");
     assert.equal(pageFromPath("/shipyard"), "shipyard");
@@ -20,6 +21,8 @@ describe("nav routes", () => {
     assert.equal(pageFromPath("/officers"), "officers");
     assert.equal(pageFromPath("/skills"), "skills");
     assert.equal(pageFromPath("/highscore"), "highscore");
+    assert.equal(pageFromPath("/alliances"), "alliances");
+    assert.equal(pageFromPath("/seasons"), "seasons");
     assert.equal(pageFromPath("/messages"), "messages");
   });
 

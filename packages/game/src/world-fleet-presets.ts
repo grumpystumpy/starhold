@@ -41,12 +41,12 @@ const BUILTIN_META: Record<
   miniPlanetCapture: {
     name: "Mini Planet Capture",
     intent: "miniCapture",
-    ships: { worldEater: 5 },
+    ships: { cruiser: 10, hauler: 20 },
   },
   miniPlanetDestruction: {
     name: "Mini Planet Destruction",
     intent: "miniDestroy",
-    ships: { worldEater: 5 },
+    ships: { worldEater: 1, hauler: 20 },
   },
 };
 

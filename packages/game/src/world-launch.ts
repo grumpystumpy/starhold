@@ -26,6 +26,7 @@ import { playerBoosts } from "./world-boosts.js";
 import { emptyCargo, ensureUniverseShape } from "./world-bootstrap.js";
 import type { FleetActionResult } from "./world-queues.js";
 import { resolveActionPlanet } from "./world-queues.js";
+import { attachFleetToAcs } from "./world-acs.js";
 import { resolveLaunchTarget } from "./world-launch-target.js";
 
 const MISSIONS: MissionType[] = [
@@ -38,6 +39,7 @@ const MISSIONS: MissionType[] = [
   "harvestAsteroid",
   "expedition",
   "pirateRaid",
+  "alienRaid",
   "jump",
 ];
 
@@ -49,9 +51,14 @@ export interface LaunchFleetOpts {
   targetCoords?: Coordinates;
   asteroidId?: string;
   pirateBaseId?: string;
+  alienBaseId?: string;
   cargo?: Partial<Resources>;
   now?: number;
   originPlanetId?: string;
+  /** Open a new Joint Strike (ACS) group with this fleet as leader. */
+  openAcs?: boolean;
+  /** Join an existing open ACS group. */
+  acsGroupId?: string;
 }
 
 export function launchFleet(
@@ -136,6 +143,7 @@ export function launchFleet(
     opts.targetCoords,
     opts.asteroidId,
     opts.pirateBaseId,
+    opts.alienBaseId,
   );
   if (!target.ok) return target;
   const {
@@ -144,6 +152,7 @@ export function launchFleet(
     targetPlayerId,
     targetAsteroidId,
     targetPirateBaseId,
+    targetAlienBaseId,
   } = target;
 
   for (const id of SHIP_ORDER) {
@@ -248,6 +257,7 @@ export function launchFleet(
     targetCoords,
     targetAsteroidId,
     targetPirateBaseId,
+    targetAlienBaseId,
     mission: opts.mission,
     ships: { ...ships },
     cargo: { ...cargo },
@@ -263,5 +273,35 @@ export function launchFleet(
 
   universe.fleets[fleetId] = fleet;
   universe.planets[origin.id] = origin;
+
+  if (opts.openAcs || opts.acsGroupId) {
+    const acs = attachFleetToAcs(
+      universe,
+      fleet,
+      { openAcs: opts.openAcs, acsGroupId: opts.acsGroupId },
+      now,
+    );
+    if (!acs.ok) {
+      // Roll back launch so the caller can retry without ACS.
+      for (const id of SHIP_ORDER) {
+        origin.ships[id] = (origin.ships[id] ?? 0) + (ships[id] ?? 0);
+      }
+      origin.resources = {
+        ...origin.resources,
+        deuterium: origin.resources.deuterium + fuel,
+      };
+      if (opts.mission === "transport") {
+        origin.resources = {
+          metal: origin.resources.metal + cargo.metal,
+          crystal: origin.resources.crystal + cargo.crystal,
+          deuterium: origin.resources.deuterium + cargo.deuterium,
+        };
+      }
+      delete universe.fleets[fleetId];
+      universe.planets[origin.id] = origin;
+      return acs;
+    }
+  }
+
   return { ok: true, fleet, planet: origin };
 }

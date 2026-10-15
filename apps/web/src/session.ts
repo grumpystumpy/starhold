@@ -1,4 +1,5 @@
 import type {
+  AcsPrefill,
   BuildingId,
   DefenseId,
   PlayerView,
@@ -49,10 +50,14 @@ export const session = {
   armedShip: null as ShipId | null,
   armedDefense: null as DefenseId | null,
   armedResearch: null as ResearchId | null,
+  /** Mark-read armed the same way. `all` marks every unread alert. */
+  armedEventRead: null as { kind: "one"; id: string } | { kind: "all" } | null,
   /** Galaxy browser system override (null = follow active planet). */
   galaxySystem: null as number | null,
   /** Active routed page (synced to URL pathname). */
   activePage: "overview" as NavPage,
+  /** Fleet deep-link from Propose Joint Strike. Cleared once the form is armed. */
+  pendingAcsPrefill: null as AcsPrefill | null,
   /** Ignore duplicate click after pointerup already dispatched the armed action. */
   suppressClickUntil: 0,
 };

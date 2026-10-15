@@ -16,6 +16,8 @@ import {
 } from "./catalog.js";
 import type {
   CombatOutcome,
+  CombatRoundLog,
+  CombatRoundLosses,
   DefenseId,
   DefenseStock,
   FleetShips,
@@ -117,6 +119,71 @@ export function debrisFromDestroyed(destroyed: Resources): Resources {
   };
 }
 
+/** Sparse ship losses (before → after). Omits zeros. */
+export function sparseShipLosses(
+  before: FleetShips,
+  after: FleetShips,
+): Partial<FleetShips> {
+  const out: Partial<FleetShips> = {};
+  for (const id of SHIP_ORDER) {
+    const lost = Math.max(0, (before[id] ?? 0) - (after[id] ?? 0));
+    if (lost > 0) out[id] = lost;
+  }
+  return out;
+}
+
+/** Sparse defense losses (before → after). Omits zeros. */
+export function sparseDefenseLosses(
+  before: DefenseStock,
+  after: DefenseStock,
+): Partial<DefenseStock> {
+  const out: Partial<DefenseStock> = {};
+  for (const id of DEFENSE_ORDER) {
+    const lost = Math.max(0, (before[id] ?? 0) - (after[id] ?? 0));
+    if (lost > 0) out[id] = lost;
+  }
+  return out;
+}
+
+function cloneFleetShips(ships: FleetShips): FleetShips {
+  return { ...ships };
+}
+
+function cloneDefenses(defenses: DefenseStock): DefenseStock {
+  return { ...defenses };
+}
+
+function lossesFromSnapshots(
+  shipsBefore: FleetShips,
+  shipsAfter: FleetShips,
+  defensesBefore?: DefenseStock,
+  defensesAfter?: DefenseStock,
+): CombatRoundLosses {
+  const ships = sparseShipLosses(shipsBefore, shipsAfter);
+  const defenses =
+    defensesBefore && defensesAfter
+      ? sparseDefenseLosses(defensesBefore, defensesAfter)
+      : undefined;
+  const losses: CombatRoundLosses = { ships };
+  if (defenses && Object.keys(defenses).length > 0) {
+    losses.defenses = defenses;
+  }
+  return losses;
+}
+
+/** Debris from sparse ship losses this round (defenses never debris). */
+export function debrisFromShipLosses(
+  ...sides: Array<Partial<FleetShips>>
+): Resources {
+  const before = emptyFleetShips();
+  for (const ships of sides) {
+    for (const id of SHIP_ORDER) {
+      before[id] = (before[id] ?? 0) + (ships[id] ?? 0);
+    }
+  }
+  return debrisFromDestroyed(destroyedShipResources(before, emptyFleetShips()));
+}
+
 export interface CombatResolution {
   outcome: CombatOutcome;
   attackerAfter: FleetShips;
@@ -124,6 +191,8 @@ export interface CombatResolution {
   defensesAfter: DefenseStock;
   rounds: number;
   summary: string;
+  /** Empty when no rounds fought (unopposed / no attackers). */
+  roundLog: CombatRoundLog[];
 }
 
 type SidePools = {
@@ -176,16 +245,25 @@ function pickFocusTarget(
   return best;
 }
 
+export interface BattlefieldMods {
+  shieldMult: number;
+  attackMult: number;
+  armorMult: number;
+}
+
 function targetHp(
   id: CombatUnitId,
   research: ResearchLevels | undefined,
+  battlefield?: BattlefieldMods,
 ): number {
+  const sMult = battlefield?.shieldMult ?? 1;
+  const aMult = battlefield?.armorMult ?? 1;
   if ((SHIP_ORDER as string[]).includes(id)) {
     const d = SHIPS[id as ShipId];
-    return unitHp(d.shield, d.hull, research);
+    return unitHp(d.shield * sMult, d.hull * aMult, research);
   }
   const d = DEFENSES[id as DefenseId];
-  return unitHp(d.shield, d.hull, research);
+  return unitHp(d.shield * sMult, d.hull * aMult, research);
 }
 
 function targetCount(side: SidePools, id: CombatUnitId): number {
@@ -200,9 +278,10 @@ function applyDamageToTarget(
   id: CombatUnitId,
   damage: number,
   research: ResearchLevels | undefined,
+  battlefield?: BattlefieldMods,
 ): void {
   if (damage <= 0) return;
-  const hp = targetHp(id, research);
+  const hp = targetHp(id, research, battlefield);
   const pool = (side.residual[id] ?? 0) + damage;
   const kills = Math.floor(pool / hp);
   const rem = pool - kills * hp;
@@ -258,10 +337,11 @@ export function redistributeSwarmIntercept(
 function mothershipHullFraction(
   side: SidePools,
   research: ResearchLevels | undefined,
+  battlefield?: BattlefieldMods,
 ): number {
   const count = side.ships.swarmMothership ?? 0;
   if (count <= 0) return 0;
-  const hp = targetHp("swarmMothership", research);
+  const hp = targetHp("swarmMothership", research, battlefield);
   const residual = side.residual.swarmMothership ?? 0;
   return Math.max(0, Math.min(1, 1 - residual / hp));
 }
@@ -275,11 +355,15 @@ export function applyHarvesterKamikaze(
   enemy: SidePools,
   ownResearch: ResearchLevels | undefined,
   enemyResearch: ResearchLevels | undefined,
+  battlefield?: BattlefieldMods,
 ): number {
   const harvesters = own.ships.swarmHarvester ?? 0;
   if (harvesters <= 0) return 0;
   if ((own.ships.swarmMothership ?? 0) <= 0) return 0;
-  if (mothershipHullFraction(own, ownResearch) >= SWARM_KAMIKAZE_HULL_FRAC) {
+  if (
+    mothershipHullFraction(own, ownResearch, battlefield) >=
+    SWARM_KAMIKAZE_HULL_FRAC
+  ) {
     return 0;
   }
   const focus = pickFocusTarget(enemy.ships, enemy.defenses);
@@ -290,7 +374,13 @@ export function applyHarvesterKamikaze(
   }
   const dmgPer =
     SWARM_KAMIKAZE_SHIELD_DMG + SWARM_KAMIKAZE_HULL_DMG;
-  applyDamageToTarget(enemy, focus, harvesters * dmgPer, enemyResearch);
+  applyDamageToTarget(
+    enemy,
+    focus,
+    harvesters * dmgPer,
+    enemyResearch,
+    battlefield,
+  );
   own.ships.swarmHarvester = 0;
   own.residual.swarmHarvester = 0;
   return harvesters;
@@ -301,9 +391,10 @@ function applyShotWithIntercept(
   target: CombatUnitId,
   damage: number,
   research: ResearchLevels | undefined,
+  battlefield?: BattlefieldMods,
 ): void {
   for (const part of redistributeSwarmIntercept(target, damage, side)) {
-    applyDamageToTarget(side, part.target, part.damage, research);
+    applyDamageToTarget(side, part.target, part.damage, research, battlefield);
   }
 }
 
@@ -314,17 +405,23 @@ function collectFire(
   targetShips: FleetShips,
   targetDefenses: DefenseStock,
   firerResearch: ResearchLevels | undefined,
-  opts?: { attackMult?: number; defenseSlot?: number },
+  opts?: {
+    attackMult?: number;
+    defenseSlot?: number;
+    battlefield?: BattlefieldMods;
+  },
 ): Array<{ target: CombatUnitId; damage: number }> {
   const shots: Array<{ target: CombatUnitId; damage: number }> = [];
   const focus = pickFocusTarget(targetShips, targetDefenses);
   if (!focus) return shots;
   const attackMult = Math.max(0.01, opts?.attackMult ?? 1);
+  const battlefieldAtk = Math.max(0.01, opts?.battlefield?.attackMult ?? 1);
   const slot = opts?.defenseSlot;
 
   for (const id of livingShipIds(firerShips)) {
     const def = SHIPS[id];
-    let atk = unitAtk(def.attack, firerResearch) * attackMult;
+    let atk =
+      unitAtk(def.attack, firerResearch) * attackMult * battlefieldAtk;
     if (id === "swarmDrone") {
       atk *= swarmDroneAttackMult(firerShips.swarmDrone ?? 0);
     }
@@ -336,7 +433,8 @@ function collectFire(
   if (firerDefenses) {
     for (const id of livingDefenseIds(firerDefenses)) {
       const def = DEFENSES[id];
-      let atk = unitAtk(def.attack, firerResearch) * attackMult;
+      let atk =
+        unitAtk(def.attack, firerResearch) * attackMult * battlefieldAtk;
       if (
         slot != null &&
         def.slotAttackBonus &&
@@ -360,6 +458,8 @@ export interface CombatMods {
   attackMult?: number;
   /** Defender planet slot (Frost Lance cold-slot bonus). */
   defenseSlot?: number;
+  /** Location battlefield mods (e.g. Moving Fortress) — both sides. */
+  battlefield?: BattlefieldMods;
 }
 
 /**
@@ -376,6 +476,7 @@ export function resolveCombat(
   const defensePowerMult = Math.max(0.01, mods?.defensePower ?? 1);
   const attackMult = Math.max(0.01, mods?.attackMult ?? 1);
   const defenseSlot = mods?.defenseSlot;
+  const battlefield = mods?.battlefield;
   const atkSide: SidePools = {
     ships: normalizeFleetShips(attacker),
     defenses: emptyDefenses(),
@@ -395,6 +496,7 @@ export function resolveCombat(
       defensesAfter: defSide.defenses,
       rounds: 0,
       summary: "No attacking ships.",
+      roundLog: [],
     };
   }
 
@@ -406,19 +508,25 @@ export function resolveCombat(
       defensesAfter: emptyDefenses(),
       rounds: 0,
       summary: "Unopposed landing. Garrison empty.",
+      roundLog: [],
     };
   }
 
   let rounds = 0;
+  const roundLog: CombatRoundLog[] = [];
   for (let r = 1; r <= MAX_COMBAT_ROUNDS; r++) {
     rounds = r;
+    const atkShipsBefore = cloneFleetShips(atkSide.ships);
+    const defShipsBefore = cloneFleetShips(defSide.ships);
+    const defDefsBefore = cloneDefenses(defSide.defenses);
+
     const atkShots = collectFire(
       atkSide.ships,
       null,
       defSide.ships,
       defSide.defenses,
       attackerResearch,
-      { attackMult },
+      { attackMult, battlefield },
     );
     const defShots = collectFire(
       defSide.ships,
@@ -426,7 +534,7 @@ export function resolveCombat(
       atkSide.ships,
       emptyDefenses(),
       defenderResearch,
-      { defenseSlot },
+      { defenseSlot, battlefield },
     );
 
     for (const shot of atkShots) {
@@ -436,6 +544,7 @@ export function resolveCombat(
         shot.target,
         shot.damage / defensePowerMult,
         defenderResearch,
+        battlefield,
       );
     }
     for (const shot of defShots) {
@@ -444,6 +553,7 @@ export function resolveCombat(
         shot.target,
         shot.damage * defensePowerMult,
         attackerResearch,
+        battlefield,
       );
     }
 
@@ -452,13 +562,32 @@ export function resolveCombat(
       defSide,
       attackerResearch,
       defenderResearch,
+      battlefield,
     );
     applyHarvesterKamikaze(
       defSide,
       atkSide,
       defenderResearch,
       attackerResearch,
+      battlefield,
     );
+
+    const attackerLosses = lossesFromSnapshots(atkShipsBefore, atkSide.ships);
+    const defenderLosses = lossesFromSnapshots(
+      defShipsBefore,
+      defSide.ships,
+      defDefsBefore,
+      defSide.defenses,
+    );
+    roundLog.push({
+      round: r,
+      attackerLosses,
+      defenderLosses,
+      debrisThisRound: debrisFromShipLosses(
+        attackerLosses.ships,
+        defenderLosses.ships,
+      ),
+    });
 
     const atkAlive = shipCount(atkSide.ships) > 0;
     const defAlive =
@@ -488,6 +617,7 @@ export function resolveCombat(
     defensesAfter: defSide.defenses,
     rounds,
     summary: `${outcome.split("_").join(" ")} after ${rounds} round${rounds === 1 ? "" : "s"} (surviving power atk ${atkPower.toFixed(0)} / def ${defPower.toFixed(0)}).`,
+    roundLog,
   };
 }
 

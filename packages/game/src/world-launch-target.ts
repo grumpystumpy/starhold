@@ -3,6 +3,9 @@ import {
   MAP_GALAXIES,
   MAP_SLOTS,
   MAP_SYSTEMS,
+  MINI_SLOT_MAX,
+  MINI_SLOT_MIN,
+  NEWBIE_PROTECTION_POINTS,
 } from "./catalog.js";
 import {
   empireColonyCap,
@@ -21,7 +24,14 @@ import type {
   UniverseState,
 } from "./types.js";
 import { planetAtCoords } from "./world-bootstrap.js";
-import { pirateBaseAtCoords } from "./world-pirates.js";
+import {
+  empireDriftBeaconExpeditionBonus,
+  isMiniPlanet,
+  isUnclaimedMini,
+  playerKnowsMini,
+} from "./world-mini.js";
+import { alienBaseAtCoords, pirateBaseAtCoords } from "./world-pirates.js";
+import { isNewbieProtected } from "./world-protection.js";
 import { getDebris } from "./world-tick.js";
 
 export type LaunchTargetResult =
@@ -32,6 +42,7 @@ export type LaunchTargetResult =
       targetPlayerId: string | null;
       targetAsteroidId: string | null;
       targetPirateBaseId: string | null;
+      targetAlienBaseId: string | null;
     }
   | { ok: false; error: string };
 
@@ -45,12 +56,14 @@ export function resolveLaunchTarget(
   targetCoordsOpt: Coordinates | undefined,
   targetAsteroidIdOpt?: string,
   targetPirateBaseIdOpt?: string,
+  targetAlienBaseIdOpt?: string,
 ): LaunchTargetResult {
   let targetCoords: Coordinates;
   let targetPlanet: PlanetState | null = null;
   let targetPlayerId: string | null = null;
   let targetAsteroidId: string | null = null;
   let targetPirateBaseId: string | null = null;
+  let targetAlienBaseId: string | null = null;
 
   if (mission === "expedition") {
     if (!targetCoordsOpt) {
@@ -72,7 +85,9 @@ export function resolveLaunchTarget(
     const activeExpeditions = Object.values(universe.fleets).filter(
       (f) => f.ownerPlayerId === player.id && f.mission === "expedition",
     ).length;
-    const cap = empireExpeditionCap(player, maxExpeditions);
+    const cap =
+      empireExpeditionCap(player, maxExpeditions) +
+      empireDriftBeaconExpeditionBonus(universe, player.id);
     if (activeExpeditions >= cap) {
       return {
         ok: false,
@@ -86,6 +101,7 @@ export function resolveLaunchTarget(
       targetPlayerId: null,
       targetAsteroidId: null,
       targetPirateBaseId: null,
+      targetAlienBaseId: null,
     };
   }
 
@@ -107,6 +123,29 @@ export function resolveLaunchTarget(
       targetPlayerId: null,
       targetAsteroidId: null,
       targetPirateBaseId,
+      targetAlienBaseId: null,
+    };
+  }
+
+  if (mission === "alienRaid") {
+    const alienId = targetAlienBaseIdOpt?.trim();
+    if (!alienId) {
+      return { ok: false, error: "alienBaseId required for alienRaid." };
+    }
+    const base = universe.alienBases?.[alienId];
+    if (!base || base.destroyedAt != null) {
+      return { ok: false, error: "Alien base not found." };
+    }
+    targetAlienBaseId = alienId;
+    targetCoords = { ...base.coords };
+    return {
+      ok: true,
+      targetCoords,
+      targetPlanet: null,
+      targetPlayerId: null,
+      targetAsteroidId: null,
+      targetPirateBaseId: null,
+      targetAlienBaseId,
     };
   }
 
@@ -131,6 +170,7 @@ export function resolveLaunchTarget(
       targetPlayerId: null,
       targetAsteroidId,
       targetPirateBaseId: null,
+      targetAlienBaseId: null,
     };
   }
 
@@ -142,23 +182,26 @@ export function resolveLaunchTarget(
       };
     }
     targetCoords = { ...targetCoordsOpt };
+    const isMiniSlot =
+      targetCoords.slot >= MINI_SLOT_MIN &&
+      targetCoords.slot <= MINI_SLOT_MAX;
     if (
       targetCoords.galaxy < 1 ||
       targetCoords.galaxy > MAP_GALAXIES ||
       targetCoords.system < 1 ||
       targetCoords.system > MAP_SYSTEMS ||
       targetCoords.slot < 1 ||
-      targetCoords.slot > MAP_SLOTS
+      (targetCoords.slot > MAP_SLOTS && !isMiniSlot)
     ) {
       return { ok: false, error: "Coordinates out of map bounds." };
     }
     targetPlanet = planetAtCoords(universe, targetCoords);
     if (mission === "colonize") {
-      if (targetPlanet) {
-        return { ok: false, error: "Slot is already occupied." };
-      }
       if (pirateBaseAtCoords(universe, targetCoords)) {
         return { ok: false, error: "Pirate base occupies that slot." };
+      }
+      if (alienBaseAtCoords(universe, targetCoords)) {
+        return { ok: false, error: "Alien base occupies that slot." };
       }
       const hasCradle = (ships.colonyShip ?? 0) >= 1;
       const hasArk = (ships.foundationArk ?? 0) >= 1;
@@ -167,6 +210,24 @@ export function resolveLaunchTarget(
           ok: false,
           error: "Colonize requires a Colonizer or Foundation Ark.",
         };
+      }
+      if (targetPlanet && isMiniPlanet(targetPlanet)) {
+        if (!isUnclaimedMini(targetPlanet)) {
+          return { ok: false, error: "Mini planet is already colonized." };
+        }
+        if (!playerKnowsMini(universe, player.id, targetPlanet.id)) {
+          return {
+            ok: false,
+            error: "You have not discovered that mini planet yet.",
+          };
+        }
+      } else if (targetPlanet) {
+        return { ok: false, error: "Slot is already occupied." };
+      } else if (isMiniSlot) {
+        return { ok: false, error: "No mini planet at those coordinates." };
+      }
+      if (!isMiniSlot && pirateBaseAtCoords(universe, targetCoords)) {
+        return { ok: false, error: "Pirate base occupies that slot." };
       }
       const colonyCap = empireColonyCap(player, universe, maxColonies);
       if (ownedPlanetCount(universe, player.id) >= colonyCap) {
@@ -217,6 +278,14 @@ export function resolveLaunchTarget(
           error: "Use transport or deploy to move between your own planets.",
         };
       }
+      const defender = universe.players[targetPlanet.ownerPlayerId];
+      if (defender && isNewbieProtected(universe, defender)) {
+        const cap = NEWBIE_PROTECTION_POINTS.toLocaleString("en-US");
+        return {
+          ok: false,
+          error: `Target is under newbie protection (under ${cap} points).`,
+        };
+      }
     } else if (mission === "espionage") {
       if (targetPlanet.ownerPlayerId === player.id) {
         return { ok: false, error: "Cannot spy on yourself." };
@@ -253,5 +322,6 @@ export function resolveLaunchTarget(
     targetPlayerId,
     targetAsteroidId,
     targetPirateBaseId,
+      targetAlienBaseId: null,
   };
 }

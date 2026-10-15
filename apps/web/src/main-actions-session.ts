@@ -6,6 +6,7 @@ import {
   fetchState,
   joinGame,
   loginAccount,
+  relocateMiniFortress,
   renamePlanet,
   selectPlanet,
   signupAccount,
@@ -374,6 +375,42 @@ export async function doRenamePlanet(name: string): Promise<void> {
     setFlash(
       "error",
       err instanceof Error ? err.message : "Rename failed.",
+    );
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doRelocateFortress(
+  galaxy: number,
+  system: number,
+): Promise<void> {
+  if (!session.view) return;
+  if (session.busy) {
+    setFlash("error", "Still applying the last action — try again in a moment.");
+    schedulePaint();
+    return;
+  }
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    session.view = await relocateMiniFortress(
+      session.view.player.id,
+      session.view.planet.id,
+      galaxy,
+      system,
+    );
+    const c = session.view.planet.coords;
+    setFlash(
+      "notice",
+      `Moving Fortress landed at ${c.galaxy}:${c.system}:${c.slot}.`,
+    );
+  } catch (err) {
+    setFlash(
+      "error",
+      err instanceof Error ? err.message : "Fortress jump failed.",
     );
   } finally {
     session.busy = false;

@@ -146,6 +146,18 @@ async function apiSmoke() {
     throw new Error(`victim join failed: ${JSON.stringify(victim)}`);
   }
 
+  // Clear newbie protection on the victim so PvP raid e2e still runs.
+  const graduated = await apiJson("/api/e2e/graduate-newbie", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId: victim.player.id }),
+  });
+  if (graduated.error) {
+    throw new Error(
+      `graduate-newbie hook failed (is ALLOW_E2E_HOOKS=1?): ${JSON.stringify(graduated)}`,
+    );
+  }
+
   const launch = await apiJson("/api/launch-fleet", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -222,6 +234,10 @@ async function uiSmoke() {
   await page.waitForSelector('[data-testid="player-level"]', { timeout: 10_000 });
   await page.waitForSelector('[data-testid="xp-bar"]', { timeout: 5_000 });
   logs.push("ui-player-level");
+  await goNav(page, "seasons");
+  await page.waitForSelector('[data-testid="seasons-panel"]', { timeout: 10_000 });
+  await page.waitForSelector('[data-testid="season-board-combat"]', { timeout: 5_000 });
+  logs.push("ui-seasons");
   await goNav(page, "highscore");
   await page.waitForSelector('[data-testid="highscores"]', { timeout: 10_000 });
   const hsRank = await page.locator('[data-testid="highscore-1"]').count();
@@ -241,6 +257,75 @@ async function uiSmoke() {
   });
   if (!galaxyHasMoon) throw new Error("galaxy slots missing hasMoon");
   logs.push("ui-galaxy-moon-field");
+
+  // Pirates + Aliens redesign smoke (galaxy chrome)
+  await goNav(page, "galaxy");
+  await page.waitForSelector('[data-testid="galaxy-panel"]', { timeout: 10_000 });
+  const alienChrome =
+    (await page.locator('[data-testid="galaxy-alien-empty"]').count()) +
+    (await page.locator('[data-testid="galaxy-alien"]').count());
+  if (alienChrome < 1) throw new Error("galaxy missing Aliens row");
+  logs.push("ui-galaxy-aliens-row");
+  const playerIdForPirate = await page.evaluate(
+    () => window.starhold?.getState()?.playerId ?? null,
+  );
+  if (!playerIdForPirate) throw new Error("missing playerId for pirate scan");
+  const homeGalaxy = await page.evaluate(
+    () => window.starhold?.getState()?.galaxy?.galaxy ?? 1,
+  );
+  let pirateHit = null;
+  const galaxyOrder = [
+    homeGalaxy,
+    ...Array.from({ length: 10 }, (_, i) => i + 1).filter((g) => g !== homeGalaxy),
+  ];
+  for (const galaxy of galaxyOrder) {
+    if (pirateHit) break;
+    for (let system = 1; system <= 399; system++) {
+      const st = await apiJson(
+        `/api/state?playerId=${encodeURIComponent(playerIdForPirate)}&galaxy=${galaxy}&system=${system}`,
+      );
+      if (st.galaxy?.pirateBase) {
+        pirateHit = st.galaxy.pirateBase;
+        break;
+      }
+    }
+  }
+  if (!pirateHit) throw new Error("API found no pirate bases (expected ~200)");
+  if (pirateHit.coords.galaxy !== homeGalaxy) {
+    throw new Error(
+      `no pirate in home galaxy ${homeGalaxy}; UI cannot cross galaxies`,
+    );
+  }
+  logs.push(
+    `api-pirate:${pirateHit.coords.galaxy}:${pirateHit.coords.system}`,
+  );
+  const targetLabel = `${pirateHit.coords.galaxy}:${pirateHit.coords.system}`;
+  let foundPirate =
+    (await page.locator('[data-testid="galaxy-pirate"]').count()) > 0;
+  for (let i = 0; i < 450 && !foundPirate; i++) {
+    const before =
+      (await page.textContent('[data-testid="galaxy-label"]')) ?? "";
+    if (before.startsWith(targetLabel)) {
+      foundPirate =
+        (await page.locator('[data-testid="galaxy-pirate"]').count()) > 0;
+      break;
+    }
+    await page.click('[data-testid="galaxy-next"]');
+    await page.waitForFunction(
+      (prev) =>
+        (document.querySelector('[data-testid="galaxy-label"]')?.textContent ??
+          "") !== prev,
+      before,
+      { timeout: 8_000 },
+    );
+    foundPirate =
+      (await page.locator('[data-testid="galaxy-pirate"]').count()) > 0;
+  }
+  if (!foundPirate) {
+    throw new Error(`galaxy UI missing pirate at ${targetLabel}`);
+  }
+  logs.push("ui-galaxy-pirate-found");
+
   const joined = await page.evaluate(() => window.starhold?.getState());
   if (joined?.name !== urlName) {
     throw new Error(`URL join failed: ${JSON.stringify(joined)}`);
@@ -452,12 +537,10 @@ async function uiSmoke() {
   await page.click('[data-testid="build-scout"]');
   await page.waitForFunction(
     () => {
-      const hangar = document.querySelector(
-        '[data-testid="hangar-scout"] span:last-child',
-      );
+      const hangar = document.querySelector('[data-testid="hangar-count-scout"]');
       const q = document.querySelector('[data-testid="ship-queue"]');
       const ok = document.querySelector('[data-testid="flash-ok"]');
-      const n = Number(hangar?.textContent ?? 0);
+      const n = Number(String(hangar?.textContent ?? "0").replace(/,/g, ""));
       return n >= 1 || Boolean(q) || Boolean(ok?.textContent?.match(/scout|Hangar|Queued/i));
     },
     undefined,
@@ -466,10 +549,8 @@ async function uiSmoke() {
 
   await page.waitForFunction(
     () => {
-      const hangar = document.querySelector(
-        '[data-testid="hangar-scout"] span:last-child',
-      );
-      return Number(hangar?.textContent ?? 0) >= 1;
+      const hangar = document.querySelector('[data-testid="hangar-count-scout"]');
+      return Number(String(hangar?.textContent ?? "0").replace(/,/g, "")) >= 1;
     },
     undefined,
     { timeout: 30_000 },
@@ -477,9 +558,11 @@ async function uiSmoke() {
   logs.push("ui-build-scout");
 
   await page.waitForTimeout(1500);
+  const hangarCountText =
+    (await page.textContent('[data-testid="hangar-count-scout"]')) ?? "0";
   const noticeOrHangar =
     (await page.locator('[data-testid="flash-ok"]').count()) >= 1 ||
-    Number(await page.textContent('[data-testid="hangar-scout"] span:last-child')) >= 1;
+    Number(String(hangarCountText).replace(/,/g, "")) >= 1;
   if (!noticeOrHangar) throw new Error("lost build feedback after poll");
   logs.push("build-feedback-ok");
 
@@ -490,6 +573,26 @@ async function uiSmoke() {
   });
   await rivalPage.waitForSelector('[data-testid="resources"]', { timeout: 15_000 });
   logs.push(`rival-join:${rivalName}`);
+  // getState() exposes playerId (not player.id) + roster planet ids.
+  const rivalMeta = await rivalPage.evaluate(() => {
+    const st = window.starhold?.getState();
+    const playerId = st?.playerId ?? null;
+    const planetId =
+      st?.roster?.find((r) => r.id === playerId)?.planetId ?? null;
+    return { playerId, planetId };
+  });
+  if (!rivalMeta.playerId || !rivalMeta.planetId) {
+    throw new Error(`rival join missing ids: ${JSON.stringify(rivalMeta)}`);
+  }
+  const grad = await apiJson("/api/e2e/graduate-newbie", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId: rivalMeta.playerId }),
+  });
+  if (grad.error) {
+    throw new Error(`UI rival graduate failed: ${JSON.stringify(grad)}`);
+  }
+  logs.push("rival-graduated");
 
   await page.reload({ waitUntil: "networkidle" });
   const hasResources = await page.locator('[data-testid="resources"]').count();
@@ -510,25 +613,51 @@ async function uiSmoke() {
   logs.push("fleet-form-and-art");
 
   await page.click('[data-testid="mission-raid"]');
+  // Default target is roster[0] (often another newbie). Aim at the graduated rival.
+  await page.waitForFunction(
+    (planetId) => {
+      const sel = document.querySelector('[data-testid="fleet-target"]');
+      return Boolean(
+        sel &&
+          [...sel.options].some((o) => o.value === `planet:${planetId}`),
+      );
+    },
+    rivalMeta.planetId,
+    { timeout: 10_000 },
+  );
+  await page.selectOption(
+    '[data-testid="fleet-target"]',
+    `planet:${rivalMeta.planetId}`,
+  );
   await page.fill('[data-testid="fleet-count-scout"]', "1");
   await page.click('[data-testid="launch-fleet"]');
   await page.waitForSelector('[data-testid="fleets-live"], [data-testid="flash-ok"]', {
     timeout: 10_000,
   });
+  const launchErr = await page.locator('[data-testid="flash-error"]').count();
+  if (launchErr > 0) {
+    const errText = await page.textContent('[data-testid="flash-error"]');
+    throw new Error(`UI fleet launch error: ${errText}`);
+  }
   logs.push("ui-fleet-mission-launch");
 
   await page.waitForFunction(
     () => {
-      const reports = document.querySelector('[data-testid="combat-reports"]');
       const st = window.starhold?.getState();
-      return (
-        Boolean(reports) ||
-        (st?.reports?.length ?? 0) >= 1
-      );
+      return (st?.reports?.length ?? 0) >= 1;
     },
     undefined,
     { timeout: 120_000 },
   );
+  await goNav(page, "messages");
+  await page.waitForSelector('[data-testid="messages-panel"]', {
+    timeout: 10_000,
+  });
+  const inboxCombat = await page.locator('[data-testid^="message-combat-"]').count();
+  if (inboxCombat < 1) {
+    throw new Error("messages inbox missing combat report after raid");
+  }
+  logs.push("ui-messages-inbox");
   const missionState = await page.evaluate(() => {
     const st = window.starhold.getState();
     const r = st.reports?.[0];
@@ -553,7 +682,98 @@ async function uiSmoke() {
   return { logs };
 }
 
+async function authAndGoalsSmoke() {
+  const require = createRequire(import.meta.url);
+  const playwright = require("playwright");
+  const browser = await playwright.chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  const stamp = Date.now().toString(36);
+  const email = `goals${stamp}@example.com`;
+  const password = "starhold-goals";
+  const name = `Goal${stamp.slice(-4)}`;
+  const logs = [];
+
+  await page.goto(`${WEB}/`, { waitUntil: "networkidle" });
+  await page.fill('[data-testid="auth-email"]', email);
+  await page.fill('[data-testid="auth-password"]', password);
+  await page.click('[data-testid="auth-signup-btn"]');
+  await page.waitForSelector('[data-testid="account-email"]', { timeout: 15_000 });
+  logs.push("signup");
+
+  await page.fill('[data-testid="commander-input"]', name);
+  await page.click('[data-testid="join-btn"]');
+  await page.waitForSelector('[data-testid="resources"]', { timeout: 15_000 });
+  const playerId = await page.evaluate(() => window.starhold.getState().playerId);
+  if (!playerId) throw new Error("signup join missing player");
+  logs.push(`joined:${name}`);
+
+  await page.evaluate(() => localStorage.clear());
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForSelector('[data-testid="resources"]', { timeout: 15_000 });
+  const persisted = await page.evaluate(() => window.starhold.getState());
+  if (persisted.playerId !== playerId || persisted.name !== name) {
+    throw new Error(`cookie persist failed: ${JSON.stringify(persisted)}`);
+  }
+  logs.push("cookie-persist");
+
+  await goNav(page, "goals");
+  await page.waitForSelector('[data-testid="goals-daily"]', { timeout: 10_000 });
+  await page.waitForSelector('[data-testid="goals-weekly"]', { timeout: 10_000 });
+  const progress = await page.textContent(
+    '[data-testid="goal-progress-dailyPirateWins"]',
+  );
+  const reward = await page.textContent(
+    '[data-testid="goal-reward-dailyExpeditions"]',
+  );
+  const weeklyReward = await page.textContent(
+    '[data-testid="goal-reward-weeklyExpeditions"]',
+  );
+  const panel = await page.innerText('[data-testid="goals-panel"]');
+  if (progress?.trim() !== "0 / 3") {
+    throw new Error(`daily pirate progress: ${progress}`);
+  }
+  if (!reward?.includes("2,000") || !weeklyReward?.includes("12,000")) {
+    throw new Error(`goal rewards missing commas: ${reward} | ${weeklyReward}`);
+  }
+  if (panel.includes("_")) {
+    throw new Error(`underscore in goals UI: ${panel}`);
+  }
+  const claim = page.locator('[data-testid="claim-goal-dailyPirateWins"]');
+  if (await claim.isEnabled()) {
+    throw new Error("unfinished pirate goal should not be claimable");
+  }
+  logs.push("goals-ui");
+
+  await page.evaluate(async () => {
+    await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+    localStorage.clear();
+  });
+  await page.goto(`${WEB}/`, { waitUntil: "networkidle" });
+  await page.waitForSelector('[data-testid="auth-login-btn"]', { timeout: 15_000 });
+  if ((await page.locator('[data-testid="resources"]').count()) > 0) {
+    throw new Error("logout still showed the resource bar");
+  }
+  await page.fill('[data-testid="auth-email"]', email);
+  await page.fill('[data-testid="auth-password"]', password);
+  await page.click('[data-testid="auth-login-btn"]');
+  await page.waitForSelector('[data-testid="resources"]', { timeout: 15_000 });
+  const afterLogin = await page.evaluate(() => window.starhold.getState());
+  if (afterLogin.playerId !== playerId || afterLogin.name !== name) {
+    throw new Error(`login did not resume commander: ${JSON.stringify(afterLogin)}`);
+  }
+  await goNav(page, "goals");
+  await page.waitForSelector('[data-testid="goal-progress-dailyExpeditions"]', {
+    timeout: 10_000,
+  });
+  logs.push("login-persist");
+
+  await browser.close();
+  console.log("Auth + goals smoke OK", logs);
+  return { logs, playerId, email };
+}
+
 await waitHealthy();
 const api = await apiSmoke();
+const authGoals = await authAndGoalsSmoke();
 const ui = await uiSmoke();
-console.log(JSON.stringify({ ok: true, api, ui }, null, 2));
+console.log(JSON.stringify({ ok: true, api, authGoals, ui }, null, 2));

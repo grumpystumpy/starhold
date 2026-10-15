@@ -1,8 +1,10 @@
 import {
   PRODUCTION_MULT,
+  unreadEventCount,
   type PlayerView,
 } from "@starhold/game";
 import { fmt, fmtCoords } from "./format";
+import { NAV_LABELS } from "./nav";
 import { patchFlash } from "./render-chrome-join.js";
 import { escapeHtml } from "./render-escape";
 import { storageFillTitle } from "./render-tooltips";
@@ -37,7 +39,19 @@ export function patchLiveChrome(
       Number(PRODUCTION_MULT) > 1
         ? ` · income ×${PRODUCTION_MULT} (test)`
         : "";
-    coords.textContent = `${planet.name}${planet.kind === "moon" ? " · Moon" : ""} · ${fmtCoords(planet.coords)} · ${universe.name} @ ${universe.speed}×${income}`;
+    coords.textContent = `${planet.name}${planet.kind === "moon" ? " · Moon" : ""}${planet.flags?.mini ? " · Mini" : ""} · ${fmtCoords(planet.coords)} · ${universe.name} @ ${universe.speed}×${income}`;
+  }
+
+  const topArt = root.querySelector<HTMLImageElement>(".topbar-brand .planet-disc");
+  if (topArt) {
+    const moon = planet.kind === "moon";
+    if (topArt.dataset.artId !== view.planetArt.artId) {
+      topArt.src = view.planetArt.artThumbUrl;
+      topArt.dataset.artId = view.planetArt.artId;
+    }
+    topArt.width = moon ? 44 : 56;
+    topArt.height = moon ? 44 : 56;
+    topArt.classList.toggle("planet-disc-moon", moon);
   }
 
   const levelLabel = root.querySelector<HTMLElement>(
@@ -120,6 +134,7 @@ export function patchLiveChrome(
   shell.dataset.busy = state.busy ? "1" : "0";
 
   patchFlash(root, state.error, state.notice);
+  patchMessagesBadge(root, view);
 
   // Keep empire rail labels in sync without remounting chips.
   for (const p of view.ownedPlanets) {
@@ -129,13 +144,46 @@ export function patchLiveChrome(
     if (!chip) continue;
     const nameEl = chip.querySelector(".planet-chip-name");
     if (nameEl) {
-      nameEl.innerHTML = `${escapeHtml(p.name)}${p.isMoon ? " · Moon" : ""}${p.isHome ? " ★" : ""}`;
+      nameEl.innerHTML = `${escapeHtml(p.name)}${p.isMoon ? " · Moon" : ""}${p.isMini ? " · Mini" : ""}${p.isHome ? " ★" : ""}`;
     }
     chip.classList.toggle("active", p.isActive);
     chip.toggleAttribute("disabled", state.busy);
   }
 
   return true;
+}
+
+function patchMessagesBadge(root: HTMLElement, view: PlayerView): void {
+  const unread = unreadEventCount(view.player);
+  const link = root.querySelector<HTMLElement>('[data-testid="nav-messages"]');
+  if (link) {
+    const existing = link.querySelector<HTMLElement>(
+      '[data-testid="nav-messages-badge"]',
+    );
+    if (unread > 0) {
+      if (existing) {
+        existing.textContent = fmt(unread);
+      } else {
+        const badge = document.createElement("span");
+        badge.className = "nav-badge";
+        badge.dataset.testid = "nav-messages-badge";
+        badge.textContent = fmt(unread);
+        link.append(badge);
+      }
+    } else if (existing) {
+      existing.remove();
+    }
+  }
+
+  const option = root.querySelector<HTMLOptionElement>(
+    '[data-testid="nav-dropdown"] option[value="messages"]',
+  );
+  if (option) {
+    option.textContent =
+      unread > 0
+        ? `${NAV_LABELS.messages} (${fmt(unread)})`
+        : NAV_LABELS.messages;
+  }
 }
 
 function patchRes(

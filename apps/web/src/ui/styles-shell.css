@@ -123,6 +123,21 @@
   font-weight: 600;
 }
 
+.nav-badge {
+  display: inline-block;
+  margin-left: 0.35rem;
+  min-width: 1.15rem;
+  padding: 0 0.32rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #1a1208;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
+  vertical-align: 1px;
+}
+
 .shell-main {
   min-width: 0;
   /* No enter animation — poll re-renders would restart it and break click stability. */
@@ -174,6 +189,47 @@
   height: 36px;
 }
 
+.planet-disc {
+  border-radius: 50%;
+  object-fit: cover;
+  background: transparent;
+  border-color: transparent;
+}
+
+.planet-disc-top {
+  width: 56px;
+  height: 56px;
+}
+
+.planet-disc-top.planet-disc-moon {
+  width: 44px;
+  height: 44px;
+}
+
+.planet-disc-hero {
+  width: 168px;
+  height: 168px;
+}
+
+.planet-disc-hero-moon {
+  width: 96px;
+  height: 96px;
+}
+
+.planet-chip .planet-disc {
+  width: 36px;
+  height: 36px;
+}
+
+.planet-chip .planet-disc-moon {
+  width: 28px;
+  height: 28px;
+}
+
+.planet-disc-empty {
+  opacity: 0.62;
+}
+
 .planet-chip-text {
   display: flex;
   flex-direction: column;
@@ -206,6 +262,7 @@
 
 .overview-hero {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.75rem;
   align-items: center;
   margin-bottom: 0.75rem;
@@ -233,25 +290,28 @@
   font-weight: 600;
 }
 
-/* Cost / requirement tooltips */
+/* Cost / requirement tooltips — large enough for phone tap/read */
 .has-tip {
   position: relative;
   display: inline-flex;
   vertical-align: middle;
-  margin-left: 0.25rem;
+  margin-left: 0.3rem;
+  touch-action: manipulation;
 }
 
 .tip-trigger {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1rem;
-  height: 1rem;
+  width: 1.35rem;
+  height: 1.35rem;
   border-radius: 50%;
   border: 1px solid var(--line);
-  font-size: 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 700;
   color: var(--muted);
   cursor: help;
+  background: color-mix(in srgb, var(--bg1) 70%, transparent);
 }
 
 .tip-bubble {
@@ -259,37 +319,55 @@
   position: absolute;
   z-index: 40;
   left: 0;
-  top: calc(100% + 0.35rem);
-  min-width: 12rem;
-  max-width: 18rem;
-  padding: 0.55rem 0.65rem;
+  right: auto;
+  top: calc(100% + 0.4rem);
+  min-width: 15rem;
+  max-width: min(24rem, calc(100vw - 1.5rem));
+  padding: 0.8rem 0.95rem;
   background: var(--bg0);
   border: 1px solid var(--accent-dim);
-  border-radius: 3px;
-  box-shadow: 0 8px 20px color-mix(in srgb, #000 45%, transparent);
+  border-radius: 4px;
+  box-shadow: 0 10px 28px color-mix(in srgb, #000 50%, transparent);
   color: var(--text);
-  font-size: 0.8rem;
+  font-size: 0.95rem;
   font-weight: 400;
-  line-height: 1.35;
+  line-height: 1.45;
   white-space: normal;
+  pointer-events: none;
+}
+
+/* Flip when JS detects the bubble would overflow the right viewport edge. */
+.has-tip.tip-align-end .tip-bubble {
+  left: auto;
+  right: 0;
+}
+
+/* Viewport-clamped placement (inline left/top/width from positionTip). */
+.has-tip.tip-fixed .tip-bubble {
+  position: fixed;
+  right: auto;
+  max-width: calc(100vw - 1rem);
 }
 
 .has-tip:hover .tip-bubble,
-.has-tip:focus-within .tip-bubble {
+.has-tip:focus-within .tip-bubble,
+.has-tip[aria-expanded="true"] .tip-bubble {
   display: block;
 }
 
 .tip-bubble strong {
   display: block;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.35rem;
   color: var(--accent);
+  font-size: 1.02rem;
 }
 
+.tip-line,
 .tip-cost,
 .tip-time,
 .tip-req,
 .tip-blocked {
-  margin-top: 0.2rem;
+  margin-top: 0.28rem;
   color: var(--muted);
 }
 
@@ -348,6 +426,11 @@
     width: 100%;
   }
 
+  .planet-disc-hero {
+    width: 128px;
+    height: 128px;
+  }
+
   .side-nav .nav-link.active {
     border-left-color: transparent;
     border-bottom-color: var(--accent);
@@ -355,5 +438,23 @@
 
   .resource-bar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tip-trigger {
+    width: 1.6rem;
+    height: 1.6rem;
+    font-size: 0.9rem;
+  }
+
+  .tip-bubble {
+    min-width: min(16.5rem, calc(100vw - 1.25rem));
+    max-width: calc(100vw - 1.25rem);
+    padding: 0.95rem 1.05rem;
+    font-size: 1.05rem;
+    line-height: 1.5;
+  }
+
+  .tip-bubble strong {
+    font-size: 1.1rem;
   }
 }

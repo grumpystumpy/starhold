@@ -205,9 +205,13 @@ export function buildingRow(
     action: `Upgrade ${def.name} → L${level + 1}`,
     cost,
     timeSecs: secs,
-    requires: def.energyUsePerLevel
-      ? [`Energy use +${def.energyUsePerLevel}/level`]
-      : undefined,
+    detail: def.description,
+    requires: [
+      `Current L${level}`,
+      ...(def.energyUsePerLevel
+        ? [`Energy use +${def.energyUsePerLevel}/level`]
+        : []),
+    ],
     blocked,
   });
   return `

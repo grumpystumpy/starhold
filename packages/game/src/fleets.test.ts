@@ -14,6 +14,7 @@ import {
   launchFleet,
   playerView,
 } from "./world.js";
+import { graduateNewbieProtection } from "./test-graduate.js";
 
 describe("fleet formulas", () => {
   it("measures coordinate distance", () => {
@@ -106,6 +107,7 @@ describe("launchFleet + travel resolve", () => {
     const universe = createUniverse("Raid Drift", 8);
     const a = joinUniverse(universe, "Raider", 20_000_000);
     const b = joinUniverse(universe, "Victim", 20_000_001);
+    graduateNewbieProtection(universe, universe.players[b.player.id]!);
     universe.planets[a.planet.id].ships.scout = 5;
     universe.planets[a.planet.id].ships.hauler = 1;
     universe.planets[a.planet.id].resources.deuterium = 500;
@@ -155,6 +157,7 @@ describe("launchFleet + travel resolve", () => {
     const universe = createUniverse("Reject Drift", 8);
     const a = joinUniverse(universe, "Poor", 30_000_000);
     const b = joinUniverse(universe, "Rich", 30_000_001);
+    graduateNewbieProtection(universe, universe.players[b.player.id]!);
     const empty = launchFleet(
       universe,
       a.player.id,

@@ -1,0 +1,13 @@
+# Generated serverless bundle — rebuild via npm run build:vercel
+api/index.js
+
+# Planet art media (large; agents should not load blobs)
+apps/web/public/assets/planets/**
+!apps/web/public/assets/planets/README.md
+
+# Playtest / UI review dumps
+ui-review-out/
+playtest-reports/
+**/playtest-report*
+scripts/ui-review-baselines/**
+!scripts/ui-review-baselines/README.md

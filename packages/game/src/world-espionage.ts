@@ -6,6 +6,7 @@ import type {
   UniverseState,
 } from "./types.js";
 import { playerBoosts } from "./world-boosts.js";
+import { isMovingFortress } from "./world-mini.js";
 
 export function resolveEspionage(
   universe: UniverseState,
@@ -17,6 +18,31 @@ export function resolveEspionage(
   const targetOwner = universe.players[target.ownerPlayerId];
   if (!spy || !targetOwner) return;
 
+  const reportId = `spy_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+
+  // Moving Fortress: espionage returns nothing.
+  if (isMovingFortress(target)) {
+    const blank: EspionageReport = {
+      id: reportId,
+      at: now,
+      missionId: fleet.id,
+      spyPlayerId: spy.id,
+      targetPlayerId: targetOwner.id,
+      targetName: targetOwner.name,
+      targetCoords: { ...target.coords },
+      detail: 0,
+      resources: null,
+      ships: null,
+      defenses: null,
+      buildings: null,
+      research: null,
+      summary: `Moving Fortress at ${target.coords.galaxy}:${target.coords.system}:${target.coords.slot} — sensors return nothing.`,
+    };
+    universe.spyReports[reportId] = blank;
+    fleet.reportId = reportId;
+    return;
+  }
+
   const spyBoost = playerBoosts(spy, now).espionageLevel;
   const wingBonus = (fleet.ships.astrolabeWing ?? 0) >= 1 ? 1 : 0;
   const detail = Math.min(
@@ -26,7 +52,6 @@ export function resolveEspionage(
       target.buildings.researchLab ?? 0,
     ) + wingBonus,
   );
-  const reportId = `spy_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
   const report: EspionageReport = {
     id: reportId,
     at: now,

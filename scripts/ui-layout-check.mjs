@@ -32,6 +32,7 @@ const MAX_DIFF_RATIO = Number(process.env.UI_REVIEW_MAX_DIFF_RATIO ?? "0.02");
 
 const ROUTES = [
   "overview",
+  "goals",
   "buildings",
   "defenses",
   "shipyard",
@@ -41,6 +42,8 @@ const ROUTES = [
   "officers",
   "skills",
   "highscore",
+  "alliances",
+  "seasons",
   "messages",
 ];
 

@@ -3,6 +3,7 @@ import type {
   BuildingId,
   DefenseDef,
   DefenseId,
+  GoalCadence,
   PlayerClassId,
   ResearchDef,
   ResearchId,
@@ -164,7 +165,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
     attack: 300_000,
     shield: 800_000,
     hull: 2_000_000,
-    speed: 600,
+    speed: 300,
     fuelPerDistance: 4,
     researchReq: {
       weaponsTech: 14,
@@ -787,6 +788,48 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
     baseBuildSeconds: 40,
     energyUsePerLevel: 15,
   },
+  riftSiphon: {
+    id: "riftSiphon",
+    name: "Rift Siphon",
+    description:
+      "Mini-planet special — +15% all mine output on this body per level (max 5).",
+    baseCost: { metal: 800, crystal: 400, deuterium: 200 },
+    costGrowth: 1.8,
+    baseBuildSeconds: 45,
+    energyUsePerLevel: 25,
+    maxLevel: 5,
+  },
+  echoVault: {
+    id: "echoVault",
+    name: "Echo Vault",
+    description:
+      "Mini-planet special — +25% storage caps per level (max 5).",
+    baseCost: { metal: 1200, crystal: 800, deuterium: 0 },
+    costGrowth: 1.9,
+    baseBuildSeconds: 40,
+    maxLevel: 5,
+  },
+  anomalyForge: {
+    id: "anomalyForge",
+    name: "Anomaly Forge",
+    description:
+      "Mini-planet special — −8% ship build time per level (max 5).",
+    baseCost: { metal: 1000, crystal: 1000, deuterium: 400 },
+    costGrowth: 1.9,
+    baseBuildSeconds: 50,
+    energyUsePerLevel: 30,
+    maxLevel: 5,
+  },
+  driftBeacon: {
+    id: "driftBeacon",
+    name: "Drift Beacon",
+    description:
+      "Mini-planet special — +1 expedition slot at level 1 (higher levels reserved).",
+    baseCost: { metal: 2000, crystal: 1500, deuterium: 1000 },
+    costGrowth: 2.0,
+    baseBuildSeconds: 60,
+    maxLevel: 5,
+  },
 
 };
 
@@ -925,8 +968,70 @@ export const OCCUPATION_DURATION_MS = 2 * 24 * 60 * 60 * 1000;
 /** Occupier / owner mine output split while occupied. */
 export const OCCUPATION_OCCUPIER_SHARE = 0.3;
 export const OCCUPATION_OWNER_SHARE = 0.7;
-/** World Eaters required to capture/destroy a mini planet. */
-export const MINI_WORLD_EATER_MIN = 5;
+/**
+ * World Eaters required to **destroy** a mini planet.
+ * Direct capture on win: Void Titan / Mothership / World Eater (see canDirectCaptureMini).
+ */
+export const MINI_WORLD_EATER_MIN = 1;
+/** Mini planets spawn outside normal slots 1–16. */
+export const MINI_SLOT_MIN = 20;
+export const MINI_SLOT_MAX = 29;
+/** ~1 standard mini planet per N systems (multiple minis OK in same system). */
+export const MINI_SYSTEMS_PER = 5;
+/** Fields cap band for mini planets (v1). */
+export const MINI_FIELDS_MIN = 80;
+export const MINI_FIELDS_MAX = 140;
+/** Rich output vs similar-size normals (slot-8 baseline). */
+export const MINI_RICH_MINE_MULT = 1.75;
+/** Destroy payout multiplier on remaining metal/crystal (never deut) — massive. */
+export const MINI_DESTROY_RESOURCE_MULT = 5;
+/** Debris fraction of cumulative building residual cost on destroy (metal/crystal). */
+export const MINI_DESTROY_DEBRIS_FRAC = 0.75;
+/** After first colonize, minis become galaxy-visible to all after this delay. */
+export const MINI_GALAXY_VISIBLE_AFTER_MS = 8 * 60 * 60 * 1000;
+/** Wall-clock between mini drift steps. */
+export const MINI_DRIFT_INTERVAL_MS = 6 * 60 * 60 * 1000;
+/** Max |Δsystem| per drift step (same galaxy). */
+export const MINI_DRIFT_SYSTEM_STEP = 2;
+
+/** Super-rare spawn: ~1 Ironwater per N systems. */
+export const MINI_IRONWATER_SYSTEMS_PER = 2000;
+/** Super-rare spawn: ~1 Moving Fortress per N systems. */
+export const MINI_FORTRESS_SYSTEMS_PER = 2500;
+/** Super-rare spawn: ~1 Relic World per N systems. */
+export const MINI_RELIC_SYSTEMS_PER = 2500;
+/**
+ * Ironwater deut mult vs slot-8 baseline at same deutSynth.
+ * Best normal slot deut mult is 1.3 (slot 15) × 10 = 13.
+ */
+export const MINI_IRONWATER_DEUT_MULT = 13;
+/** Moving Fortress: max |Δgalaxy| per jump (current or one over). */
+export const MINI_FORTRESS_RELOCATE_GALAXY_RANGE = 1;
+/** Landing accuracy: final system is random within ±N of chosen (clamped 1–MAP_SYSTEMS). */
+export const MINI_FORTRESS_RELOCATE_ACCURACY = 10;
+/** Deut cost: base + per |Δgalaxy| + per |Δsystem| of the chosen aim. */
+export const MINI_FORTRESS_RELOCATE_DEUT_BASE = 10_000;
+export const MINI_FORTRESS_RELOCATE_DEUT_PER_GALAXY = 25_000;
+export const MINI_FORTRESS_RELOCATE_DEUT_PER_SYSTEM = 200;
+/** @deprecated Replaced by galaxy-range + accuracy jump model. */
+export const MINI_FORTRESS_RELOCATE_SYSTEMS = 8;
+/** Fortress battlefield combat mods (all fleets/defenses at body). */
+export const MINI_FORTRESS_SHIELD_MULT = 3;
+export const MINI_FORTRESS_ATTACK_MULT = 2;
+export const MINI_FORTRESS_ARMOR_MULT = 0.25;
+/** Relic World empire research time factor (×0.70 = +30% speed). */
+export const MINI_RELIC_RESEARCH_TIME = 0.7;
+/** Relic World expedition find multiplier. */
+export const MINI_RELIC_EXPEDITION_FIND = 1.25;
+/** Relic Worlds get this many extra lottery tickets in pirate raid targeting. */
+export const MINI_RELIC_PIRATE_WEIGHT = 4;
+
+/** Rift Siphon: +15% mine output per level. */
+export const RIFT_SIPHON_MINE_PER = 0.15;
+/** Echo Vault: +25% storage caps per level. */
+export const ECHO_VAULT_STORAGE_PER = 0.25;
+/** Anomaly Forge: −8% ship build time per level. */
+export const ANOMALY_FORGE_SHIP_TIME_PER = 0.08;
 
 /** Round 3 — Rig Foundry: −15% build time per level, floor ×0.10. */
 export const RIG_FOUNDRY_TIME_PER_LEVEL = 0.15;
@@ -1072,6 +1177,160 @@ export const PLAYER_CLASS_BONUSES: Readonly<
   },
 };
 
+/** ========== Pirates + Aliens (Micah redesign 2026-10-14) ==========
+ * Constant names fixed by docs/design/round2-contract.md §5–5b.
+ * Magnitudes are v1 placeholders except Micah overrides (200 / hourly / 0 aliens).
+ */
+
+export const PIRATE_MAX_LEVEL = 100;
+/** @deprecated Alias — prefer PIRATE_MAX_LEVEL. */
+export const PIRATE_LEVEL_CAP = PIRATE_MAX_LEVEL;
+/** @deprecated Alias of PIRATE_MAX_LEVEL (tier === level). */
+export const PIRATE_TIER_CAP = PIRATE_MAX_LEVEL;
+
+export const PIRATE_LEVEL_GROWTH_INTERVAL_MS = 6 * 60 * 60 * 1000;
+/** @deprecated Prefer PIRATE_LEVEL_GROWTH_INTERVAL_MS. */
+export const PIRATE_GROWTH_INTERVAL_MS = PIRATE_LEVEL_GROWTH_INTERVAL_MS;
+
+export const PIRATE_TARGET_BASE_COUNT = 200;
+
+/** Once per hour; each base rolls nextRaidAt = periodStart + offset. */
+export const PIRATE_RAID_PERIOD_MS = 60 * 60 * 1000;
+/** Stretch / skip factor so pirate-vs-pirate is slightly less often. */
+export const PIRATE_VS_PIRATE_RAID_PERIOD_MULT = 1.25;
+/** @deprecated Prefer PIRATE_RAID_PERIOD_MS. */
+export const NPC_RAID_PERIOD_MS = PIRATE_RAID_PERIOD_MS;
+/** @deprecated */
+export const PIRATE_RAID_INTERVAL_MIN_MS = PIRATE_RAID_PERIOD_MS;
+/** @deprecated */
+export const PIRATE_RAID_INTERVAL_MAX_MS = PIRATE_RAID_PERIOD_MS;
+
+export const PIRATE_FREE_SPAWN_INTERVAL_MS = 3 * 60 * 60 * 1000;
+export const PIRATE_FREE_SHIP_BASE = 10;
+export const PIRATE_FREE_SHIP_PER_LEVEL = 5;
+/** @deprecated Prefer PIRATE_FREE_SHIP_*. */
+export const PIRATE_FREE_SPAWN_BASE = PIRATE_FREE_SHIP_BASE;
+/** @deprecated Prefer PIRATE_FREE_SHIP_*. */
+export const PIRATE_FREE_SPAWN_PER_LEVEL = PIRATE_FREE_SHIP_PER_LEVEL;
+
+export const PIRATE_FREE_DEFENSE_BASE = 5;
+export const PIRATE_FREE_DEFENSE_PER_LEVEL = 2;
+export const PIRATE_LEVEL_DEFENSE_BASE = 3;
+export const PIRATE_LEVEL_DEFENSE_PER_LEVEL = 1;
+
+/** Composition weights (relative). Ids must be DefenseId / ShipId. */
+export const PIRATE_FREE_SHIP_COMPOSITION: Readonly<Record<string, number>> = {
+  scout: 7,
+  interceptor: 3,
+};
+export const PIRATE_FREE_DEFENSE_COMPOSITION: Readonly<Record<string, number>> = {
+  laserBattery: 5,
+  needleTurret: 3,
+  arcLattice: 1,
+};
+export const PIRATE_LEVEL_DEFENSE_COMPOSITION: Readonly<Record<string, number>> = {
+  laserBattery: 4,
+  needleTurret: 3,
+  arcLattice: 2,
+  kineticFence: 1,
+  flakCurtain: 1,
+  pulseBastion: 1,
+  rippleArray: 1,
+  gaussRail: 1,
+  ionSheath: 1,
+  emberMortar: 1,
+  plasmaSpire: 1,
+  siegeBlockade: 1,
+  voidWard: 1,
+  crownAegis: 1,
+};
+
+export const PIRATE_SPLIT_LEVEL = 25;
+export const PIRATE_SPLIT_CHILD_COUNT = 2;
+export const PIRATE_SPLIT_CHILD_LEVEL = 1;
+export const PIRATE_SPLIT_NEARBY_SYSTEM_RADIUS = 5;
+
+export const PIRATE_EXCLUDED_SHIP_IDS = [
+  "worldEater",
+  "swarmMothership",
+  "voidforgeTitan",
+] as const;
+
+/** After player destroy: respawn delay elsewhere (inclusive range). */
+export const PIRATE_RESPAWN_DELAY_MIN_MS = 12 * 60 * 60 * 1000;
+export const PIRATE_RESPAWN_DELAY_MAX_MS = 36 * 60 * 60 * 1000;
+
+/** Starshards: destroy base = base + per-tier; win defense vs pirate raid. */
+export const PIRATE_DESTROY_STARSHARDS_BASE = 40;
+export const PIRATE_DESTROY_STARSHARDS_PER_TIER = 5;
+export const PIRATE_DEFENSE_WIN_STARSHARDS = 10;
+
+/**
+ * Soft cap for NPC raid detachment vs small empires:
+ * raid power ≤ defenderPower × factor + floor.
+ */
+export const PIRATE_RAID_POWER_FACTOR = 1.4;
+export const PIRATE_RAID_POWER_FLOOR = 40;
+
+/** Max catch-up raid firings per base per tick (lazy Hobby path). */
+export const NPC_RAID_CATCHUP_MAX = 24;
+/** Max AI bases processed per lazy tick batch (bounded Hobby maxDuration). */
+export const NPC_AI_BATCH_SIZE = 200;
+
+/* ---- Aliens ---- */
+
+export const ALIEN_INITIAL_BASE_COUNT = 0;
+/** 0.001% per expedition. */
+export const ALIEN_EXPEDITION_FIND_CHANCE = 0.00001;
+export const ALIEN_SETTLE_SLOT = 1;
+export const ALIEN_BUILDUP_MS = 4 * 60 * 60 * 1000;
+export const ALIEN_MAX_LEVEL = 100;
+export const ALIEN_SPLIT_LEVEL = 50;
+export const ALIEN_SPLIT_CHILD_COUNT = 2;
+export const ALIEN_SPLIT_CHILD_LEVEL = 1;
+export const ALIEN_SPLIT_NEARBY_SYSTEM_RADIUS = 5;
+export const ALIEN_RAID_PERIOD_MS = PIRATE_RAID_PERIOD_MS;
+export const ALIEN_VS_ALIEN_RAID_PERIOD_MULT = 1.25;
+export const ALIEN_FREE_SPAWN_INTERVAL_MS = 3 * 60 * 60 * 1000;
+export const ALIEN_STRENGTH_MULT = 1.5;
+export const ALIEN_FREE_SHIP_BASE = 15;
+export const ALIEN_FREE_SHIP_PER_LEVEL = 8;
+export const ALIEN_FREE_DEFENSE_BASE = 8;
+export const ALIEN_FREE_DEFENSE_PER_LEVEL = 3;
+export const ALIEN_LEVEL_DEFENSE_BASE = 5;
+export const ALIEN_LEVEL_DEFENSE_PER_LEVEL = 2;
+export const ALIEN_MAX_BASE_COUNT = 12;
+export const ALIEN_TECH_ABOVE_TOP_PLAYER = 1;
+export const ALIEN_EXCLUDED_SHIP_IDS = PIRATE_EXCLUDED_SHIP_IDS;
+
+export const ALIEN_FREE_SHIP_COMPOSITION: Readonly<Record<string, number>> = {
+  scout: 6,
+  interceptor: 4,
+};
+export const ALIEN_FREE_DEFENSE_COMPOSITION: Readonly<Record<string, number>> = {
+  laserBattery: 4,
+  needleTurret: 3,
+  arcLattice: 2,
+  flakCurtain: 1,
+};
+export const ALIEN_LEVEL_DEFENSE_COMPOSITION: Readonly<Record<string, number>> =
+  PIRATE_LEVEL_DEFENSE_COMPOSITION;
+
+/** @deprecated Prefer ALIEN_EXPEDITION_FIND_CHANCE. */
+export const ALIEN_FIND_CHANCE_DENOM = Math.round(1 / ALIEN_EXPEDITION_FIND_CHANCE);
+/** @deprecated Prefer ALIEN_MAX_BASE_COUNT. */
+export const ALIEN_MAX_LIVING = ALIEN_MAX_BASE_COUNT;
+/** @deprecated Prefer ALIEN_STRENGTH_MULT. */
+export const ALIEN_SHIP_MULT = ALIEN_STRENGTH_MULT;
+/** @deprecated Prefer ALIEN_STRENGTH_MULT. */
+export const ALIEN_DEFENSE_MULT = ALIEN_STRENGTH_MULT;
+/** @deprecated Prefer ALIEN_STRENGTH_MULT. */
+export const ALIEN_FREE_SPAWN_MULT = ALIEN_STRENGTH_MULT;
+/** @deprecated Prefer ALIEN_TECH_ABOVE_TOP_PLAYER. */
+export const ALIEN_TECH_TOP_PLUS = ALIEN_TECH_ABOVE_TOP_PLAYER;
+/** @deprecated Prefer ALIEN_MAX_LEVEL. */
+export const ALIEN_LEVEL_CAP = ALIEN_MAX_LEVEL;
+
 /** Fold Bridge base cooldown (wall-clock). Class / Beacon multiply. */
 export const JUMP_GATE_BASE_COOLDOWN_MS = 300_000;
 
@@ -1088,6 +1347,14 @@ export const GRID_STAKE_ENERGY_PER = 0.04;
 export const GRID_STAKE_ENERGY_CAP = 10;
 export const FRONTIER_BEACON_JUMP_CD = 0.75;
 
+/** Monthly season scoring. Calendar month is UTC `YYYY-MM`. */
+export const SEASON_COMBAT_WIN = 10;
+export const SEASON_COMBAT_PVE_WIN = 3;
+/** Economy points = resources spent on completed buildings and research / this. */
+export const SEASON_ECONOMY_SPEND_DIV = 1000;
+export const SEASON_LEADERBOARD_TOP = 20;
+export const SEASON_REWARD_TOP_N = 5;
+
 /** Foundation Ark bootstrap building levels on successful colonize. */
 export const FOUNDATION_ARK_BOOTSTRAP: Readonly<
   Partial<Record<BuildingId, number>>
@@ -1101,3 +1368,137 @@ export const FOUNDATION_ARK_BOOTSTRAP: Readonly<
   deutTank: 5,
   rigFoundry: 6,
 };
+
+/** Alliances foundation (backlog #7) — friends-scale social groups. */
+export const ALLIANCE_TAG_MIN = 2;
+export const ALLIANCE_TAG_MAX = 4;
+export const ALLIANCE_NAME_MIN = 3;
+export const ALLIANCE_NAME_MAX = 30;
+export const ALLIANCE_MAX_MEMBERS = 16;
+export const ALLIANCE_MAX_OFFICERS = 3;
+export const ALLIANCE_CREATE_MIN_POINTS = 0;
+/** Default join mode when creating an alliance. */
+export const ALLIANCE_JOIN_MODE_DEFAULT: "open" | "invite" = "open";
+
+/**
+ * Newbie protection (Micah CHANGE #15): empire points below this are
+ * protected from player raids and pirate NPC raids. Ends permanently
+ * once empire points reach the threshold (no re-entry).
+ */
+export const NEWBIE_PROTECTION_POINTS = 2500;
+
+/**
+ * Pirate raid fairness (Micah CHANGE #18): players under this empire
+ * points total get a reduced pick weight after each successful pirate
+ * raid that UTC day. Does not apply to aliens.
+ */
+export const PIRATE_FAIRNESS_POINTS_MAX = 100_000;
+/** Additive penalty per successful pirate raid that day (1% of original). */
+export const PIRATE_FAIRNESS_PENALTY_PER_RAID = 0.01;
+/** ACS / Joint Strike (backlog #8) — same-alliance synced raids. */
+export const ACS_MAX_FLEETS = 8;
+export const ACS_JOIN_WINDOW_MS = 15 * 60 * 1000;
+export const ACS_HOLD_MAX_MS = 30 * 60 * 1000;
+export const ACS_MIN_FLEETS_TO_RESOLVE = 1;
+/** Drop resolved/cancelled ACS groups after this age on tick. */
+export const ACS_GROUP_PRUNE_MS = 24 * 60 * 60 * 1000;
+/**
+ * Daily / weekly goals. Targets and rewards live here so balance edits
+ * do not touch rules code. Display titles are original (no underscores).
+ */
+export type GoalMetric = "pirateWin" | "expedition";
+
+export interface GoalTuning {
+  id: string;
+  cadence: GoalCadence;
+  metric: GoalMetric;
+  title: string;
+  detail: string;
+  target: number;
+  starshards: number;
+  metal: number;
+  crystal: number;
+  deuterium: number;
+}
+
+export const GOAL_DAILY_PIRATE_WINS = 3;
+export const GOAL_DAILY_PIRATE_STARSHARDS = 25;
+export const GOAL_DAILY_EXPEDITIONS = 5;
+export const GOAL_DAILY_EXPEDITION_METAL = 2_000;
+export const GOAL_DAILY_EXPEDITION_CRYSTAL = 1_000;
+export const GOAL_DAILY_EXPEDITION_DEUTERIUM = 500;
+
+export const GOAL_WEEKLY_PIRATE_WINS = 12;
+export const GOAL_WEEKLY_PIRATE_STARSHARDS = 100;
+export const GOAL_WEEKLY_EXPEDITIONS = 20;
+export const GOAL_WEEKLY_EXPEDITION_METAL = 12_000;
+export const GOAL_WEEKLY_EXPEDITION_CRYSTAL = 6_000;
+export const GOAL_WEEKLY_EXPEDITION_DEUTERIUM = 3_000;
+
+export const GOALS: readonly GoalTuning[] = [
+  {
+    id: "dailyPirateWins",
+    cadence: "daily",
+    metric: "pirateWin",
+    title: "Pirate victories",
+    detail: "Win pirate fights today. A win is destroying a pirate base or holding your colony against a pirate raid.",
+    target: GOAL_DAILY_PIRATE_WINS,
+    starshards: GOAL_DAILY_PIRATE_STARSHARDS,
+    metal: 0,
+    crystal: 0,
+    deuterium: 0,
+  },
+  {
+    id: "dailyExpeditions",
+    cadence: "daily",
+    metric: "expedition",
+    title: "Expedition runs",
+    detail: "Finish expedition flights today. The outbound arrival counts, including an empty find.",
+    target: GOAL_DAILY_EXPEDITIONS,
+    starshards: 0,
+    metal: GOAL_DAILY_EXPEDITION_METAL,
+    crystal: GOAL_DAILY_EXPEDITION_CRYSTAL,
+    deuterium: GOAL_DAILY_EXPEDITION_DEUTERIUM,
+  },
+  {
+    id: "weeklyPirateWins",
+    cadence: "weekly",
+    metric: "pirateWin",
+    title: "Weekly pirate victories",
+    detail: "Win pirate fights this week. A win is destroying a pirate base or holding your colony against a pirate raid.",
+    target: GOAL_WEEKLY_PIRATE_WINS,
+    starshards: GOAL_WEEKLY_PIRATE_STARSHARDS,
+    metal: 0,
+    crystal: 0,
+    deuterium: 0,
+  },
+  {
+    id: "weeklyExpeditions",
+    cadence: "weekly",
+    metric: "expedition",
+    title: "Weekly expedition runs",
+    detail: "Finish expedition flights this week. The outbound arrival counts, including an empty find.",
+    target: GOAL_WEEKLY_EXPEDITIONS,
+    starshards: 0,
+    metal: GOAL_WEEKLY_EXPEDITION_METAL,
+    crystal: GOAL_WEEKLY_EXPEDITION_CRYSTAL,
+    deuterium: GOAL_WEEKLY_EXPEDITION_DEUTERIUM,
+  },
+];
+
+/** Per-player ring buffer for synthetic empire alerts (builds, returns, raids, minis). */
+export const EVENT_LOG_MAX = 100;
+/** Same-galaxy system distance that counts as “nearby” for mini-planet sightings. */
+export const EVENT_LOG_MINI_NEARBY_SYSTEM_RADIUS = 5;
+/** Show an unread count on the Messages nav item. */
+export const EVENT_LOG_UNREAD_BADGE = true;
+/** Alliance chat + shared intel (backlog #12). */
+export const ALLIANCE_CHAT_MAX_MESSAGES = 200;
+export const ALLIANCE_CHAT_MAX_CHARS = 500;
+export const ALLIANCE_CHAT_RATE_PER_MIN = 20;
+export const ALLIANCE_INTEL_MAX_REPORTS = 50;
+export const ALLIANCE_MARKERS_MAX = 30;
+/** Galaxy marker lifetime. Lazy purge on read — no cron. */
+export const ALLIANCE_MARKER_TTL_MS = 72 * 60 * 60 * 1000;
+/** Marker / strike note cap. */
+export const ALLIANCE_MARKER_NOTE_MAX = 80;

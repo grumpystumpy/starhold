@@ -3,6 +3,7 @@ import { SKILLS } from "./catalog-skills.js";
 import { STARSHARDS_DAILY_LOGIN } from "./catalog.js";
 import type { OfficerId, UniverseState } from "./types.js";
 import { advanceUniverse } from "./world-arrival.js";
+import { claimGoal, type GoalActionResult } from "./world-goals.js";
 import {
   canClaimDailyLogin,
   grantStarshards,
@@ -42,6 +43,23 @@ export function claimDailyLogin(
   grantStarshards(player, STARSHARDS_DAILY_LOGIN);
   universe.players[player.id] = player;
   return { ok: true, starshardsGranted: STARSHARDS_DAILY_LOGIN };
+}
+
+/**
+ * Claim a finished daily or weekly goal.
+ * Advances first so offline flights catch up into the open period.
+ */
+export function claimPlayerGoal(
+  universe: UniverseState,
+  playerId: string,
+  goalId: string,
+  now = Date.now(),
+): GoalActionResult {
+  if (!universe.players[playerId]) {
+    return { ok: false, error: "Unknown player." };
+  }
+  advanceUniverse(universe, now);
+  return claimGoal(universe, playerId, goalId, now);
 }
 
 /** Hire / renew an officer for Starshards (7d wall-clock). */

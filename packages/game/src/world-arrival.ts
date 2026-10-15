@@ -18,6 +18,10 @@ import type {
   PlanetState,
   UniverseState,
 } from "./types.js";
+import {
+  handleAcsOutboundArrival,
+  tickAcsGroups,
+} from "./world-acs.js";
 import { resolveRaidArrival } from "./world-arrival-raid.js";
 import { harvestAsteroidField } from "./world-asteroids.js";
 import {
@@ -30,9 +34,21 @@ import {
 } from "./world-bootstrap.js";
 import { resolveEspionage } from "./world-espionage.js";
 import { resolveExpeditionArrival } from "./world-expedition.js";
+import {
+  isUnclaimedMini,
+  miniKindOf,
+  playerKnowsMini,
+  playerOwnsMiniKind,
+  tickMiniDrift,
+} from "./world-mini.js";
 import { ownedPlanetCount } from "./world-moons.js";
 import { playerBoosts } from "./world-boosts.js";
-import { resolvePirateRaidArrival, tickPirates } from "./world-pirates.js";
+import {
+  resolveAlienRaidArrival,
+  resolvePirateRaidArrival,
+  tickPirates,
+} from "./world-pirates.js";
+import { rollSeasons } from "./world-seasons.js";
 import { pruneSpyReports } from "./world-spy-prune.js";
 import {
   clearOccupationIfFleetGone,
@@ -40,6 +56,8 @@ import {
   occupationMineShares,
   pruneExpiredOccupations,
 } from "./world-occupation.js";
+import { formatEventCount, pushEventLog } from "./world-event-log.js";
+import { resolveMiniPlanetChoice } from "./world-round2.js";
 import {
   addCargoToPlanet,
   addShipsToPlanet,
@@ -80,7 +98,26 @@ export function resolveFleetArrival(
   const owner = universe.players[fleet.ownerPlayerId];
   const drive = owner?.research.combustionDrive ?? 0;
 
+  if (fleet.phase === "holding") {
+    if (fleet.acsGroupId) {
+      handleAcsOutboundArrival(universe, fleet, now);
+    } else {
+      fleet.phase = "returning";
+      fleet.arrivesAt = now + 1;
+      universe.fleets[fleet.id] = fleet;
+    }
+    return;
+  }
+
   if (fleet.phase === "outbound") {
+    if (
+      fleet.acsGroupId &&
+      (fleet.mission === "raid" || fleet.mission === "pirateRaid")
+    ) {
+      if (handleAcsOutboundArrival(universe, fleet, now)) {
+        return;
+      }
+    }
     if (fleet.mission === "raid") {
       const target = fleet.targetPlanetId
         ? universe.planets[fleet.targetPlanetId]
@@ -140,11 +177,51 @@ export function resolveFleetArrival(
       const occupied = planetAtCoords(universe, fleet.targetCoords);
       const hasCradle = (fleet.ships.colonyShip ?? 0) >= 1;
       const hasArk = (fleet.ships.foundationArk ?? 0) >= 1;
-      if (occupied) {
-      } else if (!hasCradle && !hasArk) {
-      } else if (!owner) {
+      if (!owner) {
         delete universe.fleets[fleet.id];
         return;
+      } else if (
+        occupied &&
+        isUnclaimedMini(occupied) &&
+        playerKnowsMini(universe, owner.id, occupied.id, now) &&
+        hasCradle &&
+        ownedPlanetCount(universe, owner.id) <
+          empireColonyCap(owner, universe, maxColonies) &&
+        !(
+          (miniKindOf(occupied) === "fortress" ||
+            miniKindOf(occupied) === "relic") &&
+          playerOwnsMiniKind(universe, owner.id, miniKindOf(occupied))
+        )
+      ) {
+        // Claim unoccupied mini — Colonizer only (Micah).
+        const remaining = normalizeFleetShips(fleet.ships);
+        remaining.colonyShip = Math.max(0, remaining.colonyShip - 1);
+        occupied.buildings.solarPlant = Math.max(
+          occupied.buildings.solarPlant ?? 0,
+          1,
+        );
+        occupied.ownerPlayerId = owner.id;
+        occupied.name = `${owner.name}'s Colony`;
+        if (occupied.colonizedAt == null) occupied.colonizedAt = now;
+        if (!occupied.discoveredBy) occupied.discoveredBy = [];
+        if (!occupied.discoveredBy.includes(owner.id)) {
+          occupied.discoveredBy.push(owner.id);
+        }
+        if (!owner.discoveredMiniIds) owner.discoveredMiniIds = [];
+        if (!owner.discoveredMiniIds.includes(occupied.id)) {
+          owner.discoveredMiniIds.push(occupied.id);
+        }
+        addShipsToPlanet(occupied, remaining);
+        universe.planets[occupied.id] = occupied;
+        if (!owner.planetIds.includes(occupied.id)) {
+          owner.planetIds.push(occupied.id);
+        }
+        universe.players[owner.id] = owner;
+        delete universe.fleets[fleet.id];
+        return;
+      } else if (occupied) {
+        // Slot taken — fleet returns with Colonizer intact.
+      } else if (!hasCradle && !hasArk) {
       } else if (
         ownedPlanetCount(universe, owner.id) >=
         empireColonyCap(owner, universe, maxColonies)
@@ -218,6 +295,8 @@ export function resolveFleetArrival(
       resolveExpeditionArrival(universe, fleet, now);
     } else if (fleet.mission === "pirateRaid") {
       resolvePirateRaidArrival(universe, fleet, now);
+    } else if (fleet.mission === "alienRaid") {
+      resolveAlienRaidArrival(universe, fleet, now);
     }
 
     const returnSecs = flightSecondsOneWay(
@@ -238,10 +317,50 @@ export function resolveFleetArrival(
     return;
   }
 
+  // Default direct-capture if capital fleet left resolve pending until return.
+  if (fleet.reportId && fleet.mission === "raid") {
+    const report = universe.reports[fleet.reportId];
+    if (
+      report?.miniResolveAvailable &&
+      !report.miniResolved &&
+      report.outcome === "attacker_win"
+    ) {
+      resolveMiniPlanetChoice(
+        universe,
+        fleet.ownerPlayerId,
+        fleet.id,
+        "capture",
+      );
+    }
+  }
+
   clearOccupationIfFleetGone(universe, fleet);
-  addShipsToPlanet(origin, fleet.ships);
-  addCargoToPlanet(origin, fleet.cargo);
-  delete universe.fleets[fleet.id];
+  const live = universe.fleets[fleet.id];
+  if (!live) return;
+  addShipsToPlanet(origin, live.ships);
+  addCargoToPlanet(origin, live.cargo);
+  if (owner) {
+    const hulls = SHIP_ORDER.filter((id) => (live.ships[id] ?? 0) > 0)
+      .map(
+        (id) =>
+          `${formatEventCount(live.ships[id] ?? 0)}× ${SHIPS[id].name}`,
+      )
+      .join(", ");
+    pushEventLog(owner, {
+      kind: "fleetReturn",
+      createdAt: live.arrivesAt,
+      title: `Fleet returned to ${origin.name}`,
+      body: hulls ? `${live.mission} · ${hulls}` : live.mission,
+      href: "#messages",
+      meta: {
+        mission: live.mission,
+        planetId: origin.id,
+        fleetId: live.id,
+      },
+    });
+    universe.players[owner.id] = owner;
+  }
+  delete universe.fleets[live.id];
 }
 
 export function fleetCargoCapacityForHarvest(ships: FleetShips): number {
@@ -269,6 +388,7 @@ export function advanceFleets(universe: UniverseState, now: number): void {
 
 export function advanceUniverse(universe: UniverseState, now = Date.now()): void {
   ensureUniverseShape(universe);
+  rollSeasons(universe, now);
   pruneExpiredOccupations(universe, now);
   for (const player of Object.values(universe.players)) {
     advanceResearch(universe, player, now);
@@ -324,7 +444,9 @@ export function advanceUniverse(universe: UniverseState, now = Date.now()): void
   for (const fleet of Object.values(universe.fleets)) {
     advanceFleetSwarmProduce(fleet, now);
   }
+  tickAcsGroups(universe, now);
   advanceFleets(universe, now);
+  tickMiniDrift(universe, now);
   tickPirates(universe, now);
   pruneSpyReports(universe, now);
 }

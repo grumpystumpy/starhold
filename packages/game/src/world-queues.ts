@@ -110,10 +110,25 @@ export function queueBuildingUpgrade(
   if (!buildingAllowedOn(planet, buildingId)) {
     return {
       ok: false,
-      error: planet.kind === "moon"
-        ? "That structure cannot be built on a moon."
-        : "That structure can only be built on a moon.",
+      error: planet.flags?.mini
+        ? "That structure cannot be built on a mini planet."
+        : planet.kind === "moon"
+          ? "That structure cannot be built on a moon."
+          : "That structure can only be built on a moon.",
     };
+  }
+  const maxLevel = BUILDINGS[buildingId]?.maxLevel;
+  if (typeof maxLevel === "number") {
+    const pendingSame = planet.buildQueue.filter(
+      (q) => q.buildingId === buildingId,
+    ).length;
+    const current = (planet.buildings[buildingId] ?? 0) + pendingSame;
+    if (current >= maxLevel) {
+      return {
+        ok: false,
+        error: `${BUILDINGS[buildingId].name} is maxed at level ${maxLevel}.`,
+      };
+    }
   }
   if (buildingId === "sensorArray" && (planet.buildings.lunarBase ?? 0) < 1) {
     return { ok: false, error: "Horizon Scanner needs Crater Hab level 1." };
@@ -295,8 +310,9 @@ export function queueShipBuild(
   const cls = classBonuses(player.playerClass?.classId);
   const naniteLevel = naniteFactoryLevel(planet);
   const rigLevel = planet.buildings.rigFoundry ?? 0;
+  const anomalyLevel = planet.buildings.anomalyForge ?? 0;
   const unitSeconds =
-    (shipUnitBuildSeconds(shipId, yard, naniteLevel, rigLevel) *
+    (shipUnitBuildSeconds(shipId, yard, naniteLevel, rigLevel, anomalyLevel) *
       lb.shipBuild *
       cls.shipBuildTime) /
     universe.speed;
@@ -309,6 +325,7 @@ export function queueShipBuild(
     kind: "ship",
     shipId,
     count: qty,
+    orderedCount: qty,
     enqueuedAt: now,
     workSeconds: seconds,
     startedAt: startNow ? now : null,
@@ -384,6 +401,7 @@ export function queueDefenseBuild(
     kind: "defense",
     defenseId,
     count: qty,
+    orderedCount: qty,
     enqueuedAt: now,
     workSeconds: seconds,
     startedAt: startNow ? now : null,

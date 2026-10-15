@@ -1,5 +1,6 @@
 import {
   SHIP_ORDER,
+  type AcsPrefill,
   type Coordinates,
   type FleetShips,
   type MissionType,
@@ -16,6 +17,7 @@ export const MISSIONS: MissionType[] = [
   "harvestAsteroid",
   "expedition",
   "pirateRaid",
+  "alienRaid",
   "jump",
 ];
 
@@ -24,14 +26,35 @@ export type FleetDraft = {
   targetCoords: Coordinates | null;
   asteroidId: string | null;
   pirateBaseId: string | null;
+  alienBaseId: string | null;
   mission: MissionType;
   counts: Partial<FleetShips>;
   cargo: Partial<Resources>;
+  /** Joint Strike checkbox — kept across repaints. */
+  openAcs: boolean;
 };
 
 function parseMission(raw: string | null | undefined): MissionType {
   if (raw && (MISSIONS as string[]).includes(raw)) return raw as MissionType;
   return "deploy";
+}
+
+/** Raid form state for a Joint Strike deep-link, before the fleet form exists. */
+export function fleetDraftWithAcsPrefill(
+  base: FleetDraft | null,
+  prefill: AcsPrefill,
+): FleetDraft {
+  return {
+    targetPlanetId: null,
+    targetCoords: prefill.coords,
+    asteroidId: null,
+    pirateBaseId: null,
+    alienBaseId: null,
+    mission: prefill.mission,
+    counts: base?.counts ?? {},
+    cargo: base?.cargo ?? {},
+    openAcs: prefill.openAcs,
+  };
 }
 
 export function salvageFleetForm(root: HTMLElement): FleetDraft | null {
@@ -79,12 +102,15 @@ export function salvageFleetForm(root: HTMLElement): FleetDraft | null {
   let targetCoords: Coordinates | null = null;
   let asteroidId: string | null = null;
   let pirateBaseId: string | null = null;
+  let alienBaseId: string | null = null;
   if (value.startsWith("planet:")) {
     targetPlanetId = value.slice("planet:".length);
   } else if (value.startsWith("asteroid:")) {
     asteroidId = value.slice("asteroid:".length);
   } else if (value.startsWith("pirate:")) {
     pirateBaseId = value.slice("pirate:".length);
+  } else if (value.startsWith("alien:")) {
+    alienBaseId = value.slice("alien:".length);
   } else if (value.startsWith("coords:")) {
     const [g, s, slot] = value
       .slice("coords:".length)
@@ -97,8 +123,12 @@ export function salvageFleetForm(root: HTMLElement): FleetDraft | null {
     targetCoords,
     asteroidId,
     pirateBaseId,
+    alienBaseId,
     mission: parseMission(missionEl?.value),
     counts,
     cargo,
+    openAcs: Boolean(
+      form.querySelector<HTMLInputElement>("#fleet-open-acs")?.checked,
+    ),
   };
 }

@@ -47,7 +47,7 @@ Attacker only has ships; defender has ships + defenses.
 | Bomber → Beam Emplacement | 4 | Breach guns |
 | Bomber → Scout | 2 | |
 | Scout → Probe | 2 | |
-| Whisper Probe / Outpost Cradle | — | atk 0; never fire |
+| Whisper Probe / Colonizer | — | atk 0; never fire |
 
 No mutual RF stacks beyond the single focus target per firer type per round.
 

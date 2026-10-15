@@ -35,6 +35,7 @@ import {
   silentRefresh,
   startPolling,
 } from "./main-actions";
+import { wireJointStrikeForm } from "./main-actions-alliances";
 import { ensureDelegatedHandlers } from "./main-handlers";
 import {
   ensurePopstateHandler,
@@ -77,6 +78,11 @@ function paint(): void {
     },
   );
   ensureDelegatedHandlers();
+  if (session.pendingAcsPrefill && session.activePage === "fleet") {
+    if (wireJointStrikeForm(session.pendingAcsPrefill)) {
+      session.pendingAcsPrefill = null;
+    }
+  }
 }
 
 setPaintImpl(paint);
@@ -207,6 +213,7 @@ declare global {
         targetCoords?: Coordinates;
         asteroidId?: string;
         pirateBaseId?: string;
+  alienBaseId?: string;
         cargo?: Partial<import("@starhold/game").Resources>;
       }) => Promise<void>;
       refresh: () => Promise<void>;
@@ -223,6 +230,7 @@ declare global {
         fleets: PlayerView["fleets"] | null;
         reports: PlayerView["reports"] | null;
         spyReports: PlayerView["spyReports"] | null;
+        eventLog: PlayerView["player"]["eventLog"] | null;
         galaxy: PlayerView["galaxy"] | null;
         roster: PlayerView["roster"] | null;
       };
@@ -255,6 +263,7 @@ window.starhold = {
     fleets: session.view?.fleets ?? null,
     reports: session.view?.reports ?? null,
     spyReports: session.view?.spyReports ?? null,
+    eventLog: session.view?.player.eventLog ?? null,
     galaxy: session.view?.galaxy ?? null,
     roster: session.view?.roster ?? null,
   }),

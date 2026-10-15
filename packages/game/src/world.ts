@@ -32,6 +32,7 @@ export {
 export {
   migrateUniverseV2ToV3,
   migrateUniverseV3ToV4,
+  migrateUniverseV4ToV5,
 } from "./world-migrate.js";
 export {
   changePlayerClass,
@@ -41,6 +42,46 @@ export {
   isPlayerClassId,
 } from "./world-class.js";
 export type { ClassActionResult } from "./world-class.js";
+export type { AllianceActionResult } from "./world-alliances.js";
+export {
+  allianceDirectory,
+  allianceTagForPlayer,
+  allianceViewFor,
+  createAlliance,
+  disbandAlliance,
+  inviteToAlliance,
+  isAllianceJoinMode,
+  isAllianceRole,
+  joinAlliance,
+  kickFromAlliance,
+  leaveAlliance,
+  normalizeAllianceName,
+  normalizeAllianceTag,
+  setAllianceJoinMode,
+  setAllianceRole,
+} from "./world-alliances.js";
+export {
+  leaveAcsFleet,
+  listOpenAcsForAlliance,
+  lockAcsEarly,
+} from "./world-acs.js";
+export type { AllianceIntelResult, StrikeMission } from "./world-alliance-intel.js";
+export {
+  deleteAllianceIntel,
+  deleteAllianceMarker,
+  galaxyMarkerOverlay,
+  isStrikeMission,
+  jointStrikeHelpersAvailable,
+  listAllianceChat,
+  listAllianceIntel,
+  listAllianceMarkers,
+  parseAllianceCoords,
+  postAllianceChat,
+  proposeAllianceStrike,
+  resetAllianceChatRateLimit,
+  shareAllianceIntel,
+  upsertAllianceMarker,
+} from "./world-alliance-intel.js";
 export type { LaunchFleetOpts } from "./world-launch.js";
 export { launchFleet } from "./world-launch.js";
 export type {
@@ -68,6 +109,26 @@ export {
   playerView,
   publicRoster,
 } from "./world-view.js";
+export {
+  graduateNewbieProtection,
+  isNewbieProtected,
+  pirateRaidPickWeight,
+  recordSuccessfulPirateRaid,
+} from "./world-protection.js";
+export {
+  COLD_ART_IDS,
+  HOT_ART_IDS,
+  LUSH_ART_IDS,
+  MINI_ART_IDS,
+  artForBody,
+  miniArtForSlots,
+  normalArtAt,
+  normalArtForSystem,
+  planetArtId,
+  planetArtRef,
+  poolForSlot,
+  resolveArtIndex,
+} from "./planet-art.js";
 export { pruneSpyReports } from "./world-spy-prune.js";
 export {
   expeditionKindFromRoll,
@@ -96,22 +157,37 @@ export {
   seedUniverseAsteroids,
 } from "./world-asteroids.js";
 export {
+  activeAlienBases,
   activePirateBases,
+  alienBaseAtCoords,
+  alienBaseId,
+  createAlienBase,
   createPirateBase,
+  ensurePiratePopulation,
+  findNearestOpenSlot1,
   pirateBaseAtCoords,
   pirateBaseId,
+  pirateCombatResearch,
   pirateDestroyStarshards,
+  pirateEligibleShipIds,
+  pirateFreeSpawnShips,
   pirateRespawnAt,
   pirateShipsForTier,
+  pirateTechsForLevel,
+  pickRaidTarget,
+  resolveAlienRaidArrival,
   resolvePirateRaidArrival,
+  rollNextRaidAt,
   scalePirateRaidFleet,
   seedUniversePirates,
   tickPirates,
+  tryAlienExpeditionFind,
 } from "./world-pirates.js";
 export {
   activateOfficer,
   canClaimDailyLogin,
   claimDailyLogin,
+  claimPlayerGoal,
   emptyBoosts,
   expeditionStarshardsAmount,
   grantPirateDestroyStarshards,
@@ -124,6 +200,14 @@ export {
   type PlayerBoosts,
   type StarshardActionResult,
 } from "./world-starshards.js";
+export {
+  claimGoal,
+  ensureGoalBoard,
+  goalsView,
+  noteGoalMetric,
+  utcWeekKey,
+  type GoalActionResult,
+} from "./world-goals.js";
 export {
   effectiveCombatResearch,
   ensurePlayerProgress,
@@ -158,8 +242,52 @@ export {
   swarmProduce,
 } from "./world-round2.js";
 export {
+  discoverMiniPlanet,
+  fortressRelocateDeutCost,
+  fortressRelocateLandingWindow,
+  isIronwaterRock,
+  isMiniGalaxyPublic,
+  isMiniPlanet,
+  isMovingFortress,
+  isRelicWorld,
+  isUnclaimedMini,
+  miniKindOf,
+  playerKnowsMini,
+  playerOwnsMiniKind,
+  relocateMovingFortress,
+  seedUniverseMinis,
+  tickMiniDrift,
+  vacateMiniPlanet,
+} from "./world-mini.js";
+export {
+  ensureEventLog,
+  formatEventCount,
+  markEventsRead,
+  pushEventLog,
+  recordMiniPlanetSighting,
+  unreadEventCount,
+} from "./world-event-log.js";
+export {
   PLANET_NAME_MAX_LEN,
   PLANET_NAME_MIN_LEN,
   renamePlanet,
   validatePlanetName,
 } from "./world-planet-name.js";
+export {
+  SEASON_BOARDS,
+  addSeasonEconomySpend,
+  awardSeasonPirateKill,
+  awardSeasonPveWin,
+  awardSeasonPvpWin,
+  claimSeasonReward,
+  grantSeasonPoints,
+  isSeasonBoard,
+  isSeasonPvpMission,
+  placementReward,
+  rollSeasons,
+  seasonIdFromTime,
+  seasonLeaderboardView,
+  seasonPilotTitle,
+  setSeasonSkin,
+  setSeasonTitle,
+} from "./world-seasons.js";

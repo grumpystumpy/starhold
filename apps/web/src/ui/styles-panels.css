@@ -35,6 +35,13 @@
   flex-wrap: wrap;
   gap: 0.5rem;
   margin: 0.5rem 0 0.75rem;
+  align-items: center;
+}
+
+.galaxy-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
 }
 
 .galaxy-nav {
@@ -100,7 +107,256 @@
   padding-top: 0;
 }
 
+.inbox-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.45rem 0 0.75rem;
+}
+
+.inbox-filters button {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.82rem;
+}
+
+.inbox-filter[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.message-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.message-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.message-kind {
+  display: inline-block;
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  border-radius: 999px;
+  padding: 0.05rem 0.4rem;
+}
+
+.message-title {
+  font-weight: 600;
+  color: inherit;
+  text-decoration: none;
+}
+
+a.message-title:hover {
+  color: var(--accent);
+}
+
+.message-body {
+  display: block;
+}
+
+.message-unread .message-title {
+  font-weight: 700;
+}
+
+.message-row.message-unread {
+  border-left: 3px solid var(--accent);
+  padding-left: 0.45rem;
+}
+
+.message-read {
+  align-self: flex-start;
+  margin-top: 0.25rem;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.75rem;
+}
+
+.battle-report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.35rem 0 0.2rem;
+}
+
+.battle-report-details {
+  margin-top: 0.35rem;
+}
+
+.battle-report-details > summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 0.85rem;
+}
+
+.battle-replay {
+  margin-top: 0.45rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  background: color-mix(in srgb, var(--bg2) 55%, transparent);
+}
+
+.battle-round-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-bottom: 0.4rem;
+}
+
+.battle-round-tab {
+  min-width: 2.2rem;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+.battle-round-tab.is-active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.battle-round .meta {
+  margin: 0.15rem 0;
+}
+
+.alliance-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 0.85rem;
+  align-items: end;
+  margin: 0.5rem 0 1rem;
+}
+
+.alliance-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.alliance-form input,
+.alliance-form select {
+  min-width: 8rem;
+}
+
+.alliance-directory,
+.alliance-roster {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+}
+
+.alliance-dir-row,
+.alliance-member {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0;
+  border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+  font-size: 0.9rem;
+}
+
+.alliance-dir-row:first-child,
+.alliance-member:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.alliance-member-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.alliance-founder-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: end;
+  margin: 0.5rem 0;
+}
+
+.alliance-leave-row {
+  margin: 0.75rem 0 1rem;
+}
+
+.alliance-section {
+  margin-top: 1rem;
+}
+
+.alliance-chat-log {
+  max-height: 14rem;
+  overflow: auto;
+  margin: 0 0 0.75rem;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  border-radius: 3px;
+}
+
+.alliance-chat-line {
+  margin: 0;
+  padding: 0.28rem 0;
+  font-size: 0.9rem;
+}
+
+.alliance-chat-form input[name="alliance-chat-body"] {
+  min-width: 12rem;
+  flex: 1;
+}
+
+.galaxy-slot {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.galaxy-slot-marked {
+  background: color-mix(in srgb, var(--warn) 22%, transparent);
+  box-shadow: inset 3px 0 0 var(--accent);
+  padding-left: 0.45rem;
+}
+
+.galaxy-marker-pin {
+  color: var(--accent);
+  font-weight: 700;
+  margin-right: 0.25rem;
+}
+
+.galaxy-slot-side,
+.galaxy-slot-actions,
+.galaxy-alliance-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.galaxy-slot-actions button,
+.alliance-section button {
+  font-size: 0.82rem;
+  padding: 0.25rem 0.5rem;
+}
+
 @media (max-width: 560px) {
+  .alliance-chat-form,
+  .galaxy-alliance-tools,
+  .galaxy-slot-side {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   .item-thumb {
     grid-template-columns: auto 1fr;
   }
@@ -341,6 +597,46 @@
   font-weight: 600;
 }
 
+.galaxy-slots li {
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.galaxy-slot-main {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  flex: 1 1 12rem;
+}
+
+.galaxy-slot-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.galaxy-slot-coords {
+  flex: none;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.galaxy-slots .planet-disc {
+  width: 40px;
+  height: 40px;
+}
+
+.galaxy-slots .planet-disc-moon {
+  width: 26px;
+  height: 26px;
+}
+
+.row-with-thumb .planet-disc {
+  width: 32px;
+  height: 32px;
+}
+
 .roster {
   list-style: none;
   margin: 0;
@@ -430,14 +726,64 @@ code {
 }
 
 .officer-list,
-.skill-list {
+.skill-list,
+.class-list,
+.goal-list {
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
+.goal-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.goal-copy {
+  flex: 1 1 16rem;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.goal-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.goal-actions .hint {
+  overflow-wrap: anywhere;
+}
+
+.goal-meter {
+  width: 100%;
+  max-width: 16rem;
+  height: 0.45rem;
+  margin-top: 0.35rem;
+  background: var(--bg2);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.goal-meter > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
 .officer-row,
-.skill-row {
+.skill-row,
+.class-card {
   display: flex;
   justify-content: space-between;
   gap: 0.75rem;
@@ -447,13 +793,121 @@ code {
 }
 
 .officer-row:last-child,
-.skill-row:last-child {
+.skill-row:last-child,
+.class-card:last-child {
   border-bottom: none;
 }
 
 .officer-row .hint,
-.skill-row .hint {
+.skill-row .hint,
+.class-card .hint {
   display: block;
+}
+
+.class-panel .class-list {
+  margin-top: 0.35rem;
+}
+
+.planet-frame {
+  flex: 0 0 auto;
+  display: inline-flex;
+  border-radius: 16px;
+  padding: 3px;
+  background: transparent;
+}
+
+.planet-frame[data-planet-skin]:not([data-planet-skin=""]) {
+  box-shadow: 0 0 0 1px var(--accent-dim);
+}
+
+.planet-frame[data-planet-skin^="season-champion-"] {
+  background: linear-gradient(140deg, #f6e27a, #e07a3d 42%, #7a4dff);
+}
+
+.planet-frame[data-planet-skin^="season-contender-"] {
+  background: linear-gradient(140deg, #9be7ff, #3d7dff 55%, #14325c);
+}
+
+.planet-frame img {
+  border-radius: 12px;
+  display: block;
+}
+
+.overview-commander {
+  margin: 0;
+  font-family: var(--font-brand);
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+}
+
+.active-title {
+  margin: 0.1rem 0 0.25rem;
+  color: var(--accent);
+  font-size: 0.92rem;
+}
+
+.season-boards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+}
+
+.season-board,
+.season-claim {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.65rem 0.75rem;
+  min-width: 0;
+}
+
+.season-board h3,
+.season-claim h3 {
+  margin: 0 0 0.35rem;
+}
+
+.season-list {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+}
+
+.season-list li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.season-list li:last-child {
+  border-bottom: none;
+}
+
+.season-claim-row span {
+  min-width: 0;
+  flex: 1 1 12rem;
+}
+
+.season-pickers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.season-pickers label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+}
+
+.season-pickers select {
+  width: 100%;
+  max-width: 24rem;
 }
 
 .skill-branch h3 {

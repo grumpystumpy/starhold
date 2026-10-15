@@ -24,7 +24,7 @@ Empire-wide techs that gate flight, combat, espionage depth, colonies, and fleet
 ## Balance notes
 
 - Lab must be reachable in a short playtest without deut farming.
-- First techs (Power Discipline, Shadow Optics, Pulse Drive) stay cheap vs Interceptor / Outpost Cradle.
+- First techs (Power Discipline, Shadow Optics, Pulse Drive) stay cheap vs Interceptor / Colonizer.
 
 ## Completeness
 

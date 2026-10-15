@@ -1,9 +1,14 @@
-import type {
-  BuildingId,
-  DefenseId,
-  OfficerId,
-  ResearchId,
-  ShipId,
+import {
+  formatCombatShareCard,
+  fortressRelocateDeutCost,
+  fortressRelocateLandingWindow,
+  MINI_FORTRESS_RELOCATE_ACCURACY,
+  type BuildingId,
+  type DefenseId,
+  type OfficerId,
+  type PlayerClassId,
+  type ResearchId,
+  type ShipId,
 } from "@starhold/game";
 import {
   clearFlash,
@@ -21,24 +26,52 @@ import {
   doBuild,
   doBuildDefense,
   doCancelQueue,
+  doChangeClass,
+  doChooseClass,
   doClaimDaily,
+  doClaimGoal,
+  doCreateAlliance,
+  doDeleteAllianceIntel,
+  doDeleteAllianceMarker,
   doDeleteFleetPreset,
+  doDisbandAlliance,
   doGalaxyNav,
   doClaimAnonymous,
+  doInviteAlliance,
   doJoin,
+  doJoinAlliance,
+  doKickAllianceMember,
   doLaunchFleet,
   doLaunchMaxExpeditions,
+  doLeaveAlliance,
+  doPostAllianceChat,
+  doProposeJointStrike,
   doRefresh,
   doRenamePlanet,
+  doRelocateFortress,
   doLogin,
   doSignup,
   doResearch,
   doSaveFleetPreset,
   doScanSystem,
+  doClaimSeason,
   doSelectPlanet,
+  doMarkEventsRead,
+  doSetAllianceJoinMode,
+  doSetAllianceRole,
+  doSetSeasonSkin,
+  doSetSeasonTitle,
+  doShareAllianceIntel,
+  doUpsertAllianceMarker,
+  fleetStrikeTarget,
   doUnlockSkill,
   doUpgrade,
 } from "./main-actions";
+import { setInboxFilter } from "./ui/render-messages";
+import {
+  setBattleReplayRound,
+  toggleBattleReplay,
+} from "./ui/render-fleets-panels";
 import { readFleetForm } from "./main-fleet-form";
 import { resolveNavPage } from "./ui/nav";
 import { navigateTo } from "./ui/router";
@@ -65,6 +98,31 @@ export function bindClickHandlers(): void {
       if (closestActionEl(target, "[data-claim-anonymous]")) {
         ev.preventDefault();
         void doClaimAnonymous();
+        return;
+      }
+
+      const filterBtn = closestActionEl(target, "button[data-inbox-filter]");
+      if (filterBtn) {
+        ev.preventDefault();
+        const raw = filterBtn.getAttribute("data-inbox-filter");
+        if (raw === "all" || raw === "combat" || raw === "alerts") {
+          setInboxFilter(raw);
+          schedulePaint();
+        }
+        return;
+      }
+
+      const readOne = closestActionEl(target, "[data-event-read]");
+      if (readOne) {
+        ev.preventDefault();
+        const id = readOne.getAttribute("data-event-read");
+        if (id) void doMarkEventsRead([id]);
+        return;
+      }
+
+      if (closestActionEl(target, "[data-event-read-all]")) {
+        ev.preventDefault();
+        void doMarkEventsRead();
         return;
       }
 
@@ -134,6 +192,15 @@ export function bindClickHandlers(): void {
           | null;
         const itemId = cancelBtn.getAttribute("data-queue-item");
         if (kind && itemId) void doCancelQueue(kind, itemId);
+        return;
+      }
+
+      const seasonClaim = closestActionEl(target, "[data-season-claim]");
+      if (seasonClaim) {
+        ev.preventDefault();
+        const board = seasonClaim.getAttribute("data-season-claim");
+        const seasonId = seasonClaim.getAttribute("data-season-id");
+        if (board) void doClaimSeason(board, seasonId);
         return;
       }
 
@@ -207,6 +274,66 @@ export function bindClickHandlers(): void {
         return;
       }
 
+      const copyShare = closestActionEl(target, "[data-copy-battle-share]");
+      if (copyShare) {
+        ev.preventDefault();
+        const reportId = copyShare.getAttribute("data-copy-battle-share");
+        const report = session.view?.reports?.find((r) => r.id === reportId);
+        if (!report) {
+          setFlash("error", "Battle report not found.");
+          schedulePaint();
+          return;
+        }
+        const text = formatCombatShareCard(report, session.view?.player.id);
+        void navigator.clipboard.writeText(text).then(
+          () => {
+            setFlash("notice", "Battle share copied.");
+            schedulePaint();
+          },
+          () => {
+            setFlash("error", "Could not copy share text.");
+            schedulePaint();
+          },
+        );
+        return;
+      }
+
+      const replaySummary = closestActionEl(
+        target,
+        "[data-battle-replay-summary]",
+      );
+      if (replaySummary) {
+        ev.preventDefault();
+        const id = replaySummary.getAttribute("data-battle-replay-summary");
+        const first = Number(
+          replaySummary.getAttribute("data-first-round") || "1",
+        );
+        if (id) toggleBattleReplay(id, Number.isFinite(first) ? first : 1);
+        schedulePaint();
+        return;
+      }
+
+      const roundTab = closestActionEl(target, "[data-battle-round-tab]");
+      if (roundTab) {
+        ev.preventDefault();
+        const round = Number(roundTab.getAttribute("data-battle-round-tab"));
+        const reportId = roundTab
+          .closest("details")
+          ?.getAttribute("data-battle-report");
+        if (!reportId || !Number.isFinite(round)) return;
+        setBattleReplayRound(reportId, round);
+        schedulePaint();
+        return;
+      }
+
+      const goalBtn = closestActionEl(target, "[data-claim-goal]");
+      if (goalBtn) {
+        ev.preventDefault();
+        const goalId = goalBtn.getAttribute("data-claim-goal");
+        if (goalId) void doClaimGoal(goalId);
+        return;
+      }
+
       const officerBtn = closestActionEl(target, "[data-activate-officer]");
       if (officerBtn) {
         ev.preventDefault();
@@ -225,9 +352,155 @@ export function bindClickHandlers(): void {
         return;
       }
 
+      const chooseClassBtn = closestActionEl(target, "[data-choose-class]");
+      if (chooseClassBtn) {
+        ev.preventDefault();
+        const classId = chooseClassBtn.getAttribute(
+          "data-choose-class",
+        ) as PlayerClassId | null;
+        if (classId) void doChooseClass(classId);
+        return;
+      }
+
+      const changeClassBtn = closestActionEl(target, "[data-change-class]");
+      if (changeClassBtn) {
+        ev.preventDefault();
+        const classId = changeClassBtn.getAttribute(
+          "data-change-class",
+        ) as PlayerClassId | null;
+        if (classId) void doChangeClass(classId);
+        return;
+      }
+
       if (closestActionEl(target, "#refresh-btn")) {
         ev.preventDefault();
         void doRefresh();
+      }
+
+      const joinAlly = closestActionEl(target, "[data-alliance-join]");
+      if (joinAlly) {
+        ev.preventDefault();
+        const id = joinAlly.getAttribute("data-alliance-join");
+        if (id) void doJoinAlliance(id);
+        return;
+      }
+
+      if (closestActionEl(target, "[data-alliance-leave]")) {
+        ev.preventDefault();
+        void doLeaveAlliance();
+        return;
+      }
+
+      if (closestActionEl(target, "[data-alliance-disband]")) {
+        ev.preventDefault();
+        void doDisbandAlliance();
+        return;
+      }
+
+      const kickBtn = closestActionEl(target, "[data-alliance-kick]");
+      if (kickBtn) {
+        ev.preventDefault();
+        const id = kickBtn.getAttribute("data-alliance-kick");
+        if (id) void doKickAllianceMember(id);
+        return;
+      }
+
+      const promoteBtn = closestActionEl(target, "[data-alliance-promote]");
+      if (promoteBtn) {
+        ev.preventDefault();
+        const id = promoteBtn.getAttribute("data-alliance-promote");
+        if (id) void doSetAllianceRole(id, "officer");
+        return;
+      }
+
+      const transferBtn = closestActionEl(target, "[data-alliance-transfer]");
+      if (transferBtn) {
+        ev.preventDefault();
+        const id = transferBtn.getAttribute("data-alliance-transfer");
+        if (id) void doSetAllianceRole(id, "founder");
+        return;
+      }
+
+      const shareBtn = closestActionEl(target, "[data-share-intel]");
+      if (shareBtn) {
+        ev.preventDefault();
+        const id = shareBtn.getAttribute("data-share-intel");
+        if (id) void doShareAllianceIntel(id);
+        return;
+      }
+
+      const intelDelete = closestActionEl(target, "[data-alliance-intel-delete]");
+      if (intelDelete) {
+        ev.preventDefault();
+        const id = intelDelete.getAttribute("data-alliance-intel-delete");
+        if (id) void doDeleteAllianceIntel(id);
+        return;
+      }
+
+      const markerDelete = closestActionEl(
+        target,
+        "[data-alliance-marker-remove]",
+      );
+      if (markerDelete) {
+        ev.preventDefault();
+        const id = markerDelete.getAttribute("data-alliance-marker-remove");
+        if (id) void doDeleteAllianceMarker(id);
+        return;
+      }
+
+      const markBtn = closestActionEl(target, "[data-galaxy-mark]");
+      if (markBtn) {
+        ev.preventDefault();
+        const slot = Number(markBtn.getAttribute("data-galaxy-mark"));
+        const galaxy = session.view?.galaxy;
+        if (galaxy && Number.isInteger(slot)) {
+          const note =
+            root.querySelector<HTMLInputElement>("#galaxy-marker-note")?.value ??
+            "";
+          void doUpsertAllianceMarker(
+            { galaxy: galaxy.galaxy, system: galaxy.system, slot },
+            note,
+          );
+        }
+        return;
+      }
+
+      const proposeSlot = closestActionEl(target, "[data-galaxy-propose]");
+      if (proposeSlot) {
+        ev.preventDefault();
+        const slot = Number(proposeSlot.getAttribute("data-galaxy-propose"));
+        const galaxy = session.view?.galaxy;
+        if (galaxy && Number.isInteger(slot)) {
+          const note =
+            root.querySelector<HTMLInputElement>("#galaxy-marker-note")?.value ??
+            "";
+          const pirate = galaxy.pirateBase;
+          const mission =
+            pirate &&
+            pirate.coords.galaxy === galaxy.galaxy &&
+            pirate.coords.system === galaxy.system &&
+            pirate.coords.slot === slot
+              ? "pirateRaid"
+              : "raid";
+          void doProposeJointStrike(
+            { galaxy: galaxy.galaxy, system: galaxy.system, slot },
+            note,
+            mission,
+          );
+        }
+        return;
+      }
+
+      if (closestActionEl(target, "[data-propose-strike]")) {
+        ev.preventDefault();
+        const picked = fleetStrikeTarget();
+        if (!picked) {
+          setFlash("error", "Pick a planet or coordinates for Joint Strike.");
+          schedulePaint();
+          return;
+        }
+        void doProposeJointStrike(picked.coords, undefined, picked.mission);
+        return;
       }
     },
     true,
@@ -238,6 +511,14 @@ export function bindClickHandlers(): void {
     if (el instanceof HTMLSelectElement && el.matches("[data-nav-select]")) {
       const page = resolveNavPage(el.value);
       if (page) navigateTo(page);
+      return;
+    }
+    if (
+      el instanceof HTMLSelectElement &&
+      el.matches("[data-alliance-join-mode-select]")
+    ) {
+      const mode = el.value === "invite" ? "invite" : "open";
+      void doSetAllianceJoinMode(mode);
       return;
     }
     if (
@@ -302,6 +583,67 @@ export function bindClickHandlers(): void {
         "#planet-rename-input",
       );
       void doRenamePlanet(input?.value ?? "");
+      return;
+    }
+
+    if (form.id === "fortress-relocate-form") {
+      ev.preventDefault();
+      const gEl = form.querySelector<HTMLInputElement>("#fortress-aim-galaxy");
+      const sEl = form.querySelector<HTMLInputElement>("#fortress-aim-system");
+      const g = Number(gEl?.value ?? 0);
+      const s = Number(sEl?.value ?? 0);
+      void doRelocateFortress(g, s);
+      return;
+    }
+
+    if (form.id === "alliance-create-form") {
+      ev.preventDefault();
+      const nameInput = form.querySelector<HTMLInputElement>(
+        '[name="alliance-name"]',
+      );
+      const tagInput = form.querySelector<HTMLInputElement>(
+        '[name="alliance-tag"]',
+      );
+      const modeSelect = form.querySelector<HTMLSelectElement>(
+        '[name="alliance-join-mode"]',
+      );
+      const joinMode = modeSelect?.value === "invite" ? "invite" : "open";
+      void doCreateAlliance(
+        nameInput?.value ?? "",
+        tagInput?.value ?? "",
+        joinMode,
+      );
+      return;
+    }
+
+    if (form.id === "alliance-invite-form") {
+      ev.preventDefault();
+      const input = form.querySelector<HTMLInputElement>(
+        '[name="alliance-invite-id"]',
+      );
+      void doInviteAlliance(input?.value?.trim() ?? "");
+      return;
+    }
+
+    if (form.id === "alliance-chat-form") {
+      ev.preventDefault();
+      const input = form.querySelector<HTMLInputElement>(
+        '[name="alliance-chat-body"]',
+      );
+      void doPostAllianceChat(input?.value ?? "");
+      return;
+    }
+  });
+
+  root.addEventListener("change", (ev) => {
+    const el = ev.target;
+    if (!(el instanceof HTMLSelectElement)) return;
+    if (el.hasAttribute("data-season-title")) {
+      void doSetSeasonTitle(el.value);
+      return;
+    }
+    if (el.hasAttribute("data-season-skin")) {
+      void doSetSeasonSkin(el.value);
     }
   });
 
@@ -315,6 +657,27 @@ export function bindClickHandlers(): void {
     }
     if (el instanceof HTMLInputElement && el.id === "auth-password") {
       session.passwordDraft = el.value;
+    }
+    if (
+      el instanceof HTMLInputElement &&
+      (el.id === "fortress-aim-galaxy" || el.id === "fortress-aim-system")
+    ) {
+      const form = el.closest("#fortress-relocate-form");
+      const hint = root.querySelector<HTMLElement>(
+        "[data-testid='fortress-landing-window']",
+      );
+      if (!form || !hint || !session.view) return;
+      const g = Number(
+        form.querySelector<HTMLInputElement>("#fortress-aim-galaxy")?.value ??
+          0,
+      );
+      const s = Number(
+        form.querySelector<HTMLInputElement>("#fortress-aim-system")?.value ??
+          0,
+      );
+      const win = fortressRelocateLandingWindow(g, s);
+      const cost = fortressRelocateDeutCost(session.view.planet.coords, g, s);
+      hint.innerHTML = `Aim a system in an allowed galaxy. Landing window for current aim: <strong>${win.galaxy}:${win.systemMin}–${win.galaxy}:${win.systemMax}</strong> (±${MINI_FORTRESS_RELOCATE_ACCURACY} systems). Free mini slot on landing. Est. cost at current aim: ${cost} deut.`;
     }
   });
 }

@@ -1,4 +1,5 @@
 import type {
+  AcsPrefill,
   BuildingId,
   Coordinates,
   DefenseId,
@@ -124,6 +125,20 @@ export async function fetchState(
   return parse<PlayerView>(res);
 }
 
+export async function markEventsRead(
+  playerId: string,
+  ids?: string[],
+): Promise<PlayerView> {
+  const body: { playerId: string; ids?: string[] } = { playerId };
+  if (ids) body.ids = ids;
+  const res = await credFetch("/api/events/read", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return parse<PlayerView>(res);
+}
+
 export async function upgradeBuilding(
   playerId: string,
   buildingId: BuildingId,
@@ -236,7 +251,10 @@ export async function launchFleetMission(
     targetCoords?: Coordinates;
     asteroidId?: string;
     pirateBaseId?: string;
+  alienBaseId?: string;
     cargo?: Partial<Resources>;
+    openAcs?: boolean;
+    acsGroupId?: string;
   },
 ): Promise<PlayerView> {
   const res = await credFetch("/api/launch-fleet", {
@@ -295,6 +313,18 @@ export async function scanSystemRequest(
   return parse<PlayerView>(res);
 }
 
+export async function claimGoalReward(
+  playerId: string,
+  goalId: string,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/claim-goal", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, goalId }),
+  });
+  return parse<PlayerView>(res);
+}
+
 export async function claimDaily(playerId: string): Promise<PlayerView> {
   const res = await credFetch("/api/claim-daily", {
     method: "POST",
@@ -316,6 +346,43 @@ export async function activateOfficerHire(
   return parse<PlayerView>(res);
 }
 
+export async function claimSeasonReward(
+  playerId: string,
+  board: string,
+  seasonId?: string,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/season/claim", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, board, seasonId }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function setCosmeticTitle(
+  playerId: string,
+  title: string | null,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/cosmetics/title", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, title }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function setCosmeticSkin(
+  playerId: string,
+  skinId: string | null,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/cosmetics/planet-skin", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, skinId }),
+  });
+  return parse<PlayerView>(res);
+}
+
 export async function unlockSkillNode(
   playerId: string,
   skillId: string,
@@ -326,4 +393,202 @@ export async function unlockSkillNode(
     body: JSON.stringify({ playerId, skillId }),
   });
   return parse<PlayerView>(res);
+}
+
+export async function chooseClass(
+  playerId: string,
+  classId: string,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/class/choose", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, classId }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function changeClass(
+  playerId: string,
+  classId: string,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/class/change", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, classId }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function relocateMiniFortress(
+  playerId: string,
+  planetId: string,
+  galaxy: number,
+  system: number,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/mini-relocate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, planetId, galaxy, system }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function createAllianceRequest(
+  playerId: string,
+  opts: { name: string; tag: string; joinMode?: "open" | "invite" },
+): Promise<PlayerView> {
+  const res = await credFetch("/api/alliance/create", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, ...opts }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function joinAllianceRequest(
+  playerId: string,
+  opts: { allianceId?: string; tag?: string },
+): Promise<PlayerView> {
+  const res = await credFetch("/api/alliance/join", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, ...opts }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function leaveAllianceRequest(
+  playerId: string,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/alliance/leave", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function inviteAllianceRequest(
+  playerId: string,
+  targetPlayerId: string,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/alliance/invite", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, targetPlayerId }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function kickAllianceRequest(
+  playerId: string,
+  targetPlayerId: string,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/alliance/kick", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, targetPlayerId }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function setAllianceRoleRequest(
+  playerId: string,
+  targetPlayerId: string,
+  role: "founder" | "officer" | "member",
+): Promise<PlayerView> {
+  const res = await credFetch("/api/alliance/set-role", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, targetPlayerId, role }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function setAllianceJoinModeRequest(
+  playerId: string,
+  joinMode: "open" | "invite",
+): Promise<PlayerView> {
+  const res = await credFetch("/api/alliance/set-join-mode", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, joinMode }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function disbandAllianceRequest(
+  playerId: string,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/alliance/disband", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function postAllianceChatRequest(body: string): Promise<PlayerView> {
+  const res = await credFetch("/api/alliance/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ body }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function shareAllianceIntelRequest(
+  spyReportId: string,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/alliance/intel/share", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ spyReportId }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function deleteAllianceIntelRequest(
+  intelId: string,
+): Promise<PlayerView> {
+  const res = await credFetch(
+    `/api/alliance/intel/${encodeURIComponent(intelId)}`,
+    { method: "DELETE" },
+  );
+  return parse<PlayerView>(res);
+}
+
+export async function upsertAllianceMarkerRequest(
+  coords: Coordinates,
+  note: string,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/alliance/markers", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ coords, note }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function deleteAllianceMarkerRequest(
+  markerId: string,
+): Promise<PlayerView> {
+  const res = await credFetch(
+    `/api/alliance/markers/${encodeURIComponent(markerId)}`,
+    { method: "DELETE" },
+  );
+  return parse<PlayerView>(res);
+}
+
+export async function proposeAllianceStrikeRequest(opts: {
+  coords: Coordinates;
+  note?: string;
+  mission?: "raid" | "pirateRaid";
+}): Promise<{ planId: string; acsPrefill: AcsPrefill | null; view: PlayerView }> {
+  const res = await credFetch("/api/alliance/plan-strike", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(opts),
+  });
+  return parse(res);
 }
