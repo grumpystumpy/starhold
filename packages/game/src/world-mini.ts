@@ -43,6 +43,7 @@ import type {
   Resources,
   UniverseState,
 } from "./types.js";
+import { recordMiniPlanetSighting } from "./world-event-log.js";
 import { addDebris, addShipsToPlanet } from "./world-tick.js";
 
 export type MiniKind = "standard" | "ironwater" | "fortress" | "relic";
@@ -331,11 +332,12 @@ export function playerKnowsMini(
   return Boolean(player?.discoveredMiniIds?.includes(planetId));
 }
 
-/** Reveal a mini to the finder (coords only). */
+/** Reveal a mini to the finder (coords only). Nearby empires get an alert. */
 export function discoverMiniPlanet(
   universe: UniverseState,
   playerId: string,
   planetId: string,
+  now = Date.now(),
 ): PlanetState | null {
   const planet = universe.planets[planetId];
   const player = universe.players[playerId];
@@ -347,6 +349,7 @@ export function discoverMiniPlanet(
   if (!player.discoveredMiniIds) player.discoveredMiniIds = [];
   if (!player.discoveredMiniIds.includes(planetId)) {
     player.discoveredMiniIds.push(planetId);
+    recordMiniPlanetSighting(universe, planet.coords, playerId, now, planet.id);
   }
   universe.planets[planetId] = planet;
   universe.players[playerId] = player;

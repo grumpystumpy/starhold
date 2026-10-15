@@ -224,6 +224,7 @@ declare global {
         fleets: PlayerView["fleets"] | null;
         reports: PlayerView["reports"] | null;
         spyReports: PlayerView["spyReports"] | null;
+        eventLog: PlayerView["player"]["eventLog"] | null;
         galaxy: PlayerView["galaxy"] | null;
         roster: PlayerView["roster"] | null;
       };
@@ -256,6 +257,7 @@ window.starhold = {
     fleets: session.view?.fleets ?? null,
     reports: session.view?.reports ?? null,
     spyReports: session.view?.spyReports ?? null,
+    eventLog: session.view?.player.eventLog ?? null,
     galaxy: session.view?.galaxy ?? null,
     roster: session.view?.roster ?? null,
   }),

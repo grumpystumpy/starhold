@@ -24,6 +24,7 @@ import type {
 import { emptyPlayerClass } from "./formulas-round3.js";
 import { seedUniverseAsteroids } from "./world-asteroids.js";
 import { ensurePlayerFleetPresets } from "./world-fleet-presets.js";
+import { ensureEventLog } from "./world-event-log.js";
 import { seedUniverseMinis } from "./world-mini.js";
 import {
   ensurePirateBaseShape,
@@ -200,6 +201,7 @@ export function ensureUniverseShape(universe: UniverseState): void {
     if (player.xp == null || player.xp < 0) player.xp = 0;
     if (player.xpTotal == null || player.xpTotal < 0) player.xpTotal = 0;
     if (player.allianceId === undefined) player.allianceId = null;
+    ensureEventLog(player);
     ensurePlayerFleetPresets(player);
   }
   const seed = universe.seed ?? universe.id;
@@ -326,6 +328,7 @@ export function joinUniverse(
     playerClass: emptyPlayerClass(),
     discoveredMiniIds: [],
     allianceId: null,
+    eventLog: [],
   };
   ensurePlayerFleetPresets(player);
 

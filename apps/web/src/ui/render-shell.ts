@@ -1,5 +1,6 @@
 import {
   PRODUCTION_MULT,
+  unreadEventCount,
   type PlayerView,
 } from "@starhold/game";
 import { RESOURCE_ART, planetArtFor } from "./assets";
@@ -85,7 +86,10 @@ function pageDropdown(view: PlayerView, active: NavPage): string {
       <select class="nav-dropdown" data-nav-select data-testid="nav-dropdown" aria-label="Game pages">
         ${NAV_PAGES.map((id) => {
           const href = hrefForPage(id, navQuery(view));
-          return `<option value="${id}" data-href="${escapeAttr(href)}"${id === active ? " selected" : ""}>${NAV_LABELS[id]}</option>`;
+          const unread = id === "messages" ? unreadEventCount(view.player) : 0;
+          const label =
+            unread > 0 ? `${NAV_LABELS[id]} (${fmt(unread)})` : NAV_LABELS[id];
+          return `<option value="${id}" data-href="${escapeAttr(href)}"${id === active ? " selected" : ""}>${escapeHtml(label)}</option>`;
         }).join("")}
       </select>
     </label>`;
@@ -98,7 +102,12 @@ function leftNav(view: PlayerView, active: NavPage): string {
       <ul>
         ${NAV_PAGES.map((id) => {
           const href = hrefForPage(id, q);
-          return `<li><a href="${escapeAttr(href)}" class="nav-link${id === active ? " active" : ""}" data-nav="${id}" data-testid="nav-${id}">${NAV_LABELS[id]}</a></li>`;
+          const unread = id === "messages" ? unreadEventCount(view.player) : 0;
+          const badge =
+            unread > 0
+              ? `<span class="nav-badge" data-testid="nav-messages-badge">${fmt(unread)}</span>`
+              : "";
+          return `<li><a href="${escapeAttr(href)}" class="nav-link${id === active ? " active" : ""}" data-nav="${id}" data-testid="nav-${id}">${NAV_LABELS[id]}${badge}</a></li>`;
         }).join("")}
       </ul>
     </nav>`;

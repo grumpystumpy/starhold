@@ -46,3 +46,4 @@ export {
   doSetAllianceJoinMode,
   doSetAllianceRole,
 } from "./main-actions-alliances.js";
+export { doMarkEventsRead } from "./main-actions-events.js";

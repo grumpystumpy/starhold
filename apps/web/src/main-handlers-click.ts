@@ -51,11 +51,13 @@ import {
   doSaveFleetPreset,
   doScanSystem,
   doSelectPlanet,
+  doMarkEventsRead,
   doSetAllianceJoinMode,
   doSetAllianceRole,
   doUnlockSkill,
   doUpgrade,
 } from "./main-actions";
+import { setInboxFilter } from "./ui/render-messages";
 import { readFleetForm } from "./main-fleet-form";
 import { resolveNavPage } from "./ui/nav";
 import { navigateTo } from "./ui/router";
@@ -82,6 +84,31 @@ export function bindClickHandlers(): void {
       if (closestActionEl(target, "[data-claim-anonymous]")) {
         ev.preventDefault();
         void doClaimAnonymous();
+        return;
+      }
+
+      const filterBtn = closestActionEl(target, "[data-inbox-filter]");
+      if (filterBtn) {
+        ev.preventDefault();
+        const raw = filterBtn.getAttribute("data-inbox-filter");
+        if (raw === "all" || raw === "combat" || raw === "alerts") {
+          setInboxFilter(raw);
+          schedulePaint();
+        }
+        return;
+      }
+
+      const readOne = closestActionEl(target, "[data-event-read]");
+      if (readOne) {
+        ev.preventDefault();
+        const id = readOne.getAttribute("data-event-read");
+        if (id) void doMarkEventsRead([id]);
+        return;
+      }
+
+      if (closestActionEl(target, "[data-event-read-all]")) {
+        ev.preventDefault();
+        void doMarkEventsRead();
         return;
       }
 

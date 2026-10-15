@@ -107,6 +107,24 @@
   padding-top: 0;
 }
 
+.inbox-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.45rem 0 0.75rem;
+}
+
+.inbox-filters button {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.82rem;
+}
+
+.inbox-filter[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .message-row {
   display: flex;
   flex-direction: column;
@@ -121,18 +139,44 @@
 }
 
 .message-kind {
-  font-size: 0.72rem;
+  display: inline-block;
+  font-size: 0.68rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--muted);
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  border-radius: 999px;
+  padding: 0.05rem 0.4rem;
 }
 
 .message-title {
   font-weight: 600;
+  color: inherit;
+  text-decoration: none;
+}
+
+a.message-title:hover {
+  color: var(--accent);
 }
 
 .message-body {
   display: block;
+}
+
+.message-unread .message-title {
+  font-weight: 700;
+}
+
+.message-row.message-unread {
+  border-left: 3px solid var(--accent);
+  padding-left: 0.45rem;
+}
+
+.message-read {
+  align-self: flex-start;
+  margin-top: 0.25rem;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.75rem;
 }
 
 .battle-report-actions {
@@ -247,7 +291,6 @@
 
 .alliance-leave-row {
   margin: 0.75rem 0 1rem;
-
 }
 
 @media (max-width: 560px) {

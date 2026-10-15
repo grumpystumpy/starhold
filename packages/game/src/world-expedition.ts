@@ -180,7 +180,7 @@ export function resolveExpeditionArrival(
         now,
       );
       if (found) {
-        discoverMiniPlanet(universe, fleet.ownerPlayerId, found.id);
+        discoverMiniPlanet(universe, fleet.ownerPlayerId, found.id, now);
         miniPlanetId = found.id;
         miniCoords = { ...found.coords };
         summary = `Anomalous gravity well charted — mini planet at ${found.coords.galaxy}:${found.coords.system}:${found.coords.slot} (coords to you only).`;

@@ -270,6 +270,23 @@ export interface AllianceListEntry {
   maxMembers: number;
 }
 
+export type EventLogKind =
+  | "buildComplete"
+  | "fleetReturn"
+  | "raidAlert"
+  | "miniNearby";
+
+export interface EventLogEntry {
+  id: string;
+  kind: EventLogKind;
+  createdAt: number;
+  readAt: number | null;
+  title: string;
+  body: string;
+  href?: string;
+  meta?: Record<string, string | number | boolean | null>;
+}
+
 export interface PlayerState {
   id: string;
   name: string;
@@ -319,6 +336,8 @@ export interface PlayerState {
    * Lives on the player inside the universe document (no extra KV keys).
    */
   goals?: PlayerGoalState;
+  /** Synthetic empire alerts. Missing on old saves — migrate to []. */
+  eventLog?: EventLogEntry[];
 }
 
 /** UTC period keys + per-goal counters. Rolled lazily on read. */

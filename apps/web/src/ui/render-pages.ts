@@ -284,7 +284,8 @@ function fleetPage(
   const mailCount =
     (view.reports?.length ?? 0) +
     (view.spyReports?.length ?? 0) +
-    (view.expeditionReports?.length ?? 0);
+    (view.expeditionReports?.length ?? 0) +
+    (view.player.eventLog?.length ?? 0);
   return `
     <section class="panel" data-testid="fleets-panel">
       <h2>Fleets &amp; missions</h2>
@@ -292,7 +293,7 @@ function fleetPage(
       ${fleetsInFlight(fleets, view.roster, view.now)}
       ${hostileInboundHtml(view.hostileInbound ?? [], view.roster, view.now)}
       ${sensorContactsHtml(view.sensorContacts ?? [], view.roster, view.now)}
-      <p class="hint" data-testid="fleet-messages-link">Combat, spy, and expedition reports (${fmt(mailCount)}) live in <a href="${escapeAttr(mailHref)}" data-nav="messages" data-testid="fleet-open-messages">Messages</a>.</p>
+      <p class="hint" data-testid="fleet-messages-link">Reports and alerts (${fmt(mailCount)}) live in <a href="${escapeAttr(mailHref)}" data-nav="messages" data-testid="fleet-open-messages">Messages</a>.</p>
     </section>`;
 }
 
@@ -355,7 +356,7 @@ export function pageHtml(
     case "alliances":
       return alliancesPageHtml(view, busy);
     case "messages":
-      return messagesPageHtml(view);
+      return messagesPageHtml(view, { busy });
     default: {
       const _exhaustive: never = page;
       return _exhaustive;

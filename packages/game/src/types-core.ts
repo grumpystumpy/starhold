@@ -284,6 +284,8 @@ export interface ShipQueueItem extends QueueItemBase {
   count: number;
   /** Seconds per unit (for UI remaining estimate) */
   unitSeconds: number;
+  /** Original order size. Survives partial batch delivery across ticks. */
+  orderedCount?: number;
 }
 
 export interface DefenseQueueItem extends QueueItemBase {
@@ -291,6 +293,8 @@ export interface DefenseQueueItem extends QueueItemBase {
   defenseId: DefenseId;
   count: number;
   unitSeconds: number;
+  /** Original order size. Survives partial batch delivery across ticks. */
+  orderedCount?: number;
 }
 
 export interface ResearchQueueItem extends QueueItemBase {

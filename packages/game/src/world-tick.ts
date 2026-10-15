@@ -1,4 +1,4 @@
-import { SHIP_ORDER } from "./catalog.js";
+import { BUILDINGS, DEFENSES, RESEARCH, SHIPS, SHIP_ORDER } from "./catalog.js";
 import {
   clampToStorage,
   coordsKey,
@@ -15,6 +15,7 @@ import type {
   Coordinates,
   DebrisField,
   DefenseQueueItem,
+  EventLogEntry,
   FleetMission,
   FleetShips,
   PlanetState,
@@ -23,6 +24,7 @@ import type {
   ShipQueueItem,
   UniverseState,
 } from "./types.js";
+import { formatEventCount, pushEventLog } from "./world-event-log.js";
 import { ensureQueueFrontStarted } from "./world-queue-normalize.js";
 
 const MIN_UNIT_SECONDS = 1e-9;
@@ -50,11 +52,15 @@ function advanceCountableQueue<T extends ShipQueueItem | DefenseQueueItem>(
   queue: T[],
   now: number,
   deliver: (item: T, batch: number) => void,
+  onFinished?: (item: T, finishedCount: number) => void,
 ): void {
   ensureQueueFrontStarted(queue, now);
   while (queue.length > 0) {
     const front = queue[0]!;
     if (front.startedAt == null) break;
+    if (front.orderedCount == null || front.orderedCount < front.count) {
+      front.orderedCount = front.count;
+    }
     const unit = Math.max(MIN_UNIT_SECONDS, front.unitSeconds);
     const elapsedSec = Math.max(0, (now - front.startedAt) / 1000);
     // completesAt is authoritative for finishing the remaining count (avoids float floor-to-0).
@@ -69,6 +75,7 @@ function advanceCountableQueue<T extends ShipQueueItem | DefenseQueueItem>(
     front.count -= batch;
     front.paidCost = scalePaidCost(front.paidCost, front.count, before);
     if (front.count <= 0) {
+      onFinished?.(front, front.orderedCount ?? before);
       const freedAt = Math.min(now, front.completesAt);
       queue.shift();
       ensureQueueFrontStarted(queue, now, freedAt);
@@ -106,7 +113,7 @@ export function advancePlanet(
   now: number,
   energyTechLevel = 0,
   boosts?: { mineOutput?: number; energyOutput?: number },
-  _owner?: PlayerState,
+  owner?: PlayerState,
 ): PlanetState {
   let state = {
     ...planet,
@@ -122,16 +129,53 @@ export function advancePlanet(
   // Buildings grant no XP (Micah amendment / Round 2 rebalance).
   advanceBuildingQueue(state.buildQueue, now, (item) => {
     state.buildings[item.buildingId] = item.targetLevel;
+    noteBuildComplete(
+      owner,
+      `${BUILDINGS[item.buildingId].name} → level ${formatEventCount(item.targetLevel)}`,
+      `Finished on ${state.name}.`,
+      item.completesAt,
+      {
+        buildingId: item.buildingId,
+        targetLevel: item.targetLevel,
+        planetId: state.id,
+      },
+    );
   });
 
-  advanceCountableQueue(state.shipQueue, now, (item, batch) => {
-    state.ships[item.shipId] = (state.ships[item.shipId] ?? 0) + batch;
-  });
+  advanceCountableQueue(
+    state.shipQueue,
+    now,
+    (item, batch) => {
+      state.ships[item.shipId] = (state.ships[item.shipId] ?? 0) + batch;
+    },
+    (item, finished) => {
+      noteBuildComplete(
+        owner,
+        `${SHIPS[item.shipId].name} × ${formatEventCount(finished)}`,
+        `Shipyard finished on ${state.name}.`,
+        item.completesAt,
+        { shipId: item.shipId, count: finished, planetId: state.id },
+      );
+    },
+  );
 
-  advanceCountableQueue(state.defenseQueue, now, (item, batch) => {
-    state.defenses[item.defenseId] =
-      (state.defenses[item.defenseId] ?? 0) + batch;
-  });
+  advanceCountableQueue(
+    state.defenseQueue,
+    now,
+    (item, batch) => {
+      state.defenses[item.defenseId] =
+        (state.defenses[item.defenseId] ?? 0) + batch;
+    },
+    (item, finished) => {
+      noteBuildComplete(
+        owner,
+        `${DEFENSES[item.defenseId].name} × ${formatEventCount(finished)}`,
+        `Shipyard finished on ${state.name}.`,
+        item.completesAt,
+        { defenseId: item.defenseId, count: finished, planetId: state.id },
+      );
+    },
+  );
 
   const elapsedMs = Math.max(0, now - state.lastTickAt);
   if (elapsedMs > 0) {
@@ -209,9 +253,33 @@ export function advanceResearch(
     player.research[researchId] = targetLevel;
     player.researchQueue.shift();
     grantPlayerXp(player, xpForResearch(targetLevel));
+    pushEventLog(player, {
+      kind: "buildComplete",
+      createdAt: freedAt,
+      title: `${RESEARCH[researchId].name} → level ${formatEventCount(targetLevel)}`,
+      body: "Research finished.",
+      meta: { researchId, targetLevel },
+    });
     ensureQueueFrontStarted(player.researchQueue, now, freedAt);
   }
   universe.players[player.id] = player;
+}
+
+function noteBuildComplete(
+  owner: PlayerState | undefined,
+  title: string,
+  body: string,
+  createdAt: number,
+  meta: EventLogEntry["meta"],
+): void {
+  if (!owner) return;
+  pushEventLog(owner, {
+    kind: "buildComplete",
+    title,
+    body,
+    createdAt,
+    meta,
+  });
 }
 
 export function addShipsToPlanet(planet: PlanetState, ships: FleetShips): void {

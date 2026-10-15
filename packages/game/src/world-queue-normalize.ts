@@ -94,12 +94,17 @@ export function normalizeShipQueue(
         typeof raw.unitSeconds === "number" && raw.unitSeconds > 0
           ? raw.unitSeconds
           : Math.max(1e-9, base.workSeconds / count);
+      const orderedCount =
+        typeof raw.orderedCount === "number" && raw.orderedCount >= count
+          ? Math.floor(raw.orderedCount)
+          : count;
       return {
         ...base,
         kind: "ship" as const,
         shipId: raw.shipId,
         count,
         unitSeconds,
+        orderedCount,
       };
     },
   );
@@ -121,12 +126,17 @@ export function normalizeDefenseQueue(
       typeof raw.unitSeconds === "number" && raw.unitSeconds > 0
         ? raw.unitSeconds
         : Math.max(1e-9, base.workSeconds / count);
+    const orderedCount =
+      typeof raw.orderedCount === "number" && raw.orderedCount >= count
+        ? Math.floor(raw.orderedCount)
+        : count;
     return {
       ...base,
       kind: "defense" as const,
       defenseId: raw.defenseId,
       count,
       unitSeconds,
+      orderedCount,
     };
   });
 }

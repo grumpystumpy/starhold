@@ -55,6 +55,7 @@ import {
   occupationMineShares,
   pruneExpiredOccupations,
 } from "./world-occupation.js";
+import { formatEventCount, pushEventLog } from "./world-event-log.js";
 import { resolveMiniPlanetChoice } from "./world-round2.js";
 import {
   addCargoToPlanet,
@@ -337,6 +338,27 @@ export function resolveFleetArrival(
   if (!live) return;
   addShipsToPlanet(origin, live.ships);
   addCargoToPlanet(origin, live.cargo);
+  if (owner) {
+    const hulls = SHIP_ORDER.filter((id) => (live.ships[id] ?? 0) > 0)
+      .map(
+        (id) =>
+          `${formatEventCount(live.ships[id] ?? 0)}× ${SHIPS[id].name}`,
+      )
+      .join(", ");
+    pushEventLog(owner, {
+      kind: "fleetReturn",
+      createdAt: live.arrivesAt,
+      title: `Fleet returned to ${origin.name}`,
+      body: hulls ? `${live.mission} · ${hulls}` : live.mission,
+      href: "#messages",
+      meta: {
+        mission: live.mission,
+        planetId: origin.id,
+        fleetId: live.id,
+      },
+    });
+    universe.players[owner.id] = owner;
+  }
   delete universe.fleets[live.id];
 }
 
