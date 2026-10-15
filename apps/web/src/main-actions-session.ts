@@ -4,6 +4,7 @@ import {
   claimAnonymousPlayer,
   fetchAuthMe,
   fetchState,
+  invalidateCachedState,
   joinGame,
   loginAccount,
   relocateMiniFortress,
@@ -24,15 +25,25 @@ import { syncSessionUrl } from "./ui/router";
 
 /** Background refresh cadence. Actions apply their own response immediately. */
 export const POLL_INTERVAL_MS = 30_000;
+/** No input for this long: stop polling until the player interacts. */
+export const IDLE_PAUSE_MS = 3 * 60 * 1000;
 
 let pollPlayerId: string | null = null;
 let pollChain: Promise<void> | null = null;
 let refreshGen = 0;
 let refreshInFlight: { key: string; promise: Promise<void> } | null = null;
 let visibilityBound = false;
+let activityBound = false;
+let lastActivityAt = 0;
+let idleTimer: number | undefined;
+let idlePaused = false;
 
 function tabHidden(): boolean {
   return typeof document !== "undefined" && document.visibilityState === "hidden";
+}
+
+function pollsAllowed(): boolean {
+  return Boolean(pollPlayerId) && !tabHidden() && !idlePaused;
 }
 
 function clearPollTimer(): void {
@@ -49,7 +60,7 @@ export function deferBackgroundPoll(): void {
 
 function schedulePoll(delay: number): void {
   clearPollTimer();
-  if (!pollPlayerId || tabHidden()) return;
+  if (!pollsAllowed()) return;
   session.pollTimer = window.setTimeout(() => {
     session.pollTimer = undefined;
     void pollNow();
@@ -61,7 +72,7 @@ function pollNow(): Promise<void> {
   const playerId = pollPlayerId;
   pollChain = (async () => {
     try {
-      if (!playerId || pollPlayerId !== playerId || tabHidden()) return;
+      if (!playerId || pollPlayerId !== playerId || !pollsAllowed()) return;
       await silentRefresh(playerId);
     } finally {
       pollChain = null;
@@ -71,13 +82,74 @@ function pollNow(): Promise<void> {
   return pollChain;
 }
 
+function clearIdleTimer(): void {
+  if (idleTimer !== undefined) {
+    window.clearTimeout(idleTimer);
+    idleTimer = undefined;
+  }
+}
+
+function pauseForIdle(): void {
+  if (!pollPlayerId || idlePaused) return;
+  if (Date.now() - lastActivityAt < IDLE_PAUSE_MS) {
+    scheduleIdleCheck();
+    return;
+  }
+  idlePaused = true;
+  session.idlePaused = true;
+  clearPollTimer();
+  schedulePaint();
+}
+
+function scheduleIdleCheck(): void {
+  clearIdleTimer();
+  if (!pollPlayerId) return;
+  const delay = Math.max(0, IDLE_PAUSE_MS - (Date.now() - lastActivityAt));
+  idleTimer = window.setTimeout(() => {
+    idleTimer = undefined;
+    pauseForIdle();
+  }, delay);
+}
+
+function resumeFromIdle(): void {
+  idlePaused = false;
+  session.idlePaused = false;
+  schedulePaint();
+  if (pollPlayerId && !tabHidden()) void pollNow();
+}
+
+/** Pointer, key, touch, scroll, or focus. The first event after idle wakes polling. */
+function onActivity(): void {
+  lastActivityAt = Date.now();
+  if (idlePaused) resumeFromIdle();
+  scheduleIdleCheck();
+}
+
 function onVisibilityChange(): void {
   if (!pollPlayerId) return;
   if (tabHidden()) {
     clearPollTimer();
     return;
   }
+  if (idlePaused || Date.now() - lastActivityAt >= IDLE_PAUSE_MS) {
+    pauseForIdle();
+    return;
+  }
   void pollNow();
+}
+
+function ensureActivityListeners(): void {
+  if (activityBound || typeof document === "undefined") return;
+  activityBound = true;
+  const opts: AddEventListenerOptions = { capture: true, passive: true };
+  document.addEventListener("pointerdown", onActivity, opts);
+  document.addEventListener("keydown", onActivity, opts);
+  document.addEventListener("touchstart", onActivity, opts);
+  document.addEventListener("touchmove", onActivity, opts);
+  document.addEventListener("wheel", onActivity, opts);
+  // `scroll` also fires when a poll repaints the page. Wheel, touch, and
+  // pointer cover a person scrolling; layout shifts must not reset idle.
+  window.addEventListener("focus", onActivity);
 }
 
 function ensureVisibilityListener(): void {
@@ -88,13 +160,24 @@ function ensureVisibilityListener(): void {
 
 export function startPolling(playerId: string): void {
   pollPlayerId = playerId;
+  lastActivityAt = Date.now();
+  idlePaused = false;
+  session.idlePaused = false;
   ensureVisibilityListener();
+  ensureActivityListeners();
+  scheduleIdleCheck();
   schedulePoll(POLL_INTERVAL_MS);
 }
 
 export function stopPolling(): void {
   pollPlayerId = null;
   clearPollTimer();
+  clearIdleTimer();
+}
+
+/** Drop a background read that started before a player action returned. */
+export function bumpInFlightRefresh(): void {
+  refreshGen += 1;
 }
 
 function refreshKey(playerId: string): string {
@@ -146,7 +229,10 @@ async function refreshOnce(
 }
 
 setAfterPlayerMutation(() => {
+  invalidateCachedState();
+  bumpInFlightRefresh();
   deferBackgroundPoll();
+  onActivity();
 });
 
 export async function doJoin(name: string): Promise<void> {

@@ -528,6 +528,22 @@ async function uiSmoke() {
   }
 
   await goNav(page, "shipyard");
+  // Outer slots accrue a few metal a minute. Top up so the Build click does
+  // not depend on which home slot this commander drew.
+  const scoutPlayerId = await page.evaluate(
+    () => window.starhold?.getState()?.playerId ?? null,
+  );
+  if (!scoutPlayerId) throw new Error("missing player for scout grant");
+  const granted = await apiJson("/api/e2e/grant", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      playerId: scoutPlayerId,
+      resources: { metal: 800, crystal: 500, deuterium: 200 },
+    }),
+  });
+  if (granted.error) throw new Error(`scout grant failed: ${granted.error}`);
+  await page.evaluate(() => window.starhold.poll());
   await pollUntil(
     page,
     "scout build ready",

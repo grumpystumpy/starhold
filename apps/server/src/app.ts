@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { Context, Next } from "hono";
+import { compress } from "hono/compress";
 import {
   type BuildingId,
   type Coordinates,
@@ -75,6 +76,7 @@ import {
 import { sessionSecretConfigured } from "./accounts.js";
 import { mountAllianceIntelRoutes } from "./alliance-intel-routes.js";
 import { mountAuthRoutes } from "./auth-routes.js";
+import { respondWithPlayerView } from "./state-response.js";
 import { staticCacheControl } from "./static-cache.js";
 import { storageMode, withUniverse } from "./store.js";
 
@@ -111,7 +113,7 @@ async function simpleCors(c: Context, next: Next): Promise<Response | void> {
       );
       res.headers.set(
         "Access-Control-Allow-Headers",
-        "Content-Type, Cookie",
+        "Content-Type, Cookie, If-None-Match, X-Starhold-Have-Catalogs",
       );
       res.headers.set("Access-Control-Allow-Credentials", "true");
       res.headers.set("Vary", "Origin");
@@ -130,6 +132,10 @@ async function simpleCors(c: Context, next: Next): Promise<Response | void> {
 export function createApp(): Hono {
   const app = new Hono();
 
+  // Gzip JSON when the caller asks. Browsers send Accept-Encoding; unit
+  // tests do not, so they still see plain JSON. Vercel will not recompress
+  // a response that already has Content-Encoding.
+  app.use("/api/*", compress({ encoding: "gzip" }));
   app.use("*", simpleCors);
   app.use("*", async (c, next) => {
     await next();
@@ -214,7 +220,10 @@ export function createApp(): Hono {
       const galaxy = Number(c.req.query("galaxy") || 0) || undefined;
       const system = Number(c.req.query("system") || 0) || undefined;
       return await withUniverse((universe) =>
-        c.json(playerView(universe, playerId, Date.now(), galaxy, system)),
+        respondWithPlayerView(
+          c,
+          playerView(universe, playerId, Date.now(), galaxy, system),
+        ),
       );
     } catch (err) {
       return c.json(

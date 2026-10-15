@@ -23,6 +23,45 @@ async function parse<T>(res: Response): Promise<T> {
 /** Player mutations already return a fresh view. Reset the background poll. */
 let afterPlayerMutation: (() => void) | null = null;
 
+interface StateCacheEntry {
+  etag: string | null;
+  view: PlayerView;
+}
+
+const stateCache = new Map<string, StateCacheEntry>();
+
+/**
+ * A successful mutation changed the empire. Drop ETags so the next poll
+ * cannot treat a pre-mutation fingerprint as current.
+ */
+export function invalidateCachedState(): void {
+  for (const entry of stateCache.values()) entry.etag = null;
+}
+
+function stateCacheKey(
+  playerId: string,
+  galaxy?: number,
+  system?: number,
+): string {
+  return `${playerId}:${galaxy ?? ""}:${system ?? ""}`;
+}
+
+interface UnchangedStateBody {
+  unchanged: true;
+  now: number;
+  resources: Resources;
+}
+
+function isUnchangedState(
+  data: PlayerView | UnchangedStateBody | CatalogOmittedBody,
+): data is UnchangedStateBody {
+  return "unchanged" in data && data.unchanged === true;
+}
+
+interface CatalogOmittedBody extends PlayerView {
+  catalogsOmitted: true;
+}
+
 export function setAfterPlayerMutation(fn: () => void): void {
   afterPlayerMutation = fn;
 }
@@ -137,8 +176,46 @@ export async function fetchState(
   params.set("playerId", playerId);
   if (galaxy) params.set("galaxy", String(galaxy));
   if (system) params.set("system", String(system));
-  const res = await credFetch(`/api/state?${params.toString()}`);
-  return parse<PlayerView>(res);
+  const key = stateCacheKey(playerId, galaxy, system);
+  const cached = stateCache.get(key);
+  const headers: Record<string, string> = {};
+  if (cached?.etag) headers["If-None-Match"] = cached.etag;
+  if ((cached?.view.officerCatalog?.length ?? 0) > 0) {
+    headers["X-Starhold-Have-Catalogs"] = "1";
+  }
+  const res = await credFetch(`/api/state?${params.toString()}`, { headers });
+  const etag = res.headers.get("ETag");
+  const data = await parse<
+    PlayerView | UnchangedStateBody | CatalogOmittedBody
+  >(res);
+  if (isUnchangedState(data)) {
+    if (!cached) throw new Error("State unchanged without a cached view.");
+    const view: PlayerView = {
+      ...cached.view,
+      now: data.now,
+      planet: {
+        ...cached.view.planet,
+        resources: data.resources,
+        lastTickAt: data.now,
+      },
+    };
+    stateCache.set(key, { etag: etag ?? cached.etag, view });
+    return view;
+  }
+  let view: PlayerView = data;
+  if ("catalogsOmitted" in data && data.catalogsOmitted) {
+    if (!cached?.view.officerCatalog || !cached.view.skillCatalog) {
+      throw new Error("Catalogs omitted without a cached catalog.");
+    }
+    const { catalogsOmitted: _omitted, ...rest } = data;
+    view = {
+      ...rest,
+      officerCatalog: cached.view.officerCatalog,
+      skillCatalog: cached.view.skillCatalog,
+    };
+  }
+  stateCache.set(key, { etag, view });
+  return view;
 }
 
 export async function markEventsRead(

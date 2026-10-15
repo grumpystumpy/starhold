@@ -10,7 +10,9 @@ API is serverless (`api/index.js`, with `/api/*` rewritten to `/api`). Shared mu
 
 - `git.deploymentEnabled`: `main` true, `*` false. Non-main branches never create a deployment (this does not spend the Hobby deploy quota).
 - `ignoreCommand` (`node scripts/vercel-ignore-build.mjs`): exit 0 skips, exit 1 builds. Skips anything that is not `VERCEL_ENV=production` on `main`. On `main`, skips when the diff is only docs, markdown, `.github/`, tests, or `scripts/` (except `scripts/bundle-api.mjs`, which packages the function). If the diff cannot be read, it builds.
-- GitHub Actions (`.github/workflows/ci.yml`) runs unit tests, typecheck, `build:vercel`, and Playwright against localhost. It must not call the Vercel CLI, a deploy hook, or `VERCEL_TOKEN`.
+- GitHub Actions (`.github/workflows/ci.yml`) runs unit tests, typecheck, `build:vercel`, and Playwright against localhost. It must not call the Vercel CLI, a deploy hook, or a Vercel API token.
+
+**Runtime:** Nothing on the server ticks by itself. There is no cron, no keep-alive loop, and `/api/health` does not touch KV. The universe advances only when a player request reads it. The client polls `GET /api/state` every 30s while the tab is visible and the player has used the page in the last 3 minutes. Hidden tabs and idle sessions do not poll. Quiet polls send `If-None-Match` and get back the clock and resource stocks instead of the full view. JSON is gzipped when the caller sends `Accept-Encoding: gzip`.
 
 **Dashboard settings the repo cannot set** (Micah, project **starhold**):
 

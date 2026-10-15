@@ -1,5 +1,6 @@
 export {
   POLL_INTERVAL_MS,
+  IDLE_PAUSE_MS,
   startPolling,
   stopPolling,
   deferBackgroundPoll,

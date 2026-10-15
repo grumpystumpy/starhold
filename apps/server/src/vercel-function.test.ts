@@ -170,4 +170,14 @@ test("ignore command builds only production main when the game changed", () => {
   assert.equal(/vercel\s+deploy/i.test(ci), false);
   assert.equal(ci.includes("VERCEL_TOKEN"), false);
   assert.equal(ci.includes("hooks.vercel.com"), false);
+
+  const serverSrc = path.join(root, "apps/server/src");
+  const sources = fs
+    .readdirSync(serverSrc)
+    .filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"));
+  for (const name of sources) {
+    const text = fs.readFileSync(path.join(serverSrc, name), "utf8");
+    assert.equal(text.includes("setInterval"), false, name);
+    assert.equal(/node-cron|waitUntil\(/.test(text), false, name);
+  }
 });

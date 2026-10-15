@@ -38,6 +38,8 @@ export const session = {
   /** Pending anonymous playerId offer for claim UI. */
   claimablePlayerId: null as string | null,
   pollTimer: undefined as number | undefined,
+  /** No pointer, key, touch, scroll, or focus for the idle window. */
+  idlePaused: false,
   flashTimer: undefined as number | undefined,
   /** Defer full paints while a pointer is down so polls cannot swallow clicks. */
   pointersDown: 0,

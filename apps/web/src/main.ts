@@ -32,6 +32,7 @@ import {
   doSelectPlanet,
   doUpgrade,
   resumeFromCookie,
+  IDLE_PAUSE_MS,
   POLL_INTERVAL_MS,
   silentRefresh,
   startPolling,
@@ -220,6 +221,7 @@ declare global {
       refresh: () => Promise<void>;
       poll: () => Promise<void>;
       pollIntervalMs: number;
+      idlePauseMs: number;
       getState: () => {
         playerId: string | null;
         name: string | null;
@@ -254,6 +256,7 @@ window.starhold = {
   poll: () =>
     session.view ? silentRefresh(session.view.player.id) : Promise.resolve(),
   pollIntervalMs: POLL_INTERVAL_MS,
+  idlePauseMs: IDLE_PAUSE_MS,
   getState: () => ({
     playerId: session.view?.player.id ?? null,
     name: session.view?.player.name ?? null,

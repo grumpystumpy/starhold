@@ -10,6 +10,7 @@ import { NAV_LABELS, NAV_PAGES, type NavPage } from "./nav";
 import { flashHtml, resBlock } from "./render-chrome";
 import { escapeAttr, escapeHtml } from "./render-escape";
 import { hrefForPage } from "./router";
+import { session } from "../session";
 import { infoTooltip, storageFillTitle } from "./render-tooltips";
 
 function resourceBar(view: PlayerView, busy: boolean): string {
@@ -211,6 +212,7 @@ export function shellHtml(
         </div>
       </header>
       <div data-flash-slot>${flashHtml(state.error, state.notice)}</div>
+      <button type="button" class="idle-pause" data-testid="idle-pause"${session.idlePaused ? "" : " hidden"}>Paused, tap to resume</button>
       ${resourceBar(view, state.busy)}
       <div class="shell-body">
         ${leftNav(view, activePage)}
