@@ -298,6 +298,18 @@ export async function scanSystemRequest(
   return parse<PlayerView>(res);
 }
 
+export async function claimGoalReward(
+  playerId: string,
+  goalId: string,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/claim-goal", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, goalId }),
+  });
+  return parse<PlayerView>(res);
+}
+
 export async function claimDaily(playerId: string): Promise<PlayerView> {
   const res = await credFetch("/api/claim-daily", {
     method: "POST",

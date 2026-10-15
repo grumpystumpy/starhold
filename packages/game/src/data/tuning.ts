@@ -3,6 +3,7 @@ import type {
   BuildingId,
   DefenseDef,
   DefenseId,
+  GoalCadence,
   PlayerClassId,
   ResearchDef,
   ResearchId,
@@ -1393,3 +1394,86 @@ export const ACS_HOLD_MAX_MS = 30 * 60 * 1000;
 export const ACS_MIN_FLEETS_TO_RESOLVE = 1;
 /** Drop resolved/cancelled ACS groups after this age on tick. */
 export const ACS_GROUP_PRUNE_MS = 24 * 60 * 60 * 1000;
+/**
+ * Daily / weekly goals. Targets and rewards live here so balance edits
+ * do not touch rules code. Display titles are original (no underscores).
+ */
+export type GoalMetric = "pirateWin" | "expedition";
+
+export interface GoalTuning {
+  id: string;
+  cadence: GoalCadence;
+  metric: GoalMetric;
+  title: string;
+  detail: string;
+  target: number;
+  starshards: number;
+  metal: number;
+  crystal: number;
+  deuterium: number;
+}
+
+export const GOAL_DAILY_PIRATE_WINS = 3;
+export const GOAL_DAILY_PIRATE_STARSHARDS = 25;
+export const GOAL_DAILY_EXPEDITIONS = 5;
+export const GOAL_DAILY_EXPEDITION_METAL = 2_000;
+export const GOAL_DAILY_EXPEDITION_CRYSTAL = 1_000;
+export const GOAL_DAILY_EXPEDITION_DEUTERIUM = 500;
+
+export const GOAL_WEEKLY_PIRATE_WINS = 12;
+export const GOAL_WEEKLY_PIRATE_STARSHARDS = 100;
+export const GOAL_WEEKLY_EXPEDITIONS = 20;
+export const GOAL_WEEKLY_EXPEDITION_METAL = 12_000;
+export const GOAL_WEEKLY_EXPEDITION_CRYSTAL = 6_000;
+export const GOAL_WEEKLY_EXPEDITION_DEUTERIUM = 3_000;
+
+export const GOALS: readonly GoalTuning[] = [
+  {
+    id: "dailyPirateWins",
+    cadence: "daily",
+    metric: "pirateWin",
+    title: "Pirate victories",
+    detail: "Win pirate fights today. A win is destroying a pirate base or holding your colony against a pirate raid.",
+    target: GOAL_DAILY_PIRATE_WINS,
+    starshards: GOAL_DAILY_PIRATE_STARSHARDS,
+    metal: 0,
+    crystal: 0,
+    deuterium: 0,
+  },
+  {
+    id: "dailyExpeditions",
+    cadence: "daily",
+    metric: "expedition",
+    title: "Expedition runs",
+    detail: "Finish expedition flights today. The outbound arrival counts, including an empty find.",
+    target: GOAL_DAILY_EXPEDITIONS,
+    starshards: 0,
+    metal: GOAL_DAILY_EXPEDITION_METAL,
+    crystal: GOAL_DAILY_EXPEDITION_CRYSTAL,
+    deuterium: GOAL_DAILY_EXPEDITION_DEUTERIUM,
+  },
+  {
+    id: "weeklyPirateWins",
+    cadence: "weekly",
+    metric: "pirateWin",
+    title: "Weekly pirate victories",
+    detail: "Win pirate fights this week. A win is destroying a pirate base or holding your colony against a pirate raid.",
+    target: GOAL_WEEKLY_PIRATE_WINS,
+    starshards: GOAL_WEEKLY_PIRATE_STARSHARDS,
+    metal: 0,
+    crystal: 0,
+    deuterium: 0,
+  },
+  {
+    id: "weeklyExpeditions",
+    cadence: "weekly",
+    metric: "expedition",
+    title: "Weekly expedition runs",
+    detail: "Finish expedition flights this week. The outbound arrival counts, including an empty find.",
+    target: GOAL_WEEKLY_EXPEDITIONS,
+    starshards: 0,
+    metal: GOAL_WEEKLY_EXPEDITION_METAL,
+    crystal: GOAL_WEEKLY_EXPEDITION_CRYSTAL,
+    deuterium: GOAL_WEEKLY_EXPEDITION_DEUTERIUM,
+  },
+];

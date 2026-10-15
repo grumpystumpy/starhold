@@ -100,6 +100,7 @@ import {
   grantPirateFleetKillStarshards,
   utcDayKey,
 } from "./world-boosts.js";
+import { noteGoalMetric } from "./world-goals.js";
 import { emptyCargo, planetAtCoords } from "./world-bootstrap.js";
 import {
   pirateRaidPickWeight,
@@ -1195,6 +1196,7 @@ function applyNpcRaidOnPlanet(
     grantPlayerXp(owner, xpForCombatLose());
   } else if (combat.outcome === "defender_win") {
     grantPirateFleetKillStarshards(owner);
+    if (faction === "pirate") noteGoalMetric(owner, "pirateWin", 1, now);
     const killed = resourcesCostTotal(
       destroyedShipResources(raidFleet, combat.attackerAfter),
     );
@@ -1471,6 +1473,7 @@ function resolveNpcRaidArrival(
     else markAlienDestroyed(base as AlienBase, now);
     if (owner) {
       grantPirateDestroyStarshards(owner, tierAtFight);
+      if (kind === "pirate") noteGoalMetric(owner, "pirateWin", 1, now);
       attackerXp =
         xpForCombatWin(killed) +
         xpForPirateBaseDestroy(tierAtFight) +

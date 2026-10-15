@@ -4,6 +4,7 @@ import {
   changeClass,
   chooseClass,
   claimDaily,
+  claimGoalReward,
   unlockSkillNode,
 } from "./api";
 import { clearFlash, schedulePaint, session, setFlash } from "./session";
@@ -20,6 +21,27 @@ export async function doClaimDaily(): Promise<void> {
     setFlash(
       "error",
       err instanceof Error ? err.message : "Daily claim failed.",
+    );
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doClaimGoal(goalId: string): Promise<void> {
+  if (!session.view || session.busy) return;
+  const title =
+    session.view.goals?.find((goal) => goal.id === goalId)?.title ?? "Goal";
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    session.view = await claimGoalReward(session.view.player.id, goalId);
+    setFlash("notice", `Claimed ${title}.`);
+  } catch (err) {
+    setFlash(
+      "error",
+      err instanceof Error ? err.message : "Goal claim failed.",
     );
   } finally {
     session.busy = false;

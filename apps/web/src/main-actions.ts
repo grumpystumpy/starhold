@@ -30,6 +30,7 @@ export {
 } from "./main-actions-fleet.js";
 export {
   doClaimDaily,
+  doClaimGoal,
   doActivateOfficer,
   doUnlockSkill,
   doChooseClass,

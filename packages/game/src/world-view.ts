@@ -50,6 +50,7 @@ import {
 } from "./world-bootstrap.js";
 import { stampQueueView } from "./world-queue-manage.js";
 import { inSensorPhalanxRange, ownedPlanetCount } from "./world-moons.js";
+import { goalsView } from "./world-goals.js";
 import { occupationForPlanet } from "./world-occupation.js";
 import { playerKnowsMini } from "./world-mini.js";
 import { getDebris } from "./world-tick.js";
@@ -375,5 +376,6 @@ export function playerView(
     alliance: allianceViewFor(universe, playerId),
     allianceDirectory: allianceDirectory(universe),
     openAcsGroups: listOpenAcsForAlliance(universe, player.allianceId),
+    goals: goalsView(player, now),
   };
 }

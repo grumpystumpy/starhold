@@ -21,6 +21,7 @@ import {
   changePlayerClass,
   choosePlayerClass,
   claimDailyLogin,
+  claimPlayerGoal,
   classCatalog,
   createAlliance,
   deleteFleetPreset,
@@ -601,6 +602,25 @@ export function createApp(): Hono {
   });
 
   // Single-segment paths (Vercel catch-all); contract names map here.
+  app.post("/api/claim-goal", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      goalId?: string;
+    };
+    if (!body.playerId || !body.goalId) {
+      return c.json({ error: "playerId and goalId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = claimPlayerGoal(
+        universe,
+        body.playerId!,
+        body.goalId!,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    });
+  });
+
   app.post("/api/claim-daily", async (c) => {
     const body = (await c.req.json().catch(() => ({}))) as {
       playerId?: string;

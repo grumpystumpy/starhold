@@ -37,6 +37,7 @@ import {
 } from "./render-fleets";
 import { alliancesPageHtml } from "./render-alliances";
 import { recommendedNext } from "./render-helpers";
+import { goalsPageHtml } from "./render-goals";
 import { messagesPageHtml } from "./render-messages";
 import {
   officersPanelHtml,
@@ -331,6 +332,8 @@ export function pageHtml(
   switch (page) {
     case "overview":
       return overviewPage(view, busy);
+    case "goals":
+      return goalsPageHtml(view, busy);
     case "buildings":
       return buildingsPage(view, busy);
     case "research":

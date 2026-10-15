@@ -581,10 +581,58 @@ code {
 
 .officer-list,
 .skill-list,
-.class-list {
+.class-list,
+.goal-list {
   list-style: none;
   margin: 0;
   padding: 0;
+}
+
+.goal-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.goal-copy {
+  flex: 1 1 16rem;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.goal-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.goal-actions .hint {
+  overflow-wrap: anywhere;
+}
+
+.goal-meter {
+  width: 100%;
+  max-width: 16rem;
+  height: 0.45rem;
+  margin-top: 0.35rem;
+  background: var(--bg2);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.goal-meter > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
 }
 
 .officer-row,

@@ -29,6 +29,7 @@ import {
   doChangeClass,
   doChooseClass,
   doClaimDaily,
+  doClaimGoal,
   doCreateAlliance,
   doDeleteFleetPreset,
   doDisbandAlliance,
@@ -264,6 +265,14 @@ export function bindClickHandlers(): void {
           if (match) pane.removeAttribute("hidden");
           else pane.setAttribute("hidden", "");
         }
+        return;
+      }
+
+      const goalBtn = closestActionEl(target, "[data-claim-goal]");
+      if (goalBtn) {
+        ev.preventDefault();
+        const goalId = goalBtn.getAttribute("data-claim-goal");
+        if (goalId) void doClaimGoal(goalId);
         return;
       }
 

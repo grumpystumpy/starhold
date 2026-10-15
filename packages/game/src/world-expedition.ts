@@ -24,6 +24,7 @@ import {
   expeditionStarshardsAmount,
   grantStarshards,
 } from "./world-boosts.js";
+import { noteGoalMetric } from "./world-goals.js";
 import {
   discoverMiniPlanet,
   empireRelicExpeditionFindMult,
@@ -203,16 +204,19 @@ export function resolveExpeditionArrival(
       `Alien signal traced — ${alien.name} settled at ${alien.coords.galaxy}:${alien.coords.system}:${alien.coords.slot}.`;
   }
 
-  // Non-empty expedition outcomes grant XP (contract v1).
-  if (kind !== "nothing") {
-    const owner = universe.players[fleet.ownerPlayerId];
-    if (owner) {
+  const owner = universe.players[fleet.ownerPlayerId];
+  if (owner) {
+    // Non-empty expedition outcomes grant XP (contract v1).
+    if (kind !== "nothing") {
       grantPlayerXp(owner, xpForExpedition());
       if (kind === "miniPlanet" && miniPlanetId) {
         grantPlayerXp(owner, xpForMiniPlanetDiscovery());
       }
-      universe.players[owner.id] = owner;
     }
+    // Outbound arrival counts as a run, including an empty find.
+    // `now` is the lazy catch-up clock, so offline flights credit the open period.
+    noteGoalMetric(owner, "expedition", 1, now);
+    universe.players[owner.id] = owner;
   }
 
   const reportId = `xpd_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;

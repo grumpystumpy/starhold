@@ -314,6 +314,41 @@ export interface PlayerState {
     dayKey: string;
     successfulRaids: number;
   };
+  /**
+   * Daily / weekly goal counters for the current UTC periods.
+   * Lives on the player inside the universe document (no extra KV keys).
+   */
+  goals?: PlayerGoalState;
+}
+
+/** UTC period keys + per-goal counters. Rolled lazily on read. */
+export interface PlayerGoalState {
+  /** UTC day key `YYYY-MM-DD`. */
+  dailyKey: string;
+  /** ISO week key `YYYY-Www` (UTC, Monday start). */
+  weeklyKey: string;
+  progress: Record<string, number>;
+  claimed: string[];
+}
+
+export type GoalCadence = "daily" | "weekly";
+
+export interface GoalRewardView {
+  starshards: number;
+  metal: number;
+  crystal: number;
+  deuterium: number;
+}
+
+export interface GoalView {
+  id: string;
+  cadence: GoalCadence;
+  title: string;
+  detail: string;
+  progress: number;
+  target: number;
+  claimed: boolean;
+  reward: GoalRewardView;
 }
 
 export interface UniverseState {
@@ -458,6 +493,8 @@ export interface PlayerView {
   allianceDirectory: AllianceListEntry[];
   /** Open Joint Strike (ACS) groups for the player's alliance. */
   openAcsGroups: AcsGroup[];
+  /** Daily and weekly goals for the current UTC periods. */
+  goals: GoalView[];
 }
 
 export interface PublicPlayer {
