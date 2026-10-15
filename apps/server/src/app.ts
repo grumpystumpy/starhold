@@ -136,8 +136,14 @@ export function createApp(): Hono {
 
   // Gzip JSON when the caller asks. Browsers send Accept-Encoding; unit
   // tests do not, so they still see plain JSON. Vercel will not recompress
-  // a response that already has Content-Encoding.
-  app.use("/api/*", compress({ encoding: "gzip" }));
+  // a response that already has Content-Encoding. Workers skip this: the
+  // edge compresses, and doing it in the isolate spends the 10 ms CPU budget.
+  // A Worker response that is gzipped without Content-Encoding cannot be parsed.
+  const gzip = compress({ encoding: "gzip" });
+  app.use("/api/*", (c, next) => {
+    if (process.env.STARHOLD_RUNTIME === "workers") return next();
+    return gzip(c, next);
+  });
   app.use("*", simpleCors);
   app.use("*", async (c, next) => {
     await next();

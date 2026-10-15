@@ -8,8 +8,16 @@ import {
   type UniverseState,
 } from "@starhold/game";
 import type { KvSetOptions, KvStore, StorageMode } from "./kv.js";
-import { structuralStamp } from "./persist-stamp.js";
 import { addCpu, currentMethod, currentScope } from "./request-context.js";
+import {
+  assembleUniverse,
+  emptyStamps,
+  sliceStamps,
+  splitUniverse,
+  stampsEqual,
+  type PlayerSlice,
+  type SliceStamps,
+} from "./universe-docs.js";
 
 /**
  * Universe persistence.
@@ -33,7 +41,9 @@ interface UniverseCache {
   key: string;
   version: string;
   universe: UniverseState;
-  stamp: string;
+  slices: SliceStamps;
+  /** True when this copy was loaded from the single legacy JSON document. */
+  legacyBlob: boolean;
 }
 
 let memoryUniverse: UniverseState | null = null;
@@ -168,14 +178,21 @@ function freshUniverse(): UniverseState {
 function remember(
   universe: UniverseState,
   version: string,
-  stamp: string,
+  slices: SliceStamps,
+  legacyBlob: boolean,
 ): void {
   universeCache = {
     key: universeKey(),
     version,
     universe,
-    stamp,
+    slices,
+    legacyBlob,
   };
+}
+
+function quietRead(): boolean {
+  const method = currentMethod();
+  return method === "GET" || method === "HEAD";
 }
 
 async function loadUniverse(client: KvStore | null): Promise<UniverseState> {
@@ -195,6 +212,11 @@ async function loadUniverse(client: KvStore | null): Promise<UniverseState> {
   ) {
     ensureUniverseShape(universeCache.universe);
     return universeCache.universe;
+  }
+
+  if (client.list && storageMode() === "d1") {
+    const fromRows = await loadD1Rows(client, key, version);
+    if (fromRows) return fromRows;
   }
 
   let data = await client.get<UniverseState>(key);
@@ -217,14 +239,13 @@ async function loadUniverse(client: KvStore | null): Promise<UniverseState> {
       await client.del("starhold:universe:v1").catch(() => undefined);
       const next = String(Date.now());
       await client.set(versionKey(), next);
-      remember(migrated.universe, next, structuralStamp(migrated.universe));
+      remember(migrated.universe, next, sliceStamps(migrated.universe), true);
       return migrated.universe;
     }
     ensureUniverseShape(migrated.universe);
-    const stamp = structuralStamp(migrated.universe);
     const next = version ?? String(Date.now());
     if (!version) await client.set(versionKey(), next);
-    remember(migrated.universe, next, stamp);
+    remember(migrated.universe, next, sliceStamps(migrated.universe), true);
     return migrated.universe;
   }
 
@@ -233,26 +254,112 @@ async function loadUniverse(client: KvStore | null): Promise<UniverseState> {
   await client.set(key, created);
   const next = String(Date.now());
   await client.set(versionKey(), next);
-  remember(created, next, structuralStamp(created));
+  remember(created, next, sliceStamps(created), true);
   return created;
+}
+
+async function loadD1Rows(
+  client: KvStore,
+  key: string,
+  version: string | null,
+): Promise<UniverseState | null> {
+  if (!client.list) return null;
+  const rows = await client.list(`${key}:`);
+  const byKey = new Map(rows.map((row) => [row.key, row.value]));
+  const world = byKey.get(`${key}:world`);
+  if (!world || typeof world !== "object" || !("id" in world)) return null;
+  const slices: PlayerSlice[] = [];
+  for (const [rowKey, value] of byKey) {
+    if (!rowKey.startsWith(`${key}:player:`)) continue;
+    if (value && typeof value === "object" && "player" in value) {
+      slices.push(value as PlayerSlice);
+    }
+  }
+  const universe = assembleUniverse(
+    world as UniverseState,
+    byKey.get(`${key}:asteroids`) as UniverseState["asteroids"],
+    byKey.get(`${key}:pirates`) as UniverseState["pirateBases"],
+    byKey.get(`${key}:aliens`) as UniverseState["alienBases"],
+    slices,
+  );
+  const migrated = migrateOrResetUniverse(universe, {
+    name: universeName(),
+    speed: universeSpeed(),
+  });
+  ensureUniverseShape(migrated.universe);
+  const next = version ?? String(Date.now());
+  if (!version) await client.set(versionKey(), next);
+  remember(migrated.universe, next, sliceStamps(migrated.universe), false);
+  return migrated.universe;
+}
+
+async function writeChangedSlices(
+  client: KvStore,
+  state: UniverseState,
+  before: SliceStamps,
+  after: SliceStamps,
+  legacyBlob: boolean,
+): Promise<void> {
+  const parts = splitUniverse(state);
+  const base = universeKey();
+  const writeAll = legacyBlob;
+  if (writeAll || before.world !== after.world) {
+    await client.set(`${base}:world`, parts.world);
+  }
+  if (writeAll || before.asteroids !== after.asteroids) {
+    await client.set(`${base}:asteroids`, parts.asteroids);
+  }
+  if (writeAll || before.pirates !== after.pirates) {
+    await client.set(`${base}:pirates`, parts.pirates);
+  }
+  if (writeAll || before.aliens !== after.aliens) {
+    await client.set(`${base}:aliens`, parts.aliens);
+  }
+  const ids = new Set([
+    ...Object.keys(before.players),
+    ...Object.keys(after.players),
+  ]);
+  for (const id of ids) {
+    const next = after.players[id];
+    const prev = before.players[id];
+    if (!next) {
+      if (prev) await client.del(`${base}:player:${id}`);
+      continue;
+    }
+    if (writeAll || prev !== next) {
+      await client.set(`${base}:player:${id}`, parts.players[id]);
+    }
+  }
+  if (writeAll) await client.del(base);
 }
 
 async function saveUniverse(
   client: KvStore,
   state: UniverseState,
-  beforeStamp: string,
+  before: SliceStamps,
 ): Promise<void> {
-  const stamp = structuralStamp(state);
-  const method = currentMethod();
-  const quietRead = method === "GET" || method === "HEAD";
-  if (quietRead && stamp === beforeStamp) {
-    if (universeCache?.universe === state) universeCache.stamp = stamp;
+  const after = sliceStamps(state);
+  if (stampsEqual(before, after)) {
+    if (universeCache?.universe === state) universeCache.slices = after;
+    return;
+  }
+  if (storageMode() === "d1") {
+    await writeChangedSlices(
+      client,
+      state,
+      before,
+      after,
+      universeCache?.legacyBlob === true,
+    );
+    const version = String(Date.now());
+    await client.set(versionKey(), version);
+    remember(state, version, after, false);
     return;
   }
   await client.set(universeKey(), state);
   const version = String(Date.now());
   await client.set(versionKey(), version);
-  remember(state, version, stamp);
+  remember(state, version, after, true);
 }
 
 async function acquireLock(client: KvStore): Promise<boolean> {
@@ -271,37 +378,83 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function runUniverse<T>(
+  universe: UniverseState,
+  fn: (universe: UniverseState) => T | Promise<T>,
+): Promise<T> {
+  const started = performance.now();
+  try {
+    return await fn(universe);
+  } finally {
+    addCpu(performance.now() - started);
+  }
+}
+
+/** Serializes requests in this isolate so two polls cannot tick the same object. */
+let localTail: Promise<void> = Promise.resolve();
+
+function withLocalLock<T>(fn: () => Promise<T>): Promise<T> {
+  const run = localTail.then(fn, fn);
+  localTail = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
 /**
  * Run work against the shared universe, persisting afterward when using Redis or D1.
- * Read-only callers should still use this so tick-on-read advances consistently.
- * On Workers, a GET whose structural stamp did not change skips the write.
+ * A GET/HEAD whose only changes are accrued resources (and `lastTickAt`) skips
+ * the lock and the save. Those stocks are recomputed from the clocks on the
+ * next cold load. D1 then writes the changed player or world rows, not the
+ * whole universe. Vercel still stores one JSON document when something
+ * structural did change.
  */
-export async function withUniverse<T>(
+async function withUniverseBody<T>(
   fn: (universe: UniverseState) => T | Promise<T>,
 ): Promise<T> {
   const client = getKvClient();
   if (!client) {
     const universe = await loadUniverse(null);
-    const started = performance.now();
-    try {
-      return await fn(universe);
-    } finally {
-      addCpu(performance.now() - started);
+    return runUniverse(universe, fn);
+  }
+
+  if (quietRead()) {
+    const universe = await loadUniverse(client);
+    const version = universeCache?.version ?? null;
+    if (universeCache?.universe === universe) {
+      universeCache.slices = sliceStamps(universe);
     }
+    const before = universeCache?.slices ?? sliceStamps(universe);
+    const result = await runUniverse(universe, fn);
+    const after = sliceStamps(universe);
+    if (stampsEqual(before, after)) {
+      if (universeCache) universeCache.slices = after;
+      return result;
+    }
+    if (await acquireLock(client)) {
+      try {
+        const current = await client.get<string>(versionKey());
+        if (current === version) {
+          await saveUniverse(client, universe, before);
+          return result;
+        }
+      } finally {
+        await releaseLock(client);
+      }
+    }
+    universeCache = null;
   }
 
   for (let attempt = 0; attempt < 12; attempt++) {
     if (await acquireLock(client)) {
       try {
         const universe = await loadUniverse(client);
-        const before = universeCache?.stamp ?? structuralStamp(universe);
-        const started = performance.now();
-        let result: T;
-        try {
-          result = await fn(universe);
-        } finally {
-          addCpu(performance.now() - started);
+        if (universeCache?.universe === universe) {
+          universeCache.slices = sliceStamps(universe);
         }
+        const before = universeCache?.slices ?? emptyStamps();
+        const result = await runUniverse(universe, fn);
         await saveUniverse(client, universe, before);
         return result;
       } finally {
@@ -311,6 +464,12 @@ export async function withUniverse<T>(
     await sleep(40 + attempt * 40);
   }
   throw new Error("Universe busy — retry in a moment.");
+}
+
+export async function withUniverse<T>(
+  fn: (universe: UniverseState) => T | Promise<T>,
+): Promise<T> {
+  return withLocalLock(() => withUniverseBody(fn));
 }
 
 /** Test helper: wipe in-memory universe (no-op for the Redis document). */

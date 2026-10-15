@@ -32,22 +32,21 @@ async function runViewport(width, height) {
   const password = "starhold-cf";
   const name = `Cf${stamp.slice(-4)}`;
   try {
-    await page.goto(WEB, { waitUntil: "networkidle" });
+    await page.goto(WEB, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector('[data-testid="auth-email"]', { timeout: 20_000 });
     await page.fill('[data-testid="auth-email"]', email);
     await page.fill('[data-testid="auth-password"]', password);
     await page.click('[data-testid="auth-signup-btn"]');
-    await page.waitForSelector('[data-testid="commander-input"]', {
-      timeout: 20_000,
-    });
+    await page.waitForSelector('[data-testid="account-email"]', { timeout: 20_000 });
 
     await page.context().clearCookies();
-    await page.reload({ waitUntil: "networkidle" });
+    await page.evaluate(() => localStorage.clear());
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForSelector('[data-testid="auth-email"]', { timeout: 20_000 });
     await page.fill('[data-testid="auth-email"]', email);
     await page.fill('[data-testid="auth-password"]', password);
     await page.click('[data-testid="auth-login-btn"]');
-    await page.waitForSelector('[data-testid="commander-input"]', {
-      timeout: 20_000,
-    });
+    await page.waitForSelector('[data-testid="account-email"]', { timeout: 20_000 });
 
     await page.fill('[data-testid="commander-input"]', name);
     await page.click('[data-testid="join-btn"]');

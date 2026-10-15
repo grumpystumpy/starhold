@@ -1,18 +1,24 @@
 /**
- * One-time Upstash / Vercel KV → D1 copy. Not run by CI or deploy.
+ * One-time Vercel KV → D1 copy. Read-only against KV. Does not apply SQL.
  *
+ *   node --import tsx scripts/kv-to-d1.mjs export --dry-run
  *   node --import tsx scripts/kv-to-d1.mjs export kv-export.json
+ *   node --import tsx scripts/kv-to-d1.mjs import --dry-run kv-export.json
  *   node --import tsx scripts/kv-to-d1.mjs import kv-export.json kv-import.sql
+ *   npx wrangler d1 execute starhold --remote --file=kv-import.sql
  *
- * Export reads KV_REST_API_* or UPSTASH_REDIS_REST_*. The JSON file contains
- * password hashes — do not commit it. Import writes SQL for
- * `wrangler d1 execute starhold --file=kv-import.sql`.
+ * Export reads KV_REST_API_URL and KV_REST_API_TOKEN (SCAN/GET/TTL only).
+ * UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are accepted as aliases.
+ * Do not commit the JSON or SQL. Do not run this against production until
+ * the cut-over checklist in docs/cloudflare.md says to.
  */
-import { writeFile, readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
+import { chunkKey, splitChunkText } from "../apps/server/src/d1-codec.ts";
 import {
-  chunkKey,
-  splitChunkText,
-} from "../apps/server/src/d1-codec.ts";
+  formatTransferCounts,
+  planImportRows,
+  summarizeExport,
+} from "../apps/server/src/transfer-plan.ts";
 
 function creds() {
   const url = (
@@ -24,7 +30,7 @@ function creds() {
     process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || "";
   if (!url || !token) {
     throw new Error(
-      "Set KV_REST_API_URL and KV_REST_API_TOKEN (or UPSTASH_REDIS_REST_*).",
+      "Set KV_REST_API_URL and KV_REST_API_TOKEN (read-only). UPSTASH_REDIS_REST_* also works.",
     );
   }
   return { url, token };
@@ -38,7 +44,7 @@ async function upstash(path, body) {
     body: body == null ? undefined : JSON.stringify(body),
   });
   if (!res.ok) {
-    throw new Error(`Upstash ${path} failed: ${res.status} ${await res.text()}`);
+    throw new Error(`KV ${path} failed: ${res.status} ${await res.text()}`);
   }
   const data = await res.json();
   return data.result;
@@ -64,12 +70,15 @@ function sqlString(value) {
   return `'${String(value).replaceAll("'", "''")}'`;
 }
 
-function insertSql(key, value, expiresAt) {
+function replaceSql(key, value, expiresAt) {
   const exp = expiresAt == null ? "NULL" : String(expiresAt);
-  return `INSERT INTO kv (key, value, expires_at) VALUES (${sqlString(key)}, ${sqlString(value)}, ${exp}) ON CONFLICT(key) DO UPDATE SET value = excluded.value, expires_at = excluded.expires_at;`;
+  return [
+    `DELETE FROM kv WHERE key = ${sqlString(key)} OR key GLOB ${sqlString(`${key}#*`)} ;`,
+    `INSERT INTO kv (key, value, expires_at) VALUES (${sqlString(key)}, ${sqlString(value)}, ${exp});`,
+  ];
 }
 
-async function exportKv(outPath) {
+async function readKv() {
   const keys = await scanKeys();
   const rows = [];
   for (const key of keys) {
@@ -82,40 +91,74 @@ async function exportKv(outPath) {
       ttlSec: Number.isFinite(ttl) && ttl > 0 ? ttl : null,
     });
   }
+  return rows;
+}
+
+function printCounts(rows) {
+  console.log(formatTransferCounts(summarizeExport(rows)));
+}
+
+async function exportKv(outPath, dryRun) {
+  const rows = await readKv();
+  printCounts(rows);
+  if (dryRun) {
+    console.log("Dry run: read KV only, wrote no file.");
+    return;
+  }
   const payload = { exportedAt: new Date().toISOString(), keys: rows };
   await writeFile(outPath, JSON.stringify(payload));
   console.log(`Wrote ${rows.length} keys to ${outPath}`);
 }
 
-async function importSql(inPath, outPath) {
-  const payload = JSON.parse(await readFile(inPath, "utf8"));
-  const lines = ["BEGIN TRANSACTION;"];
-  const now = Date.now();
-  for (const row of payload.keys ?? []) {
+function sqlForRows(rows) {
+  const planned = planImportRows(rows, Date.now());
+  const lines = [
+    "BEGIN TRANSACTION;",
+    "DELETE FROM kv WHERE key GLOB 'starhold:universe:*';",
+  ];
+  for (const row of planned) {
     const text = JSON.stringify(row.value);
-    const expires =
-      row.ttlSec != null ? now + Number(row.ttlSec) * 1000 : null;
     const chunked = splitChunkText(text);
     if (!chunked) {
-      lines.push(insertSql(row.key, text, expires));
+      lines.push(...replaceSql(row.key, text, row.expiresAt));
       continue;
     }
-    lines.push(insertSql(row.key, chunked.manifest, expires));
+    lines.push(...replaceSql(row.key, chunked.manifest, row.expiresAt));
     chunked.parts.forEach((part, index) => {
-      lines.push(insertSql(chunkKey(row.key, index), part, null));
+      lines.push(...replaceSql(chunkKey(row.key, index), part, null));
     });
   }
   lines.push("COMMIT;");
-  await writeFile(outPath, lines.join("\n"));
-  console.log(`Wrote ${outPath}. Apply with wrangler d1 execute when you are ready.`);
+  return { planned, sql: lines.join("\n") };
 }
 
-const [command, input, output] = process.argv.slice(2);
+async function importSql(inPath, outPath, dryRun) {
+  const payload = JSON.parse(await readFile(inPath, "utf8"));
+  const rows = payload.keys ?? [];
+  printCounts(rows);
+  if (dryRun) {
+    console.log("Dry run: counted the export file, wrote no SQL and did not touch D1.");
+    return;
+  }
+  const { sql } = sqlForRows(rows);
+  await writeFile(outPath, sql);
+  console.log(
+    `Wrote ${outPath}. Review it, then apply with: npx wrangler d1 execute starhold --remote --file=${outPath}`,
+  );
+}
+
+const args = process.argv.slice(2);
+const dryRun = args.includes("--dry-run");
+const positional = args.filter((arg) => arg !== "--dry-run");
+const [command, input, output] = positional;
+
 if (command === "export") {
-  await exportKv(input || "kv-export.json");
+  await exportKv(input || "kv-export.json", dryRun);
 } else if (command === "import") {
-  await importSql(input || "kv-export.json", output || "kv-import.sql");
+  await importSql(input || "kv-export.json", output || "kv-import.sql", dryRun);
 } else {
-  console.error("Usage: export [kv-export.json] | import [kv-export.json] [kv-import.sql]");
+  console.error(
+    "Usage: export [--dry-run] [kv-export.json] | import [--dry-run] [kv-export.json] [kv-import.sql]",
+  );
   process.exit(1);
 }

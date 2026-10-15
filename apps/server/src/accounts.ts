@@ -2,12 +2,15 @@
  * Account / session / password auth persistence.
  * Uses Upstash/KV when configured, D1 on Workers, otherwise process-local Maps.
  * Vercel passwords stay Node scrypt. Workers use WebCrypto PBKDF2 (10k).
+ * An imported scrypt hash is verified once (sliced on Workers) and replaced
+ * with PBKDF2 so later logins stay inside the free-plan CPU cap.
  */
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { KvStore } from "./kv.js";
 import { hashPbkdf2, verifyPbkdf2 } from "./password.js";
 import { hashScrypt, verifyScrypt } from "./password-scrypt.js";
+import { currentScope } from "./request-context.js";
 import { getKvClient } from "./store.js";
 
 export const SESSION_COOKIE = "starhold_session";
@@ -26,8 +29,9 @@ export interface AccountRecord {
    */
   passwordHash: string;
   /**
-   * PBKDF2 copy stamped on a successful Vercel login so a KV export can
-   * sign in on Workers. Absent until that login. Additive — old rows load.
+   * PBKDF2 copy. Stamped on a successful Vercel login, or written when
+   * Workers verifies an imported scrypt hash and replaces `passwordHash`.
+   * Additive — old rows load.
    */
   passwordHashPbkdf2?: string;
   playerId: string | null;
@@ -177,22 +181,35 @@ export async function verifyPassword(
 ): Promise<boolean> {
   const peppered = pepperPassword(password);
   if (encoded.startsWith("pbkdf2$")) return verifyPbkdf2(peppered, encoded);
-  if (encoded.startsWith("scrypt$")) {
-    if (isWorkersRuntime()) return false;
-    return verifyScrypt(peppered, encoded);
-  }
+  if (encoded.startsWith("scrypt$")) return verifyScrypt(peppered, encoded);
   return false;
 }
 
-/** Workers cannot run scrypt inside 10 ms. A PBKDF2 copy from Vercel can. */
-export function workersPasswordBlock(
-  account: AccountRecord,
-): string | null {
-  if (!isWorkersRuntime()) return null;
-  if (account.passwordHash.startsWith("scrypt$") && !account.passwordHashPbkdf2) {
-    return "This password is stored for the Vercel site. Log in there once, then try this host again.";
+const memScryptAttempts = new Map<string, { email: string; expiresAt: number }>();
+
+function scryptAttemptKey(id: string): string {
+  return `starhold:scrypt-attempt:${id}`;
+}
+
+/** Remember a sliced scrypt login so continuations are not rate-limited. */
+export async function noteScryptAttempt(id: string, email: string): Promise<void> {
+  const expiresAt = Date.now() + 10 * 60 * 1000;
+  const client = getKvClient();
+  if (!client) {
+    memScryptAttempts.set(id, { email, expiresAt });
+    return;
   }
-  return null;
+  await kvSet(client, scryptAttemptKey(id), { email }, 10 * 60);
+}
+
+export async function isScryptAttempt(id: string): Promise<boolean> {
+  const client = getKvClient();
+  if (!client) {
+    const row = memScryptAttempts.get(id);
+    return Boolean(row && row.expiresAt > Date.now());
+  }
+  const row = await kvGet<{ email: string }>(client, scryptAttemptKey(id));
+  return Boolean(row);
 }
 
 /**
@@ -304,9 +321,11 @@ export async function authenticateEmailPassword(
   email: string,
   password: string,
   now = Date.now(),
+  attemptId?: string,
 ): Promise<
   | { ok: true; account: AccountRecord }
   | { ok: false; error: string; status: 400 | 401 }
+  | { ok: false; pending: true; attemptId: string; status: 202; error: "" }
 > {
   const normalized = normalizeEmail(email);
   if (!isValidEmail(normalized) || !password) {
@@ -318,9 +337,42 @@ export async function authenticateEmailPassword(
     await hashPassword(password).catch(() => undefined);
     return { ok: false, error: "Invalid email or password.", status: 401 };
   }
-  const blocked = workersPasswordBlock(account);
-  if (blocked) {
-    return { ok: false, error: blocked, status: 401 };
+  const importedScrypt =
+    isWorkersRuntime() &&
+    account.passwordHash.startsWith("scrypt$") &&
+    !account.passwordHashPbkdf2;
+  if (importedScrypt) {
+    const migrator = currentScope()?.migrateScrypt;
+    let match = false;
+    if (migrator) {
+      const step = await migrator({
+        attemptId,
+        password: pepperPassword(password),
+        encoded: account.passwordHash,
+      });
+      if (!step.done) {
+        await noteScryptAttempt(step.attemptId, normalized);
+        return {
+          ok: false,
+          pending: true,
+          attemptId: step.attemptId,
+          status: 202,
+          error: "",
+        };
+      }
+      match = step.match;
+    } else {
+      match = await verifyScrypt(pepperPassword(password), account.passwordHash);
+    }
+    if (!match) {
+      return { ok: false, error: "Invalid email or password.", status: 401 };
+    }
+    const pbkdf2 = await hashPbkdf2(pepperPassword(password));
+    account.passwordHash = pbkdf2;
+    account.passwordHashPbkdf2 = pbkdf2;
+    account.lastLoginAt = now;
+    await saveAccount(account);
+    return { ok: true, account };
   }
   const encoded =
     isWorkersRuntime() && account.passwordHashPbkdf2
@@ -416,6 +468,7 @@ export function resetMemoryAccounts(): void {
   memEmailIndex.clear();
   memSessions.clear();
   memRate.clear();
+  memScryptAttempts.clear();
 }
 
 export function safeEqual(a: string, b: string): boolean {

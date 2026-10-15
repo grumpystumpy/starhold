@@ -15,6 +15,7 @@ import {
   deleteSession,
   getAccountById,
   getSession,
+  isScryptAttempt,
   normalizeEmail,
   requireSessionSecret,
   sessionSecretConfigured,
@@ -148,26 +149,40 @@ export function mountAuthRoutes(app: Hono): void {
     const body = (await c.req.json().catch(() => ({}))) as {
       email?: string;
       password?: string;
+      attemptId?: string;
     };
     const email = normalizeEmail(body.email ?? "");
     const password = body.password ?? "";
-
-    const rate = await checkAuthRateLimit(
-      "login",
-      email,
-      clientIp(c.req.raw.headers),
-    );
-    if (rate.limited) {
-      return c.json(
-        {
-          error: `Too many login attempts. Try again in ${rate.retryAfterSec}s.`,
-        },
-        429,
+    const continuing =
+      typeof body.attemptId === "string" &&
+      body.attemptId.length > 0 &&
+      (await isScryptAttempt(body.attemptId));
+    if (!continuing) {
+      const rate = await checkAuthRateLimit(
+        "login",
+        email,
+        clientIp(c.req.raw.headers),
       );
+      if (rate.limited) {
+        return c.json(
+          {
+            error: `Too many login attempts. Try again in ${rate.retryAfterSec}s.`,
+          },
+          429,
+        );
+      }
     }
 
-    const auth = await authenticateEmailPassword(email, password);
+    const auth = await authenticateEmailPassword(
+      email,
+      password,
+      Date.now(),
+      body.attemptId,
+    );
     if (!auth.ok) {
+      if ("pending" in auth && auth.pending) {
+        return c.json({ pending: true, attemptId: auth.attemptId }, 202);
+      }
       return c.json({ error: auth.error }, auth.status);
     }
 

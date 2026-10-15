@@ -13,11 +13,21 @@ export interface KvSetOptions {
   nx?: boolean;
 }
 
+export interface KvListRow {
+  key: string;
+  value: unknown;
+}
+
 export interface KvStore {
   get<T>(key: string): Promise<T | null>;
   /** `"OK"` when the write landed. `null` when `nx` lost the race. */
   set(key: string, value: unknown, opts?: KvSetOptions): Promise<"OK" | null>;
   del(key: string): Promise<void>;
+  /**
+   * Keys that start with `prefix`. Chunk part rows are folded back into
+   * their parent. D1 implements this; the Redis adapter does not.
+   */
+  list?(prefix: string): Promise<KvListRow[]>;
 }
 
 export type StorageMode = "upstash" | "kv" | "memory" | "d1";

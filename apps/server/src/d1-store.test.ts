@@ -29,6 +29,10 @@ function sqliteD1(): D1Like {
           const row = stmt.get(...(bound.values as never[])) as T | undefined;
           return row ?? null;
         },
+        async all<T>() {
+          const rows = stmt.all(...(bound.values as never[])) as T[];
+          return { results: rows };
+        },
         async run(): Promise<D1RunResult> {
           const result = stmt.run(...(bound.values as never[]));
           return { meta: { changes: Number(result.changes ?? 0) } };
@@ -84,8 +88,15 @@ describe("D1 kv store", () => {
             joinUniverse(universe, "Ada");
           }),
       );
-      const versionKey = `starhold:universe:v${UNIVERSE_SCHEMA_VERSION}:ver`;
+      const base = `starhold:universe:v${UNIVERSE_SCHEMA_VERSION}`;
+      const versionKey = `${base}:ver`;
       const before = await store.get<string>(versionKey);
+      const playerRows = await store.list!(`${base}:player:`);
+      assert.equal(playerRows.length, 1);
+      const playerKey = playerRows[0]!.key;
+      const playerBefore = JSON.stringify(playerRows[0]!.value);
+      const asteroidsBefore = JSON.stringify(await store.get(`${base}:asteroids`));
+      assert.equal(await store.get(base), null);
       await runWithScope(
         { kv: store, mode: "d1", method: "GET", cpuMs: 0 },
         () =>
@@ -96,6 +107,27 @@ describe("D1 kv store", () => {
       );
       const after = await store.get<string>(versionKey);
       assert.equal(after, before);
+      assert.equal(JSON.stringify(await store.get(playerKey)), playerBefore);
+      assert.equal(JSON.stringify(await store.get(`${base}:asteroids`)), asteroidsBefore);
+
+      await runWithScope(
+        { kv: store, mode: "d1", method: "POST", cpuMs: 0 },
+        () =>
+          withUniverse((universe) => {
+            const planet = Object.values(universe.planets)[0];
+            planet?.buildQueue.push({
+              id: "q1",
+              kind: "building",
+              buildingId: "metalMine",
+              targetLevel: 2,
+              startedAt: 1,
+              finishesAt: 2,
+            } as never);
+          }),
+      );
+      assert.notEqual(JSON.stringify(await store.get(playerKey)), playerBefore);
+      assert.equal(JSON.stringify(await store.get(`${base}:asteroids`)), asteroidsBefore);
+      assert.notEqual(await store.get<string>(versionKey), before);
     } finally {
       if (previous == null) delete process.env.STARHOLD_RUNTIME;
       else process.env.STARHOLD_RUNTIME = previous;

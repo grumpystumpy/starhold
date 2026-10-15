@@ -1,5 +1,5 @@
 import { chunkKey, chunkPartCount, splitChunkText } from "./d1-codec.js";
-import type { KvSetOptions, KvStore } from "./kv.js";
+import type { KvListRow, KvSetOptions, KvStore } from "./kv.js";
 import { addCpu } from "./request-context.js";
 
 export interface D1RunResult {
@@ -9,6 +9,7 @@ export interface D1RunResult {
 export interface D1Stmt {
   bind(...values: unknown[]): D1Stmt;
   first<T>(): Promise<T | null>;
+  all<T>(): Promise<{ results: T[] }>;
   run(): Promise<D1RunResult>;
 }
 
@@ -147,6 +148,39 @@ export function createD1Store(db: D1Like, now: () => number = Date.now): KvStore
 
     del(key: string): Promise<void> {
       return delKey(key);
+    },
+
+    async list(prefix: string): Promise<KvListRow[]> {
+      const selected = await db
+        .prepare(
+          "SELECT key, value FROM kv WHERE key GLOB ? AND (expires_at IS NULL OR expires_at > ?)",
+        )
+        .bind(`${prefix}*`, now())
+        .all<{ key: string; value: string }>();
+      const raw = new Map<string, string>();
+      for (const row of selected.results) raw.set(row.key, row.value);
+      const out: KvListRow[] = [];
+      for (const [key, value] of raw) {
+        if (key.includes("#")) continue;
+        const parts = chunkPartCount(value);
+        let text = value;
+        if (parts != null) {
+          const chunks: string[] = [];
+          let complete = true;
+          for (let i = 0; i < parts; i++) {
+            const part = raw.get(chunkKey(key, i));
+            if (part == null) {
+              complete = false;
+              break;
+            }
+            chunks.push(part);
+          }
+          if (!complete) continue;
+          text = chunks.join("");
+        }
+        out.push({ key, value: timedParse(text) });
+      }
+      return out;
     },
   };
 }

@@ -1,10 +1,9 @@
-# Deploys the Workers test host. Off until Micah sets the repo variable
-# CLOUDFLARE_DEPLOY_ENABLED=true. workflow_dispatch can deploy once the
-# API token secret exists. Push to main does not deploy before that.
+# Deploys the Workers host. Push to main only, and only when the repository
+# variable CLOUDFLARE_DEPLOY_ENABLED is true. No pull-request, branch, or
+# preview deploys. The job does not start until Micah sets that variable.
 name: Cloudflare Workers
 
 on:
-  workflow_dispatch:
   push:
     branches: [main]
 
@@ -13,7 +12,7 @@ permissions:
 
 jobs:
   deploy:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && vars.CLOUDFLARE_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -34,11 +33,6 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "push" ] && [ "${{ vars.CLOUDFLARE_DEPLOY_ENABLED }}" != "true" ]; then
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "Push deploy is off until the repo variable CLOUDFLARE_DEPLOY_ENABLED=true."
-            exit 0
-          fi
           if [ -z "${CLOUDFLARE_API_TOKEN}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
             echo "enabled=false" >> "$GITHUB_OUTPUT"
             echo "CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID is unset; skipping deploy."

@@ -15,7 +15,7 @@ Summary:
 
 Repo pieces: `vercel.json`, `api/index.ts`, Upstash-backed `apps/server/src/store.ts`, `.env.example`.
 
-A parallel **Cloudflare Workers** test host (D1, not the live site) is documented in [cloudflare.md](./cloudflare.md). Vercel stays the production URL.
+**Cloudflare Workers + D1** will replace this host once the cut-over checklist in [cloudflare.md](./cloudflare.md) is done. Until that checklist is finished, Vercel stays the live site and `npm run build:vercel` must keep passing.
 
 ## Local / CI
 

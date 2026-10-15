@@ -95,35 +95,38 @@ describe("accounts memory store", () => {
     assert.equal(await verifyPassword("wrong-password", hash), false);
   });
 
-  it("rejects a scrypt-only account on Workers until Vercel stamps PBKDF2", async () => {
+  it("rehashes an imported scrypt password to PBKDF2 on first Workers login", async () => {
     const created = await createAccountWithPassword(
       "legacy@starhold.test",
       "secretpass",
     );
     assert.equal(created.ok, true);
     if (!created.ok) return;
-    process.env.STARHOLD_RUNTIME = "workers";
-    const blocked = await authenticateEmailPassword(
-      "legacy@starhold.test",
-      "secretpass",
-    );
-    assert.equal(blocked.ok, false);
-    if (blocked.ok) return;
-    assert.match(blocked.error, /Vercel/);
+    assert.ok(created.account.passwordHash.startsWith("scrypt$"));
 
-    delete process.env.STARHOLD_RUNTIME;
-    const stamped = await authenticateEmailPassword(
-      "legacy@starhold.test",
-      "secretpass",
-    );
-    assert.equal(stamped.ok, true);
-    if (!stamped.ok) return;
     process.env.STARHOLD_RUNTIME = "workers";
-    const allowed = await authenticateEmailPassword(
+    const first = await authenticateEmailPassword(
       "legacy@starhold.test",
       "secretpass",
     );
-    assert.equal(allowed.ok, true);
+    assert.equal(first.ok, true);
+    if (!first.ok) return;
+    assert.ok(first.account.passwordHash.startsWith("pbkdf2$"));
+    assert.equal(first.account.passwordHashPbkdf2, first.account.passwordHash);
+
+    const second = await authenticateEmailPassword(
+      "legacy@starhold.test",
+      "secretpass",
+    );
+    assert.equal(second.ok, true);
+    if (!second.ok) return;
+    assert.equal(second.account.passwordHash, first.account.passwordHash);
+
+    const wrong = await authenticateEmailPassword(
+      "legacy@starhold.test",
+      "wrongpass",
+    );
+    assert.equal(wrong.ok, false);
   });
 
   it("rate-limits repeated auth attempts", async () => {
