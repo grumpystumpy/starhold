@@ -271,10 +271,15 @@ async function main() {
   if (!(await openAcs.isChecked())) {
     throw new Error("Joint Strike deep-link did not arm Open ACS");
   }
+  const flash = await pageA.getByTestId("flash-ok").innerText();
+  const strikeCoords = flash.match(/(\d+:\d+:\d+)/)?.[1];
+  if (!strikeCoords) {
+    throw new Error(`Joint Strike flash missing target coords: ${flash}`);
+  }
   await pageA.getByTestId("nav-alliances").click();
-  await pageA.getByText(/proposed Joint Strike on 1:1:1/).waitFor({
-    timeout: 10_000,
-  });
+  await pageA
+    .getByText(new RegExp(`proposed Joint Strike on ${strikeCoords}`))
+    .waitFor({ timeout: 10_000 });
   logs.push("strike_proposed");
 
   await pageA.getByTestId("nav-fleet").click();

@@ -115,6 +115,17 @@ async function main() {
   }
   logs.push("e2e_grant");
 
+  const graduated = await apiJson("/api/e2e/graduate-newbie", {
+    method: "POST",
+    body: JSON.stringify({ playerId: defenderId }),
+  });
+  if (!graduated.ok) {
+    throw new Error(
+      `graduate defender failed: ${JSON.stringify(graduated.data)}`,
+    );
+  }
+  logs.push("defender_graduated");
+
   const launch = await apiJson("/api/launch-fleet", {
     method: "POST",
     body: JSON.stringify({

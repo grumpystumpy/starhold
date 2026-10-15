@@ -76,6 +76,22 @@ function unitLossLine(
   return parts.length ? parts.join(", ") : "none";
 }
 
+/** Report id → visible round. Survives the 1s poll remount. */
+const openReplayRound = new Map<string, number>();
+
+export function battleReplayRound(reportId: string): number | null {
+  return openReplayRound.has(reportId) ? openReplayRound.get(reportId)! : null;
+}
+
+export function toggleBattleReplay(reportId: string, firstRound: number): void {
+  if (openReplayRound.has(reportId)) openReplayRound.delete(reportId);
+  else openReplayRound.set(reportId, firstRound);
+}
+
+export function setBattleReplayRound(reportId: string, round: number): void {
+  openReplayRound.set(reportId, round);
+}
+
 function roundPaneHtml(round: CombatRoundLog, active: boolean): string {
   const debris =
     (round.debrisThisRound?.metal ?? 0) + (round.debrisThisRound?.crystal ?? 0);
@@ -98,13 +114,16 @@ function battleReplayHtml(report: CombatReport): string {
   if (!log.length) {
     return `<p class="hint" data-testid="battle-replay-legacy">Summary only — older reports have no round replay.</p>`;
   }
+  const selected = openReplayRound.get(report.id) ?? log[0]!.round;
   const tabs = log
     .map(
-      (round, i) =>
-        `<button type="button" class="battle-round-tab${i === 0 ? " is-active" : ""}" data-battle-round-tab="${round.round}" data-testid="battle-round-tab-${round.round}">R${fmt(round.round)}</button>`,
+      (round) =>
+        `<button type="button" class="battle-round-tab${round.round === selected ? " is-active" : ""}" data-battle-round-tab="${round.round}" data-testid="battle-round-tab-${round.round}">R${fmt(round.round)}</button>`,
     )
     .join("");
-  const panes = log.map((round, i) => roundPaneHtml(round, i === 0)).join("");
+  const panes = log
+    .map((round) => roundPaneHtml(round, round.round === selected))
+    .join("");
   return `
     <div class="battle-replay" data-testid="battle-replay">
       <div class="battle-round-tabs" role="tablist">${tabs}</div>
@@ -115,12 +134,14 @@ function battleReplayHtml(report: CombatReport): string {
 
 /** Share + round replay controls (Fleet list and Messages inbox). */
 export function combatBattleExtrasHtml(report: CombatReport): string {
+  const firstRound = report.roundLog?.[0]?.round ?? 1;
+  const open = openReplayRound.has(report.id);
   return `
     <div class="battle-report-actions">
       <button type="button" class="ghost" data-copy-battle-share="${escapeAttr(report.id)}" data-testid="copy-battle-share-${escapeAttr(report.id)}">Copy share</button>
     </div>
-    <details class="battle-report-details" data-testid="battle-details-${escapeAttr(report.id)}">
-      <summary>Replay rounds</summary>
+    <details class="battle-report-details" data-battle-report="${escapeAttr(report.id)}" data-testid="battle-details-${escapeAttr(report.id)}"${open ? " open" : ""}>
+      <summary data-battle-replay-summary="${escapeAttr(report.id)}" data-first-round="${firstRound}">Replay rounds</summary>
       ${battleReplayHtml(report)}
     </details>
   `;

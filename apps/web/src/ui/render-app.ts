@@ -1,9 +1,14 @@
 import type { PlayerView } from "@starhold/game";
+import { session } from "../session";
 import { startCountdownTick } from "./countdown";
 import type { NavPage } from "./nav";
 import { canPatchShell, patchLiveChrome } from "./patch-chrome";
 import { renderJoin } from "./render-chrome";
-import { salvageFleetForm } from "./render-fleets";
+import {
+  fleetDraftWithAcsPrefill,
+  salvageFleetForm,
+  type FleetDraft,
+} from "./render-fleets";
 import { dashboardHtml } from "./render-dashboard";
 import type { UiHandlers } from "./render-helpers";
 import { pageHtml } from "./render-pages";
@@ -34,7 +39,7 @@ export function renderApp(
     return;
   }
 
-  const fleetDraft = salvageFleetForm(root);
+  const fleetDraft = fleetDraftForPage(root, state.activePage);
 
   if (canPatchShell(root, state.view, state.activePage)) {
     patchLiveChrome(root, state.view, state);
@@ -58,4 +63,14 @@ export function renderApp(
     state.activePage,
   );
   startCountdownTick();
+}
+
+function fleetDraftForPage(
+  root: HTMLElement,
+  activePage: NavPage,
+): FleetDraft | null {
+  const salvaged = salvageFleetForm(root);
+  const prefill = session.pendingAcsPrefill;
+  if (!prefill || activePage !== "fleet") return salvaged;
+  return fleetDraftWithAcsPrefill(salvaged, prefill);
 }

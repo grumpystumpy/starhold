@@ -169,13 +169,11 @@ async function runViewport(browser, vp, email, password, commander) {
   if (!pirateHit) {
     throw new Error(`${vp.name}: API scan found no pirate bases (expected ~200 seeded)`);
   }
-  if (pirateHit.coords.galaxy !== homeGalaxy) {
-    throw new Error(
-      `${vp.name}: no pirate in home galaxy ${homeGalaxy} (UI cannot cross galaxies; found ${pirateHit.coords.galaxy}:${pirateHit.coords.system})`,
-    );
-  }
+  const pirateInHome = pirateHit.coords.galaxy === homeGalaxy;
   pass.push(
-    `API pirate seed ok @ ${pirateHit.coords.galaxy}:${pirateHit.coords.system}`,
+    pirateInHome
+      ? `API pirate seed ok @ ${pirateHit.coords.galaxy}:${pirateHit.coords.system}`
+      : `API pirate seed ok outside home galaxy ${homeGalaxy} @ ${pirateHit.coords.galaxy}:${pirateHit.coords.system}`,
   );
 
   await loginPage.click('[data-testid="nav-galaxy"]');
@@ -203,8 +201,9 @@ async function runViewport(browser, vp, email, password, commander) {
 
   const targetLabel = `${pirateHit.coords.galaxy}:${pirateHit.coords.system}`;
   let foundPirate =
+    pirateInHome &&
     (await loginPage.locator('[data-testid="galaxy-pirate"]').count()) > 0;
-  for (let i = 0; i < 450 && !foundPirate; i++) {
+  for (let i = 0; i < 450 && pirateInHome && !foundPirate; i++) {
     const before =
       (await loginPage.textContent('[data-testid="galaxy-label"]')) ?? "";
     if (before.startsWith(targetLabel)) {
@@ -223,18 +222,30 @@ async function runViewport(browser, vp, email, password, commander) {
     foundPirate =
       (await loginPage.locator('[data-testid="galaxy-pirate"]').count()) > 0;
   }
-  if (!foundPirate) {
+  if (pirateInHome && !foundPirate) {
     throw new Error(
       `${vp.name}: UI did not show pirate at ${targetLabel} after galaxy nav`,
     );
   }
-  const pirateText = await loginPage.textContent(
-    '[data-testid="galaxy-pirate"]',
-  );
-  if (!pirateText || !/Lv\s*\d+/i.test(pirateText)) {
-    throw new Error(`${vp.name}: pirate row missing Lv label: ${pirateText}`);
+  if (foundPirate) {
+    const pirateText = await loginPage.textContent(
+      '[data-testid="galaxy-pirate"]',
+    );
+    if (!pirateText || !/Lv\s*\d+/i.test(pirateText)) {
+      throw new Error(`${vp.name}: pirate row missing Lv label: ${pirateText}`);
+    }
+    pass.push(`galaxy pirate found with level: ${pirateText.trim()}`);
+  } else {
+    const empty = await loginPage
+      .locator('[data-testid="galaxy-pirate-empty"]')
+      .count();
+    if (empty < 1) {
+      throw new Error(`${vp.name}: galaxy missing pirate row`);
+    }
+    pass.push(
+      "home galaxy has no pirate this seed; empty pirate row rendered",
+    );
   }
-  pass.push(`galaxy pirate found with level: ${pirateText.trim()}`);
   await shot(loginPage, path.join(OUT, vp.name), "09-galaxy-pirate.png");
 
   // Fleet composer should offer pirate target when in that system

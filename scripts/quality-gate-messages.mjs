@@ -65,7 +65,7 @@ async function main() {
     throw new Error("messages stub still present");
   }
   const summary = await page.getByTestId("messages-summary").textContent();
-  if (!summary || !/0 report/i.test(summary)) {
+  if (!summary || !/0 items/i.test(summary) || !/0 combat/i.test(summary)) {
     throw new Error(`unexpected messages summary: ${summary}`);
   }
   logs.push("messages_empty_ok");

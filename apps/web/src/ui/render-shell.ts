@@ -210,7 +210,7 @@ export function shellHtml(
           <button type="button" class="ghost" id="refresh-btn" data-testid="refresh-btn" ${state.busy ? "disabled" : ""}>Refresh</button>
         </div>
       </header>
-      ${flashHtml(state.error, state.notice)}
+      <div data-flash-slot>${flashHtml(state.error, state.notice)}</div>
       ${resourceBar(view, state.busy)}
       <div class="shell-body">
         ${leftNav(view, activePage)}

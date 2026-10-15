@@ -150,6 +150,9 @@ export function fleetComposer(
   if (selected && !options.some((o) => o.includes(`value="${selected}"`))) {
     selected = options[0]?.match(/value="([^"]+)"/)?.[1] ?? "";
   }
+  const optionHtml = options
+    .map((html) => markSelectedOption(html, selected))
+    .join("");
 
   const orbitShipIds = SHIP_ORDER.filter(
     (id) => (view.planet.ships[id] ?? 0) > 0 && !SHIPS[id].stationary,
@@ -337,7 +340,7 @@ export function fleetComposer(
       <label>
         Target
         <select id="fleet-target" data-testid="fleet-target" ${launchBlocked ? "disabled" : ""}>
-          ${options.join("") || `<option value="">No targets</option>`}
+          ${optionHtml || `<option value="">No targets</option>`}
         </select>
       </label>
       ${cargoBlock}
@@ -353,6 +356,13 @@ export function fleetComposer(
       }
     </form>
   `;
+}
+
+function markSelectedOption(html: string, selected: string): string {
+  if (!selected) return html;
+  const needle = `value="${selected}"`;
+  if (!html.includes(needle)) return html;
+  return html.replace(needle, `${needle} selected`);
 }
 
 function acsBlock(

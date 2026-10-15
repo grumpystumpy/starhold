@@ -68,6 +68,10 @@ import {
   doUpgrade,
 } from "./main-actions";
 import { setInboxFilter } from "./ui/render-messages";
+import {
+  setBattleReplayRound,
+  toggleBattleReplay,
+} from "./ui/render-fleets-panels";
 import { readFleetForm } from "./main-fleet-form";
 import { resolveNavPage } from "./ui/nav";
 import { navigateTo } from "./ui/router";
@@ -97,7 +101,7 @@ export function bindClickHandlers(): void {
         return;
       }
 
-      const filterBtn = closestActionEl(target, "[data-inbox-filter]");
+      const filterBtn = closestActionEl(target, "button[data-inbox-filter]");
       if (filterBtn) {
         ev.preventDefault();
         const raw = filterBtn.getAttribute("data-inbox-filter");
@@ -294,23 +298,31 @@ export function bindClickHandlers(): void {
         return;
       }
 
+      const replaySummary = closestActionEl(
+        target,
+        "[data-battle-replay-summary]",
+      );
+      if (replaySummary) {
+        ev.preventDefault();
+        const id = replaySummary.getAttribute("data-battle-replay-summary");
+        const first = Number(
+          replaySummary.getAttribute("data-first-round") || "1",
+        );
+        if (id) toggleBattleReplay(id, Number.isFinite(first) ? first : 1);
+        schedulePaint();
+        return;
+      }
+
       const roundTab = closestActionEl(target, "[data-battle-round-tab]");
       if (roundTab) {
         ev.preventDefault();
-        const round = roundTab.getAttribute("data-battle-round-tab");
-        const details = roundTab.closest("details");
-        if (!round || !details) return;
-        for (const tab of details.querySelectorAll("[data-battle-round-tab]")) {
-          tab.classList.toggle(
-            "is-active",
-            tab.getAttribute("data-battle-round-tab") === round,
-          );
-        }
-        for (const pane of details.querySelectorAll("[data-battle-round]")) {
-          const match = pane.getAttribute("data-battle-round") === round;
-          if (match) pane.removeAttribute("hidden");
-          else pane.setAttribute("hidden", "");
-        }
+        const round = Number(roundTab.getAttribute("data-battle-round-tab"));
+        const reportId = roundTab
+          .closest("details")
+          ?.getAttribute("data-battle-report");
+        if (!reportId || !Number.isFinite(round)) return;
+        setBattleReplayRound(reportId, round);
+        schedulePaint();
         return;
       }
 

@@ -1,5 +1,6 @@
 import {
   SHIP_ORDER,
+  type AcsPrefill,
   type Coordinates,
   type FleetShips,
   type MissionType,
@@ -36,6 +37,24 @@ export type FleetDraft = {
 function parseMission(raw: string | null | undefined): MissionType {
   if (raw && (MISSIONS as string[]).includes(raw)) return raw as MissionType;
   return "deploy";
+}
+
+/** Raid form state for a Joint Strike deep-link, before the fleet form exists. */
+export function fleetDraftWithAcsPrefill(
+  base: FleetDraft | null,
+  prefill: AcsPrefill,
+): FleetDraft {
+  return {
+    targetPlanetId: null,
+    targetCoords: prefill.coords,
+    asteroidId: null,
+    pirateBaseId: null,
+    alienBaseId: null,
+    mission: prefill.mission,
+    counts: base?.counts ?? {},
+    cargo: base?.cargo ?? {},
+    openAcs: prefill.openAcs,
+  };
 }
 
 export function salvageFleetForm(root: HTMLElement): FleetDraft | null {

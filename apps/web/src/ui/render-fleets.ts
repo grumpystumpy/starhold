@@ -1,5 +1,5 @@
 export type { FleetDraft } from "./render-fleets-draft.js";
-export { salvageFleetForm } from "./render-fleets-draft.js";
+export { fleetDraftWithAcsPrefill, salvageFleetForm } from "./render-fleets-draft.js";
 export { fleetComposer } from "./render-fleets-composer.js";
 export {
   fleetsInFlight,
