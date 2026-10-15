@@ -18,8 +18,9 @@ Redeploy notes: [hosting.md](./hosting.md) · [vercel-deploy.md](./vercel-deploy
 - Default branch is **`main`**. **Never** push to `cursor/core-loop-prototype-1093` (retired after merge of PR #1).
 - Each feature batch: branch off **`main`**, open a **small PR into `main`**, merge when **CI is green** (unit + Playwright required).
 - Branch names: `cursor/<short-name>-####` when an agent suffix is required.
-- Prefer Github MCP when `git push` is unavailable. Never leave `PLACEHOLDER` file contents.
-- Large `api/index.js`: assemble via one-shot workflow or local `scripts/bundle-api.mjs` on the feature branch.
+- Prefer real `git push`. Never leave `PLACEHOLDER` file contents.
+- **Do not commit `api/index.js`.** Generate it with `npm run build:vercel` (`scripts/bundle-api.mjs`). Vercel `buildCommand` and CI both run `build:vercel`.
+- Vercel: only `main` deploys (`vercel.json` → `git.deploymentEnabled`). No PR preview deploys.
 - If CI on `main` is red after a merge: open a CI-fix PR from `main` before the next feature batch.
 
 ## Parallel workstreams (post-contract)

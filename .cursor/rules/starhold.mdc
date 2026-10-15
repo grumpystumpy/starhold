@@ -1,0 +1,12 @@
+---
+description: Starhold quality gate + doc pointers (keep short)
+alwaysApply: true
+---
+
+# Starhold
+
+See root [AGENTS.md](../../AGENTS.md). Vision/process: `docs/vision.md`, `docs/process.md`. Per-system only: `docs/design/<system>.md`.
+
+**Gate:** rebase → `test` + `typecheck` + `build:vercel` → local Playwright (no Vercel preview) → UI dual-viewport if UI → KV additive → Micah approve. No auto-merge.
+
+**Never commit** `api/index.js` (generate via `build:vercel`). Deploys: `main` only.
