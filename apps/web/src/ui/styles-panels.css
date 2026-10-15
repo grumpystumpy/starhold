@@ -597,6 +597,46 @@ a.message-title:hover {
   font-weight: 600;
 }
 
+.galaxy-slots li {
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.galaxy-slot-main {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  flex: 1 1 12rem;
+}
+
+.galaxy-slot-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.galaxy-slot-coords {
+  flex: none;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.galaxy-slots .planet-disc {
+  width: 40px;
+  height: 40px;
+}
+
+.galaxy-slots .planet-disc-moon {
+  width: 26px;
+  height: 26px;
+}
+
+.row-with-thumb .planet-disc {
+  width: 32px;
+  height: 32px;
+}
+
 .roster {
   list-style: none;
   margin: 0;

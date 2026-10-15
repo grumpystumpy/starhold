@@ -510,7 +510,15 @@ export interface AlienBasePublic {
   active: boolean;
 }
 
-export interface GalaxySlot {
+export interface PlanetArtFields {
+  artId: string;
+  /** Master WebP (512). Overview hero. */
+  artUrl: string;
+  /** 128 thumb. Galaxy rows, switcher, dense lists. */
+  artThumbUrl: string;
+}
+
+export interface GalaxySlot extends PlanetArtFields {
   coords: Coordinates;
   planetId: string | null;
   playerId: string | null;
@@ -521,6 +529,8 @@ export interface GalaxySlot {
   isOwn: boolean;
   hasMoon: boolean;
   moonId: string | null;
+  /** Mini body sitting on this colonizable slot. */
+  isMini: boolean;
   activity: "empty" | "planet" | "pirate" | "alien" | null;
   /** Set for alliance members when this slot has a live marker. */
   allianceMarker?: {
@@ -530,12 +540,22 @@ export interface GalaxySlot {
   } | null;
 }
 
+/** Mini planet outside slots 1–15 (deep space / expedition). */
+export interface GalaxyMiniBody extends PlanetArtFields {
+  planetId: string;
+  name: string;
+  coords: Coordinates;
+  isOwn: boolean;
+  playerName: string | null;
+  debris: { metal: number; crystal: number } | null;
+}
+
 export interface GalaxyView {
   galaxy: number;
   system: number;
   slots: GalaxySlot[];
-  /** Mini planets in this system visible to the viewer (discovered or owned). */
-  minis?: GalaxySlot[];
+  /** Discovered minis in this system whose slot is outside 1–15. */
+  minis: GalaxyMiniBody[];
   deepSpace: { coords: Coordinates };
   asteroids: AsteroidField[];
   pirateBase: PirateBasePublic | null;
@@ -552,17 +572,20 @@ export interface PlayerView {
   };
   player: PlayerState;
   planet: PlanetState;
-  ownedPlanets: Array<{
-    id: string;
-    name: string;
-    coords: Coordinates;
-    isHome: boolean;
-    isActive: boolean;
-    isMoon: boolean;
-    /** Round 2 mini planet — art hook for PLANET_ART.mini. */
-    isMini?: boolean;
-    jumpGateLevel: number;
-  }>;
+  /** Derived art for the active body (not persisted). */
+  planetArt: PlanetArtFields;
+  ownedPlanets: Array<
+    PlanetArtFields & {
+      id: string;
+      name: string;
+      coords: Coordinates;
+      isHome: boolean;
+      isActive: boolean;
+      isMoon: boolean;
+      isMini: boolean;
+      jumpGateLevel: number;
+    }
+  >;
   economy: EconomySnapshot;
   roster: PublicPlayer[];
   highscores: HighscoreEntry[];
@@ -607,7 +630,7 @@ export interface PlayerView {
   seasonLeaderboard: SeasonLeaderboardView;
 }
 
-export interface PublicPlayer {
+export interface PublicPlayer extends PlanetArtFields {
   id: string;
   name: string;
   coords: Coordinates;
@@ -616,7 +639,7 @@ export interface PublicPlayer {
   allianceTag?: string | null;
 }
 
-export interface HighscoreEntry {
+export interface HighscoreEntry extends PlanetArtFields {
   rank: number;
   playerId: string;
   name: string;

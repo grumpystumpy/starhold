@@ -10,8 +10,8 @@ import {
   type FleetShips,
   type PlayerView,
 } from "@starhold/game";
-import { PLANET_ART, SHIP_ART } from "./assets";
 import { fmt, fmtCoords, fmtEta, remainingSeconds } from "./format";
+import { planetDiscHtml } from "./planet-disc";
 import { escapeAttr, escapeHtml } from "./render-escape";
 import { infoTooltip } from "./render-tooltips";
 
@@ -290,7 +290,7 @@ export function galaxyPanel(
       const moon = s.hasMoon ? " · Moon" : "";
       const tag = s.allianceTag ? ` [${escapeHtml(s.allianceTag)}]` : "";
       const who = s.playerName
-        ? `${escapeHtml(s.playerName)}${tag}${s.isOwn ? " (you)" : ""} · ~${fmt(s.pointsHint)} pts${moon}`
+        ? `${escapeHtml(s.playerName)}${tag}${s.isOwn ? " (you)" : ""}${s.isMini ? " · Mini" : ""} · ~${fmt(s.pointsHint)} pts${moon}`
         : "Empty";
       const marker = s.allianceMarker;
       const tip = marker
@@ -304,23 +304,25 @@ export function galaxyPanel(
       const actions = inAlliance
         ? `<span class="galaxy-slot-actions"><button type="button" data-galaxy-mark="${s.coords.slot}" data-testid="galaxy-mark-${s.coords.slot}" ${busy ? "disabled" : ""}>Mark</button><button type="button" data-galaxy-propose="${s.coords.slot}" data-testid="galaxy-propose-${s.coords.slot}" ${busy ? "disabled" : ""}>Propose Joint Strike</button></span>`
         : "";
-      return `<li class="galaxy-slot${marker ? " galaxy-slot-marked" : ""}" data-testid="galaxy-slot-${s.coords.slot}"><span>${pin}${fmt(s.coords.slot)}. ${who}${debris}</span><span class="galaxy-slot-side">${fmtCoords(s.coords)}${actions}</span></li>`;
+      const disc = planetDiscHtml({
+        src: s.artThumbUrl,
+        artId: s.artId,
+        size: 40,
+        className: s.planetId ? undefined : "planet-disc-empty",
+        testId: `galaxy-art-${s.coords.slot}`,
+      });
+      const moonDisc = s.hasMoon
+        ? planetDiscHtml({
+            src: s.artThumbUrl,
+            artId: s.artId,
+            size: 26,
+            className: "planet-disc-moon",
+            testId: `galaxy-moon-art-${s.coords.slot}`,
+          })
+        : "";
+      return `<li class="galaxy-slot${marker ? " galaxy-slot-marked" : ""}" data-testid="galaxy-slot-${s.coords.slot}" data-art-id="${escapeAttr(s.artId)}"><span class="galaxy-slot-main">${pin}${disc}${moonDisc}<span class="galaxy-slot-label">${fmt(s.coords.slot)}. ${who}${debris}</span></span><span class="galaxy-slot-side">${fmtCoords(s.coords)}${actions}</span></li>`;
     })
     .join("");
-  const miniRows =
-    galaxy.minis && galaxy.minis.length > 0
-      ? galaxy.minis
-          .map((s) => {
-            const debris = s.debris
-              ? ` · debris ${fmt(s.debris.metal)}/${fmt(s.debris.crystal)}`
-              : "";
-            const who = s.playerName
-              ? `${escapeHtml(s.playerName)}${s.isOwn ? " (you)" : ""}`
-              : "Unclaimed";
-            return `<li data-testid="galaxy-mini-${s.coords.slot}"><span class="row-with-thumb"><img class="thumb" src="${PLANET_ART.mini}" alt="" width="28" height="28" />Mini ${fmt(s.coords.slot)}. ${who}${debris}</span><span>${fmtCoords(s.coords)}</span></li>`;
-          })
-          .join("")
-      : "";
   const markerTools = inAlliance
     ? `<div class="galaxy-alliance-tools alliance-form" data-testid="galaxy-alliance-tools"><label>Marker note<input type="text" id="galaxy-marker-note" data-testid="galaxy-marker-note" maxlength="80" placeholder="Siege window" ${busy ? "disabled" : ""} /></label></div>`
     : "";
@@ -384,10 +386,21 @@ export function galaxyPanel(
       </div>
       <p class="hint">Send max uses the Expedition preset and fills free expedition slots from ships in orbit on the selected colony. Scan probes every foreign-owned planet/moon in this system.</p>
       ${markerTools}
-      <ul class="roster" data-testid="galaxy-slots">${rows}</ul>
+      <ul class="roster galaxy-slots" data-testid="galaxy-slots">${rows}</ul>
       ${
-        miniRows
-          ? `<h3 class="subhead">Mini planets</h3><ul class="roster" data-testid="galaxy-minis">${miniRows}</ul>`
+        galaxy.minis.length > 0
+          ? `<h3 class="subhead">Mini planets</h3>
+      <ul class="roster galaxy-slots" data-testid="galaxy-minis">${galaxy.minis
+        .map((mini) => {
+          const debris = mini.debris
+            ? ` · debris ${fmt(mini.debris.metal)}/${fmt(mini.debris.crystal)}`
+            : "";
+          const who = mini.playerName
+            ? `${escapeHtml(mini.playerName)}${mini.isOwn ? " (you)" : ""}`
+            : escapeHtml(mini.name);
+          return `<li data-testid="galaxy-mini-${escapeAttr(mini.planetId)}" data-art-id="${escapeAttr(mini.artId)}"><span class="galaxy-slot-main">${planetDiscHtml({ src: mini.artThumbUrl, artId: mini.artId, size: 40, testId: `galaxy-mini-art-${mini.planetId}` })}<span class="galaxy-slot-label">Mini ${fmt(mini.coords.slot)}. ${who}${debris}</span></span><span class="galaxy-slot-coords">${fmtCoords(mini.coords)}</span></li>`;
+        })
+        .join("")}</ul>`
           : ""
       }
       <h3 class="subhead">Deep space</h3>

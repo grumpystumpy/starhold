@@ -189,6 +189,47 @@
   height: 36px;
 }
 
+.planet-disc {
+  border-radius: 50%;
+  object-fit: cover;
+  background: transparent;
+  border-color: transparent;
+}
+
+.planet-disc-top {
+  width: 56px;
+  height: 56px;
+}
+
+.planet-disc-top.planet-disc-moon {
+  width: 44px;
+  height: 44px;
+}
+
+.planet-disc-hero {
+  width: 168px;
+  height: 168px;
+}
+
+.planet-disc-hero-moon {
+  width: 96px;
+  height: 96px;
+}
+
+.planet-chip .planet-disc {
+  width: 36px;
+  height: 36px;
+}
+
+.planet-chip .planet-disc-moon {
+  width: 28px;
+  height: 28px;
+}
+
+.planet-disc-empty {
+  opacity: 0.62;
+}
+
 .planet-chip-text {
   display: flex;
   flex-direction: column;
@@ -221,6 +262,7 @@
 
 .overview-hero {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.75rem;
   align-items: center;
   margin-bottom: 0.75rem;
@@ -382,6 +424,11 @@
   .planet-chip {
     max-width: none;
     width: 100%;
+  }
+
+  .planet-disc-hero {
+    width: 128px;
+    height: 128px;
   }
 
   .side-nav .nav-link.active {

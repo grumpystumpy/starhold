@@ -17,13 +17,19 @@ import {
   planetPoints,
   playerProgressView,
 } from "./formulas.js";
-
-export { empirePoints };
+import {
+  artForBody,
+  createPlanetArtContext,
+  isMiniBody,
+  normalArtAt,
+  type PlanetArtContext,
+} from "./planet-art.js";
 import type {
+  GalaxyMiniBody,
   GalaxySlot,
   GalaxyView,
   HighscoreEntry,
-  PlayerState,
+  PlanetArtFields,
   PlayerView,
   PublicPlayer,
   UniverseState,
@@ -57,7 +63,19 @@ import { playerKnowsMini } from "./world-mini.js";
 import { seasonLeaderboardView } from "./world-seasons.js";
 import { getDebris } from "./world-tick.js";
 
+export { empirePoints };
+
+function artFields(
+  universe: UniverseState,
+  planet: UniverseState["planets"][string] | undefined,
+  ctx: PlanetArtContext,
+): PlanetArtFields {
+  if (planet) return artForBody(universe, planet, ctx);
+  return normalArtAt({ galaxy: 1, system: 1, slot: 8 });
+}
+
 export function highscoresBoard(universe: UniverseState): HighscoreEntry[] {
+  const artCtx = createPlanetArtContext(universe);
   const rows = Object.values(universe.players).map((p) => {
     const home = universe.planets[p.homePlanetId];
     return {
@@ -69,6 +87,7 @@ export function highscoresBoard(universe: UniverseState): HighscoreEntry[] {
       level: p.level ?? 1,
       xpTotal: p.xpTotal ?? 0,
       allianceTag: allianceTagForPlayer(universe, p),
+      ...artFields(universe, home, artCtx),
     };
   });
   rows.sort(
@@ -82,6 +101,7 @@ export function highscoresBoard(universe: UniverseState): HighscoreEntry[] {
 }
 
 export function publicRoster(universe: UniverseState): PublicPlayer[] {
+  const artCtx = createPlanetArtContext(universe);
   return Object.values(universe.players).map((p) => {
     const planet = universe.planets[p.homePlanetId];
     return {
@@ -91,6 +111,7 @@ export function publicRoster(universe: UniverseState): PublicPlayer[] {
       pointsHint: empirePoints(universe, p),
       planetId: p.homePlanetId,
       allianceTag: allianceTagForPlayer(universe, p),
+      ...artFields(universe, planet, artCtx),
     };
   });
 }
@@ -105,6 +126,7 @@ export function galaxyViewFor(
   ensureUniverseShape(universe);
   const g = Math.min(MAP_GALAXIES, Math.max(1, Math.floor(galaxy)));
   const s = Math.min(MAP_SYSTEMS, Math.max(1, Math.floor(system)));
+  const artCtx = createPlanetArtContext(universe);
   const slots: GalaxySlot[] = [];
   for (let slot = 1; slot <= MAP_SLOTS; slot++) {
     const coords = { galaxy: g, system: s, slot };
@@ -114,6 +136,9 @@ export function galaxyViewFor(
     const owner = planet
       ? universe.players[planet.ownerPlayerId]
       : undefined;
+    const art = planet
+      ? artForBody(universe, planet, artCtx)
+      : normalArtAt(coords);
     slots.push({
       coords,
       planetId: planet?.id ?? null,
@@ -127,9 +152,38 @@ export function galaxyViewFor(
       isOwn: owner?.id === playerId,
       hasMoon: Boolean(moon),
       moonId: moon?.id ?? null,
+      isMini: planet ? isMiniBody(universe, planet) : false,
       activity: planet ? "planet" : "empty",
+      ...art,
     });
   }
+
+  const minis: GalaxyMiniBody[] = [];
+  for (const planet of Object.values(universe.planets)) {
+    if (!isMiniBody(universe, planet)) continue;
+    if (planet.coords.galaxy !== g || planet.coords.system !== s) continue;
+    if (planet.coords.slot >= 1 && planet.coords.slot <= MAP_SLOTS) continue;
+    if (!playerKnowsMini(universe, playerId, planet.id, now)) continue;
+    const owner = planet.ownerPlayerId
+      ? universe.players[planet.ownerPlayerId]
+      : undefined;
+    const debris = getDebris(universe, planet.coords);
+    const art = artForBody(universe, planet, artCtx);
+    minis.push({
+      planetId: planet.id,
+      name: planet.name,
+      coords: planet.coords,
+      isOwn: planet.ownerPlayerId === playerId,
+      playerName: owner?.name ?? (planet.ownerPlayerId ? null : "Unclaimed"),
+      debris: debris
+        ? { metal: debris.metal, crystal: debris.crystal }
+        : null,
+      ...art,
+    });
+  }
+  minis.sort(
+    (a, b) => a.coords.slot - b.coords.slot || a.planetId.localeCompare(b.planetId),
+  );
 
   const pirate = Object.values(universe.pirateBases ?? {}).find(
     (b) =>
@@ -142,39 +196,6 @@ export function galaxyViewFor(
     if (slot && slot.activity === "empty") {
       slot.activity = "pirate";
     }
-  }
-
-  const minis: GalaxySlot[] = [];
-  for (const miniId of universe.miniPlanetIds ?? []) {
-    const mini = universe.planets[miniId];
-    if (
-      !mini?.flags?.mini ||
-      mini.coords.galaxy !== g ||
-      mini.coords.system !== s
-    ) {
-      continue;
-    }
-    const known = playerKnowsMini(universe, playerId, miniId);
-    if (!known) continue;
-    const owner = mini.ownerPlayerId
-      ? universe.players[mini.ownerPlayerId]
-      : undefined;
-    const debris = getDebris(universe, mini.coords);
-    minis.push({
-      coords: { ...mini.coords },
-      planetId: mini.id,
-      playerId: owner?.id ?? null,
-      playerName: owner?.name ?? (mini.ownerPlayerId ? null : "Unclaimed"),
-      allianceTag: null,
-      pointsHint: Math.floor(planetPoints(mini)),
-      debris: debris
-        ? { metal: debris.metal, crystal: debris.crystal }
-        : null,
-      isOwn: owner?.id === playerId,
-      hasMoon: false,
-      moonId: null,
-      activity: "planet",
-    });
   }
 
   const alien = Object.values(universe.alienBases ?? {}).find(
@@ -291,6 +312,8 @@ export function playerView(
 
   const g = galaxy ?? planet.coords.galaxy;
   const s = system ?? planet.coords.system;
+  const artCtx = createPlanetArtContext(universe);
+  const planetArt = artForBody(universe, planet, artCtx);
 
   const sensorLevel = planet.buildings.sensorArray ?? 0;
   const sensorContacts =
@@ -336,10 +359,12 @@ export function playerView(
     },
     player,
     planet,
+    planetArt,
     ownedPlanets: player.planetIds
       .map((id) => {
         const p = universe.planets[id];
         if (!p) return null;
+        const art = artForBody(universe, p, artCtx);
         return {
           id: p.id,
           name: p.name,
@@ -347,8 +372,9 @@ export function playerView(
           isHome: p.id === player.homePlanetId,
           isActive: p.id === player.activePlanetId,
           isMoon: p.kind === "moon",
-          isMini: Boolean(p.flags?.mini),
+          isMini: isMiniBody(universe, p),
           jumpGateLevel: p.buildings.jumpGate ?? 0,
+          ...art,
         };
       })
       .filter((x): x is NonNullable<typeof x> => x !== null),
