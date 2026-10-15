@@ -102,7 +102,10 @@ export function highscoresBoard(universe: UniverseState): HighscoreEntry[] {
   return rows.map((r, i) => ({ ...r, rank: i + 1 }));
 }
 
-export function publicRoster(universe: UniverseState): PublicPlayer[] {
+export function publicRoster(
+  universe: UniverseState,
+  pointsById?: ReadonlyMap<string, number>,
+): PublicPlayer[] {
   const artCtx = createPlanetArtContext(universe);
   return Object.values(universe.players).map((p) => {
     const planet = universe.planets[p.homePlanetId];
@@ -110,7 +113,7 @@ export function publicRoster(universe: UniverseState): PublicPlayer[] {
       id: p.id,
       name: p.name,
       coords: planet?.coords ?? { galaxy: 0, system: 0, slot: 0 },
-      pointsHint: empirePoints(universe, p),
+      pointsHint: pointsById?.get(p.id) ?? empirePoints(universe, p),
       planetId: p.homePlanetId,
       planetName: planet?.name ?? "",
       allianceTag: allianceTagForPlayer(universe, p),
@@ -259,11 +262,11 @@ export function galaxyViewFor(
 function maybeGrantHighscoreStarshards(
   universe: UniverseState,
   playerId: string,
+  board: HighscoreEntry[],
 ): void {
   const player = universe.players[playerId];
   if (!player || player.highscoreStarshardsClaimed) return;
   if (Object.keys(universe.players).length < 2) return;
-  const board = highscoresBoard(universe);
   const row = board.find((e) => e.playerId === playerId);
   if (!row || row.rank > 3) return;
   player.highscoreStarshardsClaimed = true;
@@ -283,7 +286,11 @@ export function playerView(
   const player = universe.players[playerId];
   if (!player) throw new Error("Unknown player.");
   pruneExpiredOfficers(player, now);
-  maybeGrantHighscoreStarshards(universe, playerId);
+  const highscores = highscoresBoard(universe);
+  maybeGrantHighscoreStarshards(universe, playerId, highscores);
+  const pointsById = new Map(
+    highscores.map((row) => [row.playerId, row.points]),
+  );
   const planet = activePlanet(universe, player);
   if (!planet) throw new Error("Planet missing.");
   stampQueueView(player, planet, now);
@@ -396,8 +403,8 @@ export function playerView(
         energyOutput: boosts.energyOutput,
       },
     ),
-    roster: publicRoster(universe),
-    highscores: highscoresBoard(universe),
+    roster: publicRoster(universe, pointsById),
+    highscores,
     galaxy: galaxyViewFor(universe, playerId, g, s, now),
     fleets,
     reports,

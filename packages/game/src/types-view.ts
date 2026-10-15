@@ -460,6 +460,19 @@ export interface GoalView {
   reward: GoalRewardView;
 }
 
+export interface UniverseSeedCursor {
+  /** Next system ordinal in `[0, MAP_GALAXIES * MAP_SYSTEMS]`. */
+  at: number;
+  /** Pirate placement rank rows. Dropped once pirates are placed. */
+  ranks?: { g: number; s: number; k: number }[];
+  /** True after `ranks` has been sorted once. */
+  sorted?: boolean;
+  /** Next index in the sorted rank list. */
+  rankAt?: number;
+  pirates: number;
+  done?: boolean;
+}
+
 export interface UniverseState {
   id: string;
   name: string;
@@ -486,6 +499,12 @@ export interface UniverseState {
   /** Lazy AI catch-up cursor (Hobby bounded batch). */
   lastAiSimAt?: number;
   aiCatchUpCursor?: string | null;
+  /**
+   * Workers bootstrap. Absent on Vercel universes that were seeded in one
+   * shot. `done` means minis, asteroids, and the pirate roster match a
+   * full seed.
+   */
+  seedCursor?: UniverseSeedCursor;
   /** Active Mothership occupations keyed by planetId. */
 
   occupations?: Record<string, OccupationState>;

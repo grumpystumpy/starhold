@@ -22,6 +22,8 @@ describe("accounts memory store", () => {
     resetMemoryAccounts();
     delete process.env.VERCEL;
     delete process.env.SESSION_SECRET;
+    delete process.env.STARHOLD_RUNTIME;
+    delete process.env.STARHOLD_PASSWORD_KDF;
   });
 
   it("normalizes and validates email / password", () => {
@@ -83,6 +85,45 @@ describe("accounts memory store", () => {
     const session = await createSession(created.account.id);
     const found = await getSession(session.id);
     assert.equal(found?.accountId, created.account.id);
+  });
+
+  it("round-trips a PBKDF2 hash", async () => {
+    process.env.STARHOLD_PASSWORD_KDF = "pbkdf2";
+    const hash = await hashPassword("correct-horse");
+    assert.ok(hash.startsWith("pbkdf2$"));
+    assert.equal(await verifyPassword("correct-horse", hash), true);
+    assert.equal(await verifyPassword("wrong-password", hash), false);
+  });
+
+  it("rejects a scrypt-only account on Workers until Vercel stamps PBKDF2", async () => {
+    const created = await createAccountWithPassword(
+      "legacy@starhold.test",
+      "secretpass",
+    );
+    assert.equal(created.ok, true);
+    if (!created.ok) return;
+    process.env.STARHOLD_RUNTIME = "workers";
+    const blocked = await authenticateEmailPassword(
+      "legacy@starhold.test",
+      "secretpass",
+    );
+    assert.equal(blocked.ok, false);
+    if (blocked.ok) return;
+    assert.match(blocked.error, /Vercel/);
+
+    delete process.env.STARHOLD_RUNTIME;
+    const stamped = await authenticateEmailPassword(
+      "legacy@starhold.test",
+      "secretpass",
+    );
+    assert.equal(stamped.ok, true);
+    if (!stamped.ok) return;
+    process.env.STARHOLD_RUNTIME = "workers";
+    const allowed = await authenticateEmailPassword(
+      "legacy@starhold.test",
+      "secretpass",
+    );
+    assert.equal(allowed.ok, true);
   });
 
   it("rate-limits repeated auth attempts", async () => {

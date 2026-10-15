@@ -76,6 +76,8 @@ import {
 import { sessionSecretConfigured } from "./accounts.js";
 import { mountAllianceIntelRoutes } from "./alliance-intel-routes.js";
 import { mountAuthRoutes } from "./auth-routes.js";
+import { mountCpuRoutes } from "./cpu-routes.js";
+import { readCpuMs } from "./request-context.js";
 import { respondWithPlayerView } from "./state-response.js";
 import { staticCacheControl } from "./static-cache.js";
 import { storageMode, withUniverse } from "./store.js";
@@ -141,8 +143,15 @@ export function createApp(): Hono {
     await next();
     if (!c.req.path.startsWith("/api")) return;
     c.header("Cache-Control", staticCacheControl(c.req.path) ?? "private, no-store");
+    if (
+      process.env.STARHOLD_RUNTIME === "workers" ||
+      process.env.STARHOLD_CPU_PROFILE === "1"
+    ) {
+      c.res.headers.set("x-starhold-cpu-ms", readCpuMs().toFixed(2));
+    }
   });
   mountAuthRoutes(app);
+  mountCpuRoutes(app);
 
   app.notFound((c) =>
     c.json({ error: "Not found", path: c.req.path }, 404),
@@ -1225,9 +1234,14 @@ export function createApp(): Hono {
     });
   });
 
-  /** Local quality-gate seed hook — disabled unless STARHOLD_E2E=1. */
-  if (process.env.STARHOLD_E2E === "1") {
-    app.post("/api/e2e/grant", async (c) => {
+  /**
+   * Local quality-gate seed hook. Registered always so a Workers isolate
+   * can see STARHOLD_E2E set at request time; the handler 404s otherwise.
+   */
+  app.post("/api/e2e/grant", async (c) => {
+    if (process.env.STARHOLD_E2E !== "1") {
+      return c.json({ error: "Not found", path: c.req.path }, 404);
+    }
       const body = (await c.req.json().catch(() => ({}))) as {
         playerId?: string;
         ships?: Partial<FleetShips>;
@@ -1365,15 +1379,17 @@ export function createApp(): Hono {
         }
         return c.json(playerView(universe, body.playerId!));
       });
-    });
-  }
+  });
 
   /**
    * CI / local Playwright only. Raises storage so empire points clear
    * newbie protection without combat ships. Never enabled in production.
+   * Checked per request so Workers env applied in fetch is visible.
    */
-  if (process.env.ALLOW_E2E_HOOKS === "1") {
-    app.post("/api/e2e/graduate-newbie", async (c) => {
+  app.post("/api/e2e/graduate-newbie", async (c) => {
+    if (process.env.ALLOW_E2E_HOOKS !== "1") {
+      return c.json({ error: "Not found", path: c.req.path }, 404);
+    }
       const body = (await c.req.json().catch(() => ({}))) as {
         playerId?: string;
       };
@@ -1389,8 +1405,7 @@ export function createApp(): Hono {
           points: empirePoints(universe, player),
         });
       });
-    });
-  }
+  });
 
   return app;
 }

@@ -10,6 +10,8 @@ export {
 } from "./world-accounts.js";
 export { advancePlanet } from "./world-tick.js";
 export { advanceUniverse } from "./world-arrival.js";
+export { bindTickBudget, workersTickBudget } from "./tick-budget.js";
+export type { TickBudget } from "./tick-budget.js";
 export type { ActionResult, FleetActionResult } from "./world-queues.js";
 export {
   setActivePlanet,

@@ -15,6 +15,8 @@ Summary:
 
 Repo pieces: `vercel.json`, `api/index.ts`, Upstash-backed `apps/server/src/store.ts`, `.env.example`.
 
+A parallel **Cloudflare Workers** test host (D1, not the live site) is documented in [cloudflare.md](./cloudflare.md). Vercel stays the production URL.
+
 ## Local / CI
 
 Without Upstash env vars the API uses **in-memory** state (fine for `npm run dev` and GitHub Actions e2e).

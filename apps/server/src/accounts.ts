@@ -1,16 +1,13 @@
 /**
  * Account / session / password auth persistence.
- * Uses Upstash/KV when configured; otherwise process-local Maps (local + CI).
- * Passwords: Node crypto.scrypt (serverless-safe, no native addon).
+ * Uses Upstash/KV when configured, D1 on Workers, otherwise process-local Maps.
+ * Vercel passwords stay Node scrypt. Workers use WebCrypto PBKDF2 (10k).
  */
 
-import {
-  createHash,
-  randomBytes,
-  scrypt as scryptCb,
-  timingSafeEqual,
-} from "node:crypto";
-import type { Redis } from "@upstash/redis";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import type { KvStore } from "./kv.js";
+import { hashPbkdf2, verifyPbkdf2 } from "./password.js";
+import { hashScrypt, verifyScrypt } from "./password-scrypt.js";
 import { getKvClient } from "./store.js";
 
 export const SESSION_COOKIE = "starhold_session";
@@ -20,37 +17,19 @@ export const AUTH_RATE_MAX = 10;
 export const PASSWORD_MIN = 8;
 export const PASSWORD_MAX = 128;
 
-/** scrypt params — ~16–40ms on typical serverless CPU; no native deps. */
-const SCRYPT_N = 16384;
-const SCRYPT_R = 8;
-const SCRYPT_P = 1;
-const SCRYPT_KEYLEN = 64;
-const SCRYPT_SALT_BYTES = 16;
-
-function scryptAsync(
-  password: string,
-  salt: Buffer,
-  keylen: number,
-): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    scryptCb(
-      password,
-      salt,
-      keylen,
-      { N: SCRYPT_N, r: SCRYPT_R, p: SCRYPT_P },
-      (err, derived) => {
-        if (err) reject(err);
-        else resolve(derived as Buffer);
-      },
-    );
-  });
-}
-
 export interface AccountRecord {
   id: string;
   email: string;
-  /** scrypt$salt$hash (pepper applied before scrypt). */
+  /**
+   * `scrypt$…` on Vercel, `pbkdf2$…` on Workers.
+   * Pepper is applied before the KDF.
+   */
   passwordHash: string;
+  /**
+   * PBKDF2 copy stamped on a successful Vercel login so a KV export can
+   * sign in on Workers. Absent until that login. Additive — old rows load.
+   */
+  passwordHashPbkdf2?: string;
   playerId: string | null;
   createdAt: number;
   lastLoginAt: number;
@@ -89,12 +68,26 @@ export function isVercelRuntime(): boolean {
   return process.env.VERCEL === "1";
 }
 
+export function isWorkersRuntime(): boolean {
+  return process.env.STARHOLD_RUNTIME === "workers";
+}
+
+function usePbkdf2(): boolean {
+  const kdf = process.env.STARHOLD_PASSWORD_KDF?.trim();
+  if (kdf === "pbkdf2") return true;
+  if (kdf === "scrypt") return false;
+  return isWorkersRuntime();
+}
+
 /**
- * On Vercel, refuse auth mutations without SESSION_SECRET so password peppers
- * and cookie integrity are not silently weak.
+ * On Vercel and Workers, refuse auth mutations without SESSION_SECRET so
+ * password peppers and cookie integrity are not silently weak.
  */
 export function requireSessionSecret(): string | null {
-  if (isVercelRuntime() && !sessionSecretConfigured()) {
+  if (!sessionSecretConfigured() && isWorkersRuntime()) {
+    return "SESSION_SECRET is required. Set it with `wrangler secret put SESSION_SECRET` (local: `.dev.vars`).";
+  }
+  if (!sessionSecretConfigured() && isVercelRuntime()) {
     return "SESSION_SECRET is required in production. Set it in Vercel → Environment Variables (openssl rand -base64 32), then redeploy.";
   }
   return null;
@@ -141,7 +134,7 @@ function rateKey(bucket: string): string {
 }
 
 async function kvGet<T>(
-  client: Redis | null,
+  client: KvStore | null,
   key: string,
 ): Promise<T | null> {
   if (!client) return null;
@@ -150,20 +143,20 @@ async function kvGet<T>(
 }
 
 async function kvSet(
-  client: Redis | null,
+  client: KvStore | null,
   key: string,
   value: unknown,
   exSec?: number,
 ): Promise<void> {
   if (!client) return;
   if (exSec != null) {
-    await client.set(key, value, { ex: exSec });
+    await client.set(key, value, { exSec });
   } else {
     await client.set(key, value);
   }
 }
 
-async function kvDel(client: Redis | null, key: string): Promise<void> {
+async function kvDel(client: KvStore | null, key: string): Promise<void> {
   if (!client) return;
   await client.del(key);
 }
@@ -173,31 +166,33 @@ function pepperPassword(password: string): string {
 }
 
 export async function hashPassword(password: string): Promise<string> {
-  const salt = randomBytes(SCRYPT_SALT_BYTES);
-  const derived = await scryptAsync(
-    pepperPassword(password),
-    salt,
-    SCRYPT_KEYLEN,
-  );
-  return `scrypt$${salt.toString("base64url")}$${derived.toString("base64url")}`;
+  const peppered = pepperPassword(password);
+  if (usePbkdf2()) return hashPbkdf2(peppered);
+  return hashScrypt(peppered);
 }
 
 export async function verifyPassword(
   password: string,
   encoded: string,
 ): Promise<boolean> {
-  const parts = encoded.split("$");
-  if (parts.length !== 3 || parts[0] !== "scrypt") return false;
-  const salt = Buffer.from(parts[1]!, "base64url");
-  const expected = Buffer.from(parts[2]!, "base64url");
-  if (salt.length === 0 || expected.length === 0) return false;
-  const derived = await scryptAsync(
-    pepperPassword(password),
-    salt,
-    expected.length,
-  );
-  if (derived.length !== expected.length) return false;
-  return timingSafeEqual(derived, expected);
+  const peppered = pepperPassword(password);
+  if (encoded.startsWith("pbkdf2$")) return verifyPbkdf2(peppered, encoded);
+  if (encoded.startsWith("scrypt$")) {
+    if (isWorkersRuntime()) return false;
+    return verifyScrypt(peppered, encoded);
+  }
+  return false;
+}
+
+/** Workers cannot run scrypt inside 10 ms. A PBKDF2 copy from Vercel can. */
+export function workersPasswordBlock(
+  account: AccountRecord,
+): string | null {
+  if (!isWorkersRuntime()) return null;
+  if (account.passwordHash.startsWith("scrypt$") && !account.passwordHashPbkdf2) {
+    return "This password is stored for the Vercel site. Log in there once, then try this host again.";
+  }
+  return null;
 }
 
 /**
@@ -323,11 +318,22 @@ export async function authenticateEmailPassword(
     await hashPassword(password).catch(() => undefined);
     return { ok: false, error: "Invalid email or password.", status: 401 };
   }
-  const match = await verifyPassword(password, account.passwordHash);
+  const blocked = workersPasswordBlock(account);
+  if (blocked) {
+    return { ok: false, error: blocked, status: 401 };
+  }
+  const encoded =
+    isWorkersRuntime() && account.passwordHashPbkdf2
+      ? account.passwordHashPbkdf2
+      : account.passwordHash;
+  const match = await verifyPassword(password, encoded);
   if (!match) {
     return { ok: false, error: "Invalid email or password.", status: 401 };
   }
   account.lastLoginAt = now;
+  if (!isWorkersRuntime() && !account.passwordHashPbkdf2) {
+    account.passwordHashPbkdf2 = await hashPbkdf2(pepperPassword(password));
+  }
   await saveAccount(account);
   return { ok: true, account };
 }

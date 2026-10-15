@@ -1,4 +1,5 @@
 import { FOUNDATION_ARK_BOOTSTRAP, SHIPS, SHIP_ORDER } from "./catalog.js";
+import { invalidateArtContext } from "./planet-art.js";
 import {
   classBonuses,
   coordsKey,
@@ -67,6 +68,12 @@ import {
   getDebris,
   subtractCargo,
 } from "./world-tick.js";
+import {
+  bindPlanetSync,
+  consumeTickBudget,
+  tickBudget,
+} from "./tick-budget.js";
+import { continueUniverseSeed } from "./world-seed.js";
 
 /** Effective fleet speed: universe × officers/skills ÷ level time factor. */
 function effectiveFleetSpeed(
@@ -89,6 +96,8 @@ export function resolveFleetArrival(
   fleet: FleetMission,
   now: number,
 ): void {
+  advancePlanetNow(universe, fleet.originPlanetId, now);
+  if (fleet.targetPlanetId) advancePlanetNow(universe, fleet.targetPlanetId, now);
   const origin = universe.planets[fleet.originPlanetId];
   if (!origin) {
     clearOccupationIfFleetGone(universe, fleet);
@@ -380,66 +389,109 @@ export function advanceFleets(universe: UniverseState, now: number): void {
     .filter((f) => f.arrivesAt <= now)
     .sort((a, b) => a.arrivesAt - b.arrivesAt);
   for (const fleet of due) {
+    if (!consumeTickBudget("fleets")) break;
     const live = universe.fleets[fleet.id];
     if (!live || live.arrivesAt > now) continue;
     resolveFleetArrival(universe, live, now);
   }
 }
 
+function planetQueueDue(planet: PlanetState, now: number): boolean {
+  const queues = [planet.buildQueue, planet.shipQueue, planet.defenseQueue];
+  for (const queue of queues) {
+    const front = queue?.[0];
+    if (front && front.startedAt != null && front.completesAt <= now) return true;
+  }
+  return false;
+}
+
+function ownedPlanetIds(universe: UniverseState): Set<string> {
+  const ids = new Set<string>();
+  for (const player of Object.values(universe.players)) {
+    for (const id of player.planetIds ?? []) ids.add(id);
+    if (player.homePlanetId) ids.add(player.homePlanetId);
+    if (player.activePlanetId) ids.add(player.activePlanetId);
+  }
+  return ids;
+}
+
+/** Advance one planet's queues, production, and occupation siphon to `now`. */
+export function advancePlanetNow(
+  universe: UniverseState,
+  id: string,
+  now: number,
+): void {
+  const planet = universe.planets[id];
+  if (!planet) return;
+  const owner = universe.players[planet.ownerPlayerId];
+  const energyTech = owner?.research.energyTech ?? 0;
+  const boosts = playerBoosts(owner, now);
+  const lb = levelBonuses(owner?.level ?? 1);
+  const before = { ...planet.resources };
+  const advanced = advancePlanet(
+    planet,
+    universe.speed,
+    now,
+    energyTech,
+    {
+      mineOutput:
+        lb.production *
+        boosts.mineOutput *
+        classBonuses(owner?.playerClass?.classId).mineOutput,
+      energyOutput: boosts.energyOutput,
+    },
+    owner,
+  );
+  if (owner) universe.players[owner.id] = owner;
+  const occ = occupationForPlanet(universe, id, now);
+  if (occ && occ.occupierPlayerId !== planet.ownerPlayerId) {
+    const gained = {
+      metal: Math.max(0, advanced.resources.metal - before.metal),
+      crystal: Math.max(0, advanced.resources.crystal - before.crystal),
+      deuterium: Math.max(0, advanced.resources.deuterium - before.deuterium),
+    };
+    const shares = occupationMineShares(gained);
+    subtractCargo(advanced, {
+      metal: gained.metal - shares.owner.metal,
+      crystal: gained.crystal - shares.owner.crystal,
+      deuterium: gained.deuterium - shares.owner.deuterium,
+    });
+    const occupier = universe.players[occ.occupierPlayerId];
+    const payPlanetId =
+      occupier?.activePlanetId ?? occupier?.homePlanetId ?? null;
+    if (payPlanetId && universe.planets[payPlanetId]) {
+      addCargoToPlanet(universe.planets[payPlanetId], shares.occupier);
+    }
+  }
+  universe.planets[id] = advanced;
+}
+
+bindPlanetSync(advancePlanetNow);
+
 export function advanceUniverse(universe: UniverseState, now = Date.now()): void {
+  invalidateArtContext(universe);
   ensureUniverseShape(universe);
+  if (universe.seedCursor && !universe.seedCursor.done) {
+    const budget = tickBudget();
+    const deferTick = continueUniverseSeed(universe, now, {
+      systems: budget?.seedSystems ?? 10_000,
+      minis: budget?.seedMinis ?? 10_000,
+      pirates: budget?.seedPirates ?? 10_000,
+    });
+    if (deferTick) return;
+  }
   rollSeasons(universe, now);
   pruneExpiredOccupations(universe, now);
   for (const player of Object.values(universe.players)) {
     advanceResearch(universe, player, now);
   }
+  const budget = tickBudget();
+  const focus = budget?.lazyPlanets ? ownedPlanetIds(universe) : null;
   for (const id of Object.keys(universe.planets)) {
     const planet = universe.planets[id];
-    const owner = universe.players[planet.ownerPlayerId];
-    const energyTech = owner?.research.energyTech ?? 0;
-    const boosts = playerBoosts(owner, now);
-    const lb = levelBonuses(owner?.level ?? 1);
-    const before = { ...planet.resources };
-    // Stack: base → research (energyTech) → level → officers → skills.
-    const advanced = advancePlanet(
-      planet,
-      universe.speed,
-      now,
-      energyTech,
-      {
-        mineOutput:
-          lb.production *
-          boosts.mineOutput *
-          classBonuses(owner?.playerClass?.classId).mineOutput,
-        energyOutput: boosts.energyOutput,
-      },
-      owner,
-    );
-    if (owner) universe.players[owner.id] = owner;
-    const occ = occupationForPlanet(universe, id, now);
-    if (occ && occ.occupierPlayerId !== planet.ownerPlayerId) {
-      const gained = {
-        metal: Math.max(0, advanced.resources.metal - before.metal),
-        crystal: Math.max(0, advanced.resources.crystal - before.crystal),
-        deuterium: Math.max(
-          0,
-          advanced.resources.deuterium - before.deuterium,
-        ),
-      };
-      const shares = occupationMineShares(gained);
-      subtractCargo(advanced, {
-        metal: gained.metal - shares.owner.metal,
-        crystal: gained.crystal - shares.owner.crystal,
-        deuterium: gained.deuterium - shares.owner.deuterium,
-      });
-      const occupier = universe.players[occ.occupierPlayerId];
-      const payPlanetId =
-        occupier?.activePlanetId ?? occupier?.homePlanetId ?? null;
-      if (payPlanetId && universe.planets[payPlanetId]) {
-        addCargoToPlanet(universe.planets[payPlanetId], shares.occupier);
-      }
-    }
-    universe.planets[id] = advanced;
+    if (!planet) continue;
+    if (focus && !focus.has(id) && !planetQueueDue(planet, now)) continue;
+    advancePlanetNow(universe, id, now);
   }
   for (const fleet of Object.values(universe.fleets)) {
     advanceFleetSwarmProduce(fleet, now);

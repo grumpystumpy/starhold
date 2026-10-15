@@ -28,13 +28,18 @@ import {
   buildingUpgradeCost,
   canDestroyMiniPlanet,
   canDirectCaptureMini,
-  coordsKey,
   emptyDefenses,
   emptyFleetShips,
   fleetCargoCapacity,
   fleetShipCount,
 } from "./formulas.js";
 import { hashSeed } from "./formulas-position.js";
+import { consumeTickBudget } from "./tick-budget.js";
+import {
+  notePlanetAdded,
+  notePlanetMoved,
+  planetAtCoords,
+} from "./planet-index.js";
 import type {
   BuildingId,
   Coordinates,
@@ -74,18 +79,6 @@ function emptyMiniBuildings(): PlanetState["buildings"] {
     anomalyForge: 0,
     driftBeacon: 0,
   };
-}
-
-function planetAtCoords(
-  universe: UniverseState,
-  coords: Coordinates,
-): PlanetState | null {
-  const key = coordsKey(coords);
-  return (
-    Object.values(universe.planets).find(
-      (p) => p.kind !== "moon" && coordsKey(p.coords) === key,
-    ) ?? null
-  );
 }
 
 export function isMiniPlanet(planet: PlanetState | null | undefined): boolean {
@@ -228,51 +221,54 @@ export function createMiniPlanet(
  * Seed standard + super-rare minis into slots 20–29.
  * Multiple minis may share a system (different slots). Idempotent on ids.
  */
+/** Minis for one system. Returns how many new bodies were created. */
+export function seedMinisInSystem(
+  universe: UniverseState,
+  galaxy: number,
+  system: number,
+  now: number,
+): number {
+  const seed = universe.seed ?? universe.id;
+  if (!universe.miniPlanetIds) universe.miniPlanetIds = [];
+  const kinds = rollMiniKindsForSystem(seed, galaxy, system);
+  let created = 0;
+  let i = 0;
+  for (const kind of kinds) {
+    const slot = pickFreeMiniSlot(
+      universe,
+      galaxy,
+      system,
+      `${seed}:mini-slot:${galaxy}:${system}:${kind}:${i}`,
+    );
+    i += 1;
+    if (slot == null) continue;
+    const id = miniPlanetId(galaxy, system, slot);
+    if (universe.planets[id]) {
+      if (!universe.miniPlanetIds.includes(id)) universe.miniPlanetIds.push(id);
+      continue;
+    }
+    const mini = createMiniPlanet(seed, galaxy, system, slot, now, kind);
+    universe.planets[id] = mini;
+    notePlanetAdded(universe, mini);
+    universe.miniPlanetIds.push(id);
+    created += 1;
+  }
+  return created;
+}
+
 export function seedUniverseMinis(
   universe: UniverseState,
   now = Date.now(),
 ): void {
-  const seed = universe.seed ?? universe.id;
   if (!universe.miniPlanetIds) universe.miniPlanetIds = [];
-  const existing = new Set(universe.miniPlanetIds);
-
-  for (const id of existing) {
+  for (const id of universe.miniPlanetIds) {
     const p = universe.planets[id];
     if (p?.flags?.mini && !p.flags.miniKind) p.flags.miniKind = "standard";
   }
 
   for (let galaxy = 1; galaxy <= MAP_GALAXIES; galaxy++) {
     for (let system = 1; system <= MAP_SYSTEMS; system++) {
-      const kinds = rollMiniKindsForSystem(seed, galaxy, system);
-      let i = 0;
-      for (const kind of kinds) {
-        const slot = pickFreeMiniSlot(
-          universe,
-          galaxy,
-          system,
-          `${seed}:mini-slot:${galaxy}:${system}:${kind}:${i}`,
-        );
-        i += 1;
-        if (slot == null) continue;
-        const id = miniPlanetId(galaxy, system, slot);
-        if (existing.has(id) || universe.planets[id]) {
-          if (!existing.has(id)) {
-            universe.miniPlanetIds.push(id);
-            existing.add(id);
-          }
-          continue;
-        }
-        universe.planets[id] = createMiniPlanet(
-          seed,
-          galaxy,
-          system,
-          slot,
-          now,
-          kind,
-        );
-        universe.miniPlanetIds.push(id);
-        existing.add(id);
-      }
+      seedMinisInSystem(universe, galaxy, system, now);
     }
   }
 }
@@ -781,7 +777,9 @@ export function empireRelicExpeditionFindMult(
  */
 export function tickMiniDrift(universe: UniverseState, now: number): void {
   const seed = universe.seed ?? universe.id;
+  let budgetHit = false;
   for (const id of universe.miniPlanetIds ?? []) {
+    if (budgetHit) break;
     const planet = universe.planets[id];
     if (!planet || !isMiniPlanet(planet)) continue;
     const last = planet.lastDriftAt ?? planet.lastTickAt ?? now;
@@ -790,7 +788,13 @@ export function tickMiniDrift(universe: UniverseState, now: number): void {
     const steps = Math.floor((now - last) / MINI_DRIFT_INTERVAL_MS);
     let system = planet.coords.system;
     let drifted = false;
+    let done = 0;
     for (let i = 0; i < steps; i++) {
+      if (!consumeTickBudget("driftSteps")) {
+        budgetHit = true;
+        break;
+      }
+      done += 1;
       const delta =
         (hashSeed(`${seed}:drift:${id}:${last}:${i}`) %
           (MINI_DRIFT_SYSTEM_STEP * 2 + 1)) -
@@ -808,13 +812,16 @@ export function tickMiniDrift(universe: UniverseState, now: number): void {
       system = next;
       drifted = true;
     }
-    planet.lastDriftAt = last + steps * MINI_DRIFT_INTERVAL_MS;
+    // Unfinished steps stay due: lastDriftAt only covers steps actually taken.
+    planet.lastDriftAt = last + done * MINI_DRIFT_INTERVAL_MS;
     if (drifted) {
+      const prev = { ...planet.coords };
       planet.coords = {
         galaxy: planet.coords.galaxy,
         system,
         slot: planet.coords.slot,
       };
+      notePlanetMoved(universe, planet, prev);
       planet.name = displayNameForKind(
         miniKindOf(planet),
         planet.coords.galaxy,
@@ -823,6 +830,7 @@ export function tickMiniDrift(universe: UniverseState, now: number): void {
       );
     }
     universe.planets[id] = planet;
+    if (done < steps) budgetHit = true;
   }
 }
 

@@ -1,0 +1,23 @@
+/**
+ * Key-value surface shared by Vercel KV (Upstash Redis) and Cloudflare D1.
+ * Workers KV is intentionally not an implementation: its free tier allows
+ * 1,000 writes a day, which a universe save would burn through.
+ */
+
+export interface KvSetOptions {
+  /** Expire after this many seconds. */
+  exSec?: number;
+  /** Expire after this many milliseconds (lock TTL). */
+  px?: number;
+  /** Insert only when the key is absent. */
+  nx?: boolean;
+}
+
+export interface KvStore {
+  get<T>(key: string): Promise<T | null>;
+  /** `"OK"` when the write landed. `null` when `nx` lost the race. */
+  set(key: string, value: unknown, opts?: KvSetOptions): Promise<"OK" | null>;
+  del(key: string): Promise<void>;
+}
+
+export type StorageMode = "upstash" | "kv" | "memory" | "d1";

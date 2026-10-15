@@ -1,0 +1,29 @@
+# Cloudflare Workers test host. No secrets in this file.
+# SESSION_SECRET is a Worker secret (`wrangler secret put`) or .dev.vars locally.
+# database_id is a placeholder until `wrangler d1 create starhold`.
+name = "starhold"
+main = "worker/index.ts"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+
+[limits]
+cpu_ms = 10
+
+[alias]
+"@starhold/game" = "./packages/game/src/index.ts"
+
+[assets]
+directory = "./apps/web/dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = [ "/api/*" ]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "starhold"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+[vars]
+STARHOLD_RUNTIME = "workers"
+STARHOLD_PASSWORD_KDF = "pbkdf2"

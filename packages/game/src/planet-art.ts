@@ -204,24 +204,60 @@ export function miniArtForSlots(
   return out;
 }
 
+const miniIdSets = new WeakMap<
+  UniverseState,
+  { length: number; tail: string; ids: Set<string> }
+>();
+
+function miniIdSet(universe: UniverseState): Set<string> {
+  const list = universe.miniPlanetIds ?? [];
+  const tail = list.length > 0 ? list[list.length - 1]! : "";
+  const cached = miniIdSets.get(universe);
+  if (cached && cached.length === list.length && cached.tail === tail) {
+    return cached.ids;
+  }
+  const ids = new Set(list);
+  miniIdSets.set(universe, { length: list.length, tail, ids });
+  return ids;
+}
+
 export function isMiniBody(
   universe: UniverseState,
   planet: PlanetState,
 ): boolean {
   if (planet.kind === "moon") return false;
-  return (
-    Boolean(planet.flags?.mini) ||
-    (universe.miniPlanetIds ?? []).includes(planet.id)
-  );
+  if (planet.flags?.mini) return true;
+  return miniIdSet(universe).has(planet.id);
 }
 
 export interface PlanetArtContext {
   miniSlots: ReadonlyMap<string, readonly number[]>;
 }
 
+let cachedArt: {
+  universe: UniverseState;
+  token: string;
+  ctx: PlanetArtContext;
+} | null = null;
+
+function artToken(universe: UniverseState): string {
+  const ids = universe.miniPlanetIds;
+  if (!ids || ids.length === 0) return "0";
+  return `${ids.length}:${ids[ids.length - 1]}`;
+}
+
+/** Drop the per-isolate art index. Call before a tick that can move minis. */
+export function invalidateArtContext(universe?: UniverseState): void {
+  if (!universe || cachedArt?.universe === universe) cachedArt = null;
+}
+
 export function createPlanetArtContext(
   universe: UniverseState,
 ): PlanetArtContext {
+  const token = artToken(universe);
+  if (cachedArt?.universe === universe && cachedArt.token === token) {
+    return cachedArt.ctx;
+  }
   const lists = new Map<string, number[]>();
   const add = (planet: PlanetState) => {
     if (!isMiniBody(universe, planet)) return;
@@ -237,7 +273,9 @@ export function createPlanetArtContext(
   for (const planet of Object.values(universe.planets)) {
     if (planet.flags?.mini) add(planet);
   }
-  return { miniSlots: lists };
+  const ctx = { miniSlots: lists };
+  cachedArt = { universe, token, ctx };
+  return ctx;
 }
 
 function miniArtAt(

@@ -1296,6 +1296,22 @@ export const NPC_RAID_CATCHUP_MAX = 24;
 /** Max AI bases processed per lazy tick batch (bounded Hobby maxDuration). */
 export const NPC_AI_BATCH_SIZE = 200;
 
+/**
+ * Workers free plan allows 10ms of CPU per request. These caps spread a
+ * long-idle catch-up across later requests. Vercel does not install a
+ * tick budget, so it still runs the full tick. See docs/cloudflare.md.
+ */
+export const WORKERS_TICK_RAID_BUDGET = 2;
+export const WORKERS_TICK_LEVELUP_BUDGET = 40;
+export const WORKERS_TICK_FLEET_BUDGET = 2;
+export const WORKERS_TICK_DRIFT_BUDGET = 8;
+/** Systems of asteroids + minis visited per Workers request. */
+export const WORKERS_TICK_SEED_SYSTEMS = 8;
+/** Stop a seed slice after this many new mini bodies. */
+export const WORKERS_TICK_SEED_MINIS = 1;
+/** Pirate bases placed per Workers request once the map scan finishes. */
+export const WORKERS_TICK_SEED_PIRATES = 4;
+
 /* ---- Aliens ---- */
 
 export const ALIEN_INITIAL_BASE_COUNT = 0;
