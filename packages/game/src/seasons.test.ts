@@ -13,6 +13,7 @@ import {
   advanceUniverse,
   claimSeasonReward,
   createUniverse,
+  graduateNewbieProtection,
   grantSeasonPoints,
   isSeasonPvpMission,
   joinUniverse,
@@ -45,6 +46,7 @@ describe("monthly seasons", () => {
     const universe = createUniverse("Season Raid", 8);
     const raider = joinUniverse(universe, "Raider", OCT);
     const victim = joinUniverse(universe, "Victim", OCT + 1);
+    graduateNewbieProtection(universe, universe.players[victim.player.id]!);
     const winner = universe.planets[raider.planet.id]!;
     winner.ships.scout = 5;
     winner.ships.hauler = 1;
@@ -73,6 +75,7 @@ describe("monthly seasons", () => {
     const weak = createUniverse("Season Loss", 8);
     const attacker = joinUniverse(weak, "Weak", OCT);
     const wall = joinUniverse(weak, "Wall", OCT + 1);
+    graduateNewbieProtection(weak, weak.players[wall.player.id]!);
     weak.planets[attacker.planet.id]!.ships.scout = 1;
     weak.planets[attacker.planet.id]!.resources.deuterium = 500;
     weak.planets[wall.planet.id]!.ships.interceptor = 12;
@@ -104,7 +107,8 @@ describe("monthly seasons", () => {
     const body = universe.planets[planet.id]!;
     body.ships.cruiser = 5;
     body.ships.interceptor = 10;
-    body.resources.deuterium = 50_000;
+    body.buildings.deutTank = 3;
+    body.resources.deuterium = 80_000;
     const launch = launchFleet(universe, {
       playerId: player.id,
       mission: "pirateRaid",
@@ -281,7 +285,7 @@ describe("monthly seasons", () => {
     delete universe.seasons;
     const result = migrateOrResetUniverse(universe);
     assert.equal(result.didReset, false);
-    assert.equal(result.universe.schemaVersion, 4);
+    assert.equal(result.universe.schemaVersion, 5);
     assert.equal(result.universe.players[player.id]?.name, "Keeper");
     assert.equal(result.universe.players[player.id]?.homePlanetId, planetId);
     rollSeasons(result.universe, OCT);

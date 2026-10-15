@@ -11,6 +11,7 @@ import {
   deleteAllianceMarker,
   ensureUniverseShape,
   galaxyViewFor,
+  graduateNewbieProtection,
   joinAlliance,
   joinUniverse,
   jointStrikeHelpersAvailable,
@@ -312,6 +313,7 @@ describe("alliance chat, intel, markers", () => {
     assert.equal(joinAlliance(universe, wing.player.id, { allianceId: allyId }).ok, true);
     assert.equal(jointStrikeHelpersAvailable(), true);
     const target = joinUniverse(universe, "Mark");
+    graduateNewbieProtection(universe, universe.players[target.player.id]!);
     const coords = universe.planets[target.player.homePlanetId]!.coords;
     const proposed = proposeAllianceStrike(
       universe,

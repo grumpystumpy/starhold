@@ -121,7 +121,6 @@ export {
   LUSH_ART_IDS,
   MINI_ART_IDS,
   artForBody,
-  isMiniBody,
   miniArtForSlots,
   normalArtAt,
   normalArtForSystem,

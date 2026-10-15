@@ -273,15 +273,6 @@ export interface AllianceListEntry {
   maxMembers: number;
 }
 
-export type AllianceRole = "founder" | "officer" | "member";
-export type AllianceJoinMode = "open" | "invite";
-
-export interface AllianceMember {
-  playerId: string;
-  role: AllianceRole;
-  joinedAt: number;
-}
-
 export type EventLogKind =
   | "buildComplete"
   | "fleetReturn"

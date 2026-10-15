@@ -5,6 +5,7 @@ import {
   advanceUniverse,
   createUniverse,
   ensureUniverseShape,
+  graduateNewbieProtection,
   joinUniverse,
   launchFleet,
   markEventsRead,
@@ -150,6 +151,7 @@ describe("event log", () => {
     const universe = createUniverse("Raid Log", 8);
     const a = joinUniverse(universe, "Raider", 60_000_000);
     const b = joinUniverse(universe, "Victim", 60_000_001);
+    graduateNewbieProtection(universe, universe.players[b.player.id]!);
     universe.planets[a.planet.id].ships.scout = 5;
     universe.planets[a.planet.id].ships.hauler = 1;
     universe.planets[a.planet.id].resources.deuterium = 500;

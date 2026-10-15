@@ -179,7 +179,8 @@ describe("goal hooks", () => {
     base!.resources = { metal: 100, crystal: 50, deuterium: 10 };
     const { player, planet } = joinUniverse(universe, "Hunter", 410_000_000);
     universe.planets[planet.id]!.ships.cruiser = 4;
-    universe.planets[planet.id]!.resources.deuterium = 50_000;
+    universe.planets[planet.id]!.buildings.deutTank = 4;
+    universe.planets[planet.id]!.resources.deuterium = 100_000;
     const launch = launchFleet(universe, {
       playerId: player.id,
       mission: "pirateRaid",

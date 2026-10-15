@@ -8,6 +8,7 @@ import {
   createUniverse,
   joinAlliance,
   joinUniverse,
+  graduateNewbieProtection,
   launchFleet,
   leaveAcsFleet,
   playerView,
@@ -38,6 +39,7 @@ describe("ACS joint strike", () => {
 
     // Target: empty rival — create a third player to raid.
     const c = joinUniverse(universe, "Target");
+    graduateNewbieProtection(universe, universe.players[c.player.id]!);
     const target = universe.planets[c.player.homePlanetId]!;
     target.ships.scout = 2;
     target.defenses = { ...target.defenses, laserBattery: 0 };
@@ -108,6 +110,7 @@ describe("ACS joint strike", () => {
     pa.resources.deuterium = 20_000;
     pb.resources.deuterium = 20_000;
     const c = joinUniverse(universe, "Victim");
+    graduateNewbieProtection(universe, universe.players[c.player.id]!);
     const target = universe.planets[c.player.homePlanetId]!;
 
     const lead = launchFleet(universe, {
@@ -137,6 +140,7 @@ describe("ACS joint strike", () => {
     pa.ships.interceptor = 5;
     pa.resources.deuterium = 20_000;
     const c = joinUniverse(universe, "Prey");
+    graduateNewbieProtection(universe, universe.players[c.player.id]!);
     const target = universe.planets[c.player.homePlanetId]!;
     const lead = launchFleet(universe, {
       playerId: a.player.id,
@@ -161,6 +165,7 @@ describe("ACS joint strike", () => {
     pa.ships.interceptor = 3;
     pa.resources.deuterium = 10_000;
     const c = joinUniverse(universe, "T");
+    graduateNewbieProtection(universe, universe.players[c.player.id]!);
     launchFleet(universe, {
       playerId: a.player.id,
       mission: "raid",
