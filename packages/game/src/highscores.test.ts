@@ -17,6 +17,7 @@ import {
   playerView,
 } from "./world.js";
 import { emptyBuildings } from "./world-bootstrap.js";
+import { graduateNewbieProtection } from "./test-graduate.js";
 
 describe("P2 highscores", () => {
   it("counts research once across two colonies", () => {
@@ -77,6 +78,7 @@ describe("P2 highscores", () => {
     const universe = createUniverse("Fleet Score", 8);
     const a = joinUniverse(universe, "Flyer", 151_000_000);
     const b = joinUniverse(universe, "Target", 151_000_001);
+    graduateNewbieProtection(universe, universe.players[b.player.id]!);
     universe.planets[a.planet.id].ships.scout = 3;
     universe.planets[a.planet.id].resources.deuterium = 5_000;
     const before = empirePoints(universe, universe.players[a.player.id]);

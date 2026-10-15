@@ -26,7 +26,9 @@ import {
   deleteFleetPreset,
   discoverMiniPlanet,
   disbandAlliance,
+  empirePoints,
   ensureUniverseShape,
+  graduateNewbieProtection,
   inviteToAlliance,
   isAllianceJoinMode,
   isAllianceRole,
@@ -1054,6 +1056,30 @@ export function createApp(): Hono {
           }
         }
         return c.json(playerView(universe, body.playerId!));
+      });
+    });
+  }
+
+  /**
+   * CI / local Playwright only. Raises storage so empire points clear
+   * newbie protection without combat ships. Never enabled in production.
+   */
+  if (process.env.ALLOW_E2E_HOOKS === "1") {
+    app.post("/api/e2e/graduate-newbie", async (c) => {
+      const body = (await c.req.json().catch(() => ({}))) as {
+        playerId?: string;
+      };
+      if (!body.playerId) {
+        return c.json({ error: "playerId required." }, 400);
+      }
+      return withUniverse((universe) => {
+        const player = universe.players[body.playerId!];
+        if (!player) return c.json({ error: "Unknown player." }, 404);
+        graduateNewbieProtection(universe, player);
+        return c.json({
+          ok: true,
+          points: empirePoints(universe, player),
+        });
       });
     });
   }

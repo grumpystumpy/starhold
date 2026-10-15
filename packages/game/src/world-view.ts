@@ -12,12 +12,13 @@ import {
 import {
   classBonuses,
   economySnapshot,
+  empirePoints,
   levelBonuses,
   planetPoints,
   playerProgressView,
-  researchPoints,
-  shipStockPoints,
 } from "./formulas.js";
+
+export { empirePoints };
 import type {
   GalaxySlot,
   GalaxyView,
@@ -51,24 +52,6 @@ import { inSensorPhalanxRange, ownedPlanetCount } from "./world-moons.js";
 import { occupationForPlanet } from "./world-occupation.js";
 import { playerKnowsMini } from "./world-mini.js";
 import { getDebris } from "./world-tick.js";
-
-/** Empire total: all planets + in-flight ships + research once. */
-export function empirePoints(
-  universe: UniverseState,
-  player: PlayerState,
-): number {
-  let points = researchPoints(player.research);
-  for (const id of player.planetIds ?? []) {
-    const planet = universe.planets[id];
-    if (planet) points += planetPoints(planet);
-  }
-  for (const fleet of Object.values(universe.fleets)) {
-    if (fleet.ownerPlayerId === player.id) {
-      points += shipStockPoints(fleet.ships);
-    }
-  }
-  return Math.floor(points);
-}
 
 export function highscoresBoard(universe: UniverseState): HighscoreEntry[] {
   const rows = Object.values(universe.players).map((p) => {

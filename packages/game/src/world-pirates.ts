@@ -101,6 +101,10 @@ import {
   utcDayKey,
 } from "./world-boosts.js";
 import { emptyCargo, planetAtCoords } from "./world-bootstrap.js";
+import {
+  pirateRaidPickWeight,
+  recordSuccessfulPirateRaid,
+} from "./world-protection.js";
 import { subtractCargo } from "./world-tick.js";
 
 const PIRATE_NAMES = [
@@ -1063,6 +1067,42 @@ export function isRelicWorldPlanet(planet: PlanetState): boolean {
   return Boolean(flags?.mini && flags.miniKind === "relic");
 }
 
+/**
+ * Pirate raids multiply relic weight by fairness (newbies weigh 0).
+ * Alien raids keep relic weight only — fairness does not apply.
+ */
+function npcPlanetPickWeight(
+  universe: UniverseState,
+  planet: PlanetState,
+  now: number,
+  faction: "pirate" | "alien",
+): number {
+  const relic = planetRaidWeight(planet);
+  if (faction !== "pirate") return relic;
+  const owner = universe.players[planet.ownerPlayerId];
+  if (!owner) return 0;
+  return relic * pirateRaidPickWeight(universe, owner, now);
+}
+
+function pickWeightedPlayerPlanet(
+  universe: UniverseState,
+  planets: PlanetState[],
+  roll: number,
+  now: number,
+  faction: "pirate" | "alien",
+): PlanetState | null {
+  const weights = planets.map((p) => npcPlanetPickWeight(universe, p, now, faction));
+  let total = 0;
+  for (const w of weights) total += w;
+  if (total <= 0) return null;
+  let slot = ((roll % 1_000_000) / 1_000_000) * total;
+  for (let i = 0; i < planets.length; i++) {
+    slot -= weights[i]!;
+    if (slot <= 0) return planets[i]!;
+  }
+  return planets[planets.length - 1]!;
+}
+
 export function planetRaidWeight(planet: PlanetState): number {
   return isRelicWorldPlanet(planet) ? MINI_RELIC_PIRATE_WEIGHT : 1;
 }
@@ -1102,18 +1142,14 @@ export function pickRaidTarget(
       : ALIEN_VS_ALIEN_RAID_PERIOD_MULT;
   const preferPlayer = planets.length > 0;
   if (preferPlayer && (npcPool.length === 0 || roll % 1000 < Math.floor(1000 / vsMult))) {
-    let total = 0;
-    for (const p of planets) total += planetRaidWeight(p);
-    let slot = roll % Math.max(1, total);
-    for (const p of planets) {
-      slot -= planetRaidWeight(p);
-      if (slot < 0) return { kind: "planet", planet: p };
-    }
-    return { kind: "planet", planet: planets[roll % planets.length]! };
+    const planet = pickWeightedPlayerPlanet(universe, planets, roll, now, faction);
+    if (planet) return { kind: "planet", planet };
+    // All player targets filtered (newbie / zero weight) — try NPCs.
   }
   if (npcPool.length === 0) {
     if (!planets.length) return null;
-    return { kind: "planet", planet: planets[roll % planets.length]! };
+    const planet = pickWeightedPlayerPlanet(universe, planets, roll, now, faction);
+    return planet ? { kind: "planet", planet } : null;
   }
   return npcPool[roll % npcPool.length]!;
 }
@@ -1123,6 +1159,7 @@ function applyNpcRaidOnPlanet(
   base: PirateBase | AlienBase,
   planet: PlanetState,
   now: number,
+  faction: "pirate" | "alien",
   markDestroyed: (b: PirateBase | AlienBase, n: number) => void,
 ): void {
   const owner = universe.players[planet.ownerPlayerId];
@@ -1165,6 +1202,8 @@ function applyNpcRaidOnPlanet(
   } else {
     grantPlayerXp(owner, xpForCombatLose());
   }
+  // Successful pirate raid for fairness (#18) — aliens exempt; fires when raid lands.
+  if (faction === "pirate") recordSuccessfulPirateRaid(owner, now);
   universe.players[owner.id] = owner;
   if (fleetShipCount(base.ships) <= 0 && defenseCount(base.defenses) <= 0) {
     markDestroyed(base, now);
@@ -1241,6 +1280,7 @@ function fireRaid(
       base,
       target.planet,
       now,
+      faction,
       faction === "pirate" ? markP : markA,
     );
   } else if (target.kind === "pirate") {

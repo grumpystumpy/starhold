@@ -12,6 +12,7 @@ import {
   joinUniverse,
   launchFleet,
 } from "./world.js";
+import { graduateNewbieProtection } from "./test-graduate.js";
 
 describe("P2 multi-round combat + rapid fire", () => {
   it("unopposed landing is attacker_win with full survivors", () => {
@@ -64,6 +65,7 @@ describe("P2 multi-round combat + rapid fire", () => {
     const universe = createUniverse("Round Drift", 8);
     const a = joinUniverse(universe, "Atk", 130_000_000);
     const b = joinUniverse(universe, "Def", 130_000_001);
+    graduateNewbieProtection(universe, universe.players[b.player.id]!);
     universe.planets[a.planet.id].ships.scout = 3;
     universe.planets[a.planet.id].resources.deuterium = 500;
     universe.planets[b.planet.id].ships.scout = 1;

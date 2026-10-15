@@ -164,7 +164,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
     attack: 300_000,
     shield: 800_000,
     hull: 2_000_000,
-    speed: 600,
+    speed: 300,
     fuelPerDistance: 4,
     researchReq: {
       weaponsTech: 14,
@@ -1370,3 +1370,19 @@ export const ALLIANCE_MAX_OFFICERS = 3;
 export const ALLIANCE_CREATE_MIN_POINTS = 0;
 /** Default join mode when creating an alliance. */
 export const ALLIANCE_JOIN_MODE_DEFAULT: "open" | "invite" = "open";
+
+/**
+ * Newbie protection (Micah CHANGE #15): empire points below this are
+ * protected from player raids and pirate NPC raids. Ends permanently
+ * once empire points reach the threshold (no re-entry).
+ */
+export const NEWBIE_PROTECTION_POINTS = 2500;
+
+/**
+ * Pirate raid fairness (Micah CHANGE #18): players under this empire
+ * points total get a reduced pick weight after each successful pirate
+ * raid that UTC day. Does not apply to aliens.
+ */
+export const PIRATE_FAIRNESS_POINTS_MAX = 100_000;
+/** Additive penalty per successful pirate raid that day (1% of original). */
+export const PIRATE_FAIRNESS_PENALTY_PER_RAID = 0.01;

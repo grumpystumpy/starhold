@@ -68,6 +68,7 @@ describe("Round 2 ship catalog fixtures (Micah amendments)", () => {
     assert.equal(s.name, "World Eater");
     assert.equal(s.cargo, 0);
     assert.equal(s.attack, 300_000);
+    assert.equal(s.speed, 300);
     assert.equal(s.shipyardLevel, 15);
     assert.ok(s.cost.metal > SHIPS.swarmMothership.cost.metal);
     assert.ok(s.shipyardLevel > SHIPS.swarmMothership.shipyardLevel);

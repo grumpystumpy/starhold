@@ -248,6 +248,14 @@ export interface PlayerState {
   discoveredMiniIds?: string[];
   /** Alliance membership — tag resolved at read time. */
   allianceId?: string | null;
+  /**
+   * Pirate raid fairness (CHANGE #18): successful pirate NPC raids on this
+   * player for a UTC day. Lazy daily reset by `dayKey`. Aliens exempt.
+   */
+  pirateRaidFairness?: {
+    dayKey: string;
+    successfulRaids: number;
+  };
 }
 
 export interface UniverseState {

@@ -12,6 +12,7 @@ import {
   queueDefenseBuild,
   queueResearch,
 } from "./world.js";
+import { graduateNewbieProtection } from "./test-graduate.js";
 
 describe("P0/P1 parity — lab & research", () => {
   it("research lab L0→L1 needs metal+crystal only (no deut)", () => {
@@ -82,6 +83,7 @@ describe("P0/P1 parity — lab & research", () => {
 
     universe.planets[a.planet.id].ships.scout = 1;
     universe.planets[a.planet.id].resources.deuterium = 500;
+    graduateNewbieProtection(universe, universe.players[b.player.id]!);
     const launch = launchFleet(
       universe,
       a.player.id,

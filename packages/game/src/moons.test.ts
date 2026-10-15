@@ -18,6 +18,7 @@ import {
   setActivePlanet,
   tryFormMoon,
 } from "./world.js";
+import { graduateNewbieProtection } from "./test-graduate.js";
 
 describe("Thread C moons", () => {
   it("computes chance and keeps planetAtCoords distinct from moon", () => {
@@ -159,6 +160,7 @@ describe("Thread C moons", () => {
 
     universe.planets[b.planet.id].ships.scout = 2;
     universe.planets[b.planet.id].resources.deuterium = 5_000;
+    graduateNewbieProtection(universe, universe.players[a.player.id]!);
     const launch = launchFleet(universe, {
       playerId: b.player.id,
       mission: "raid",
@@ -255,6 +257,7 @@ describe("Thread C moons", () => {
     const universe = createUniverse("Raid Moon", 8);
     const a = joinUniverse(universe, "Defender", 163_000_000);
     const b = joinUniverse(universe, "Attacker", 163_000_001);
+    graduateNewbieProtection(universe, universe.players[a.player.id]!);
     universe.planets[a.planet.id].ships.cruiser = 20;
     universe.planets[b.planet.id].ships.bomber = 30;
     universe.planets[b.planet.id].ships.cruiser = 20;
