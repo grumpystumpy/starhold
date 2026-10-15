@@ -68,6 +68,21 @@ export {
   playerView,
   publicRoster,
 } from "./world-view.js";
+export {
+  COLD_ART_IDS,
+  HOT_ART_IDS,
+  LUSH_ART_IDS,
+  MINI_ART_IDS,
+  artForBody,
+  isMiniBody,
+  miniArtForSlots,
+  normalArtAt,
+  normalArtForSystem,
+  planetArtId,
+  planetArtRef,
+  poolForSlot,
+  resolveArtIndex,
+} from "./planet-art.js";
 export { pruneSpyReports } from "./world-spy-prune.js";
 export {
   expeditionKindFromRoll,

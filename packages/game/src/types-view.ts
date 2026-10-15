@@ -185,7 +185,15 @@ export interface PirateBasePublic {
   threatHint: "low" | "medium" | "high";
 }
 
-export interface GalaxySlot {
+export interface PlanetArtFields {
+  artId: string;
+  /** Master WebP (512). Overview hero. */
+  artUrl: string;
+  /** 128 thumb. Galaxy rows, switcher, dense lists. */
+  artThumbUrl: string;
+}
+
+export interface GalaxySlot extends PlanetArtFields {
   coords: Coordinates;
   planetId: string | null;
   playerId: string | null;
@@ -196,13 +204,25 @@ export interface GalaxySlot {
   isOwn: boolean;
   hasMoon: boolean;
   moonId: string | null;
+  /** Mini body sitting on this colonizable slot. */
+  isMini: boolean;
   activity: "empty" | "planet" | "pirate" | null;
+}
+
+/** Mini planet outside slots 1–15 (deep space / expedition). */
+export interface GalaxyMiniBody extends PlanetArtFields {
+  planetId: string;
+  name: string;
+  coords: Coordinates;
+  isOwn: boolean;
 }
 
 export interface GalaxyView {
   galaxy: number;
   system: number;
   slots: GalaxySlot[];
+  /** Minis in this system whose slot is outside 1–15. */
+  minis: GalaxyMiniBody[];
   deepSpace: { coords: Coordinates };
   asteroids: AsteroidField[];
   pirateBase: PirateBasePublic | null;
@@ -218,15 +238,20 @@ export interface PlayerView {
   };
   player: PlayerState;
   planet: PlanetState;
-  ownedPlanets: Array<{
-    id: string;
-    name: string;
-    coords: Coordinates;
-    isHome: boolean;
-    isActive: boolean;
-    isMoon: boolean;
-    jumpGateLevel: number;
-  }>;
+  /** Derived art for the active body (not persisted). */
+  planetArt: PlanetArtFields;
+  ownedPlanets: Array<
+    PlanetArtFields & {
+      id: string;
+      name: string;
+      coords: Coordinates;
+      isHome: boolean;
+      isActive: boolean;
+      isMoon: boolean;
+      isMini: boolean;
+      jumpGateLevel: number;
+    }
+  >;
   economy: EconomySnapshot;
   roster: PublicPlayer[];
   highscores: HighscoreEntry[];
@@ -259,7 +284,7 @@ export interface PlayerView {
   occupation: OccupationState | null;
 }
 
-export interface PublicPlayer {
+export interface PublicPlayer extends PlanetArtFields {
   id: string;
   name: string;
   coords: Coordinates;
@@ -267,7 +292,7 @@ export interface PublicPlayer {
   planetId: string;
 }
 
-export interface HighscoreEntry {
+export interface HighscoreEntry extends PlanetArtFields {
   rank: number;
   playerId: string;
   name: string;

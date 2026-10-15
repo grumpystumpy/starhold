@@ -6,6 +6,7 @@ import {
 } from "@starhold/game";
 import { SHIP_ART } from "./assets";
 import { fmt, fmtCoords, fmtEta, remainingSeconds } from "./format";
+import { planetDiscHtml } from "./planet-disc";
 import { escapeAttr, escapeHtml } from "./render-escape";
 
 export function fleetsInFlight(
@@ -159,9 +160,25 @@ export function galaxyPanel(
       const moon = s.hasMoon ? " · Moon" : "";
       const tag = s.allianceTag ? ` [${escapeHtml(s.allianceTag)}]` : "";
       const who = s.playerName
-        ? `${escapeHtml(s.playerName)}${tag}${s.isOwn ? " (you)" : ""} · ~${fmt(s.pointsHint)} pts${moon}`
+        ? `${escapeHtml(s.playerName)}${tag}${s.isOwn ? " (you)" : ""}${s.isMini ? " · Mini" : ""} · ~${fmt(s.pointsHint)} pts${moon}`
         : "Empty";
-      return `<li data-testid="galaxy-slot-${s.coords.slot}"><span>${fmt(s.coords.slot)}. ${who}${debris}</span><span>${fmtCoords(s.coords)}</span></li>`;
+      const disc = planetDiscHtml({
+        src: s.artThumbUrl,
+        artId: s.artId,
+        size: 40,
+        className: s.planetId ? undefined : "planet-disc-empty",
+        testId: `galaxy-art-${s.coords.slot}`,
+      });
+      const moonDisc = s.hasMoon
+        ? planetDiscHtml({
+            src: s.artThumbUrl,
+            artId: s.artId,
+            size: 26,
+            className: "planet-disc-moon",
+            testId: `galaxy-moon-art-${s.coords.slot}`,
+          })
+        : "";
+      return `<li data-testid="galaxy-slot-${s.coords.slot}" data-art-id="${escapeAttr(s.artId)}"><span class="galaxy-slot-main">${disc}${moonDisc}<span class="galaxy-slot-label">${fmt(s.coords.slot)}. ${who}${debris}</span></span><span class="galaxy-slot-coords">${fmtCoords(s.coords)}</span></li>`;
     })
     .join("");
   const asteroids =
@@ -191,7 +208,18 @@ export function galaxyPanel(
         <button type="button" data-galaxy-scan-system data-testid="galaxy-scan-system" ${busy ? "disabled" : ""}>Scan system (probes)</button>
       </div>
       <p class="hint">Send max uses the Expedition preset and fills free expedition slots from ships in orbit on the selected colony. Scan probes every foreign-owned planet/moon in this system.</p>
-      <ul class="roster" data-testid="galaxy-slots">${rows}</ul>
+      <ul class="roster galaxy-slots" data-testid="galaxy-slots">${rows}</ul>
+      ${
+        galaxy.minis.length > 0
+          ? `<h3 class="subhead">Mini planets</h3>
+      <ul class="roster galaxy-slots" data-testid="galaxy-minis">${galaxy.minis
+        .map(
+          (mini) =>
+            `<li data-testid="galaxy-mini-${escapeAttr(mini.planetId)}" data-art-id="${escapeAttr(mini.artId)}"><span class="galaxy-slot-main">${planetDiscHtml({ src: mini.artThumbUrl, artId: mini.artId, size: 40, testId: `galaxy-mini-art-${mini.planetId}` })}<span class="galaxy-slot-label">${escapeHtml(mini.name)}${mini.isOwn ? " (you)" : ""}</span></span><span class="galaxy-slot-coords">${fmtCoords(mini.coords)}</span></li>`,
+        )
+        .join("")}</ul>`
+          : ""
+      }
       <h3 class="subhead">Deep space</h3>
       ${deep}
       <h3 class="subhead">Asteroids</h3>

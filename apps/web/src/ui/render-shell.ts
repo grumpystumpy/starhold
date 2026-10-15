@@ -2,8 +2,9 @@ import {
   PRODUCTION_MULT,
   type PlayerView,
 } from "@starhold/game";
-import { PLANET_ART, RESOURCE_ART } from "./assets";
+import { RESOURCE_ART } from "./assets";
 import { fmt, fmtCoords } from "./format";
+import { planetDiscHtml } from "./planet-disc";
 import { NAV_LABELS, NAV_PAGES, type NavPage } from "./nav";
 import { flashHtml, resBlock } from "./render-chrome";
 import { escapeAttr, escapeHtml } from "./render-escape";
@@ -75,11 +76,16 @@ function planetSwitcher(
       <ul class="planet-list">
         ${bodies
           .map((p) => {
-            const art = p.isMoon ? PLANET_ART.moon : PLANET_ART.rocky;
-            const label = `${escapeHtml(p.name)}${p.isMoon ? " · Moon" : ""}${p.isHome ? " ★" : ""}`;
+            const label = `${escapeHtml(p.name)}${p.isMoon ? " · Moon" : ""}${p.isMini ? " · Mini" : ""}${p.isHome ? " ★" : ""}`;
+            const disc = planetDiscHtml({
+              src: p.artThumbUrl,
+              artId: p.artId,
+              size: p.isMoon ? 28 : 36,
+              className: p.isMoon ? "planet-disc-moon" : undefined,
+            });
             return `<li>
               <button type="button" data-select-planet="${escapeAttr(p.id)}" data-testid="select-planet-${p.id}" class="planet-chip${p.isActive ? " active" : ""}" ${busy ? "disabled" : ""} title="${escapeAttr(fmtCoords(p.coords))}">
-                <img class="thumb" src="${art}" alt="" width="36" height="36" />
+                ${disc}
                 <span class="planet-chip-text">
                   <span class="planet-chip-name">${label}</span>
                   <span class="planet-chip-coords">${fmtCoords(p.coords)}</span>
@@ -99,8 +105,16 @@ export function shellHtml(
   mainHtml: string,
 ): string {
   const { planet, universe } = view;
-  const heroArt =
-    planet.kind === "moon" ? PLANET_ART.moon : PLANET_ART.outpost;
+  const heroArt = planetDiscHtml({
+    src: view.planetArt.artThumbUrl,
+    artId: view.planetArt.artId,
+    size: planet.kind === "moon" ? 44 : 56,
+    className:
+      planet.kind === "moon"
+        ? "planet-disc-top planet-disc-moon"
+        : "planet-disc-top",
+    lazy: false,
+  });
 
   // Enrich resource blocks with storage titles via patch after — resBlock is shared.
   // Inject title attributes by wrapping amounts in the bar already.
@@ -121,10 +135,10 @@ export function shellHtml(
       <header class="topbar shell-top">
         ${pageDropdown(view, activePage)}
         <div class="topbar-brand">
-          <img class="thumb thumb-lg" src="${heroArt}" alt="" width="56" height="56" />
+          ${heroArt}
           <div>
             <h1 class="brand">Starhold</h1>
-            <div class="coords" data-testid="planet-coords">${escapeHtml(planet.name)}${planet.kind === "moon" ? " · Moon" : ""} · ${fmtCoords(planet.coords)} · ${escapeHtml(universe.name)} @ ${universe.speed}×${Number(PRODUCTION_MULT) > 1 ? ` · income ×${PRODUCTION_MULT} (test)` : ""}</div>
+            <div class="coords" data-testid="planet-coords">${escapeHtml(planet.name)}${planet.kind === "moon" ? " · Moon" : ""}${planet.flags?.mini ? " · Mini" : ""} · ${fmtCoords(planet.coords)} · ${escapeHtml(universe.name)} @ ${universe.speed}×${Number(PRODUCTION_MULT) > 1 ? ` · income ×${PRODUCTION_MULT} (test)` : ""}</div>
           </div>
         </div>
         <div class="topbar-progress" data-testid="player-level" title="Lifetime XP ${fmt(progress.xpTotal)}">

@@ -18,10 +18,19 @@ import {
   researchPoints,
   shipStockPoints,
 } from "./formulas.js";
+import {
+  artForBody,
+  createPlanetArtContext,
+  isMiniBody,
+  normalArtAt,
+  type PlanetArtContext,
+} from "./planet-art.js";
 import type {
+  GalaxyMiniBody,
   GalaxySlot,
   GalaxyView,
   HighscoreEntry,
+  PlanetArtFields,
   PlayerState,
   PlayerView,
   PublicPlayer,
@@ -64,7 +73,17 @@ export function empirePoints(
   return Math.floor(points);
 }
 
+function artFields(
+  universe: UniverseState,
+  planet: UniverseState["planets"][string] | undefined,
+  ctx: PlanetArtContext,
+): PlanetArtFields {
+  if (planet) return artForBody(universe, planet, ctx);
+  return normalArtAt({ galaxy: 1, system: 1, slot: 8 });
+}
+
 export function highscoresBoard(universe: UniverseState): HighscoreEntry[] {
+  const artCtx = createPlanetArtContext(universe);
   const rows = Object.values(universe.players).map((p) => {
     const home = universe.planets[p.homePlanetId];
     return {
@@ -75,6 +94,7 @@ export function highscoresBoard(universe: UniverseState): HighscoreEntry[] {
       planetCount: ownedPlanetCount(universe, p.id),
       level: p.level ?? 1,
       xpTotal: p.xpTotal ?? 0,
+      ...artFields(universe, home, artCtx),
     };
   });
   rows.sort(
@@ -88,6 +108,7 @@ export function highscoresBoard(universe: UniverseState): HighscoreEntry[] {
 }
 
 export function publicRoster(universe: UniverseState): PublicPlayer[] {
+  const artCtx = createPlanetArtContext(universe);
   return Object.values(universe.players).map((p) => {
     const planet = universe.planets[p.homePlanetId];
     return {
@@ -96,6 +117,7 @@ export function publicRoster(universe: UniverseState): PublicPlayer[] {
       coords: planet?.coords ?? { galaxy: 0, system: 0, slot: 0 },
       pointsHint: empirePoints(universe, p),
       planetId: p.homePlanetId,
+      ...artFields(universe, planet, artCtx),
     };
   });
 }
@@ -109,6 +131,7 @@ export function galaxyViewFor(
   ensureUniverseShape(universe);
   const g = Math.min(MAP_GALAXIES, Math.max(1, Math.floor(galaxy)));
   const s = Math.min(MAP_SYSTEMS, Math.max(1, Math.floor(system)));
+  const artCtx = createPlanetArtContext(universe);
   const slots: GalaxySlot[] = [];
   for (let slot = 1; slot <= MAP_SLOTS; slot++) {
     const coords = { galaxy: g, system: s, slot };
@@ -118,6 +141,9 @@ export function galaxyViewFor(
     const owner = planet
       ? universe.players[planet.ownerPlayerId]
       : undefined;
+    const art = planet
+      ? artForBody(universe, planet, artCtx)
+      : normalArtAt(coords);
     slots.push({
       coords,
       planetId: planet?.id ?? null,
@@ -131,9 +157,29 @@ export function galaxyViewFor(
       isOwn: owner?.id === playerId,
       hasMoon: Boolean(moon),
       moonId: moon?.id ?? null,
+      isMini: planet ? isMiniBody(universe, planet) : false,
       activity: planet ? "planet" : "empty",
+      ...art,
     });
   }
+
+  const minis: GalaxyMiniBody[] = [];
+  for (const planet of Object.values(universe.planets)) {
+    if (!isMiniBody(universe, planet)) continue;
+    if (planet.coords.galaxy !== g || planet.coords.system !== s) continue;
+    if (planet.coords.slot >= 1 && planet.coords.slot <= MAP_SLOTS) continue;
+    const art = artForBody(universe, planet, artCtx);
+    minis.push({
+      planetId: planet.id,
+      name: planet.name,
+      coords: planet.coords,
+      isOwn: planet.ownerPlayerId === playerId,
+      ...art,
+    });
+  }
+  minis.sort(
+    (a, b) => a.coords.slot - b.coords.slot || a.planetId.localeCompare(b.planetId),
+  );
 
   const pirate = Object.values(universe.pirateBases ?? {}).find(
     (b) =>
@@ -152,6 +198,7 @@ export function galaxyViewFor(
     galaxy: g,
     system: s,
     slots,
+    minis,
     deepSpace: { coords: { galaxy: g, system: s, slot: DEEP_SPACE_SLOT } },
     asteroids: asteroidsInSystem(universe, g, s),
     pirateBase: pirate
@@ -227,6 +274,8 @@ export function playerView(
 
   const g = galaxy ?? planet.coords.galaxy;
   const s = system ?? planet.coords.system;
+  const artCtx = createPlanetArtContext(universe);
+  const planetArt = artForBody(universe, planet, artCtx);
 
   const sensorLevel = planet.buildings.sensorArray ?? 0;
   const sensorContacts =
@@ -251,10 +300,12 @@ export function playerView(
     },
     player,
     planet,
+    planetArt,
     ownedPlanets: player.planetIds
       .map((id) => {
         const p = universe.planets[id];
         if (!p) return null;
+        const art = artForBody(universe, p, artCtx);
         return {
           id: p.id,
           name: p.name,
@@ -262,7 +313,9 @@ export function playerView(
           isHome: p.id === player.homePlanetId,
           isActive: p.id === player.activePlanetId,
           isMoon: p.kind === "moon",
+          isMini: isMiniBody(universe, p),
           jumpGateLevel: p.buildings.jumpGate ?? 0,
+          ...art,
         };
       })
       .filter((x): x is NonNullable<typeof x> => x !== null),

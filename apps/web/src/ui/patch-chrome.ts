@@ -37,7 +37,19 @@ export function patchLiveChrome(
       Number(PRODUCTION_MULT) > 1
         ? ` · income ×${PRODUCTION_MULT} (test)`
         : "";
-    coords.textContent = `${planet.name}${planet.kind === "moon" ? " · Moon" : ""} · ${fmtCoords(planet.coords)} · ${universe.name} @ ${universe.speed}×${income}`;
+    coords.textContent = `${planet.name}${planet.kind === "moon" ? " · Moon" : ""}${planet.flags?.mini ? " · Mini" : ""} · ${fmtCoords(planet.coords)} · ${universe.name} @ ${universe.speed}×${income}`;
+  }
+
+  const topArt = root.querySelector<HTMLImageElement>(".topbar-brand .planet-disc");
+  if (topArt) {
+    const moon = planet.kind === "moon";
+    if (topArt.dataset.artId !== view.planetArt.artId) {
+      topArt.src = view.planetArt.artThumbUrl;
+      topArt.dataset.artId = view.planetArt.artId;
+    }
+    topArt.width = moon ? 44 : 56;
+    topArt.height = moon ? 44 : 56;
+    topArt.classList.toggle("planet-disc-moon", moon);
   }
 
   const levelLabel = root.querySelector<HTMLElement>(
@@ -129,7 +141,7 @@ export function patchLiveChrome(
     if (!chip) continue;
     const nameEl = chip.querySelector(".planet-chip-name");
     if (nameEl) {
-      nameEl.innerHTML = `${escapeHtml(p.name)}${p.isMoon ? " · Moon" : ""}${p.isHome ? " ★" : ""}`;
+      nameEl.innerHTML = `${escapeHtml(p.name)}${p.isMoon ? " · Moon" : ""}${p.isMini ? " · Mini" : ""}${p.isHome ? " ★" : ""}`;
     }
     chip.classList.toggle("active", p.isActive);
     chip.toggleAttribute("disabled", state.busy);
