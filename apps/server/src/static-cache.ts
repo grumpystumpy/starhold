@@ -22,3 +22,16 @@ export function staticCacheControl(pathname: string): string | null {
   }
   return null;
 }
+
+/** Apply the static cache policy without dropping a body or status. */
+export function withStaticCache(response: Response, pathname: string): Response {
+  const value = staticCacheControl(pathname);
+  if (!value) return response;
+  const headers = new Headers(response.headers);
+  headers.set("Cache-Control", value);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}

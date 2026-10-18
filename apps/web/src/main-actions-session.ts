@@ -1,5 +1,6 @@
 import { MAP_SYSTEMS } from "@starhold/game";
 import {
+  ApiError,
   authJoin,
   claimAnonymousPlayer,
   fetchAuthMe,
@@ -16,6 +17,10 @@ import {
   signupAccount,
 } from "./api";
 import {
+  reconnectDelayMs,
+  shouldClearSavedPlayer,
+} from "./auth-resume";
+import {
   SESSION_KEY,
   clearFlash,
   schedulePaint,
@@ -24,12 +29,74 @@ import {
   stripJoinParams,
 } from "./session";
 import { syncSessionUrl } from "./ui/router";
+import { captureGameEvent, identifyCommander } from "./telemetry";
 
 /** Background refresh cadence. Actions apply their own response immediately. */
 export const POLL_INTERVAL_MS = 30_000;
 /** No input for this long: stop polling until the player interacts. */
 export const IDLE_PAUSE_MS = 3 * 60 * 1000;
 
+let reconnectAttempt = 0;
+let reconnectTimer: number | undefined;
+
+function httpStatus(err: unknown): number {
+  return err instanceof ApiError ? err.status : 0;
+}
+
+export function scheduleReconnect(): void {
+  if (typeof window === "undefined") return;
+  if (reconnectTimer !== undefined) return;
+  const delay = reconnectDelayMs(reconnectAttempt);
+  reconnectAttempt += 1;
+  reconnectTimer = window.setTimeout(() => {
+    reconnectTimer = undefined;
+    void retryResume();
+  }, delay);
+}
+
+async function retryResume(): Promise<void> {
+  const outcome = await resumeFromCookie();
+  if (outcome === "ready" || outcome === "account") {
+    reconnectAttempt = 0;
+    return;
+  }
+  if (outcome === "logout") {
+    reconnectAttempt = 0;
+    setFlash("error", "Signed out.");
+    schedulePaint();
+    return;
+  }
+  const saved = localStorage.getItem(SESSION_KEY);
+  if (saved) {
+    try {
+      const view = await fetchState(saved);
+      session.view = view;
+      session.galaxySystem = view.planet.coords.system;
+      session.joinDraft = view.player.name;
+      syncSessionUrl({ replace: true });
+      startPolling(saved);
+      reconnectAttempt = 0;
+      setFlash("notice", `Resumed ${view.player.name}.`);
+      schedulePaint();
+      return;
+    } catch (err) {
+      if (shouldClearSavedPlayer(httpStatus(err))) {
+        localStorage.removeItem(SESSION_KEY);
+        session.view = null;
+        reconnectAttempt = 0;
+        setFlash("error", "Signed out.");
+        schedulePaint();
+        return;
+      }
+    }
+  } else if (outcome === "none") {
+    reconnectAttempt = 0;
+    return;
+  }
+  setFlash("notice", "Reconnecting…");
+  schedulePaint();
+  scheduleReconnect();
+}
 let pollPlayerId: string | null = null;
 let pollChain: Promise<void> | null = null;
 let refreshGen = 0;
@@ -291,15 +358,33 @@ async function applyAuthSuccess(opts: {
 }): Promise<void> {
   session.account = opts.account;
   session.passwordDraft = "";
-  if (opts.view?.player?.id) {
-    session.view = opts.view;
-    session.galaxySystem = opts.view.planet.coords.system;
-    session.joinDraft = opts.view.player.name;
-    localStorage.setItem(SESSION_KEY, opts.view.player.id);
+  let view = opts.view ?? null;
+  if (!view?.player?.id && opts.account.playerId) {
+    try {
+      view = await fetchState(opts.account.playerId);
+    } catch (err) {
+      if (!(err instanceof ApiError) || err.status !== 404) {
+        setFlash(
+          "error",
+          err instanceof Error
+            ? err.message
+            : "Could not load your empire. Retry in a moment.",
+        );
+        return;
+      }
+    }
+  }
+  if (view?.player?.id) {
+    session.view = view;
+    session.galaxySystem = view.planet.coords.system;
+    session.joinDraft = view.player.name;
+    localStorage.setItem(SESSION_KEY, view.player.id);
     session.claimablePlayerId = null;
     stripJoinParams();
     syncSessionUrl({ replace: true });
-    startPolling(opts.view.player.id);
+    startPolling(view.player.id);
+    identifyCommander(view.player.name);
+    captureGameEvent("login");
     setFlash("notice", opts.notice);
     return;
   }
@@ -313,6 +398,7 @@ export async function doSignup(
   email: string,
   password: string,
 ): Promise<void> {
+  if (session.busy) return;
   const trimmed = email.trim();
   session.emailDraft = email;
   session.passwordDraft = password;
@@ -358,6 +444,7 @@ export async function doLogin(
   email: string,
   password: string,
 ): Promise<void> {
+  if (session.busy) return;
   const trimmed = email.trim();
   session.emailDraft = email;
   session.passwordDraft = password;
@@ -497,9 +584,12 @@ export async function doClaimAnonymous(): Promise<void> {
 }
 
 /** Resume from HttpOnly session cookie via /api/auth/me. */
-export async function resumeFromCookie(): Promise<boolean> {
+export async function resumeFromCookie(): Promise<
+  "ready" | "account" | "none" | "retry" | "logout"
+> {
   try {
     const me = await fetchAuthMe();
+    if (!me.account) return "none";
     session.account = me.account;
     if (me.view?.player?.id) {
       session.view = me.view;
@@ -513,18 +603,21 @@ export async function resumeFromCookie(): Promise<boolean> {
       // Paint immediately — boot() returns early on true and would otherwise
       // leave the join screen up until the next background poll.
       schedulePaint();
-      return true;
+      return "ready";
     }
-    if (me.account) {
-      const guest = localStorage.getItem(SESSION_KEY);
-      session.claimablePlayerId = guest;
-      if (me.account.email) session.emailDraft = me.account.email;
-      return false;
+    const guest = localStorage.getItem(SESSION_KEY);
+    session.claimablePlayerId = guest;
+    if (me.account.email) session.emailDraft = me.account.email;
+    return "account";
+  } catch (err) {
+    if (shouldClearSavedPlayer(httpStatus(err))) {
+      localStorage.removeItem(SESSION_KEY);
+      session.account = null;
+      session.view = null;
+      return "logout";
     }
-  } catch {
-    /* treat as logged out */
+    return "retry";
   }
-  return false;
 }
 
 export async function doRefresh(): Promise<void> {

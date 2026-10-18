@@ -20,7 +20,8 @@ import {
   setPaintImpl,
   stripJoinParams,
 } from "./session";
-import { fetchState, selectPlanet } from "./api";
+import { fetchState, selectPlanet, ApiError } from "./api";
+import { shouldClearSavedPlayer } from "./auth-resume";
 import {
   doBuild,
   doBuildDefense,
@@ -32,6 +33,7 @@ import {
   doSelectPlanet,
   doUpgrade,
   resumeFromCookie,
+  scheduleReconnect,
   IDLE_PAUSE_MS,
   POLL_INTERVAL_MS,
   silentRefresh,
@@ -39,6 +41,7 @@ import {
 } from "./main-actions";
 import { wireJointStrikeForm } from "./main-actions-alliances";
 import { ensureDelegatedHandlers } from "./main-handlers";
+import { initTelemetry } from "./telemetry";
 import {
   ensurePopstateHandler,
   pageFromLocation,
@@ -95,7 +98,7 @@ setPaintImpl(paint);
 async function resumePlayer(
   playerId: string,
   planetParam?: string | null,
-): Promise<boolean> {
+): Promise<"ok" | "logout" | "retry"> {
   session.busy = true;
   schedulePaint();
   try {
@@ -114,11 +117,17 @@ async function resumePlayer(
     syncSessionUrl({ replace: true });
     startPolling(playerId);
     setFlash("notice", `Resumed ${session.view.player.name}.`);
-    return true;
-  } catch {
-    localStorage.removeItem(SESSION_KEY);
-    session.view = null;
-    return false;
+    return "ok";
+  } catch (err) {
+    const status = err instanceof ApiError ? err.status : 0;
+    if (shouldClearSavedPlayer(status)) {
+      localStorage.removeItem(SESSION_KEY);
+      session.view = null;
+      return "logout";
+    }
+    setFlash("notice", "Reconnecting…");
+    scheduleReconnect();
+    return "retry";
   } finally {
     session.busy = false;
     schedulePaint();
@@ -126,6 +135,7 @@ async function resumePlayer(
 }
 
 async function boot(): Promise<void> {
+  void initTelemetry();
   ensureDelegatedHandlers();
   ensurePopstateHandler();
   session.activePage = pageFromLocation();
@@ -146,21 +156,33 @@ async function boot(): Promise<void> {
   // Cookie session wins over localStorage when present.
   if (!commanderParam && !playerIdParam) {
     const fromCookie = await resumeFromCookie();
-    if (fromCookie) return;
-    if (session.account) {
+    if (fromCookie === "ready") return;
+    if (fromCookie === "account") {
       schedulePaint();
       // Stay on join for name / claim.
+      return;
+    }
+    if (fromCookie === "retry") {
+      setFlash("notice", "Reconnecting…");
+      schedulePaint();
+      scheduleReconnect();
+      return;
+    }
+    if (fromCookie === "logout") {
+      setFlash("error", "Signed out.");
+      schedulePaint();
       return;
     }
   }
 
   if (playerIdParam) {
-    const ok = await resumePlayer(playerIdParam, planetParam);
-    if (ok) {
+    const outcome = await resumePlayer(playerIdParam, planetParam);
+    if (outcome === "ok") {
       stripJoinParams();
       syncSessionUrl({ replace: true });
       return;
     }
+    if (outcome === "retry") return;
     setFlash("error", "Saved session expired — join again.");
     schedulePaint();
   }
@@ -175,8 +197,8 @@ async function boot(): Promise<void> {
   const saved = localStorage.getItem(SESSION_KEY);
   if (!saved) return;
   session.claimablePlayerId = saved;
-  const ok = await resumePlayer(saved, planetParam);
-  if (!ok) {
+  const outcome = await resumePlayer(saved, planetParam);
+  if (outcome === "logout") {
     // Stay on join; session was stale.
   }
 }

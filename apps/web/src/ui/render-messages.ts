@@ -358,6 +358,14 @@ export function messagesPageHtml(
     unread > 0
       ? `<button type="button" class="ghost" data-event-read-all data-testid="mark-all-read" ${busy ? "disabled" : ""}>Mark all read</button>`
       : "";
+  const deleteCount =
+    filter === "all"
+      ? items.length
+      : filter === "combat"
+        ? combatCount
+        : filter === "spy"
+          ? spyCount
+          : alertCount;
 
   return `
     <section class="panel" data-testid="messages-panel" data-inbox-filter="${filter}">
@@ -371,10 +379,7 @@ export function messagesPageHtml(
         ${markAll}
       </div>
       <div class="inbox-filters" aria-label="Delete messages">
-        ${deleteControl("all", items.length, busy)}
-        ${deleteControl("combat", combatCount, busy)}
-        ${deleteControl("spy", spyCount, busy)}
-        ${deleteControl("alerts", alertCount, busy)}
+        ${deleteControl(filter, deleteCount, busy)}
       </div>
       ${list}
     </section>`;

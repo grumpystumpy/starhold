@@ -646,6 +646,7 @@ export function bindClickHandlers(): void {
 
     if (form.id === "auth-form") {
       ev.preventDefault();
+      if (session.busy) return;
       const emailInput = form.querySelector<HTMLInputElement>("#auth-email");
       const passwordInput =
         form.querySelector<HTMLInputElement>("#auth-password");

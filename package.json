@@ -25,10 +25,12 @@
     "cf:dev": "wrangler dev --local"
   },
   "dependencies": {
+    "@sentry/cloudflare": "^11.8.0",
     "@upstash/redis": "^1.34.9",
     "hono": "^4.7.5"
   },
   "devDependencies": {
+    "@sentry/cli": "^3.8.0",
     "concurrently": "^9.1.2",
     "esbuild": "^0.25.12",
     "typescript": "^5.8.2",

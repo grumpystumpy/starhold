@@ -7,7 +7,7 @@ import {
   UNIVERSE_SCHEMA_VERSION,
   type UniverseState,
 } from "@starhold/game";
-import type { KvSetOptions, KvStore, StorageMode } from "./kv.js";
+import type { KvGetOptions, KvSetOptions, KvStore, StorageMode } from "./kv.js";
 import { addCpu, currentMethod, currentScope } from "./request-context.js";
 import {
   assembleUniverse,
@@ -51,6 +51,28 @@ let universeCache: UniverseCache | null = null;
 let redis: Redis | null | undefined;
 let redisKvStore: KvStore | null = null;
 let resolvedMode: StorageMode | undefined;
+
+/** Distributed lock TTL. Short enough that a stuck request stops blocking logins. */
+export const UNIVERSE_LOCK_MS = 2_500;
+
+export class StaleUniverseError extends Error {
+  constructor() {
+    super("Universe changed — retrying.");
+    this.name = "StaleUniverseError";
+  }
+}
+
+type UniverseFault = "busy" | "read" | "both" | null;
+let universeFault: UniverseFault = null;
+
+/** Test hook. Production never sets this. */
+export function setUniverseFaultForTests(next: UniverseFault): void {
+  universeFault = next;
+}
+
+export function isUniverseBusy(err: unknown): boolean {
+  return err instanceof Error && err.message.startsWith("Universe busy");
+}
 
 function universeName(): string {
   return process.env.STARHOLD_UNIVERSE_NAME ?? "Alpha Drift";
@@ -104,7 +126,7 @@ export function redisCredentials(
 
 function redisAsKv(client: Redis): KvStore {
   return {
-    async get<T>(key: string): Promise<T | null> {
+    async get<T>(key: string, _opts?: KvGetOptions): Promise<T | null> {
       const data = await client.get<T>(key);
       return data ?? null;
     },
@@ -337,7 +359,13 @@ async function saveUniverse(
   client: KvStore,
   state: UniverseState,
   before: SliceStamps,
+  expectedVersion: string | null,
 ): Promise<void> {
+  const current = await client.get<string>(versionKey(), { fresh: true });
+  if (current !== expectedVersion) {
+    universeCache = null;
+    throw new StaleUniverseError();
+  }
   const after = sliceStamps(state);
   if (stampsEqual(before, after)) {
     if (universeCache?.universe === state) universeCache.slices = after;
@@ -365,7 +393,7 @@ async function saveUniverse(
 async function acquireLock(client: KvStore): Promise<boolean> {
   const result = await client.set(lockKey(), String(Date.now()), {
     nx: true,
-    px: 8_000,
+    px: UNIVERSE_LOCK_MS,
   });
   return result === "OK";
 }
@@ -409,10 +437,16 @@ function withLocalLock<T>(fn: () => Promise<T>): Promise<T> {
  * next cold load. D1 then writes the changed player or world rows, not the
  * whole universe. Vercel still stores one JSON document when something
  * structural did change.
+ *
+ * A save whose version key moved since the load is rejected and the handler
+ * runs again on a fresh snapshot. The stale object is never written.
  */
 async function withUniverseBody<T>(
   fn: (universe: UniverseState) => T | Promise<T>,
 ): Promise<T> {
+  if (universeFault === "busy" || universeFault === "both") {
+    throw new Error("Universe busy — retry in a moment.");
+  }
   const client = getKvClient();
   if (!client) {
     const universe = await loadUniverse(null);
@@ -434,11 +468,13 @@ async function withUniverseBody<T>(
     }
     if (await acquireLock(client)) {
       try {
-        const current = await client.get<string>(versionKey());
+        const current = await client.get<string>(versionKey(), { fresh: true });
         if (current === version) {
-          await saveUniverse(client, universe, before);
+          await saveUniverse(client, universe, before, version);
           return result;
         }
+      } catch (err) {
+        if (!(err instanceof StaleUniverseError)) throw err;
       } finally {
         await releaseLock(client);
       }
@@ -454,9 +490,16 @@ async function withUniverseBody<T>(
           universeCache.slices = sliceStamps(universe);
         }
         const before = universeCache?.slices ?? emptyStamps();
+        const expected = universeCache?.version ?? null;
         const result = await runUniverse(universe, fn);
-        await saveUniverse(client, universe, before);
+        await saveUniverse(client, universe, before, expected);
         return result;
+      } catch (err) {
+        if (err instanceof StaleUniverseError) {
+          universeCache = null;
+          continue;
+        }
+        throw err;
       } finally {
         await releaseLock(client);
       }
@@ -464,6 +507,23 @@ async function withUniverseBody<T>(
     await sleep(40 + attempt * 40);
   }
   throw new Error("Universe busy — retry in a moment.");
+}
+
+/**
+ * Snapshot read for `/api/state` and `/api/auth/me`.
+ * Never takes the distributed universe lock and never writes the snapshot.
+ * Resource catch-up is recomputed from clocks on the next cold load.
+ */
+export async function withUniverseRead<T>(
+  fn: (universe: UniverseState) => T | Promise<T>,
+): Promise<T> {
+  return withLocalLock(async () => {
+    if (universeFault === "read" || universeFault === "both") {
+      throw new Error("Universe busy — retry in a moment.");
+    }
+    const universe = await loadUniverse(getKvClient());
+    return runUniverse(universe, fn);
+  });
 }
 
 export async function withUniverse<T>(

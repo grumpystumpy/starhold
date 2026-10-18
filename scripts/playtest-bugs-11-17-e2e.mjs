@@ -176,7 +176,10 @@ async function runViewport(browser, viewport) {
     await page.goto(`${WEB}/messages?playerId=${encodeURIComponent(playerId)}`, {
       waitUntil: "domcontentloaded",
     });
+    await page.click('[data-testid="inbox-filter-alerts"]');
     await page.waitForSelector('[data-testid="delete-all-alerts"]');
+    const deleteAll = await page.locator('button:has-text("Delete all")').count();
+    assert(deleteAll === 1, `${tag} expected one Delete all, saw ${deleteAll}`);
     await page.click('[data-testid="delete-all-alerts"]');
     await page.waitForSelector('[data-testid="delete-confirm-alerts"]');
     assert(

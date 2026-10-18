@@ -77,10 +77,10 @@ import { sessionSecretConfigured } from "./accounts.js";
 import { mountAllianceIntelRoutes } from "./alliance-intel-routes.js";
 import { mountAuthRoutes } from "./auth-routes.js";
 import { mountCpuRoutes } from "./cpu-routes.js";
-import { readCpuMs } from "./request-context.js";
+import { readCpuMs, reportServerError } from "./request-context.js";
 import { respondWithPlayerView } from "./state-response.js";
 import { staticCacheControl } from "./static-cache.js";
-import { storageMode, withUniverse } from "./store.js";
+import { storageMode, withUniverse, withUniverseRead } from "./store.js";
 
 function allowedOrigins(): Set<string> {
   const fromEnv = (process.env.ALLOWED_ORIGINS ?? "")
@@ -165,6 +165,7 @@ export function createApp(): Hono {
 
   app.onError((err, c) => {
     console.error("[starhold-api]", err);
+    reportServerError(err);
     return c.json(
       { error: err instanceof Error ? err.message : "Server error" },
       500,
@@ -234,17 +235,16 @@ export function createApp(): Hono {
     try {
       const galaxy = Number(c.req.query("galaxy") || 0) || undefined;
       const system = Number(c.req.query("system") || 0) || undefined;
-      return await withUniverse((universe) =>
+      return await withUniverseRead((universe) =>
         respondWithPlayerView(
           c,
           playerView(universe, playerId, Date.now(), galaxy, system),
         ),
       );
     } catch (err) {
-      return c.json(
-        { error: err instanceof Error ? err.message : "State failed." },
-        404,
-      );
+      const message = err instanceof Error ? err.message : "State failed.";
+      const status = message.startsWith("Universe busy") ? 503 : 404;
+      return c.json({ error: message }, status);
     }
   });
 

@@ -20,6 +20,7 @@ import {
   session,
   setFlash,
 } from "./session";
+import { captureGameEvent } from "./telemetry";
 
 function intentMission(intent: FleetPresetIntent): MissionType {
   switch (intent) {
@@ -60,6 +61,7 @@ export async function doLaunchFleet(opts: {
   session.busy = true;
   clearFlash();
   schedulePaint();
+  captureGameEvent("fleet_send", { mission: opts.mission });
   try {
     session.view = await launchFleetMission(session.view.player.id, opts);
     const live = session.view.fleets?.[0];

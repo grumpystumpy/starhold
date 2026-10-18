@@ -17,6 +17,7 @@ export {
   doClaimPassword,
   doRequestClaimCode,
   resumeFromCookie,
+  scheduleReconnect,
 } from "./main-actions-session.js";
 export {
   doUpgrade,
