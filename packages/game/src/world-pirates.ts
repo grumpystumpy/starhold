@@ -374,7 +374,7 @@ function rollInRange(seed: string, min: number, max: number): number {
   return min + (hashSeed(seed) % span);
 }
 
-/** nextRaidAt = periodStart + random offset within the hour; after `afterMs`. */
+/** nextRaidAt = periodStart + random offset within the period; after `afterMs`. */
 export function rollNextRaidAt(
   baseId: string,
   afterMs: number,
@@ -1251,22 +1251,6 @@ export function pickRaidTarget(
   return npcPool[roll % npcPool.length]!;
 }
 
-function pirateGrowthDue(base: PirateBase, now: number): boolean {
-  return (
-    base.destroyedAt == null &&
-    base.level < PIRATE_MAX_LEVEL &&
-    now - base.lastGrewAt >= PIRATE_LEVEL_GROWTH_INTERVAL_MS
-  );
-}
-
-function alienGrowthDue(base: AlienBase, now: number): boolean {
-  return (
-    base.destroyedAt == null &&
-    base.level < ALIEN_MAX_LEVEL &&
-    now - base.lastGrewAt >= PIRATE_LEVEL_GROWTH_INTERVAL_MS
-  );
-}
-
 function applyNpcRaidOnPlanet(
   universe: UniverseState,
   base: PirateBase | AlienBase,
@@ -1434,7 +1418,7 @@ function fireRaid(
 }
 
 /**
- * CI / local Playwright sets STARHOLD_E2E=1 so ~200 hourly pirate raids
+ * CI / local Playwright sets STARHOLD_E2E=1 so pirate raids
  * do not strip the lone smoke player's metal before the shipyard e2e bank.
  * Schedule still advances so catch-up does not storm when the flag clears.
  */
@@ -1474,9 +1458,9 @@ function catchUpRaidsAlien(universe: UniverseState, base: AlienBase, now: number
 }
 
 /**
- * Lazy AI catch-up (Hobby): one in-memory pass over pirate+alien bases —
- * growth, 3h spawns, hourly nextRaidAt firings, top-up, respawn.
- * No Vercel hourly cron; no per-base KV writes.
+ * Lazy AI catch-up: one in-memory pass over pirate and alien bases.
+ * Pirates raid every 3 hours. Aliens raid every hour. Page loads set
+ * skipNpcRaids so this returns after the daily alien seed.
  */
 export function tickPirates(universe: UniverseState, now: number): void {
   if (!universe.pirateBases) universe.pirateBases = {};
@@ -1493,11 +1477,9 @@ export function tickPirates(universe: UniverseState, now: number): void {
   let paused = false;
   for (const base of Object.values(universe.pirateBases)) {
     ensurePirateBaseShape(base, now);
+    // Level-up budget can run out mid-wave. Still spawn and raid; the next
+    // job applies the missed levels at their own timestamps.
     growPirateBase(universe, base, now);
-    if (pirateGrowthDue(base, now)) {
-      paused = true;
-      break;
-    }
     applyFreeSpawnsPirate(base, now);
     if (catchUpRaidsPirate(universe, base, now)) {
       paused = true;
@@ -1508,7 +1490,6 @@ export function tickPirates(universe: UniverseState, now: number): void {
     for (const base of Object.values(universe.alienBases)) {
       ensureAlienBaseShape(base, universe, now);
       growAlienBase(universe, base, now);
-      if (alienGrowthDue(base, now)) break;
       applyFreeSpawnsAlien(base, now);
       if (catchUpRaidsAlien(universe, base, now)) break;
     }

@@ -77,10 +77,11 @@ import { sessionSecretConfigured } from "./accounts.js";
 import { mountAllianceIntelRoutes } from "./alliance-intel-routes.js";
 import { mountAuthRoutes } from "./auth-routes.js";
 import { mountCpuRoutes } from "./cpu-routes.js";
-import { readCpuMs, reportServerError } from "./request-context.js";
+import { readCpuMs, reportServerError, currentScope } from "./request-context.js";
 import { respondWithPlayerView } from "./state-response.js";
 import { staticCacheControl } from "./static-cache.js";
 import { storageMode, withUniverse, withUniverseRead } from "./store.js";
+import { rollbackRowsToLegacy } from "./row-store.js";
 
 function allowedOrigins(): Set<string> {
   const fromEnv = (process.env.ALLOWED_ORIGINS ?? "")
@@ -185,6 +186,18 @@ export function createApp(): Hono {
         passwordAuth: true,
       },
     });
+  });
+
+  // Copies save_* back into the kv slices main loads. 404 unless the token matches.
+  app.post("/api/admin/rollback-rows", async (c) => {
+    const token = process.env.STARHOLD_ADMIN_TOKEN;
+    if (!token || c.req.header("x-starhold-admin") !== token) {
+      return c.json({ error: "Not found" }, 404);
+    }
+    const scope = currentScope();
+    if (!scope?.db || !scope.kv) return c.json({ error: "No database" }, 400);
+    const result = await rollbackRowsToLegacy(scope.db, scope.kv);
+    return c.json({ ok: true, ...result });
   });
 
   app.get("/api/universe", async (c) => {

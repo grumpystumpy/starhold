@@ -18,10 +18,12 @@ import {
   type PlayerState,
   type EspionageReport,
   type UniverseState,
+  UNIVERSE_SCHEMA_VERSION,
 } from "@starhold/game";
-import type { D1Like } from "./d1-store.js";
+import type { D1Like, D1Stmt } from "./d1-store.js";
 import type { KvStore } from "./kv.js";
 import { addCpu, currentScope } from "./request-context.js";
+import { splitUniverse } from "./universe-docs.js";
 
 export const HIGHSCORE_TTL_MS = 30 * 60 * 1000;
 export const ROW_LOCK_MS = 2_500;
@@ -45,19 +47,37 @@ export interface UniverseWork {
   lockSystemOwners?: boolean;
   /** Join: player names and slot coordinates, not planet bodies. */
   catalog?: boolean;
-  /** Cron: every owned planet, NPC combat, refresh highscores when due. */
+  /** Cron: every owned planet, refresh highscores when due. Does not raid. */
   maintenance?: boolean;
+  /** 10-minute cron: pirate and alien catch-up. Page loads leave this unset. */
+  npc?: boolean;
+  /** Rollback: every planet, fleet, message, and system. */
+  full?: boolean;
+  /** Systems to load besides the caller's home and the open galaxy. */
+  extraSystems?: Array<[number, number]>;
 }
 
 interface MigrateState {
   v: number;
   stage: string;
   cursor: string;
+  /** 0 copies once. 1 recopies so writes during the copy are kept. */
+  pass: number;
+  seen: string;
 }
 
 interface SystemRow {
   galaxy: number;
   system: number;
+  version: number;
+  asteroids: Record<string, AsteroidField>;
+  debris: Record<string, DebrisField>;
+}
+
+interface SystemWrite {
+  galaxy: number;
+  system: number;
+  /** 0 means the row is not stored yet. */
   version: number;
   asteroids: Record<string, AsteroidField>;
   debris: Record<string, DebrisField>;
@@ -74,6 +94,11 @@ interface LoadedRows {
   /** Planet bodies safe to write back. Stubs used for slot checks are not. */
   fullPlanetIds: Set<string>;
   stubPlanetIds: Set<string>;
+  /** Queried by id and absent, so a fleet delete is real. */
+  absentPlanetIds: Set<string>;
+  loadedSystemKeys: Set<string>;
+  fleetSnapshots: Map<string, FleetMission>;
+  pendingSystems: SystemWrite[];
   fingerprints: Map<string, string>;
 }
 
@@ -102,6 +127,7 @@ const TABLE_SQL = [
     asteroids TEXT NOT NULL, debris TEXT NOT NULL, PRIMARY KEY (galaxy, system))`,
   `CREATE TABLE IF NOT EXISTS save_highscores (
     id TEXT PRIMARY KEY, built_at INTEGER NOT NULL, doc TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS save_assert (ok INTEGER NOT NULL CHECK (ok = 1))`,
 ];
 
 const OMIT_KEYS = new Set([
@@ -113,9 +139,12 @@ const OMIT_KEYS = new Set([
 ]);
 
 function stable(value: unknown): string {
-  return JSON.stringify(value, (key, inner) =>
-    OMIT_KEYS.has(key) ? undefined : inner,
-  );
+  return JSON.stringify(value, (key, inner) => {
+    if (OMIT_KEYS.has(key)) return undefined;
+    // A quiet tick writes swarmProduce: null onto fleets that never had a job.
+    if (key === "swarmProduce" && inner == null) return undefined;
+    return inner;
+  });
 }
 
 async function run(db: D1Like, sql: string, ...values: unknown[]): Promise<number> {
@@ -132,8 +161,13 @@ async function all<T>(db: D1Like, sql: string, ...values: unknown[]): Promise<T[
   return rows.results ?? [];
 }
 
+const schemaReady = new WeakSet<object>();
+const migrationReady = new WeakSet<object>();
+
 export async function ensureRowTables(db: D1Like): Promise<void> {
+  if (schemaReady.has(db)) return;
   for (const sql of TABLE_SQL) await run(db, sql);
+  schemaReady.add(db);
 }
 
 async function readMigrate(db: D1Like): Promise<MigrateState> {
@@ -142,16 +176,18 @@ async function readMigrate(db: D1Like): Promise<MigrateState> {
     "SELECT value FROM save_meta WHERE id = ?",
     "migration",
   );
-  if (!row) return { v: 0, stage: "world", cursor: "" };
+  if (!row) return { v: 0, stage: "world", cursor: "", pass: 0, seen: "" };
   try {
     const parsed = JSON.parse(row.value) as MigrateState;
     return {
       v: parsed.v ?? 0,
       stage: parsed.stage || "world",
       cursor: parsed.cursor || "",
+      pass: parsed.pass ?? 0,
+      seen: parsed.seen ?? "",
     };
   } catch {
-    return { v: 0, stage: "world", cursor: "" };
+    return { v: 0, stage: "world", cursor: "", pass: 0, seen: "" };
   }
 }
 
@@ -165,9 +201,17 @@ async function writeMigrate(db: D1Like, state: MigrateState): Promise<void> {
 }
 
 export async function migrationDone(db: D1Like): Promise<boolean> {
+  if (migrationReady.has(db)) return true;
   await ensureRowTables(db);
   const state = await readMigrate(db);
+  if (state.v >= 1) migrationReady.add(db);
   return state.v >= 1;
+}
+
+/** Another copy, used when the legacy document changed during the last pass. */
+export async function rewindMigration(db: D1Like, seen: string): Promise<void> {
+  migrationReady.delete(db);
+  await writeMigrate(db, { v: 0, stage: "world", cursor: "", pass: 1, seen });
 }
 
 export function highscoreCacheExpired(builtAt: number, now = Date.now()): boolean {
@@ -372,118 +416,194 @@ const STAGES = [
   "done",
 ] as const;
 
+function systemCursor(galaxy: number, system: number): string {
+  return `${String(galaxy).padStart(4, "0")}:${String(system).padStart(4, "0")}`;
+}
+
+function chunkRows<T>(rows: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < rows.length; i += size) out.push(rows.slice(i, i + size));
+  return out;
+}
+
+function bind(db: D1Like, sql: string, values: unknown[]): D1Stmt {
+  return db.prepare(sql).bind(...values);
+}
+
 /**
  * Copy one slice of `universe` into the row tables.
- * Safe to call again: rows are replaced from the legacy object, and the
- * cursor only moves forward. `stopAfter` forces an interrupt for tests.
- * The kv document is not written.
+ * Safe to call again. System order is galaxy, then system, not string order.
+ * The first pass copies. The next pass copies again so a write that landed
+ * on the old save after a section was copied is kept. Then v becomes 1.
+ * One meta write per call. The kv document is not written.
  */
 export async function migrateChunk(
   db: D1Like,
   universe: UniverseState,
   limit = CHUNK,
   stopAfter?: number,
+  sourceVersion?: string,
 ): Promise<{ done: boolean; stage: string }> {
   await ensureRowTables(db);
   const state = await readMigrate(db);
-  if (state.v >= 1) return { done: true, stage: "done" };
+  if (state.v >= 1) {
+    migrationReady.add(db);
+    return { done: true, stage: "done" };
+  }
+  const playerIds = Object.keys(universe.players).sort();
+  const planetIds = Object.keys(universe.planets).sort();
+  const fleetIds = Object.keys(universe.fleets ?? {}).sort();
+  const messages = messageDrafts(universe);
+  const systems = systemDrafts(universe);
+  const stmts: D1Stmt[] = [];
   let writes = 0;
-  const stop = () => stopAfter != null && writes >= stopAfter;
-
-  const advance = async (stage: string, cursor: string) => {
-    state.stage = stage;
-    state.cursor = cursor;
-    await writeMigrate(db, state);
+  const room = () => writes < limit && (stopAfter == null || writes < stopAfter);
+  const push = (sql: string, values: unknown[]) => {
+    stmts.push(bind(db, sql, values));
+    writes += 1;
   };
 
-  if (state.stage === "world") {
-    if (!stop()) {
-      await upsertWorld(db, universe);
-      writes += 1;
+  while (room()) {
+    if (state.stage === "world") {
+      push(
+        `INSERT INTO save_world (id, version, doc) VALUES ('world', 1, ?)
+         ON CONFLICT(id) DO UPDATE SET doc = excluded.doc`,
+        [JSON.stringify(worldDoc(universe))],
+      );
+      state.stage = "players";
+      state.cursor = "";
+      continue;
     }
-    if (stop()) return { done: false, stage: state.stage };
-    await advance("players", "");
+    if (state.stage === "players") {
+      const next = playerIds.find((id) => id > state.cursor);
+      if (!next) {
+        state.stage = "planets";
+        state.cursor = "";
+        continue;
+      }
+      push(
+        `INSERT INTO save_players (id, version, doc) VALUES (?, 1, ?)
+         ON CONFLICT(id) DO UPDATE SET doc = excluded.doc`,
+        [next, JSON.stringify(playerDoc(universe.players[next]!))],
+      );
+      state.cursor = next;
+      continue;
+    }
+    if (state.stage === "planets") {
+      const next = planetIds.find((id) => id > state.cursor);
+      if (!next) {
+        state.stage = "fleets";
+        state.cursor = "";
+        continue;
+      }
+      const planet = universe.planets[next]!;
+      push(
+        `INSERT INTO save_planets (id, owner_id, galaxy, system, slot, kind, version, doc)
+         VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           owner_id = excluded.owner_id, galaxy = excluded.galaxy, system = excluded.system,
+           slot = excluded.slot, kind = excluded.kind, doc = excluded.doc`,
+        [
+          planet.id,
+          planet.ownerPlayerId || "",
+          planet.coords.galaxy,
+          planet.coords.system,
+          planet.coords.slot,
+          planet.kind ?? "planet",
+          JSON.stringify(planet),
+        ],
+      );
+      state.cursor = next;
+      continue;
+    }
+    if (state.stage === "fleets") {
+      const next = fleetIds.find((id) => id > state.cursor);
+      if (!next) {
+        state.stage = "messages";
+        state.cursor = "";
+        continue;
+      }
+      const fleet = universe.fleets[next]!;
+      push(
+        `INSERT INTO save_fleets (id, owner_id, target_owner_id, version, doc)
+         VALUES (?, ?, ?, 1, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           owner_id = excluded.owner_id, target_owner_id = excluded.target_owner_id, doc = excluded.doc`,
+        [fleet.id, fleet.ownerPlayerId, fleet.targetPlayerId || "", JSON.stringify(fleet)],
+      );
+      state.cursor = next;
+      continue;
+    }
+    if (state.stage === "messages") {
+      const next = messages.find((row) => row.id > state.cursor);
+      if (!next) {
+        state.stage = "systems";
+        state.cursor = "";
+        continue;
+      }
+      push(
+        `INSERT INTO save_messages (id, owner_id, defender_id, kind, version, doc)
+         VALUES (?, ?, ?, ?, 1, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           owner_id = excluded.owner_id, defender_id = excluded.defender_id,
+           kind = excluded.kind, doc = excluded.doc`,
+        [next.id, next.owner, next.defender, next.kind, JSON.stringify(next.doc)],
+      );
+      state.cursor = next.id;
+      continue;
+    }
+    if (state.stage === "systems") {
+      const next = systems.find((row) => systemCursor(row.galaxy, row.system) > state.cursor);
+      if (!next) {
+        state.stage = "scores";
+        state.cursor = "";
+        continue;
+      }
+      push(
+        `INSERT INTO save_systems (galaxy, system, version, asteroids, debris)
+         VALUES (?, ?, 1, ?, ?)
+         ON CONFLICT(galaxy, system) DO UPDATE SET
+           asteroids = excluded.asteroids, debris = excluded.debris`,
+        [next.galaxy, next.system, JSON.stringify(next.asteroids), JSON.stringify(next.debris)],
+      );
+      state.cursor = systemCursor(next.galaxy, next.system);
+      continue;
+    }
+    if (state.stage === "scores") {
+      push(
+        `INSERT INTO save_highscores (id, built_at, doc) VALUES ('board', ?, ?)
+         ON CONFLICT(id) DO UPDATE SET built_at = excluded.built_at, doc = excluded.doc`,
+        [Date.now(), JSON.stringify(highscoresBoard(universe))],
+      );
+      if (state.pass < 1) {
+        state.pass = 1;
+        state.stage = "world";
+        state.cursor = "";
+        state.seen = sourceVersion ?? "";
+      } else if (sourceVersion != null && sourceVersion !== state.seen) {
+        state.pass += 1;
+        state.stage = "world";
+        state.cursor = "";
+        state.seen = sourceVersion;
+      } else {
+        state.v = 1;
+        state.stage = "done";
+        state.cursor = "";
+      }
+      break;
+    }
+    break;
   }
 
-  if (state.stage === "players") {
-    const ids = Object.keys(universe.players).sort();
-    for (const id of ids) {
-      if (id <= state.cursor) continue;
-      if (stop()) return { done: false, stage: "players" };
-      await upsertPlayer(db, universe.players[id]!);
-      writes += 1;
-      await advance("players", id);
-    }
-    await advance("planets", "");
-  }
-
-  if (state.stage === "planets") {
-    const ids = Object.keys(universe.planets).sort();
-    let n = 0;
-    for (const id of ids) {
-      if (id <= state.cursor) continue;
-      if (stop() || n >= limit) return { done: false, stage: "planets" };
-      await upsertPlanet(db, universe.planets[id]!);
-      writes += 1;
-      n += 1;
-      await advance("planets", id);
-    }
-    await advance("fleets", "");
-  }
-
-  if (state.stage === "fleets") {
-    const ids = Object.keys(universe.fleets ?? {}).sort();
-    for (const id of ids) {
-      if (id <= state.cursor) continue;
-      if (stop()) return { done: false, stage: "fleets" };
-      await upsertFleet(db, universe.fleets[id]!);
-      writes += 1;
-      await advance("fleets", id);
-    }
-    await advance("messages", "");
-  }
-
-  if (state.stage === "messages") {
-    const rows = messageDrafts(universe);
-    let n = 0;
-    for (const row of rows) {
-      if (row.id <= state.cursor) continue;
-      if (stop() || n >= limit) return { done: false, stage: "messages" };
-      await upsertMessage(db, row);
-      writes += 1;
-      n += 1;
-      await advance("messages", row.id);
-    }
-    await advance("systems", "");
-  }
-
-  if (state.stage === "systems") {
-    const rows = systemDrafts(universe);
-    let n = 0;
-    for (const row of rows) {
-      const key = `${row.galaxy}:${row.system}`;
-      if (key <= state.cursor) continue;
-      if (stop() || n >= limit) return { done: false, stage: "systems" };
-      await upsertSystem(db, row);
-      writes += 1;
-      n += 1;
-      await advance("systems", key);
-    }
-    await advance("scores", "");
-  }
-
-  if (state.stage === "scores") {
-    if (!stop()) {
-      await writeHighscoreCache(db, highscoresBoard(universe), Date.now());
-      writes += 1;
-    }
-    if (stop()) return { done: false, stage: "scores" };
-    state.v = 1;
-    state.stage = "done";
-    state.cursor = "";
-    await writeMigrate(db, state);
-  }
-
+  stmts.push(
+    bind(
+      db,
+      "INSERT INTO save_meta (id, value) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET value = excluded.value",
+      ["migration", JSON.stringify(state)],
+    ),
+  );
+  await db.batch(stmts);
+  if (state.v >= 1) migrationReady.add(db);
   return { done: state.v >= 1, stage: state.stage };
 }
 
@@ -598,6 +718,7 @@ async function loadPlanetDocs(
   into: LoadedRows,
   sql: string,
   values: unknown[],
+  expectIds?: string[],
 ): Promise<void> {
   if (!sql) return;
   const rows = await all<{ id: string; version: number; doc: string }>(db, sql, ...values);
@@ -608,7 +729,13 @@ async function loadPlanetDocs(
     into.planetVersions.set(planet.id, row.version);
     into.fullPlanetIds.add(planet.id);
     into.stubPlanetIds.delete(planet.id);
+    into.absentPlanetIds.delete(planet.id);
     into.fingerprints.set(`planet:${planet.id}`, stable(planet));
+  }
+  if (expectIds) {
+    for (const id of expectIds) {
+      if (!into.fullPlanetIds.has(id)) into.absentPlanetIds.add(id);
+    }
   }
 }
 
@@ -622,6 +749,7 @@ async function loadFleets(db: D1Like, into: LoadedRows, where: string, values: u
     const fleet = JSON.parse(row.doc) as FleetMission;
     into.universe.fleets[fleet.id] = fleet;
     into.fleetVersions.set(fleet.id, row.version);
+    into.fleetSnapshots.set(fleet.id, structuredClone(fleet));
     into.fingerprints.set(`fleet:${fleet.id}`, stable(fleet));
   }
 }
@@ -660,27 +788,103 @@ async function loadMessages(
   }
 }
 
+function applySystemRow(
+  into: LoadedRows,
+  galaxy: number,
+  system: number,
+  version: number,
+  asteroids: Record<string, AsteroidField>,
+  debris: Record<string, DebrisField>,
+): void {
+  const key = `${galaxy}:${system}`;
+  into.systemVersions.set(key, version);
+  into.loadedSystemKeys.add(key);
+  Object.assign(into.universe.asteroids!, asteroids);
+  Object.assign(into.universe.debris!, debris);
+  into.fingerprints.set(`system:${key}`, stable({ asteroids, debris }));
+}
+
 async function loadSystems(db: D1Like, into: LoadedRows, pairs: Array<[number, number]>): Promise<void> {
-  for (const [galaxy, system] of pairs) {
-    const key = `${galaxy}:${system}`;
-    if (into.systemVersions.has(key)) continue;
-    const row = await first<{ version: number; asteroids: string; debris: string }>(
+  const pending = pairs.filter(([galaxy, system]) => !into.systemVersions.has(`${galaxy}:${system}`));
+  for (const group of chunkRows(pending, 40)) {
+    const clause = group.map(() => "(galaxy = ? AND system = ?)").join(" OR ");
+    const values = group.flatMap(([galaxy, system]) => [galaxy, system]);
+    const rows = await all<{
+      galaxy: number;
+      system: number;
+      version: number;
+      asteroids: string;
+      debris: string;
+    }>(
       db,
-      "SELECT version, asteroids, debris FROM save_systems WHERE galaxy = ? AND system = ?",
-      galaxy,
-      system,
+      `SELECT galaxy, system, version, asteroids, debris FROM save_systems WHERE ${clause}`,
+      ...values,
     );
-    into.systemVersions.set(key, row?.version ?? 0);
-    const asteroids = row ? (JSON.parse(row.asteroids) as Record<string, AsteroidField>) : {};
-    const debris = row ? (JSON.parse(row.debris) as Record<string, DebrisField>) : {};
-    Object.assign(into.universe.asteroids!, asteroids);
-    Object.assign(into.universe.debris!, debris);
-    into.fingerprints.set(`system:${key}`, stable({ asteroids, debris }));
+    const byKey = new Map(rows.map((row) => [`${row.galaxy}:${row.system}`, row]));
+    for (const [galaxy, system] of group) {
+      const row = byKey.get(`${galaxy}:${system}`);
+      applySystemRow(
+        into,
+        galaxy,
+        system,
+        row?.version ?? 0,
+        row ? (JSON.parse(row.asteroids) as Record<string, AsteroidField>) : {},
+        row ? (JSON.parse(row.debris) as Record<string, DebrisField>) : {},
+      );
+    }
+  }
+}
+
+async function loadAllSystems(db: D1Like, into: LoadedRows): Promise<void> {
+  const rows = await all<{
+    galaxy: number;
+    system: number;
+    version: number;
+    asteroids: string;
+    debris: string;
+  }>(db, "SELECT galaxy, system, version, asteroids, debris FROM save_systems");
+  for (const row of rows) {
+    applySystemRow(
+      into,
+      row.galaxy,
+      row.system,
+      row.version,
+      JSON.parse(row.asteroids) as Record<string, AsteroidField>,
+      JSON.parse(row.debris) as Record<string, DebrisField>,
+    );
+  }
+}
+
+async function loadPlanetsAt(
+  db: D1Like,
+  into: LoadedRows,
+  pairs: Array<[number, number]>,
+): Promise<void> {
+  for (const group of chunkRows(pairs, 40)) {
+    const clause = group.map(() => "(galaxy = ? AND system = ?)").join(" OR ");
+    const values = group.flatMap(([galaxy, system]) => [galaxy, system]);
+    await loadPlanetDocs(
+      db,
+      into,
+      `SELECT id, version, doc FROM save_planets WHERE ${clause}`,
+      values,
+    );
   }
 }
 
 function inList(ids: string[]): { clause: string; values: string[] } {
   return { clause: ids.map(() => "?").join(", "), values: ids };
+}
+
+function systemPairs(planets: Iterable<PlanetState>): Array<[number, number]> {
+  const systems = new Map<string, [number, number]>();
+  for (const planet of planets) {
+    systems.set(`${planet.coords.galaxy}:${planet.coords.system}`, [
+      planet.coords.galaxy,
+      planet.coords.system,
+    ]);
+  }
+  return [...systems.values()];
 }
 
 export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined): Promise<LoadedRows> {
@@ -700,15 +904,34 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
     systemVersions: new Map(),
     fullPlanetIds: new Set(),
     stubPlanetIds: new Set(),
+    absentPlanetIds: new Set(),
+    loadedSystemKeys: new Set(),
+    fleetSnapshots: new Map(),
+    pendingSystems: [],
     fingerprints: new Map([["world", stable(worldDoc(universe))]]),
   };
   await loadPlayers(db, loaded);
 
   const requestedIds = [...new Set((work?.playerIds ?? []).filter(Boolean))] as string[];
   const planetIds = [...new Set((work?.planetIds ?? []).filter((id): id is string => Boolean(id)))];
-  const wide = Boolean(work?.maintenance) || (requestedIds.length === 0 && !work?.catalog);
+  const wide =
+    Boolean(work?.maintenance || work?.full) ||
+    (requestedIds.length === 0 && !work?.catalog && !work?.npc);
 
-  if (work?.catalog) {
+  if (work?.full) {
+    await loadPlanetDocs(db, loaded, "SELECT id, version, doc FROM save_planets", []);
+    await loadFleets(db, loaded, "", []);
+    await loadMessages(db, loaded, "", []);
+    await loadAllSystems(db, loaded);
+  } else if (work?.npc) {
+    await loadPlanetDocs(
+      db,
+      loaded,
+      "SELECT id, version, doc FROM save_planets WHERE owner_id != ''",
+      [],
+    );
+    await loadSystems(db, loaded, systemPairs(Object.values(loaded.universe.planets)));
+  } else if (work?.catalog) {
     const stubs = await all<{
       id: string;
       owner_id: string;
@@ -736,24 +959,11 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
       "SELECT id, version, doc FROM save_planets WHERE owner_id != ''",
       [],
     );
-    const systems = new Map<string, [number, number]>();
-    for (const planet of Object.values(loaded.universe.planets)) {
-      systems.set(`${planet.coords.galaxy}:${planet.coords.system}`, [
-        planet.coords.galaxy,
-        planet.coords.system,
-      ]);
-    }
-    for (const [galaxy, system] of systems.values()) {
-      await loadPlanetDocs(
-        db,
-        loaded,
-        "SELECT id, version, doc FROM save_planets WHERE galaxy = ? AND system = ?",
-        [galaxy, system],
-      );
-    }
+    const systems = systemPairs(Object.values(loaded.universe.planets));
+    await loadPlanetsAt(db, loaded, systems);
     await loadFleets(db, loaded, "", []);
     await loadMessages(db, loaded, "", []);
-    await loadSystems(db, loaded, [...systems.values()]);
+    await loadSystems(db, loaded, systems);
   } else {
     const ids = inList(requestedIds);
     if (requestedIds.length) {
@@ -771,23 +981,21 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
         loaded,
         `SELECT id, version, doc FROM save_planets WHERE id IN (${extra.clause})`,
         extra.values,
+        planetIds,
       );
     }
     const systems = new Map<string, [number, number]>();
     if (work?.galaxy && work.system) systems.set(`${work.galaxy}:${work.system}`, [work.galaxy, work.system]);
+    for (const pair of work?.extraSystems ?? []) {
+      systems.set(`${pair[0]}:${pair[1]}`, pair);
+    }
     for (const id of requestedIds) {
       const player = loaded.universe.players[id];
       const home = player ? loaded.universe.planets[player.activePlanetId] ?? loaded.universe.planets[player.homePlanetId] : undefined;
       if (home) systems.set(`${home.coords.galaxy}:${home.coords.system}`, [home.coords.galaxy, home.coords.system]);
     }
-    for (const [galaxy, system] of systems.values()) {
-      await loadPlanetDocs(
-        db,
-        loaded,
-        "SELECT id, version, doc FROM save_planets WHERE galaxy = ? AND system = ?",
-        [galaxy, system],
-      );
-    }
+    const pairs = [...systems.values()];
+    await loadPlanetsAt(db, loaded, pairs);
     if (requestedIds.length) {
       const list = inList(requestedIds);
       await loadFleets(
@@ -803,220 +1011,468 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
         [...list.values, ...list.values],
       );
     }
-    await loadSystems(db, loaded, [...systems.values()]);
+    await loadSystems(db, loaded, pairs);
   }
 
-  if (!work?.maintenance) loaded.universe.skipNpcRaids = true;
+  if (!work?.npc) loaded.universe.skipNpcRaids = true;
   const now = Date.now();
-  if (work?.galaxy && work.system) ensureSystemVisited(loaded.universe, work.galaxy, work.system, now);
-  for (const id of requestedIds) {
-    const player = loaded.universe.players[id];
-    const home = player && loaded.universe.planets[player.homePlanetId];
-    if (home) ensureSystemVisited(loaded.universe, home.coords.galaxy, home.coords.system, now);
+  if (!work?.npc && !work?.full) {
+    if (work?.galaxy && work.system) ensureSystemVisited(loaded.universe, work.galaxy, work.system, now);
+    for (const id of requestedIds) {
+      const player = loaded.universe.players[id];
+      const home = player && loaded.universe.planets[player.homePlanetId];
+      if (home) ensureSystemVisited(loaded.universe, home.coords.galaxy, home.coords.system, now);
+    }
   }
   return loaded;
 }
 
-async function bump(
+function planetResolved(loaded: LoadedRows, id: string): boolean {
+  return loaded.fullPlanetIds.has(id) || loaded.absentPlanetIds.has(id);
+}
+
+/** A fleet deleted only because its planet was not in this working set goes back. */
+export function restoreUnresolvedFleets(loaded: LoadedRows): void {
+  const fleets = loaded.universe.fleets;
+  for (const [id, fleet] of loaded.fleetSnapshots) {
+    if (fleets[id]) continue;
+    const originOk = Boolean(fleet.originPlanetId) && planetResolved(loaded, fleet.originPlanetId);
+    const targetOk = !fleet.targetPlanetId || planetResolved(loaded, fleet.targetPlanetId);
+    if (!originOk || !targetOk) fleets[id] = fleet;
+  }
+}
+
+function memorySystems(universe: UniverseState): Map<string, SystemWrite> {
+  const map = new Map<string, SystemWrite>();
+  const bucket = (galaxy: number, system: number) => {
+    const key = `${galaxy}:${system}`;
+    let row = map.get(key);
+    if (!row) {
+      row = { galaxy, system, version: 0, asteroids: {}, debris: {} };
+      map.set(key, row);
+    }
+    return row;
+  };
+  for (const [id, field] of Object.entries(universe.asteroids ?? {})) {
+    bucket(field.coords.galaxy, field.coords.system).asteroids[id] = field;
+  }
+  for (const [id, field] of Object.entries(universe.debris ?? {})) {
+    bucket(field.coords.galaxy, field.coords.system).debris[id] = field;
+  }
+  return map;
+}
+
+/** Loaded systems are written exactly, including {}. Unloaded systems merge. */
+export async function planSystemWrites(db: D1Like, loaded: LoadedRows): Promise<SystemWrite[]> {
+  const memory = memorySystems(loaded.universe);
+  for (const key of loaded.loadedSystemKeys) {
+    if (memory.has(key)) continue;
+    const [galaxy, system] = key.split(":").map(Number) as [number, number];
+    memory.set(key, { galaxy, system, version: 0, asteroids: {}, debris: {} });
+  }
+  const writes: SystemWrite[] = [];
+  const merge: SystemWrite[] = [];
+  for (const [key, draft] of memory) {
+    const next = stable({ asteroids: draft.asteroids, debris: draft.debris });
+    if (loaded.loadedSystemKeys.has(key)) {
+      if (loaded.fingerprints.get(`system:${key}`) === next) continue;
+      writes.push({ ...draft, version: loaded.systemVersions.get(key) ?? 0 });
+    } else if (Object.keys(draft.asteroids).length || Object.keys(draft.debris).length) {
+      merge.push(draft);
+    }
+  }
+  for (const group of chunkRows(merge, 40)) {
+    const clause = group.map(() => "(galaxy = ? AND system = ?)").join(" OR ");
+    const values = group.flatMap((row) => [row.galaxy, row.system]);
+    const stored = await all<{
+      galaxy: number;
+      system: number;
+      version: number;
+      asteroids: string;
+      debris: string;
+    }>(
+      db,
+      `SELECT galaxy, system, version, asteroids, debris FROM save_systems WHERE ${clause}`,
+      ...values,
+    );
+    const byKey = new Map(stored.map((row) => [`${row.galaxy}:${row.system}`, row]));
+    for (const draft of group) {
+      const row = byKey.get(`${draft.galaxy}:${draft.system}`);
+      const asteroids = {
+        ...(row ? (JSON.parse(row.asteroids) as Record<string, AsteroidField>) : {}),
+        ...draft.asteroids,
+      };
+      const debris = {
+        ...(row ? (JSON.parse(row.debris) as Record<string, DebrisField>) : {}),
+        ...draft.debris,
+      };
+      const before = stable({
+        asteroids: row ? JSON.parse(row.asteroids) : {},
+        debris: row ? JSON.parse(row.debris) : {},
+      });
+      const next = stable({ asteroids, debris });
+      if (row && before === next) continue;
+      writes.push({
+        galaxy: draft.galaxy,
+        system: draft.system,
+        version: row?.version ?? 0,
+        asteroids,
+        debris,
+      });
+    }
+  }
+  return writes;
+}
+
+interface Check {
+  sql: string;
+  values: unknown[];
+}
+
+function valuesFrom(columns: string[], rows: unknown[][]): { sql: string; values: unknown[] } {
+  const one = `SELECT ${columns.map((column) => `? AS ${column}`).join(", ")}`;
+  return { sql: rows.map(() => one).join(" UNION ALL "), values: rows.flat() };
+}
+
+function pushUpdate(
   db: D1Like,
+  stmts: D1Stmt[],
+  table: string,
+  columns: string[],
+  keyColumns: string[],
+  rows: unknown[][],
+): number {
+  if (!rows.length) return 0;
+  let groups = 0;
+  for (const group of chunkRows(rows, 8)) {
+    const incoming = valuesFrom([...columns, ...keyColumns.map((column) => `old_${column}`), "old_version"], group);
+    const assignments = columns.map((column) => `${column} = v.${column}`).join(", ");
+    const where = [
+      ...keyColumns.map((column) => `${table}.${column} = v.old_${column}`),
+      `${table}.version = v.old_version`,
+    ].join(" AND ");
+    stmts.push(
+      bind(
+        db,
+        `UPDATE ${table} SET ${assignments} FROM (${incoming.sql}) AS v WHERE ${where}`,
+        incoming.values,
+      ),
+    );
+    stmts.push(
+      bind(
+        db,
+        "INSERT INTO save_assert (ok) SELECT CASE WHEN changes() = ? THEN 1 ELSE 0 END",
+        [group.length],
+      ),
+    );
+    groups += 1;
+  }
+  return groups;
+}
+
+function pushInsert(
+  db: D1Like,
+  stmts: D1Stmt[],
   sql: string,
-  values: unknown[],
-): Promise<void> {
-  const changes = await run(db, sql, ...values);
-  if (changes !== 1) throw new RowStaleError();
+  columnsPerRow: number,
+  rows: unknown[][],
+): void {
+  for (const group of chunkRows(rows, 8)) {
+    const values = group.flat();
+    const tuple = `(${new Array(columnsPerRow).fill("?").join(", ")})`;
+    stmts.push(bind(db, `${sql} ${group.map(() => tuple).join(", ")}`, values));
+  }
+}
+
+function isStaleError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return /CHECK constraint|constraint failed|stale row/i.test(message);
+}
+
+async function commitRows(db: D1Like, stmts: D1Stmt[]): Promise<void> {
+  if (!stmts.length) return;
+  try {
+    await db.batch(stmts);
+  } catch (err) {
+    if (isStaleError(err)) throw new RowStaleError();
+    throw err;
+  }
+}
+
+function rerank(rows: HighscoreEntry[]): HighscoreEntry[] {
+  const sorted = [...rows].sort(
+    (a, b) =>
+      b.points - a.points ||
+      b.level - a.level ||
+      b.xpTotal - a.xpTotal ||
+      a.playerId.localeCompare(b.playerId),
+  );
+  return sorted.map((row, index) => ({ ...row, rank: index + 1 }));
 }
 
 async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boolean): Promise<void> {
   const universe = loaded.universe;
   delete universe.skipNpcRaids;
+  const stmts: D1Stmt[] = [];
+  let guards = 0;
+  const newPlayerIds: string[] = [];
+
   const nextWorld = stable(worldDoc(universe));
   if (nextWorld !== loaded.fingerprints.get("world")) {
     const version = loaded.worldVersion + 1;
-    await bump(
+    guards += pushUpdate(
       db,
-      "UPDATE save_world SET doc = ?, version = ? WHERE id = 'world' AND version = ?",
-      [JSON.stringify(worldDoc(universe)), version, loaded.worldVersion],
+      stmts,
+      "save_world",
+      ["doc", "version"],
+      ["id"],
+      [[JSON.stringify(worldDoc(universe)), version, "world", loaded.worldVersion]],
     );
-    loaded.worldVersion = version;
-    loaded.fingerprints.set("world", nextWorld);
   }
 
+  const playerInserts: unknown[][] = [];
+  const playerUpdates: unknown[][] = [];
   for (const player of Object.values(universe.players)) {
     const key = `player:${player.id}`;
     const next = stable(playerDoc(player));
     const previous = loaded.fingerprints.get(key);
     if (previous === undefined) {
-      await run(
-        db,
-        "INSERT INTO save_players (id, version, doc) VALUES (?, 1, ?)",
-        player.id,
-        JSON.stringify(playerDoc(player)),
-      );
-      loaded.playerVersions.set(player.id, 1);
-      loaded.fingerprints.set(key, next);
+      playerInserts.push([player.id, JSON.stringify(playerDoc(player))]);
+      newPlayerIds.push(player.id);
       continue;
     }
     if (previous === next) continue;
     const version = (loaded.playerVersions.get(player.id) ?? 0) + 1;
-    await bump(
-      db,
-      "UPDATE save_players SET doc = ?, version = ? WHERE id = ? AND version = ?",
-      [JSON.stringify(playerDoc(player)), version, player.id, version - 1],
-    );
-    loaded.playerVersions.set(player.id, version);
-    loaded.fingerprints.set(key, next);
+    playerUpdates.push([JSON.stringify(playerDoc(player)), version, player.id, version - 1]);
   }
+  pushInsert(
+    db,
+    stmts,
+    "INSERT INTO save_players (id, version, doc) VALUES",
+    3,
+    playerInserts.map((row) => [row[0], 1, row[1]]),
+  );
+  guards += pushUpdate(db, stmts, "save_players", ["doc", "version"], ["id"], playerUpdates);
 
+  const planetInserts: unknown[][] = [];
+  const planetUpdates: unknown[][] = [];
   for (const planet of Object.values(universe.planets)) {
-    if (loaded.stubPlanetIds.has(planet.id)) continue;
+    if (loaded.stubPlanetIds.has(planet.id) && !loaded.fullPlanetIds.has(planet.id)) continue;
     const key = `planet:${planet.id}`;
     const next = stable(planet);
     const previous = loaded.fingerprints.get(key);
-    if (!loaded.fullPlanetIds.has(planet.id) || previous === undefined) {
-      await upsertPlanet(db, planet);
-      const row = await first<{ version: number }>(
-        db,
-        "SELECT version FROM save_planets WHERE id = ?",
+    const fresh = !loaded.fullPlanetIds.has(planet.id) || previous === undefined;
+    if (fresh) {
+      planetInserts.push([
         planet.id,
-      );
-      loaded.fullPlanetIds.add(planet.id);
-      loaded.planetVersions.set(planet.id, row?.version ?? 1);
-      loaded.fingerprints.set(key, next);
-      continue;
-    }
-    if (previous === next) continue;
-    const version = (loaded.planetVersions.get(planet.id) ?? 0) + 1;
-    await bump(
-      db,
-      `UPDATE save_planets SET owner_id = ?, galaxy = ?, system = ?, slot = ?, kind = ?, doc = ?, version = ?
-       WHERE id = ? AND version = ?`,
-      [
         planet.ownerPlayerId || "",
         planet.coords.galaxy,
         planet.coords.system,
         planet.coords.slot,
         planet.kind ?? "planet",
+        1,
         JSON.stringify(planet),
-        version,
-        planet.id,
-        version - 1,
-      ],
-    );
-    loaded.planetVersions.set(planet.id, version);
-    loaded.fingerprints.set(key, next);
+      ]);
+      continue;
+    }
+    if (previous === next) continue;
+    const version = (loaded.planetVersions.get(planet.id) ?? 0) + 1;
+    planetUpdates.push([
+      planet.ownerPlayerId || "",
+      planet.coords.galaxy,
+      planet.coords.system,
+      planet.coords.slot,
+      planet.kind ?? "planet",
+      JSON.stringify(planet),
+      version,
+      planet.id,
+      version - 1,
+    ]);
   }
+  pushInsert(
+    db,
+    stmts,
+    "INSERT INTO save_planets (id, owner_id, galaxy, system, slot, kind, version, doc) VALUES",
+    8,
+    planetInserts,
+  );
+  guards += pushUpdate(
+    db,
+    stmts,
+    "save_planets",
+    ["owner_id", "galaxy", "system", "slot", "kind", "doc", "version"],
+    ["id"],
+    planetUpdates,
+  );
 
   const liveFleets = new Set(Object.keys(universe.fleets ?? {}));
+  const fleetDeletes: unknown[][] = [];
   for (const [id, version] of loaded.fleetVersions) {
     if (liveFleets.has(id)) continue;
-    await bump(db, "DELETE FROM save_fleets WHERE id = ? AND version = ?", [id, version]);
-    loaded.fleetVersions.delete(id);
+    fleetDeletes.push([id, version]);
   }
+  for (const group of chunkRows(fleetDeletes, 8)) {
+    const clause = group.map(() => "(id = ? AND version = ?)").join(" OR ");
+    stmts.push(bind(db, `DELETE FROM save_fleets WHERE ${clause}`, group.flat()));
+    stmts.push(bind(db, "INSERT INTO save_assert (ok) SELECT CASE WHEN changes() = ? THEN 1 ELSE 0 END", [group.length]));
+    guards += 1;
+  }
+  const fleetInserts: unknown[][] = [];
+  const fleetUpdates: unknown[][] = [];
   for (const fleet of Object.values(universe.fleets ?? {})) {
     const key = `fleet:${fleet.id}`;
     const next = stable(fleet);
     const previous = loaded.fingerprints.get(key);
     if (previous === undefined) {
-      await run(
-        db,
-        "INSERT INTO save_fleets (id, owner_id, target_owner_id, version, doc) VALUES (?, ?, ?, 1, ?)",
+      fleetInserts.push([
         fleet.id,
         fleet.ownerPlayerId,
         fleet.targetPlayerId || "",
+        1,
         JSON.stringify(fleet),
-      );
-      loaded.fleetVersions.set(fleet.id, 1);
-      loaded.fingerprints.set(key, next);
+      ]);
       continue;
     }
     if (previous === next) continue;
     const version = (loaded.fleetVersions.get(fleet.id) ?? 0) + 1;
-    await bump(
-      db,
-      `UPDATE save_fleets SET owner_id = ?, target_owner_id = ?, doc = ?, version = ?
-       WHERE id = ? AND version = ?`,
-      [
-        fleet.ownerPlayerId,
-        fleet.targetPlayerId || "",
-        JSON.stringify(fleet),
-        version,
-        fleet.id,
-        version - 1,
-      ],
-    );
-    loaded.fleetVersions.set(fleet.id, version);
-    loaded.fingerprints.set(key, next);
+    fleetUpdates.push([
+      fleet.ownerPlayerId,
+      fleet.targetPlayerId || "",
+      JSON.stringify(fleet),
+      version,
+      fleet.id,
+      version - 1,
+    ]);
   }
+  pushInsert(
+    db,
+    stmts,
+    "INSERT INTO save_fleets (id, owner_id, target_owner_id, version, doc) VALUES",
+    5,
+    fleetInserts,
+  );
+  guards += pushUpdate(
+    db,
+    stmts,
+    "save_fleets",
+    ["owner_id", "target_owner_id", "doc", "version"],
+    ["id"],
+    fleetUpdates,
+  );
 
   const drafts = messageDrafts(universe);
   const liveMessages = new Set(drafts.map((row) => row.id));
+  const messageDeletes: unknown[][] = [];
   for (const [id, version] of loaded.messageVersions) {
     if (liveMessages.has(id)) continue;
-    await bump(db, "DELETE FROM save_messages WHERE id = ? AND version = ?", [id, version]);
-    loaded.messageVersions.delete(id);
+    messageDeletes.push([id, version]);
   }
+  for (const group of chunkRows(messageDeletes, 8)) {
+    const clause = group.map(() => "(id = ? AND version = ?)").join(" OR ");
+    stmts.push(bind(db, `DELETE FROM save_messages WHERE ${clause}`, group.flat()));
+    stmts.push(bind(db, "INSERT INTO save_assert (ok) SELECT CASE WHEN changes() = ? THEN 1 ELSE 0 END", [group.length]));
+    guards += 1;
+  }
+  const messageInserts: unknown[][] = [];
+  const messageUpdates: unknown[][] = [];
   for (const row of drafts) {
     const key = `message:${row.id}`;
     const next = JSON.stringify(row.doc);
     const previous = loaded.fingerprints.get(key);
     if (previous === undefined) {
-      await run(
-        db,
-        "INSERT INTO save_messages (id, owner_id, defender_id, kind, version, doc) VALUES (?, ?, ?, ?, 1, ?)",
-        row.id,
-        row.owner,
-        row.defender,
-        row.kind,
-        next,
-      );
-      loaded.messageVersions.set(row.id, 1);
-      loaded.fingerprints.set(key, next);
+      messageInserts.push([row.id, row.owner, row.defender, row.kind, 1, next]);
       continue;
     }
     if (previous === next) continue;
     const version = (loaded.messageVersions.get(row.id) ?? 0) + 1;
-    await bump(
-      db,
-      `UPDATE save_messages SET owner_id = ?, defender_id = ?, kind = ?, doc = ?, version = ?
-       WHERE id = ? AND version = ?`,
-      [row.owner, row.defender, row.kind, next, version, row.id, version - 1],
-    );
-    loaded.messageVersions.set(row.id, version);
-    loaded.fingerprints.set(key, next);
+    messageUpdates.push([row.owner, row.defender, row.kind, next, version, row.id, version - 1]);
   }
+  pushInsert(
+    db,
+    stmts,
+    "INSERT INTO save_messages (id, owner_id, defender_id, kind, version, doc) VALUES",
+    6,
+    messageInserts,
+  );
+  guards += pushUpdate(
+    db,
+    stmts,
+    "save_messages",
+    ["owner_id", "defender_id", "kind", "doc", "version"],
+    ["id"],
+    messageUpdates,
+  );
 
-  for (const row of systemDrafts(universe)) {
-    const key = `${row.galaxy}:${row.system}`;
-    const next = stable({ asteroids: row.asteroids, debris: row.debris });
-    const previous = loaded.fingerprints.get(`system:${key}`);
-    if (previous === undefined || loaded.systemVersions.get(key) === 0) {
-      await upsertSystem(db, row);
-      loaded.systemVersions.set(key, 1);
-      loaded.fingerprints.set(`system:${key}`, next);
-      continue;
-    }
-    if (previous === next) continue;
-    const version = (loaded.systemVersions.get(key) ?? 0) + 1;
-    await bump(
-      db,
-      `UPDATE save_systems SET asteroids = ?, debris = ?, version = ?
-       WHERE galaxy = ? AND system = ? AND version = ?`,
-      [
+  const systemInserts: unknown[][] = [];
+  const systemUpdates: unknown[][] = [];
+  for (const row of loaded.pendingSystems) {
+    if (row.version === 0) {
+      systemInserts.push([
+        row.galaxy,
+        row.system,
+        1,
+        JSON.stringify(row.asteroids),
+        JSON.stringify(row.debris),
+      ]);
+    } else {
+      const version = row.version + 1;
+      systemUpdates.push([
         JSON.stringify(row.asteroids),
         JSON.stringify(row.debris),
         version,
         row.galaxy,
         row.system,
-        version - 1,
-      ],
+        row.version,
+      ]);
+    }
+  }
+  pushInsert(
+    db,
+    stmts,
+    "INSERT INTO save_systems (galaxy, system, version, asteroids, debris) VALUES",
+    5,
+    systemInserts,
+  );
+  guards += pushUpdate(
+    db,
+    stmts,
+    "save_systems",
+    ["asteroids", "debris", "version"],
+    ["galaxy", "system"],
+    systemUpdates,
+  );
+
+  let boardJson: string | null = null;
+  let boardAt = 0;
+  if (rebuildScores) {
+    boardJson = JSON.stringify(highscoresBoard(universe));
+    boardAt = Date.now();
+  } else if (newPlayerIds.length) {
+    const cached = currentScope()?.highscores ?? [];
+    const fresh = highscoresBoard(universe);
+    const mine = fresh.filter((row) => newPlayerIds.includes(row.playerId));
+    if (cached.length) {
+      const kept = cached.filter((row) => !newPlayerIds.includes(row.playerId));
+      boardJson = JSON.stringify(rerank([...kept, ...mine]));
+      boardAt = Date.now();
+    } else if (mine.length && Object.keys(universe.players).length === newPlayerIds.length) {
+      boardJson = JSON.stringify(rerank(mine));
+      boardAt = Date.now();
+    }
+  }
+  if (boardJson) {
+    stmts.push(
+      bind(
+        db,
+        `INSERT INTO save_highscores (id, built_at, doc) VALUES ('board', ?, ?)
+         ON CONFLICT(id) DO UPDATE SET built_at = excluded.built_at, doc = excluded.doc`,
+        [boardAt, boardJson],
+      ),
     );
-    loaded.systemVersions.set(key, version);
-    loaded.fingerprints.set(`system:${key}`, next);
   }
 
-  if (rebuildScores) {
-    await writeHighscoreCache(db, highscoresBoard(universe), Date.now());
-  }
+  if (guards) stmts.push(bind(db, "DELETE FROM save_assert", []));
+  await commitRows(db, stmts);
 }
 
 async function readBoard(db: D1Like): Promise<{ builtAt: number; rows: HighscoreEntry[] } | null> {
@@ -1030,14 +1486,15 @@ async function readBoard(db: D1Like): Promise<{ builtAt: number; rows: Highscore
 
 async function resolvePlayerIds(db: D1Like, work: UniverseWork | undefined): Promise<string[]> {
   const ids = new Set((work?.playerIds ?? []).filter(Boolean) as string[]);
-  for (const planetId of work?.planetIds ?? []) {
-    if (!planetId) continue;
-    const row = await first<{ owner_id: string }>(
+  const planetIds = [...new Set((work?.planetIds ?? []).filter((id): id is string => Boolean(id)))];
+  if (planetIds.length) {
+    const list = inList(planetIds);
+    const rows = await all<{ owner_id: string }>(
       db,
-      "SELECT owner_id FROM save_planets WHERE id = ?",
-      planetId,
+      `SELECT owner_id FROM save_planets WHERE id IN (${list.clause}) AND owner_id != ''`,
+      ...list.values,
     );
-    if (row?.owner_id) ids.add(row.owner_id);
+    for (const row of rows) ids.add(row.owner_id);
   }
   if (work?.lockSystemOwners && work.galaxy && work.system) {
     const rows = await all<{ owner_id: string }>(
@@ -1061,6 +1518,46 @@ async function resolvePlayerIds(db: D1Like, work: UniverseWork | undefined): Pro
   return [...ids].sort();
 }
 
+async function expandDueFleets(
+  db: D1Like,
+  playerIds: string[],
+): Promise<{ planetIds: string[]; owners: string[]; systems: Array<[number, number]> }> {
+  const list = inList(playerIds);
+  const fleets = await all<{ doc: string }>(
+    db,
+    `SELECT doc FROM save_fleets WHERE owner_id IN (${list.clause}) OR target_owner_id IN (${list.clause})`,
+    ...list.values,
+    ...list.values,
+  );
+  const planetIds = new Set<string>();
+  const systems = new Map<string, [number, number]>();
+  for (const row of fleets) {
+    const fleet = JSON.parse(row.doc) as FleetMission;
+    if (fleet.arrivesAt > Date.now()) continue;
+    if (fleet.originPlanetId) planetIds.add(fleet.originPlanetId);
+    if (fleet.targetPlanetId) planetIds.add(fleet.targetPlanetId);
+    const coords = fleet.targetCoords;
+    if (coords?.galaxy && coords.system) {
+      systems.set(`${coords.galaxy}:${coords.system}`, [coords.galaxy, coords.system]);
+    }
+  }
+  const owners = new Set<string>();
+  if (planetIds.size) {
+    const ids = [...planetIds];
+    const listIds = inList(ids);
+    const planets = await all<{ owner_id: string; galaxy: number; system: number }>(
+      db,
+      `SELECT owner_id, galaxy, system FROM save_planets WHERE id IN (${listIds.clause})`,
+      ...listIds.values,
+    );
+    for (const planet of planets) {
+      if (planet.owner_id) owners.add(planet.owner_id);
+      systems.set(`${planet.galaxy}:${planet.system}`, [planet.galaxy, planet.system]);
+    }
+  }
+  return { planetIds: [...planetIds], owners: [...owners], systems: [...systems.values()] };
+}
+
 function changed(loaded: LoadedRows): boolean {
   const universe = loaded.universe;
   if (stable(worldDoc({ ...universe, skipNpcRaids: undefined })) !== loaded.fingerprints.get("world")) {
@@ -1070,7 +1567,7 @@ function changed(loaded: LoadedRows): boolean {
     if (stable(playerDoc(player)) !== loaded.fingerprints.get(`player:${player.id}`)) return true;
   }
   for (const planet of Object.values(universe.planets)) {
-    if (loaded.stubPlanetIds.has(planet.id)) continue;
+    if (loaded.stubPlanetIds.has(planet.id) && !loaded.fullPlanetIds.has(planet.id)) continue;
     if (stable(planet) !== loaded.fingerprints.get(`planet:${planet.id}`)) return true;
   }
   for (const fleet of Object.values(universe.fleets ?? {})) {
@@ -1081,24 +1578,22 @@ function changed(loaded: LoadedRows): boolean {
   }
   if (messageDrafts(universe).length !== loaded.messageVersions.size) return true;
   if (Object.keys(universe.fleets ?? {}).length !== loaded.fleetVersions.size) return true;
-  for (const row of systemDrafts(universe)) {
-    const key = `${row.galaxy}:${row.system}`;
-    const next = stable({ asteroids: row.asteroids, debris: row.debris });
-    if (next !== loaded.fingerprints.get(`system:${key}`)) return true;
-  }
+  if (loaded.pendingSystems.length > 0) return true;
   return false;
 }
 
-async function attachBoard(db: D1Like, work: UniverseWork | undefined): Promise<void> {
+async function attachBoard(db: D1Like, work: UniverseWork | undefined): Promise<number | null> {
   const scope = currentScope();
-  if (!scope) return;
-  scope.rowSave = true;
+  if (scope) scope.rowSave = true;
+  if (work?.npc) return Date.now();
   const board = await readBoard(db);
+  if (!scope) return board?.builtAt ?? null;
   if (work?.maintenance && (!board || highscoreCacheExpired(board.builtAt))) {
     scope.highscores = undefined;
-    return;
+    return board?.builtAt ?? null;
   }
   scope.highscores = board?.rows ?? [];
+  return board?.builtAt ?? null;
 }
 
 async function runGame<T>(
@@ -1128,18 +1623,40 @@ export async function withRowUniverse<T>(
   if (!(await migrationDone(db))) {
     throw new Error("Row save is not migrated.");
   }
-  const playerIds = await resolvePlayerIds(db, work);
-  const locks =
-    work?.maintenance || work?.catalog || playerIds.length === 0
-      ? ["__world__"]
-      : playerIds;
-  const runOnce = async () => {
-    const loaded = await loadWorkingSet(db, {
-      ...work,
-      playerIds: playerIds.length ? playerIds : work?.playerIds,
-    });
-    await attachBoard(db, work);
+  const broad = Boolean(work?.maintenance || work?.catalog || work?.npc || work?.full);
+  const requested = [...new Set((work?.playerIds ?? []).filter(Boolean))] as string[];
+  const due =
+    broad || requested.length === 0
+      ? { planetIds: [] as string[], owners: [] as string[], systems: [] as Array<[number, number]> }
+      : await expandDueFleets(db, requested);
+  const merged: UniverseWork = {
+    ...work,
+    playerIds: [...new Set([...requested, ...due.owners])],
+    planetIds: [...new Set([...(work?.planetIds ?? []), ...due.planetIds])],
+    extraSystems: [...(work?.extraSystems ?? []), ...due.systems],
+  };
+  const playerIds = [
+    ...new Set([...(await resolvePlayerIds(db, work)), ...due.owners]),
+  ].sort();
+  const locks = broad || playerIds.length === 0 ? ["__world__"] : playerIds;
+  const loadWork: UniverseWork = {
+    ...merged,
+    playerIds: playerIds.length ? playerIds : merged.playerIds,
+  };
+
+  const play = async () => {
+    const loaded = await loadWorkingSet(db, loadWork);
+    const builtAt = await attachBoard(db, work);
     const result = await runGame(loaded.universe, fn);
+    restoreUnresolvedFleets(loaded);
+    loaded.pendingSystems = await planSystemWrites(db, loaded);
+    const scoresDue =
+      Boolean(work?.maintenance) && (builtAt == null || highscoreCacheExpired(builtAt));
+    return { loaded, result, scoresDue };
+  };
+
+  const runOnce = async () => {
+    const { loaded, result } = await play();
     if (!changed(loaded)) return result;
     if (!kv || !(await acquireLocks(kv, locks, false))) return result;
     try {
@@ -1161,17 +1678,8 @@ export async function withRowUniverse<T>(
     try {
       for (let attempt = 0; attempt < 4; attempt++) {
         try {
-          const loaded = await loadWorkingSet(db, {
-            ...work,
-            playerIds: playerIds.length ? playerIds : work?.playerIds,
-          });
-          await attachBoard(db, work);
-          const result = await runGame(loaded.universe, fn);
-          const board = await readBoard(db);
-          const scoresDue =
-            Boolean(work?.maintenance) &&
-            (!board || highscoreCacheExpired(board.builtAt));
-          await saveWorkingSet(db, loaded, scoresDue);
+          const { loaded, result, scoresDue } = await play();
+          if (changed(loaded) || scoresDue) await saveWorkingSet(db, loaded, scoresDue);
           return result;
         } catch (err) {
           if (!(err instanceof RowStaleError) || attempt === 3) throw err;
@@ -1183,6 +1691,32 @@ export async function withRowUniverse<T>(
     }
   }
   return runOnce();
+}
+
+/** Copy row tables back into the kv slices main already loads. Does not delete save_*. */
+export async function rollbackRowsToLegacy(
+  db: D1Like,
+  kv: KvStore,
+): Promise<{ players: number; systems: number }> {
+  await ensureRowTables(db);
+  if (!(await migrationDone(db))) throw new Error("Row save is not migrated.");
+  const loaded = await loadWorkingSet(db, { full: true });
+  delete loaded.universe.skipNpcRaids;
+  const parts = splitUniverse(loaded.universe);
+  const base =
+    process.env.STARHOLD_UNIVERSE_KEY ?? `starhold:universe:v${UNIVERSE_SCHEMA_VERSION}`;
+  await kv.set(`${base}:world`, parts.world);
+  await kv.set(`${base}:asteroids`, parts.asteroids);
+  await kv.set(`${base}:pirates`, parts.pirates);
+  await kv.set(`${base}:aliens`, parts.aliens);
+  for (const [id, slice] of Object.entries(parts.players)) {
+    await kv.set(`${base}:player:${id}`, slice);
+  }
+  await kv.set(`${base}:ver`, String(Date.now()));
+  return {
+    players: Object.keys(parts.players).length,
+    systems: loaded.loadedSystemKeys.size,
+  };
 }
 
 export async function readHighscoreMeta(

@@ -390,7 +390,7 @@ export interface PirateBase {
   techs: PirateTechs;
   lastGrewAt: number;
   lastRaidAt: number;
-  /** Random time within the current/next hour window. */
+  /** Random time within the current or next raid period. */
   nextRaidAt: number;
   /** Cadence for free weak-ship + defense spawns (3h). */
   lastFreeSpawnAt: number;

@@ -4,7 +4,7 @@
  * the tick budget, and the password KDF differ from Vercel.
  */
 import * as Sentry from "@sentry/cloudflare";
-import { bindTickBudget, workersTickBudget, advanceUniverse } from "@starhold/game";
+import { advanceUniverse, bindTickBudget, npcJobBudget, tickPirates, workersTickBudget } from "@starhold/game";
 import { app } from "../apps/server/src/app.js";
 import { createD1Store, type D1Like } from "../apps/server/src/d1-store.js";
 import {
@@ -97,12 +97,13 @@ const worker = {
   },
 
   async scheduled(
-    _event: unknown,
+    event: { cron?: string },
     env: WorkerEnv,
     ctx: { waitUntil(promise: Promise<unknown>): void },
   ): Promise<void> {
     if (!env.DB) return;
     applyEnv(env);
+    const npc = event.cron === "*/10 * * * *";
     const store = createD1Store(env.DB);
     ctx.waitUntil(
       runWithScope(
@@ -111,13 +112,14 @@ const worker = {
           db: env.DB,
           mode: "d1",
           method: "POST",
-          budget: workersTickBudget(),
+          budget: npc ? npcJobBudget() : workersTickBudget(),
           cpuMs: 0,
         },
         () =>
           withUniverse((universe) => {
-            advanceUniverse(universe);
-          }, { maintenance: true }),
+            if (npc) tickPirates(universe, Date.now());
+            else advanceUniverse(universe);
+          }, npc ? { npc: true } : { maintenance: true }),
       ),
     );
   },

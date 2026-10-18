@@ -1213,8 +1213,8 @@ export const PIRATE_GROWTH_INTERVAL_MS = PIRATE_LEVEL_GROWTH_INTERVAL_MS;
 
 export const PIRATE_TARGET_BASE_COUNT = 200;
 
-/** Once per hour; each base rolls nextRaidAt = periodStart + offset. */
-export const PIRATE_RAID_PERIOD_MS = 60 * 60 * 1000;
+/** Once per 3 hours; each base rolls nextRaidAt = periodStart + offset. */
+export const PIRATE_RAID_PERIOD_MS = 3 * 60 * 60 * 1000;
 /** Stretch / skip factor so pirate-vs-pirate is slightly less often. */
 export const PIRATE_VS_PIRATE_RAID_PERIOD_MULT = 1.25;
 /** @deprecated Prefer PIRATE_RAID_PERIOD_MS. */
@@ -1312,6 +1312,14 @@ export const WORKERS_TICK_SEED_MINIS = 1;
 /** Pirate bases placed per Workers request once the map scan finishes. */
 export const WORKERS_TICK_SEED_PIRATES = 4;
 
+/**
+ * 10-minute NPC job. 200 bases at one raid per 3 hours is about 12 dues per run.
+ * 24 finishes a same-minute wave in under 3 hours without a second cron.
+ */
+export const NPC_JOB_RAID_BUDGET = 24;
+export const NPC_JOB_LEVELUP_BUDGET = 80;
+export const NPC_JOB_FLEET_BUDGET = 8;
+
 /* ---- Aliens ---- */
 
 export const ALIEN_INITIAL_BASE_COUNT = 0;
@@ -1324,7 +1332,7 @@ export const ALIEN_SPLIT_LEVEL = 50;
 export const ALIEN_SPLIT_CHILD_COUNT = 2;
 export const ALIEN_SPLIT_CHILD_LEVEL = 1;
 export const ALIEN_SPLIT_NEARBY_SYSTEM_RADIUS = 5;
-export const ALIEN_RAID_PERIOD_MS = PIRATE_RAID_PERIOD_MS;
+export const ALIEN_RAID_PERIOD_MS = 60 * 60 * 1000;
 export const ALIEN_VS_ALIEN_RAID_PERIOD_MULT = 1.25;
 export const ALIEN_FREE_SPAWN_INTERVAL_MS = 3 * 60 * 60 * 1000;
 export const ALIEN_STRENGTH_MULT = 1.5;

@@ -34,6 +34,7 @@ STARHOLD_PASSWORD_KDF = "pbkdf2"
 enabled = true
 head_sampling_rate = 1
 
-# Highscores and NPC catch-up. Page loads serve the cached board.
+# */10 catches pirate (3h) and alien (1h) raids. */30 rebuilds highscores.
+# Page loads do not raid.
 [triggers]
-crons = ["*/30 * * * *"]
+crons = ["*/10 * * * *", "*/30 * * * *"]

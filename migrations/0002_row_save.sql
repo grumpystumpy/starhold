@@ -69,3 +69,8 @@ CREATE TABLE IF NOT EXISTS save_highscores (
   built_at INTEGER NOT NULL,
   doc TEXT NOT NULL
 );
+
+-- Version checks insert a 0 here to abort the whole batch. The table stays empty.
+CREATE TABLE IF NOT EXISTS save_assert (
+  ok INTEGER NOT NULL CHECK (ok = 1)
+);

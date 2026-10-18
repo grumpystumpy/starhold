@@ -13,6 +13,7 @@ import { addCpu, currentMethod, currentScope } from "./request-context.js";
 import {
   migrateChunk,
   migrationDone,
+  rewindMigration,
   withRowUniverse,
   type UniverseWork,
 } from "./row-store.js";
@@ -771,7 +772,16 @@ async function rowSaveReady(): Promise<boolean> {
     const client = getKvClient();
     if (!client) return false;
     const legacy = await loadUniverse(client);
-    await migrateChunk(db, legacy);
+    const version = (await client.get<string>(versionKey())) ?? "";
+    const step = await migrateChunk(db, legacy, undefined, undefined, version);
+    if (step.done) {
+      const after = (await client.get<string>(versionKey())) ?? "";
+      if (after !== version) {
+        await rewindMigration(db, after);
+        const fresh = await loadUniverse(client);
+        await migrateChunk(db, fresh, undefined, undefined, after);
+      }
+    }
     return migrationDone(db);
   } catch (err) {
     console.error("[starhold] row migration failed; still on the old save", err);
