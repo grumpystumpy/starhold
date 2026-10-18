@@ -1,6 +1,7 @@
 import { Redis } from "@upstash/redis";
 import {
   archiveUniverseKey,
+  bindHighscoreSource,
   createUniverse,
   ensureUniverseShape,
   migrateOrResetUniverse,
@@ -10,6 +11,12 @@ import {
 import type { KvGetOptions, KvSetOptions, KvStore, StorageMode } from "./kv.js";
 import { addCpu, currentMethod, currentScope } from "./request-context.js";
 import {
+  migrateChunk,
+  migrationDone,
+  withRowUniverse,
+  type UniverseWork,
+} from "./row-store.js";
+import {
   assembleUniverse,
   emptyStamps,
   sliceStamps,
@@ -18,6 +25,15 @@ import {
   type PlayerSlice,
   type SliceStamps,
 } from "./universe-docs.js";
+
+export type { UniverseWork };
+
+bindHighscoreSource(() => {
+  const scope = currentScope();
+  if (!scope?.rowSave) return undefined;
+  if (scope.highscores === undefined) return undefined;
+  return scope.highscores;
+});
 
 /**
  * Universe persistence.
@@ -519,7 +535,8 @@ async function withUniverseBody<T>(
  * budget, so a quiet poll must not pay it. This misses resource stocks,
  * `lastTickAt`, `lastAiSimAt`, and view-only `remainingSeconds`. It does
  * cover builds, research, fleets, reports, pirate/alien clocks, the alien
- * daily seed, and planet positions (mini drift).
+ * daily seed, planet positions, debris, asteroids, occupations, alliances,
+ * ACS groups, and the seed cursor.
  */
 function structuralHint(universe: UniverseState): string {
   let h1 = 2166136261;
@@ -635,26 +652,54 @@ function structuralHint(universe: UniverseState): string {
     mix(base.destroyedAt ?? 0);
     mix(base.lastGrewAt ?? 0);
   }
+  mix(Object.keys(universe.debris ?? {}).length);
+  mix(Object.keys(universe.asteroids ?? {}).length);
+  mix(Object.keys(universe.occupations ?? {}).length);
+  mix(Object.keys(universe.alliances ?? {}).length);
+  const acs = Object.values(universe.acsGroups ?? {});
+  mix(acs.length);
+  for (const group of acs) {
+    mixStr(group.id);
+    mixStr(group.status);
+  }
+  const cursor = universe.seedCursor;
+  if (cursor) {
+    mix(cursor.at ?? 0);
+    mix(cursor.pirates ?? 0);
+    mix(cursor.rankAt ?? 0);
+    mix(cursor.done ? 1 : 0);
+  } else {
+    mix(0);
+  }
   return (h1 >>> 0).toString(16) + (h2 >>> 0).toString(16);
 }
 
 /**
  * Snapshot read for `/api/state` and `/api/auth/me`.
- * Does not wait on the universe lock.
+ * Never waits on the universe lock. A read may try the lock once when a
+ * poll finishes a build, fleet, or report.
  *
  * Memory (and the single Redis document) ticks the stored universe. A polled
  * fleet has to stay there or the return leg never finishes.
  *
  * D1 ticks the cached snapshot. A resource-only tick stays in memory and does
- * not hash the universe. A structural change (build, research, fleet, report)
- * is saved the way a quiet read saves: one lock attempt, no wait, and the
- * rows that actually differ. If the lock is busy or the version moved, the
- * cache is dropped so that in-memory tick cannot become the base of a partial
- * write.
+ * not hash the universe. A structural change (build, research, fleet, report,
+ * debris, asteroid, occupation, alliance, ACS group, or seed cursor) is saved
+ * the way a quiet read saves: one lock attempt, no wait, and the rows that
+ * actually differ. If the lock is busy or the version moved, the cache is
+ * dropped so that in-memory tick cannot become the base of a partial write.
+ *
+ * After the row migration, the same rule applies per player, planet, fleet,
+ * and message. Those reads lock only the named players, and they do not wait.
  */
 export async function withUniverseRead<T>(
   fn: (universe: UniverseState) => T | Promise<T>,
+  work?: UniverseWork,
 ): Promise<T> {
+  if (await rowSaveReady()) {
+    const scope = currentScope();
+    return withRowUniverse(scope!.db!, getKvClient(), fn, work, false);
+  }
   return withLocalLock(async () => {
     if (universeFault === "read" || universeFault === "both") {
       throw new Error("Universe busy — retry in a moment.");
@@ -700,8 +745,38 @@ export async function withUniverseRead<T>(
 
 export async function withUniverse<T>(
   fn: (universe: UniverseState) => T | Promise<T>,
+  work?: UniverseWork,
 ): Promise<T> {
+  if (await rowSaveReady()) {
+    const scope = currentScope();
+    return withRowUniverse(scope!.db!, getKvClient(), fn, work, true);
+  }
   return withLocalLock(() => withUniverseBody(fn));
+}
+
+/**
+ * One migration slice per request. Until it finishes, callers stay on the
+ * legacy document. A failed slice is logged and the old save keeps serving.
+ */
+async function rowSaveReady(): Promise<boolean> {
+  const scope = currentScope();
+  const db = scope?.db;
+  if (!db || storageMode() !== "d1") return false;
+  if (process.env.STARHOLD_ROW_SAVE === "legacy") return false;
+  if (universeFault === "read" || universeFault === "both" || universeFault === "busy") {
+    return false;
+  }
+  try {
+    if (await migrationDone(db)) return true;
+    const client = getKvClient();
+    if (!client) return false;
+    const legacy = await loadUniverse(client);
+    await migrateChunk(db, legacy);
+    return migrationDone(db);
+  } catch (err) {
+    console.error("[starhold] row migration failed; still on the old save", err);
+    return false;
+  }
 }
 
 /** Test helper: wipe in-memory universe (no-op for the Redis document). */

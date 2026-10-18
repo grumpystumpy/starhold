@@ -1,14 +1,21 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { TickBudget } from "@starhold/game";
+import type { HighscoreEntry, TickBudget } from "@starhold/game";
+import type { D1Like } from "./d1-store.js";
 import type { KvStore, StorageMode } from "./kv.js";
 
 export interface RequestScope {
   kv: KvStore | null;
+  /** Present on Workers. Row saves use this; the kv binding stays for accounts and the legacy universe. */
+  db?: D1Like;
   mode?: StorageMode;
   /** HTTP method for this request. Unset on Vercel, so saves stay unconditional. */
   method?: string;
   budget?: TickBudget;
   cpuMs: number;
+  /** Cached highscore board for this request. Only set on the row-save path. */
+  highscores?: HighscoreEntry[];
+  /** Page loads on the row path must not recompute rankings. */
+  rowSave?: boolean;
 }
 
 const scopes = new AsyncLocalStorage<RequestScope>();

@@ -114,7 +114,9 @@ export {
   highscoresBoard,
   playerView,
   publicRoster,
+  bindHighscoreSource,
 } from "./world-view.js";
+export { ensureSystemVisited } from "./world-seed.js";
 export {
   graduateNewbieProtection,
   isNewbieProtected,

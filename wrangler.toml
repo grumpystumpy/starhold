@@ -33,3 +33,7 @@ STARHOLD_PASSWORD_KDF = "pbkdf2"
 [observability]
 enabled = true
 head_sampling_rate = 1
+
+# Highscores and NPC catch-up. Page loads serve the cached board.
+[triggers]
+crons = ["*/30 * * * *"]

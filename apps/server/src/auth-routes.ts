@@ -99,7 +99,7 @@ async function startSession(c: Context, account: AccountRecord) {
   let view: ReturnType<typeof playerView> | null = null;
   let linkedPlayerId: string | null = null;
   try {
-    // Login must not take the universe lock. A busy writer used to be
+    // Login must not wait on the universe lock. A busy writer used to be
     // swallowed, which returned ok:true and view:null and left the client
     // on the sign-in screen.
     await withUniverseRead((universe) => {
@@ -114,7 +114,9 @@ async function startSession(c: Context, account: AccountRecord) {
       if (account.playerId && universe.players[account.playerId]) {
         view = playerView(universe, account.playerId);
       }
-    });
+    }, account.playerId
+      ? { playerIds: [account.playerId] }
+      : { catalog: true });
   } catch (err) {
     console.error("[starhold-auth] session view", err);
     const message = err instanceof Error ? err.message : "Universe busy — retry in a moment.";
@@ -455,7 +457,7 @@ export function mountAuthRoutes(app: Hono): void {
         player.accountId = ctx.account.id;
         await setAccountPlayerId(ctx.account.id, player.id);
         return c.json(playerView(universe, player.id));
-      });
+      }, { catalog: true });
     } catch (err) {
       return c.json(
         { error: err instanceof Error ? err.message : "Join failed." },

@@ -1482,6 +1482,12 @@ export function tickPirates(universe: UniverseState, now: number): void {
   if (!universe.pirateBases) universe.pirateBases = {};
   if (!universe.alienBases) universe.alienBases = {};
   ensureAlienDailySeed(universe, now);
+  // Page loads must stay inside the CPU budget. Growth and raids run on the
+  // maintenance pass, which holds a full owned-planet set.
+  if (universe.skipNpcRaids) {
+    universe.lastAiSimAt = now;
+    return;
+  }
   ensurePiratePopulation(universe, now);
 
   let paused = false;
