@@ -14,7 +14,7 @@ import {
   legacyMirrorIfSealed,
   migrateChunk,
   migrationDone,
-  mirrorLegacySnapshot,
+  mirrorFreshIfVersionMoved,
   UniverseBusyError,
   withRowUniverse,
   type UniverseWork,
@@ -398,6 +398,9 @@ async function saveUniverse(
     return;
   }
   if (storageMode() === "d1") {
+    const db = currentScope()?.db;
+    // Mirror first. A failed copy leaves the old save unchanged so the client retries.
+    if (db) await legacyMirrorIfSealed(db, state, before, after);
     await writeChangedSlices(
       client,
       state,
@@ -408,8 +411,6 @@ async function saveUniverse(
     const version = String(Date.now());
     await client.set(versionKey(), version);
     remember(state, version, after, false);
-    const db = currentScope()?.db;
-    if (db) await legacyMirrorIfSealed(db, state);
     return;
   }
   await client.set(universeKey(), state);
@@ -785,7 +786,7 @@ async function rowSaveReady(): Promise<boolean> {
       const after = (await client.get<string>(versionKey())) ?? "";
       if (after !== version) {
         const fresh = await loadUniverse(client);
-        await mirrorLegacySnapshot(db, fresh);
+        await mirrorFreshIfVersionMoved(db, legacy, fresh, version, after);
       }
     }
     return migrationDone(db);

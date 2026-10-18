@@ -58,23 +58,27 @@ function sqliteD1(): { db: D1Like; raw: DatabaseSync } {
   `);
   const db: D1Like = {
     prepare(sql: string): D1Stmt {
-      const stmt = raw.prepare(sql);
       const bound: { values: unknown[] } = { values: [] };
+      let stmt: ReturnType<DatabaseSync["prepare"]> | null = null;
+      const compiled = () => {
+        if (!stmt) stmt = raw.prepare(sql);
+        return stmt;
+      };
       const api: D1Stmt = {
         bind(...values: unknown[]) {
           bound.values = values;
           return api;
         },
         async first<T>() {
-          const row = stmt.get(...(bound.values as never[])) as T | undefined;
+          const row = compiled().get(...(bound.values as never[])) as T | undefined;
           return row ?? null;
         },
         async all<T>() {
-          const rows = stmt.all(...(bound.values as never[])) as T[];
+          const rows = compiled().all(...(bound.values as never[])) as T[];
           return { results: rows };
         },
         async run(): Promise<D1RunResult> {
-          const result = stmt.run(...(bound.values as never[]));
+          const result = compiled().run(...(bound.values as never[]));
           return { meta: { changes: Number(result.changes ?? 0) } };
         },
       };
@@ -94,6 +98,56 @@ function sqliteD1(): { db: D1Like; raw: DatabaseSync } {
     },
   };
   return { db, raw };
+}
+
+function subrequestD1(inner: D1Like, limit = 50): D1Like & { count(): number; reset(): number } {
+  let n = 0;
+  let inBatch = false;
+  const hit = () => {
+    if (inBatch) return;
+    n += 1;
+    if (n > limit) throw new Error("D1 query limit");
+  };
+  return {
+    count: () => n,
+    reset() {
+      const value = n;
+      n = 0;
+      return value;
+    },
+    prepare(sql: string): D1Stmt {
+      const stmt = inner.prepare(sql);
+      let bound: D1Stmt = stmt;
+      const api: D1Stmt = {
+        bind(...values: unknown[]) {
+          bound = stmt.bind(...values);
+          return api;
+        },
+        async first<T>() {
+          hit();
+          return bound.first<T>();
+        },
+        async all<T>() {
+          hit();
+          return bound.all<T>();
+        },
+        async run() {
+          hit();
+          return bound.run();
+        },
+      };
+      return api;
+    },
+    async batch(statements) {
+      hit();
+      inBatch = true;
+      try {
+        return await inner.batch(statements);
+      } finally {
+        inBatch = false;
+      }
+    },
+  };
 }
 
 function progress(universe: UniverseState) {
@@ -546,7 +600,9 @@ describe("row save review fixes", () => {
           }, { playerIds: [alpha.id] }),
       );
       const copied = await rollbackRowsToLegacy(db, store);
-      assert.ok(copied.players >= 2);
+      let page = copied;
+      while (!page.done) page = await rollbackRowsToLegacy(db, store);
+      assert.ok(page.players >= 2);
       const base = `starhold:universe:v${UNIVERSE_SCHEMA_VERSION}`;
       const slice = await store.get<{ player: { starshards: number }; planets: Record<string, unknown> }>(
         `${base}:player:${alpha.id}`,
@@ -1099,7 +1155,7 @@ describe("row save review fixes", () => {
     assert.ok(stepP95 <= 20, `migration p95 ${stepP95}`);
   });
 
-  it("returns 500 from /api/state for a non-busy error", async () => {
+  it("returns 404 from /api/state for an unknown player and does not report it", async () => {
     let reported = 0;
     setServerErrorReporter(() => {
       reported += 1;
@@ -1107,17 +1163,17 @@ describe("row save review fixes", () => {
     try {
       const app = createApp();
       const missing = await app.request("/api/state?playerId=no-such-commander");
-      assert.equal(missing.status, 500);
+      assert.equal(missing.status, 404);
       const body = (await missing.json()) as { error?: string };
       assert.match(body.error ?? "", /Unknown player/);
-      assert.equal(reported, 1);
+      assert.equal(reported, 0);
 
       setUniverseFaultForTests("both");
       const busy = await app.request("/api/state?playerId=no-such-commander");
       assert.equal(busy.status, 503);
       const busyBody = (await busy.json()) as { code?: string };
       assert.equal(busyBody.code, "busy");
-      assert.equal(reported, 1);
+      assert.equal(reported, 0);
     } finally {
       setUniverseFaultForTests(null);
       setServerErrorReporter(null);
@@ -1307,6 +1363,168 @@ describe("row save review fixes", () => {
     );
     assert.equal(parked, undefined);
     resetMemoryUniverse();
+  });
+
+  it("fails a request that would exceed 50 D1 queries", async () => {
+    const { db: inner } = sqliteD1();
+    const db = subrequestD1(inner, 50);
+    await assert.rejects(async () => {
+      for (let i = 0; i < 51; i++) {
+        await db.prepare("SELECT 1 AS n").bind().first();
+      }
+    }, /D1 query limit/);
+    assert.ok(db.count() > 50);
+  });
+
+  it("keeps every migration request under 50 queries and loses no sealed write", async () => {
+    resetMemoryUniverse();
+    const { db: inner, raw } = sqliteD1();
+    const db = subrequestD1(inner, 50);
+    const now = 1_700_000_000_000;
+    const source = createUniverse("Alpha Drift", 8, 8, { lazySeed: true });
+    if (source.seedCursor) source.seedCursor.done = true;
+    source.miniPlanetIds = ["already-seeded"];
+    for (let i = 0; i < 20; i++) joinUniverse(source, `Pilot${i}`, now + i);
+    for (let n = 0; n < 100; n++) {
+      const galaxy = 1 + Math.floor(n / 50);
+      const system = (n % 50) + 1;
+      const key = `${galaxy}:${system}:16`;
+      source.asteroids[key] = {
+        id: key,
+        coords: { galaxy, system, slot: 16 },
+        metal: 800,
+        crystal: 300,
+        deuterium: 40,
+        richness: 4,
+      };
+    }
+    const store = createD1Store(db);
+    const key = `starhold:universe:v${UNIVERSE_SCHEMA_VERSION}`;
+    await store.set(key, source);
+    await store.set(`${key}:ver`, "seed-0");
+    db.reset();
+    const who = Object.values(source.players).find((player) => player.name === "Pilot0")!;
+    const counts: number[] = [];
+    const sealCounts: number[] = [];
+    let requests = 0;
+    let done = false;
+    const bound = 80;
+    const sealOn = () => {
+      try {
+        const row = raw.prepare("SELECT value FROM save_meta WHERE id = 'migration'").get() as
+          | { value: string }
+          | undefined;
+        if (!row) return false;
+        return Boolean(JSON.parse(row.value).seal);
+      } catch {
+        return false;
+      }
+    };
+    while (requests < bound && !done) {
+      const n = requests;
+      const sealedBefore = sealOn();
+      db.reset();
+      await runWithScope(
+        { kv: store, db, mode: "d1", method: "POST", cpuMs: 0 },
+        () =>
+          withUniverse((universe) => {
+            const player = universe.players[who.id];
+            if (player && n % 2 === 0) {
+              player.starshards = (player.starshards ?? 0) + 1;
+              universe.asteroids[`proof-${n}`] = {
+                id: `proof-${n}`,
+                coords: { galaxy: 3, system: 1 + (n % 20), slot: 15 },
+                metal: 70 + n,
+                crystal: 1,
+                deuterium: 1,
+                richness: 1,
+              };
+            }
+          }),
+      );
+      const queries = db.count();
+      counts.push(queries);
+      if (sealedBefore || sealOn()) sealCounts.push(queries);
+      requests += 1;
+      done = await migrationDone(inner);
+    }
+    const max = counts.reduce((best, value) => Math.max(best, value), 0);
+    const sealMax = sealCounts.reduce((best, value) => Math.max(best, value), 0);
+    const table = {
+      requests,
+      max,
+      sealRequests: sealCounts.length,
+      sealMax,
+      over50: counts.filter((value) => value > 50).length,
+    };
+    console.log(`migration query counts ${JSON.stringify(table)}`);
+    assert.equal(done, true, `still migrating after ${requests}`);
+    assert.equal(table.over50, 0);
+    assert.ok(sealCounts.length > 0, "seal pass never ran");
+    assert.ok(sealMax <= 30, `seal pass ${sealMax}`);
+    assert.ok(max <= 50, `migration request ${max}`);
+    const loaded = await loadWorkingSet(inner, { full: true });
+    const writes = Math.floor((requests - 1) / 2) + 1;
+    assert.equal(loaded.universe.players[who.id]?.starshards, writes);
+    assert.equal(loaded.universe.asteroids?.["proof-0"]?.metal, 70);
+    resetMemoryUniverse();
+  });
+
+  it("rolls a 100-player universe back under 50 queries per request", async () => {
+    const previous = process.env.STARHOLD_ROW_SAVE;
+    const { db: inner } = sqliteD1();
+    const db = subrequestD1(inner, 50);
+    const now = 1_700_000_000_000;
+    const source = createUniverse("Alpha Drift", 8, 8, { lazySeed: true });
+    if (source.seedCursor) source.seedCursor.done = true;
+    source.miniPlanetIds = ["already-seeded"];
+    for (let i = 0; i < 110; i++) joinUniverse(source, `Pilot${i}`, now + i);
+    const alpha = Object.values(source.players).find((player) => player.name === "Pilot0")!;
+    const last = Object.values(source.players).find((player) => player.name === "Pilot109")!;
+    alpha.starshards = 4242;
+    last.starshards = 109109;
+    await migrateAll(inner, source);
+    const counts: number[] = [];
+    try {
+      const store = createD1Store(db);
+      let done = false;
+      let pages = 0;
+      let players = 0;
+      while (!done && pages < 20) {
+        db.reset();
+        const page = await rollbackRowsToLegacy(db, store);
+        const queries = db.count();
+        counts.push(queries);
+        assert.ok(queries <= 50, `rollback page ${pages} used ${queries}`);
+        players = page.players;
+        done = page.done;
+        pages += 1;
+      }
+      const max = counts.reduce((best, value) => Math.max(best, value), 0);
+      console.log(`rollback query counts ${JSON.stringify({ pages, max, players, counts })}`);
+      assert.equal(done, true);
+      assert.ok(players >= 110, `players ${players}`);
+      assert.ok(max <= 50, `rollback ${max}`);
+      process.env.STARHOLD_ROW_SAVE = "legacy";
+      resetMemoryUniverse();
+      const legacy = createD1Store(inner);
+      await runWithScope(
+        { kv: legacy, db: inner, mode: "d1", method: "GET", cpuMs: 0 },
+        () =>
+          withUniverseRead((universe) => {
+            assert.ok(Object.keys(universe.players).length >= 110);
+            assert.equal(universe.players[alpha.id]?.starshards, 4242);
+            assert.equal(universe.players[last.id]?.starshards, 109109);
+            assert.equal(universe.players[alpha.id]?.name, "Pilot0");
+            assert.ok(universe.planets[alpha.homePlanetId]);
+            assert.ok(universe.planets[last.homePlanetId]);
+          }),
+      );
+    } finally {
+      if (previous == null) delete process.env.STARHOLD_ROW_SAVE;
+      else process.env.STARHOLD_ROW_SAVE = previous;
+      resetMemoryUniverse();
+    }
   });
 });
 

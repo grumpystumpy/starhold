@@ -121,7 +121,7 @@ async function resumePlayer(
     return "ok";
   } catch (err) {
     const status = err instanceof ApiError ? err.status : 0;
-    if (shouldClearSavedPlayer(status)) {
+    if (status === 404 || shouldClearSavedPlayer(status)) {
       localStorage.removeItem(SESSION_KEY);
       session.view = null;
       session.holdJoin = false;

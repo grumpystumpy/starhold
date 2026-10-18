@@ -21,9 +21,10 @@ import {
   UNIVERSE_SCHEMA_VERSION,
 } from "@starhold/game";
 import type { D1Like, D1Stmt } from "./d1-store.js";
+import { chunkKey, splitChunkText } from "./d1-codec.js";
 import type { KvStore } from "./kv.js";
 import { addCpu, currentScope } from "./request-context.js";
-import { splitUniverse } from "./universe-docs.js";
+import { sliceStamps, splitUniverse, type SliceStamps } from "./universe-docs.js";
 
 export const HIGHSCORE_TTL_MS = 30 * 60 * 1000;
 export const ROW_LOCK_MS = 2_500;
@@ -230,7 +231,7 @@ export function setMigrationClockForTests(next: (() => number) | null): void {
 
 export async function ensureRowTables(db: D1Like): Promise<void> {
   if (schemaReady.has(db)) return;
-  for (const sql of TABLE_SQL) await run(db, sql);
+  await db.batch(TABLE_SQL.map((sql) => db.prepare(sql).bind()));
   schemaReady.add(db);
 }
 
@@ -388,110 +389,303 @@ function systemDrafts(universe: UniverseState): SystemRow[] {
   return [...map.values()].sort((a, b) => a.galaxy - b.galaxy || a.system - b.system);
 }
 
-async function upsertWorld(db: D1Like, universe: UniverseState): Promise<void> {
-  await run(
+function queue(db: D1Like, stmts: D1Stmt[], sql: string, values: unknown[]): void {
+  stmts.push(bind(db, sql, values));
+}
+
+function queueWorld(db: D1Like, stmts: D1Stmt[], universe: UniverseState): void {
+  queue(
     db,
+    stmts,
     `INSERT INTO save_world (id, version, doc) VALUES ('world', 2, ?)
      ON CONFLICT(id) DO UPDATE SET doc = excluded.doc, version = excluded.version
      WHERE save_world.version <= excluded.version`,
-    timedStringify(worldDoc(universe)),
+    [timedStringify(worldDoc(universe))],
   );
 }
 
-async function upsertPlayer(db: D1Like, player: PlayerState): Promise<void> {
-  await run(
+function queuePlayer(db: D1Like, stmts: D1Stmt[], player: PlayerState): void {
+  queue(
     db,
+    stmts,
     `INSERT INTO save_players (id, version, doc) VALUES (?, 2, ?)
      ON CONFLICT(id) DO UPDATE SET doc = excluded.doc, version = excluded.version
      WHERE save_players.version <= excluded.version`,
-    player.id,
-    timedStringify(playerDoc(player)),
+    [player.id, timedStringify(playerDoc(player))],
   );
 }
 
-async function upsertPlanet(db: D1Like, planet: PlanetState): Promise<void> {
-  await run(
+function queuePlanet(db: D1Like, stmts: D1Stmt[], planet: PlanetState): void {
+  queue(
     db,
+    stmts,
     `INSERT INTO save_planets (id, owner_id, galaxy, system, slot, kind, version, doc)
      VALUES (?, ?, ?, ?, ?, ?, 2, ?)
      ON CONFLICT(id) DO UPDATE SET
        owner_id = excluded.owner_id, galaxy = excluded.galaxy, system = excluded.system,
        slot = excluded.slot, kind = excluded.kind, doc = excluded.doc, version = excluded.version
      WHERE save_planets.version <= excluded.version`,
-    planet.id,
-    planet.ownerPlayerId || "",
-    planet.coords.galaxy,
-    planet.coords.system,
-    planet.coords.slot,
-    planet.kind ?? "planet",
-    timedStringify(planet),
+    [
+      planet.id,
+      planet.ownerPlayerId || "",
+      planet.coords.galaxy,
+      planet.coords.system,
+      planet.coords.slot,
+      planet.kind ?? "planet",
+      timedStringify(planet),
+    ],
   );
 }
 
-async function upsertFleet(db: D1Like, fleet: FleetMission): Promise<void> {
-  await run(
+function queueFleet(db: D1Like, stmts: D1Stmt[], fleet: FleetMission): void {
+  queue(
     db,
+    stmts,
     `INSERT INTO save_fleets (id, owner_id, target_owner_id, version, doc)
      VALUES (?, ?, ?, 2, ?)
      ON CONFLICT(id) DO UPDATE SET
        owner_id = excluded.owner_id, target_owner_id = excluded.target_owner_id,
        doc = excluded.doc, version = excluded.version
      WHERE save_fleets.version <= excluded.version`,
-    fleet.id,
-    fleet.ownerPlayerId,
-    fleet.targetPlayerId || "",
-    timedStringify(fleet),
+    [fleet.id, fleet.ownerPlayerId, fleet.targetPlayerId || "", timedStringify(fleet)],
   );
 }
 
-async function upsertMessage(db: D1Like, row: MessageDraft): Promise<void> {
-  await run(
+function queueMessage(db: D1Like, stmts: D1Stmt[], row: MessageDraft): void {
+  queue(
     db,
+    stmts,
     `INSERT INTO save_messages (id, owner_id, defender_id, kind, version, doc)
      VALUES (?, ?, ?, ?, 2, ?)
      ON CONFLICT(id) DO UPDATE SET
        owner_id = excluded.owner_id, defender_id = excluded.defender_id,
        kind = excluded.kind, doc = excluded.doc, version = excluded.version
      WHERE save_messages.version <= excluded.version`,
-    row.id,
-    row.owner,
-    row.defender,
-    row.kind,
-    timedStringify(row.doc),
+    [row.id, row.owner, row.defender, row.kind, timedStringify(row.doc)],
   );
 }
 
-async function upsertSystem(db: D1Like, row: SystemRow): Promise<void> {
-  await run(
+function queueSystem(db: D1Like, stmts: D1Stmt[], row: SystemRow): void {
+  queue(
     db,
+    stmts,
     `INSERT INTO save_systems (galaxy, system, version, asteroids, debris)
      VALUES (?, ?, 2, ?, ?)
      ON CONFLICT(galaxy, system) DO UPDATE SET
        asteroids = excluded.asteroids, debris = excluded.debris, version = excluded.version
      WHERE save_systems.version <= excluded.version`,
-    row.galaxy,
-    row.system,
-    timedStringify(row.asteroids),
-    timedStringify(row.debris),
+    [row.galaxy, row.system, timedStringify(row.asteroids), timedStringify(row.debris)],
   );
 }
 
-/** Copy the legacy document into rows without letting an older chunk overwrite it. */
-export async function mirrorLegacySnapshot(db: D1Like, universe: UniverseState): Promise<void> {
+function changedStampIds(before: Record<string, string>, after: Record<string, string>): string[] {
+  const ids = new Set([...Object.keys(before), ...Object.keys(after)]);
+  return [...ids].filter((id) => before[id] !== after[id]).sort();
+}
+
+function unownedPlanets(universe: UniverseState): PlanetState[] {
+  return Object.values(universe.planets).filter((planet) => {
+    const owner = planet.ownerPlayerId;
+    return !owner || !universe.players[owner];
+  });
+}
+
+function sameJson(left: unknown, right: unknown): boolean {
+  return stable(left) === stable(right);
+}
+
+function queuePlayerMirror(db: D1Like, stmts: D1Stmt[], universe: UniverseState, id: string): void {
+  queue(db, stmts, "DELETE FROM save_planets WHERE owner_id = ? AND version <= 2", [id]);
+  queue(db, stmts, "DELETE FROM save_fleets WHERE owner_id = ? AND version <= 2", [id]);
+  queue(db, stmts, "DELETE FROM save_messages WHERE owner_id = ? AND version <= 2", [id]);
+  const player = universe.players[id];
+  if (!player) {
+    queue(db, stmts, "DELETE FROM save_players WHERE id = ? AND version <= 2", [id]);
+    return;
+  }
+  queuePlayer(db, stmts, player);
+  for (const planet of Object.values(universe.planets)) {
+    if (planet.ownerPlayerId === id) queuePlanet(db, stmts, planet);
+  }
+  for (const fleet of Object.values(universe.fleets ?? {})) {
+    if (fleet.ownerPlayerId === id) queueFleet(db, stmts, fleet);
+  }
+  for (const row of messageDrafts(universe)) {
+    if (row.owner === id) queueMessage(db, stmts, row);
+  }
+}
+
+async function queueSystemMirror(
+  db: D1Like,
+  stmts: D1Stmt[],
+  universe: UniverseState,
+  previous: UniverseState | null,
+): Promise<void> {
+  const next = new Map(systemDrafts(universe).map((row) => [`${row.galaxy}:${row.system}`, row]));
+  if (previous) {
+    const prior = new Map(systemDrafts(previous).map((row) => [`${row.galaxy}:${row.system}`, row]));
+    for (const [key, row] of prior) {
+      const live = next.get(key);
+      if (!live) {
+        queue(db, stmts, "DELETE FROM save_systems WHERE galaxy = ? AND system = ? AND version <= 2", [row.galaxy, row.system]);
+      } else if (!sameJson(live.asteroids, row.asteroids) || !sameJson(live.debris, row.debris)) {
+        queueSystem(db, stmts, live);
+      }
+      next.delete(key);
+    }
+    for (const row of next.values()) queueSystem(db, stmts, row);
+    return;
+  }
+  const stored = await all<{ galaxy: number; system: number; asteroids: string; debris: string }>(
+    db,
+    "SELECT galaxy, system, asteroids, debris FROM save_systems",
+  );
+  const seen = new Set<string>();
+  for (const row of stored) {
+    const key = `${row.galaxy}:${row.system}`;
+    seen.add(key);
+    const live = next.get(key);
+    if (!live) {
+      queue(db, stmts, "DELETE FROM save_systems WHERE galaxy = ? AND system = ? AND version <= 2", [row.galaxy, row.system]);
+      continue;
+    }
+    let asteroids: unknown = {};
+    let debris: unknown = {};
+    try {
+      asteroids = timedParse(row.asteroids);
+      debris = timedParse(row.debris);
+    } catch {
+      asteroids = null;
+    }
+    if (!sameJson(live.asteroids, asteroids) || !sameJson(live.debris, debris)) {
+      queueSystem(db, stmts, live);
+    }
+  }
+  for (const [key, row] of next) {
+    if (!seen.has(key)) queueSystem(db, stmts, row);
+  }
+}
+
+async function queueUnownedPlanets(
+  db: D1Like,
+  stmts: D1Stmt[],
+  universe: UniverseState,
+  previous: UniverseState | null,
+): Promise<void> {
+  const next = new Map(unownedPlanets(universe).map((planet) => [planet.id, planet]));
+  if (previous) {
+    for (const planet of unownedPlanets(previous)) {
+      const live = next.get(planet.id);
+      if (!live) queue(db, stmts, "DELETE FROM save_planets WHERE id = ? AND version <= 2", [planet.id]);
+      else if (!sameJson(live, planet)) queuePlanet(db, stmts, live);
+      next.delete(planet.id);
+    }
+    for (const planet of next.values()) queuePlanet(db, stmts, planet);
+    return;
+  }
+  const stored = await all<{ id: string; doc: string }>(
+    db,
+    "SELECT id, doc FROM save_planets WHERE owner_id = ''",
+  );
+  const seen = new Set<string>();
+  for (const row of stored) {
+    seen.add(row.id);
+    const live = next.get(row.id);
+    if (!live) {
+      queue(db, stmts, "DELETE FROM save_planets WHERE id = ? AND version <= 2", [row.id]);
+      continue;
+    }
+    let parsed: unknown = null;
+    try {
+      parsed = timedParse(row.doc);
+    } catch {
+      parsed = null;
+    }
+    if (!sameJson(live, parsed)) queuePlanet(db, stmts, live);
+  }
+  for (const [id, planet] of next) {
+    if (!seen.has(id)) queuePlanet(db, stmts, planet);
+  }
+}
+
+/**
+ * Version-2 upserts for the rows this request actually changed.
+ * One batch, so it is one D1 subrequest. Unchanged rows stay put:
+ * a later version-1 chunk cannot overwrite version 2.
+ */
+async function writeMirror(
+  db: D1Like,
+  universe: UniverseState,
+  before: SliceStamps,
+  after: SliceStamps,
+  previous: UniverseState | null,
+): Promise<void> {
+  const worldChanged = before.world !== after.world;
+  const piratesChanged = before.pirates !== after.pirates;
+  const aliensChanged = before.aliens !== after.aliens;
+  const asteroidsChanged = before.asteroids !== after.asteroids;
+  const players = changedStampIds(before.players, after.players);
+  if (!worldChanged && !piratesChanged && !aliensChanged && !asteroidsChanged && !players.length) {
+    return;
+  }
   await ensureRowTables(db);
-  await upsertWorld(db, universe);
-  for (const player of Object.values(universe.players)) await upsertPlayer(db, player);
-  for (const planet of Object.values(universe.planets)) await upsertPlanet(db, planet);
-  for (const fleet of Object.values(universe.fleets ?? {})) await upsertFleet(db, fleet);
-  for (const row of messageDrafts(universe)) await upsertMessage(db, row);
-  for (const row of systemDrafts(universe)) await upsertSystem(db, row);
+  const stmts: D1Stmt[] = [];
+  if (worldChanged || piratesChanged || aliensChanged) queueWorld(db, stmts, universe);
+  for (const id of players) queuePlayerMirror(db, stmts, universe, id);
+  if (worldChanged || asteroidsChanged) await queueSystemMirror(db, stmts, universe, previous);
+  if (worldChanged) await queueUnownedPlanets(db, stmts, universe, previous);
+  if (stmts.length) await db.batch(stmts);
+}
+
+/** Diff two legacy snapshots and copy only that diff. One batch. */
+export async function mirrorDelta(
+  db: D1Like,
+  previous: UniverseState,
+  universe: UniverseState,
+): Promise<void> {
+  await writeMirror(db, universe, sliceStamps(previous), sliceStamps(universe), previous);
+}
+
+/**
+ * The copy just reached v1, but the legacy version moved while that chunk ran.
+ * Mirror the gap. If the mirror fails, reopen the seal so the next request
+ * retries instead of serving rows that missed the write.
+ */
+export async function mirrorFreshIfVersionMoved(
+  db: D1Like,
+  legacy: UniverseState,
+  fresh: UniverseState,
+  sourceVersion: string,
+  versionAfter: string,
+): Promise<void> {
+  if (versionAfter === sourceVersion) return;
+  try {
+    await mirrorDelta(db, legacy, fresh);
+  } catch (err) {
+    migrationReady.delete(db);
+    migrationFreshUntil.delete(db);
+    await writeMigrate(db, {
+      v: 0,
+      stage: "scores",
+      cursor: "",
+      pass: 1,
+      seen: sourceVersion,
+      seal: true,
+    });
+    throw err;
+  }
 }
 
 /** While the last migration pass is running, a legacy save must also land in the rows. */
-export async function legacyMirrorIfSealed(db: D1Like, universe: UniverseState): Promise<void> {
+export async function legacyMirrorIfSealed(
+  db: D1Like,
+  universe: UniverseState,
+  before: SliceStamps,
+  after: SliceStamps,
+): Promise<void> {
   const state = await readMigrate(db);
   if (!state.seal || state.v >= 1) return;
-  await mirrorLegacySnapshot(db, universe);
+  await writeMirror(db, universe, before, after, null);
 }
 
 async function writeHighscoreCache(
@@ -1842,29 +2036,99 @@ export async function withRowUniverse<T>(
   return runOnce();
 }
 
-/** Copy row tables back into the kv slices main already loads. Does not delete save_*. */
+const ROLLBACK_PAGE = 30;
+
+interface RollbackCursor {
+  stage: "world" | "players" | "done";
+  cursor: string;
+  written: number;
+}
+
+function queueKv(db: D1Like, stmts: D1Stmt[], key: string, value: unknown): void {
+  const text = timedStringify(value);
+  const chunked = splitChunkText(text);
+  queue(db, stmts, "DELETE FROM kv WHERE key = ? OR key GLOB ?", [key, `${key}#*`]);
+  if (!chunked) {
+    queue(db, stmts, "INSERT INTO kv (key, value, expires_at) VALUES (?, ?, ?)", [key, text, null]);
+    return;
+  }
+  queue(db, stmts, "INSERT INTO kv (key, value, expires_at) VALUES (?, ?, ?)", [key, chunked.manifest, null]);
+  chunked.parts.forEach((part, index) => {
+    queue(db, stmts, "INSERT INTO kv (key, value, expires_at) VALUES (?, ?, ?)", [chunkKey(key, index), part, null]);
+  });
+}
+
+async function readRollback(db: D1Like): Promise<RollbackCursor> {
+  const row = await first<{ value: string }>(db, "SELECT value FROM save_meta WHERE id = ?", "rollback");
+  if (!row) return { stage: "world", cursor: "", written: 0 };
+  try {
+    const parsed = timedParse(row.value) as RollbackCursor;
+    const stage = parsed.stage === "players" || parsed.stage === "done" ? parsed.stage : "world";
+    return { stage, cursor: parsed.cursor || "", written: parsed.written ?? 0 };
+  } catch {
+    return { stage: "world", cursor: "", written: 0 };
+  }
+}
+
+/**
+ * Copy row tables back into the kv slices main already loads.
+ * One page per call, one atomic batch, so a 100-player universe stays under
+ * the 50-query cap. Repeat until `done`. Does not delete save_*.
+ * `kv` is unused: the batch writes the kv table directly so the page is one subrequest.
+ */
 export async function rollbackRowsToLegacy(
   db: D1Like,
-  kv: KvStore,
-): Promise<{ players: number; systems: number }> {
+  _kv: KvStore,
+): Promise<{ players: number; systems: number; done: boolean }> {
   await ensureRowTables(db);
   if (!(await migrationDone(db))) throw new Error("Row save is not migrated.");
+  const cursor = await readRollback(db);
+  if (cursor.stage === "done") {
+    return { players: cursor.written, systems: 0, done: true };
+  }
   const loaded = await loadWorkingSet(db, { full: true });
   delete loaded.universe.skipNpcRaids;
+  delete loaded.universe.skipPirateTopUp;
   const parts = splitUniverse(loaded.universe);
   const base =
     process.env.STARHOLD_UNIVERSE_KEY ?? `starhold:universe:v${UNIVERSE_SCHEMA_VERSION}`;
-  await kv.set(`${base}:world`, parts.world);
-  await kv.set(`${base}:asteroids`, parts.asteroids);
-  await kv.set(`${base}:pirates`, parts.pirates);
-  await kv.set(`${base}:aliens`, parts.aliens);
-  for (const [id, slice] of Object.entries(parts.players)) {
-    await kv.set(`${base}:player:${id}`, slice);
+  const stmts: D1Stmt[] = [];
+  let stage: RollbackCursor["stage"] = cursor.stage;
+  let nextCursor = cursor.cursor;
+  let written = cursor.written;
+  if (stage === "world") {
+    queueKv(db, stmts, `${base}:world`, parts.world);
+    queueKv(db, stmts, `${base}:asteroids`, parts.asteroids);
+    queueKv(db, stmts, `${base}:pirates`, parts.pirates);
+    queueKv(db, stmts, `${base}:aliens`, parts.aliens);
+    stage = "players";
+    nextCursor = "";
+    written = 0;
   }
-  await kv.set(`${base}:ver`, String(Date.now()));
+  const ids = Object.keys(parts.players).sort();
+  const page = ids.filter((id) => id > nextCursor).slice(0, ROLLBACK_PAGE);
+  for (const id of page) queueKv(db, stmts, `${base}:player:${id}`, parts.players[id]);
+  written += page.length;
+  const finished = page.length < ROLLBACK_PAGE;
+  if (finished) {
+    queueKv(db, stmts, `${base}:ver`, String(Date.now()));
+    stage = "done";
+    nextCursor = "";
+  } else {
+    nextCursor = page[page.length - 1] ?? nextCursor;
+  }
+  const saved: RollbackCursor = { stage, cursor: nextCursor, written };
+  queue(
+    db,
+    stmts,
+    "INSERT INTO save_meta (id, value) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET value = excluded.value",
+    ["rollback", timedStringify(saved)],
+  );
+  await db.batch(stmts);
   return {
-    players: Object.keys(parts.players).length,
+    players: written,
     systems: loaded.loadedSystemKeys.size,
+    done: finished,
   };
 }
 

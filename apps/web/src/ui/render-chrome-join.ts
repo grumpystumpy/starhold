@@ -110,7 +110,7 @@ export function reconnectScreenHtml(state: {
     </header>
     <div data-flash-slot>${flashHtml(state.error, state.notice)}</div>
     <section class="join-panel" data-testid="reconnect">
-      <p>The server had a problem. Your commander is still saved. This page will try again.</p>
+      <p>Reconnecting… your commander is still saved.</p>
     </section>
   `;
 }

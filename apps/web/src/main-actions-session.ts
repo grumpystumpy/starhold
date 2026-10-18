@@ -81,7 +81,17 @@ async function retryResume(): Promise<void> {
       schedulePaint();
       return;
     } catch (err) {
-      if (shouldClearSavedPlayer(httpStatus(err))) {
+      const status = httpStatus(err);
+      if (status === 404) {
+        localStorage.removeItem(SESSION_KEY);
+        session.view = null;
+        session.holdJoin = false;
+        reconnectAttempt = 0;
+        setFlash("error", "Saved session expired — join again.");
+        schedulePaint();
+        return;
+      }
+      if (shouldClearSavedPlayer(status)) {
         localStorage.removeItem(SESSION_KEY);
         session.view = null;
         session.holdJoin = false;
@@ -368,7 +378,16 @@ async function applyAuthSuccess(opts: {
     try {
       view = await fetchState(opts.account.playerId);
     } catch (err) {
-      if (!(err instanceof ApiError) || err.status !== 404) {
+      const status = err instanceof ApiError ? err.status : 0;
+      if (status === 404) {
+        view = null;
+      } else if (status === 0 || status >= 500) {
+        session.holdJoin = true;
+        session.view = null;
+        setFlash("notice", "Reconnecting… your commander is still saved");
+        scheduleReconnect();
+        return;
+      } else {
         setFlash(
           "error",
           err instanceof Error
@@ -471,10 +490,18 @@ export async function doLogin(
         : "Signed in — enter a commander name or claim your guest save.",
     });
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Log in failed.",
-    );
+    const status = err instanceof ApiError ? err.status : 0;
+    if (status === 0 || status >= 500) {
+      session.holdJoin = true;
+      session.view = null;
+      setFlash("notice", "Reconnecting… your commander is still saved");
+      scheduleReconnect();
+    } else {
+      setFlash(
+        "error",
+        err instanceof Error ? err.message : "Log in failed.",
+      );
+    }
   } finally {
     session.busy = false;
     schedulePaint();

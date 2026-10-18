@@ -280,6 +280,9 @@ export function createApp(): Hono {
       if (isUniverseBusy(err)) {
         return c.json({ error: message, code: "busy" }, 503);
       }
+      if (message === "Unknown player.") {
+        return c.json({ error: message }, 404);
+      }
       console.error("[starhold-api]", err);
       reportServerError(err);
       return c.json({ error: message }, 500);
