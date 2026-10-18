@@ -36,6 +36,30 @@ export class RowStaleError extends Error {
   }
 }
 
+/** A mutation could not take its locks. Routes turn this into 503, not a 500. */
+export class UniverseBusyError extends Error {
+  readonly code = "busy" as const;
+  constructor() {
+    super("Universe busy — retry in a moment.");
+    this.name = "UniverseBusyError";
+  }
+}
+
+/** The isolate was killed. The lock is left for its TTL and the batch is not retried. */
+export class SaveKilledError extends Error {
+  constructor() {
+    super("Worker killed before the request finished.");
+    this.name = "SaveKilledError";
+  }
+}
+
+let saveAbort: "before-commit" | "after-commit" | null = null;
+
+/** Test hook. Production never sets this. */
+export function setSaveAbortForTests(next: "before-commit" | "after-commit" | null): void {
+  saveAbort = next;
+}
+
 export interface UniverseWork {
   playerIds?: string[];
   planetIds?: Array<string | null | undefined>;
@@ -139,13 +163,39 @@ const OMIT_KEYS = new Set([
   "skipPirateTopUp",
 ]);
 
+const parseJson = JSON.parse;
+const stringifyJson = JSON.stringify;
+
+function timedParse<T>(text: string): T {
+  const started = performance.now();
+  try {
+    return parseJson(text) as T;
+  } finally {
+    addCpu(performance.now() - started);
+  }
+}
+
+function timedStringify(value: unknown): string {
+  const started = performance.now();
+  try {
+    return stringifyJson(value);
+  } finally {
+    addCpu(performance.now() - started);
+  }
+}
+
 function stable(value: unknown): string {
-  return JSON.stringify(value, (key, inner) => {
-    if (OMIT_KEYS.has(key)) return undefined;
-    // A quiet tick writes swarmProduce: null onto fleets that never had a job.
-    if (key === "swarmProduce" && inner == null) return undefined;
-    return inner;
-  });
+  const started = performance.now();
+  try {
+    return stringifyJson(value, (key, inner) => {
+      if (OMIT_KEYS.has(key)) return undefined;
+      // A quiet tick writes swarmProduce: null onto fleets that never had a job.
+      if (key === "swarmProduce" && inner == null) return undefined;
+      return inner;
+    });
+  } finally {
+    addCpu(performance.now() - started);
+  }
 }
 
 async function run(db: D1Like, sql: string, ...values: unknown[]): Promise<number> {
@@ -164,6 +214,15 @@ async function all<T>(db: D1Like, sql: string, ...values: unknown[]): Promise<T[
 
 const schemaReady = new WeakSet<object>();
 const migrationReady = new WeakSet<object>();
+/** After a done check, skip D1 until this time. One re-check per minute per database. */
+const migrationFreshUntil = new WeakMap<object, number>();
+const MIGRATION_RECHECK_MS = 60_000;
+let migrationNow = (): number => Date.now();
+
+/** Test hook. Production uses Date.now. */
+export function setMigrationClockForTests(next: (() => number) | null): void {
+  migrationNow = next ?? (() => Date.now());
+}
 
 export async function ensureRowTables(db: D1Like): Promise<void> {
   if (schemaReady.has(db)) return;
@@ -179,7 +238,7 @@ async function readMigrate(db: D1Like): Promise<MigrateState> {
   );
   if (!row) return { v: 0, stage: "world", cursor: "", pass: 0, seen: "" };
   try {
-    const parsed = JSON.parse(row.value) as MigrateState;
+    const parsed = timedParse(row.value) as MigrateState;
     return {
       v: parsed.v ?? 0,
       stage: parsed.stage || "world",
@@ -197,21 +256,33 @@ async function writeMigrate(db: D1Like, state: MigrateState): Promise<void> {
     db,
     "INSERT INTO save_meta (id, value) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET value = excluded.value",
     "migration",
-    JSON.stringify(state),
+    timedStringify(state),
   );
 }
 
 export async function migrationDone(db: D1Like): Promise<boolean> {
-  if (migrationReady.has(db)) return true;
+  const freshUntil = migrationFreshUntil.get(db);
+  if (freshUntil != null && migrationNow() < freshUntil) return true;
+  if (migrationReady.has(db) && freshUntil == null) {
+    migrationFreshUntil.set(db, migrationNow() + MIGRATION_RECHECK_MS);
+    return true;
+  }
   await ensureRowTables(db);
   const state = await readMigrate(db);
-  if (state.v >= 1) migrationReady.add(db);
-  return state.v >= 1;
+  if (state.v >= 1) {
+    migrationReady.add(db);
+    migrationFreshUntil.set(db, migrationNow() + MIGRATION_RECHECK_MS);
+    return true;
+  }
+  migrationReady.delete(db);
+  migrationFreshUntil.delete(db);
+  return false;
 }
 
 /** Another copy, used when the legacy document changed during the last pass. */
 export async function rewindMigration(db: D1Like, seen: string): Promise<void> {
   migrationReady.delete(db);
+  migrationFreshUntil.delete(db);
   await writeMigrate(db, { v: 0, stage: "world", cursor: "", pass: 1, seen });
 }
 
@@ -317,7 +388,7 @@ async function upsertWorld(db: D1Like, universe: UniverseState): Promise<void> {
     db,
     `INSERT INTO save_world (id, version, doc) VALUES ('world', 1, ?)
      ON CONFLICT(id) DO UPDATE SET doc = excluded.doc`,
-    JSON.stringify(worldDoc(universe)),
+    timedStringify(worldDoc(universe)),
   );
 }
 
@@ -327,7 +398,7 @@ async function upsertPlayer(db: D1Like, player: PlayerState): Promise<void> {
     `INSERT INTO save_players (id, version, doc) VALUES (?, 1, ?)
      ON CONFLICT(id) DO UPDATE SET doc = excluded.doc`,
     player.id,
-    JSON.stringify(playerDoc(player)),
+    timedStringify(playerDoc(player)),
   );
 }
 
@@ -345,7 +416,7 @@ async function upsertPlanet(db: D1Like, planet: PlanetState): Promise<void> {
     planet.coords.system,
     planet.coords.slot,
     planet.kind ?? "planet",
-    JSON.stringify(planet),
+    timedStringify(planet),
   );
 }
 
@@ -359,7 +430,7 @@ async function upsertFleet(db: D1Like, fleet: FleetMission): Promise<void> {
     fleet.id,
     fleet.ownerPlayerId,
     fleet.targetPlayerId || "",
-    JSON.stringify(fleet),
+    timedStringify(fleet),
   );
 }
 
@@ -375,7 +446,7 @@ async function upsertMessage(db: D1Like, row: MessageDraft): Promise<void> {
     row.owner,
     row.defender,
     row.kind,
-    JSON.stringify(row.doc),
+    timedStringify(row.doc),
   );
 }
 
@@ -388,8 +459,8 @@ async function upsertSystem(db: D1Like, row: SystemRow): Promise<void> {
        asteroids = excluded.asteroids, debris = excluded.debris`,
     row.galaxy,
     row.system,
-    JSON.stringify(row.asteroids),
-    JSON.stringify(row.debris),
+    timedStringify(row.asteroids),
+    timedStringify(row.debris),
   );
 }
 
@@ -403,7 +474,7 @@ async function writeHighscoreCache(
     `INSERT INTO save_highscores (id, built_at, doc) VALUES ('board', ?, ?)
      ON CONFLICT(id) DO UPDATE SET built_at = excluded.built_at, doc = excluded.doc`,
     builtAt,
-    JSON.stringify(rows),
+    timedStringify(rows),
   );
 }
 
@@ -470,7 +541,7 @@ export async function migrateChunk(
       push(
         `INSERT INTO save_world (id, version, doc) VALUES ('world', 1, ?)
          ON CONFLICT(id) DO UPDATE SET doc = excluded.doc`,
-        [JSON.stringify(worldDoc(universe))],
+        [timedStringify(worldDoc(universe))],
       );
       state.stage = "players";
       state.cursor = "";
@@ -486,7 +557,7 @@ export async function migrateChunk(
       push(
         `INSERT INTO save_players (id, version, doc) VALUES (?, 1, ?)
          ON CONFLICT(id) DO UPDATE SET doc = excluded.doc`,
-        [next, JSON.stringify(playerDoc(universe.players[next]!))],
+        [next, timedStringify(playerDoc(universe.players[next]!))],
       );
       state.cursor = next;
       continue;
@@ -512,7 +583,7 @@ export async function migrateChunk(
           planet.coords.system,
           planet.coords.slot,
           planet.kind ?? "planet",
-          JSON.stringify(planet),
+          timedStringify(planet),
         ],
       );
       state.cursor = next;
@@ -531,7 +602,7 @@ export async function migrateChunk(
          VALUES (?, ?, ?, 1, ?)
          ON CONFLICT(id) DO UPDATE SET
            owner_id = excluded.owner_id, target_owner_id = excluded.target_owner_id, doc = excluded.doc`,
-        [fleet.id, fleet.ownerPlayerId, fleet.targetPlayerId || "", JSON.stringify(fleet)],
+        [fleet.id, fleet.ownerPlayerId, fleet.targetPlayerId || "", timedStringify(fleet)],
       );
       state.cursor = next;
       continue;
@@ -549,7 +620,7 @@ export async function migrateChunk(
          ON CONFLICT(id) DO UPDATE SET
            owner_id = excluded.owner_id, defender_id = excluded.defender_id,
            kind = excluded.kind, doc = excluded.doc`,
-        [next.id, next.owner, next.defender, next.kind, JSON.stringify(next.doc)],
+        [next.id, next.owner, next.defender, next.kind, timedStringify(next.doc)],
       );
       state.cursor = next.id;
       continue;
@@ -566,7 +637,7 @@ export async function migrateChunk(
          VALUES (?, ?, 1, ?, ?)
          ON CONFLICT(galaxy, system) DO UPDATE SET
            asteroids = excluded.asteroids, debris = excluded.debris`,
-        [next.galaxy, next.system, JSON.stringify(next.asteroids), JSON.stringify(next.debris)],
+        [next.galaxy, next.system, timedStringify(next.asteroids), timedStringify(next.debris)],
       );
       state.cursor = systemCursor(next.galaxy, next.system);
       continue;
@@ -575,7 +646,7 @@ export async function migrateChunk(
       push(
         `INSERT INTO save_highscores (id, built_at, doc) VALUES ('board', ?, ?)
          ON CONFLICT(id) DO UPDATE SET built_at = excluded.built_at, doc = excluded.doc`,
-        [Date.now(), JSON.stringify(highscoresBoard(universe))],
+        [Date.now(), timedStringify(highscoresBoard(universe))],
       );
       if (state.pass < 1) {
         state.pass = 1;
@@ -601,7 +672,7 @@ export async function migrateChunk(
     bind(
       db,
       "INSERT INTO save_meta (id, value) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET value = excluded.value",
-      ["migration", JSON.stringify(state)],
+      ["migration", timedStringify(state)],
     ),
   );
   await db.batch(stmts);
@@ -707,7 +778,7 @@ async function loadPlayers(db: D1Like, into: LoadedRows): Promise<void> {
     "SELECT id, version, doc FROM save_players",
   );
   for (const row of rows) {
-    const player = JSON.parse(row.doc) as PlayerState;
+    const player = timedParse(row.doc) as PlayerState;
     player.eventLog = [];
     into.universe.players[player.id] = player;
     into.playerVersions.set(player.id, row.version);
@@ -726,7 +797,7 @@ async function loadPlanetDocs(
   const rows = await all<{ id: string; version: number; doc: string }>(db, sql, ...values);
   for (const row of rows) {
     if (into.fullPlanetIds.has(row.id)) continue;
-    const planet = JSON.parse(row.doc) as PlanetState;
+    const planet = timedParse(row.doc) as PlanetState;
     into.universe.planets[planet.id] = planet;
     into.planetVersions.set(planet.id, row.version);
     into.fullPlanetIds.add(planet.id);
@@ -748,7 +819,7 @@ async function loadFleets(db: D1Like, into: LoadedRows, where: string, values: u
     ...values,
   );
   for (const row of rows) {
-    const fleet = JSON.parse(row.doc) as FleetMission;
+    const fleet = timedParse(row.doc) as FleetMission;
     into.universe.fleets[fleet.id] = fleet;
     into.fleetVersions.set(fleet.id, row.version);
     into.fleetSnapshots.set(fleet.id, structuredClone(fleet));
@@ -772,7 +843,7 @@ async function loadMessages(
   for (const row of rows) {
     into.messageVersions.set(row.id, row.version);
     into.fingerprints.set(`message:${row.id}`, row.doc);
-    const doc = JSON.parse(row.doc) as { id: string };
+    const doc = timedParse(row.doc) as { id: string };
     if (row.kind === "report") into.universe.reports[doc.id] = doc as CombatReport;
     else if (row.kind === "spy") into.universe.spyReports[doc.id] = doc as EspionageReport;
     else if (row.kind === "expedition") {
@@ -830,8 +901,8 @@ async function loadSystems(db: D1Like, into: LoadedRows, pairs: Array<[number, n
         galaxy,
         system,
         row?.version ?? 0,
-        row ? (JSON.parse(row.asteroids) as Record<string, AsteroidField>) : {},
-        row ? (JSON.parse(row.debris) as Record<string, DebrisField>) : {},
+        row ? (timedParse(row.asteroids) as Record<string, AsteroidField>) : {},
+        row ? (timedParse(row.debris) as Record<string, DebrisField>) : {},
       );
     }
   }
@@ -851,8 +922,8 @@ async function loadAllSystems(db: D1Like, into: LoadedRows): Promise<void> {
       row.galaxy,
       row.system,
       row.version,
-      JSON.parse(row.asteroids) as Record<string, AsteroidField>,
-      JSON.parse(row.debris) as Record<string, DebrisField>,
+      timedParse(row.asteroids) as Record<string, AsteroidField>,
+      timedParse(row.debris) as Record<string, DebrisField>,
     );
   }
 }
@@ -895,7 +966,7 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
     "SELECT version, doc FROM save_world WHERE id = 'world'",
   );
   if (!world) throw new Error("Row save is missing the world document.");
-  const universe = emptyUniverse(JSON.parse(world.doc) as UniverseState);
+  const universe = emptyUniverse(timedParse(world.doc) as UniverseState);
   const loaded: LoadedRows = {
     universe,
     worldVersion: world.version,
@@ -1104,16 +1175,16 @@ export async function planSystemWrites(db: D1Like, loaded: LoadedRows): Promise<
     for (const draft of group) {
       const row = byKey.get(`${draft.galaxy}:${draft.system}`);
       const asteroids = {
-        ...(row ? (JSON.parse(row.asteroids) as Record<string, AsteroidField>) : {}),
+        ...(row ? (timedParse(row.asteroids) as Record<string, AsteroidField>) : {}),
         ...draft.asteroids,
       };
       const debris = {
-        ...(row ? (JSON.parse(row.debris) as Record<string, DebrisField>) : {}),
+        ...(row ? (timedParse(row.debris) as Record<string, DebrisField>) : {}),
         ...draft.debris,
       };
       const before = stable({
-        asteroids: row ? JSON.parse(row.asteroids) : {},
-        debris: row ? JSON.parse(row.debris) : {},
+        asteroids: row ? timedParse(row.asteroids) : {},
+        debris: row ? timedParse(row.debris) : {},
       });
       const next = stable({ asteroids, debris });
       if (row && before === next) continue;
@@ -1196,11 +1267,19 @@ function isStaleError(err: unknown): boolean {
 
 async function commitRows(db: D1Like, stmts: D1Stmt[]): Promise<void> {
   if (!stmts.length) return;
+  if (saveAbort === "before-commit") {
+    saveAbort = null;
+    throw new SaveKilledError();
+  }
   try {
     await db.batch(stmts);
   } catch (err) {
     if (isStaleError(err)) throw new RowStaleError();
     throw err;
+  }
+  if (saveAbort === "after-commit") {
+    saveAbort = null;
+    throw new SaveKilledError();
   }
 }
 
@@ -1232,7 +1311,7 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
       "save_world",
       ["doc", "version"],
       ["id"],
-      [[JSON.stringify(worldDoc(universe)), version, "world", loaded.worldVersion]],
+      [[timedStringify(worldDoc(universe)), version, "world", loaded.worldVersion]],
     );
   }
 
@@ -1243,13 +1322,13 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
     const next = stable(playerDoc(player));
     const previous = loaded.fingerprints.get(key);
     if (previous === undefined) {
-      playerInserts.push([player.id, JSON.stringify(playerDoc(player))]);
+      playerInserts.push([player.id, timedStringify(playerDoc(player))]);
       newPlayerIds.push(player.id);
       continue;
     }
     if (previous === next) continue;
     const version = (loaded.playerVersions.get(player.id) ?? 0) + 1;
-    playerUpdates.push([JSON.stringify(playerDoc(player)), version, player.id, version - 1]);
+    playerUpdates.push([timedStringify(playerDoc(player)), version, player.id, version - 1]);
   }
   pushInsert(
     db,
@@ -1277,7 +1356,7 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
         planet.coords.slot,
         planet.kind ?? "planet",
         1,
-        JSON.stringify(planet),
+        timedStringify(planet),
       ]);
       continue;
     }
@@ -1289,7 +1368,7 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
       planet.coords.system,
       planet.coords.slot,
       planet.kind ?? "planet",
-      JSON.stringify(planet),
+      timedStringify(planet),
       version,
       planet.id,
       version - 1,
@@ -1335,7 +1414,7 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
         fleet.ownerPlayerId,
         fleet.targetPlayerId || "",
         1,
-        JSON.stringify(fleet),
+        timedStringify(fleet),
       ]);
       continue;
     }
@@ -1344,7 +1423,7 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
     fleetUpdates.push([
       fleet.ownerPlayerId,
       fleet.targetPlayerId || "",
-      JSON.stringify(fleet),
+      timedStringify(fleet),
       version,
       fleet.id,
       version - 1,
@@ -1383,7 +1462,7 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
   const messageUpdates: unknown[][] = [];
   for (const row of drafts) {
     const key = `message:${row.id}`;
-    const next = JSON.stringify(row.doc);
+    const next = timedStringify(row.doc);
     const previous = loaded.fingerprints.get(key);
     if (previous === undefined) {
       messageInserts.push([row.id, row.owner, row.defender, row.kind, 1, next]);
@@ -1417,14 +1496,14 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
         row.galaxy,
         row.system,
         1,
-        JSON.stringify(row.asteroids),
-        JSON.stringify(row.debris),
+        timedStringify(row.asteroids),
+        timedStringify(row.debris),
       ]);
     } else {
       const version = row.version + 1;
       systemUpdates.push([
-        JSON.stringify(row.asteroids),
-        JSON.stringify(row.debris),
+        timedStringify(row.asteroids),
+        timedStringify(row.debris),
         version,
         row.galaxy,
         row.system,
@@ -1451,7 +1530,7 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
   let boardJson: string | null = null;
   let boardAt = 0;
   if (rebuildScores) {
-    boardJson = JSON.stringify(highscoresBoard(universe));
+    boardJson = timedStringify(highscoresBoard(universe));
     boardAt = Date.now();
   } else if (newPlayerIds.length) {
     const cached = currentScope()?.highscores ?? [];
@@ -1459,10 +1538,10 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
     const mine = fresh.filter((row) => newPlayerIds.includes(row.playerId));
     if (cached.length) {
       const kept = cached.filter((row) => !newPlayerIds.includes(row.playerId));
-      boardJson = JSON.stringify(rerank([...kept, ...mine]));
+      boardJson = timedStringify(rerank([...kept, ...mine]));
       boardAt = Date.now();
     } else if (mine.length && Object.keys(universe.players).length === newPlayerIds.length) {
-      boardJson = JSON.stringify(rerank(mine));
+      boardJson = timedStringify(rerank(mine));
       boardAt = Date.now();
     }
   }
@@ -1487,7 +1566,7 @@ async function readBoard(db: D1Like): Promise<{ builtAt: number; rows: Highscore
     "SELECT built_at, doc FROM save_highscores WHERE id = 'board'",
   );
   if (!row) return null;
-  return { builtAt: row.built_at, rows: JSON.parse(row.doc) as HighscoreEntry[] };
+  return { builtAt: row.built_at, rows: timedParse(row.doc) as HighscoreEntry[] };
 }
 
 async function resolvePlayerIds(db: D1Like, work: UniverseWork | undefined): Promise<string[]> {
@@ -1538,7 +1617,7 @@ async function expandDueFleets(
   const planetIds = new Set<string>();
   const systems = new Map<string, [number, number]>();
   for (const row of fleets) {
-    const fleet = JSON.parse(row.doc) as FleetMission;
+    const fleet = timedParse(row.doc) as FleetMission;
     if (fleet.arrivesAt > Date.now()) continue;
     if (fleet.originPlanetId) planetIds.add(fleet.originPlanetId);
     if (fleet.targetPlanetId) planetIds.add(fleet.targetPlanetId);
@@ -1580,7 +1659,7 @@ function changed(loaded: LoadedRows): boolean {
     if (stable(fleet) !== loaded.fingerprints.get(`fleet:${fleet.id}`)) return true;
   }
   for (const row of messageDrafts(universe)) {
-    if (JSON.stringify(row.doc) !== loaded.fingerprints.get(`message:${row.id}`)) return true;
+    if (timedStringify(row.doc) !== loaded.fingerprints.get(`message:${row.id}`)) return true;
   }
   if (messageDrafts(universe).length !== loaded.messageVersions.size) return true;
   if (Object.keys(universe.fleets ?? {}).length !== loaded.fleetVersions.size) return true;
@@ -1679,8 +1758,9 @@ export async function withRowUniverse<T>(
   if (wait) {
     if (!kv) throw new Error("Row save needs the kv lock table.");
     if (!(await acquireLocks(kv, locks, true))) {
-      throw new Error("Universe busy — retry in a moment.");
+      throw new UniverseBusyError();
     }
+    let killed = false;
     try {
       for (let attempt = 0; attempt < 4; attempt++) {
         try {
@@ -1688,12 +1768,16 @@ export async function withRowUniverse<T>(
           if (changed(loaded) || scoresDue) await saveWorkingSet(db, loaded, scoresDue);
           return result;
         } catch (err) {
+          if (err instanceof SaveKilledError) {
+            killed = true;
+            throw err;
+          }
           if (!(err instanceof RowStaleError) || attempt === 3) throw err;
         }
       }
       throw new RowStaleError();
     } finally {
-      await releaseLocks(kv, locks);
+      if (!killed) await releaseLocks(kv, locks);
     }
   }
   return runOnce();

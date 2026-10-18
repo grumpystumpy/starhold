@@ -5,7 +5,11 @@ import {
   advanceUniverse,
   createUniverse,
   joinUniverse,
+  launchFleet,
+  playerView,
   queueBuildingUpgrade,
+  queueResearch,
+  queueShipBuild,
   tickPirates,
   UNIVERSE_SCHEMA_VERSION,
   type CombatReport,
@@ -13,20 +17,26 @@ import {
   type PlanetState,
   type UniverseState,
 } from "@starhold/game";
+import { hashPbkdf2 } from "./password.js";
 import { createD1Store, type D1Like, type D1RunResult, type D1Stmt } from "./d1-store.js";
 import type { KvStore } from "./kv.js";
-import { runWithScope } from "./request-context.js";
+import { runWithScope, setServerErrorReporter } from "./request-context.js";
 import {
   HIGHSCORE_TTL_MS,
   highscoreCacheExpired,
   loadWorkingSet,
   migrateAll,
   migrateChunk,
+  migrationDone,
   readHighscoreMeta,
   rollbackRowsToLegacy,
   ensureRowTables,
+  ROW_LOCK_MS,
+  SaveKilledError,
+  setMigrationClockForTests,
+  setSaveAbortForTests,
 } from "./row-store.js";
-import { resetMemoryUniverse, withUniverse, withUniverseRead } from "./store.js";
+import { resetMemoryUniverse, setUniverseFaultForTests, withUniverse, withUniverseRead } from "./store.js";
 import { createApp } from "./app.js";
 
 function sqliteD1(): { db: D1Like; raw: DatabaseSync } {
@@ -710,6 +720,375 @@ describe("row save review fixes", () => {
       if (previous == null) delete process.env.STARHOLD_ADMIN_TOKEN;
       else process.env.STARHOLD_ADMIN_TOKEN = previous;
     }
+  });
+
+  it("spends no D1 queries rechecking a finished migration", async () => {
+    const { db: inner } = sqliteD1();
+    let n = 0;
+    const db: D1Like = {
+      prepare(sql: string): D1Stmt {
+        const stmt = inner.prepare(sql);
+        let bound: D1Stmt = stmt;
+        const api: D1Stmt = {
+          bind(...values: unknown[]) {
+            bound = stmt.bind(...values);
+            return api;
+          },
+          async first<T>() {
+            n += 1;
+            return bound.first<T>();
+          },
+          async all<T>() {
+            n += 1;
+            return bound.all<T>();
+          },
+          async run() {
+            n += 1;
+            return bound.run();
+          },
+        };
+        return api;
+      },
+      batch(statements) {
+        return inner.batch(statements);
+      },
+    };
+    let now = 1_700_000_000_000;
+    setMigrationClockForTests(() => now);
+    try {
+      await migrateAll(db, fixture());
+      n = 0;
+      assert.equal(await migrationDone(db), true);
+      assert.equal(n, 0);
+      assert.equal(await migrationDone(db), true);
+      assert.equal(n, 0);
+      now += 60_000;
+      assert.equal(await migrationDone(db), true);
+      assert.equal(n, 1);
+      n = 0;
+      assert.equal(await migrationDone(db), true);
+      assert.equal(n, 0);
+    } finally {
+      setMigrationClockForTests(null);
+    }
+  });
+
+  it("returns 503 busy from upgrade and still reports a real 500", async () => {
+    let reported = 0;
+    setServerErrorReporter(() => {
+      reported += 1;
+    });
+    setUniverseFaultForTests("busy");
+    try {
+      const app = createApp();
+      app.get("/api/boom", () => {
+        throw new Error("real failure");
+      });
+      const res = await app.request("/api/upgrade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerId: "plyr_busy", buildingId: "metalMine" }),
+      });
+      assert.equal(res.status, 503);
+      const body = (await res.json()) as { error?: string; code?: string };
+      assert.equal(body.code, "busy");
+      assert.match(body.error ?? "", /^Universe busy/);
+      assert.equal(reported, 0);
+
+      const boom = await app.request("/api/boom");
+      assert.equal(boom.status, 500);
+      assert.equal(reported, 1);
+    } finally {
+      setUniverseFaultForTests(null);
+      setServerErrorReporter(null);
+    }
+  });
+
+  it("a kill before commit writes nothing and the next action waits out the lock", async () => {
+    const { db } = sqliteD1();
+    const source = fixture();
+    await migrateAll(db, source);
+    const store = createD1Store(db);
+    const alpha = Object.values(source.players).find((player) => player.name === "OldHand")!;
+    const home = source.planets[alpha.homePlanetId]!;
+    const readPlayer = async () => {
+      const row = await db
+        .prepare("SELECT version, doc FROM save_players WHERE id = ?")
+        .bind(alpha.id)
+        .first<{ version: number; doc: string }>();
+      return { version: row?.version ?? 0, doc: JSON.parse(row?.doc ?? "{}") as { name: string; starshards: number } };
+    };
+    const readMine = async () => {
+      const row = await db
+        .prepare("SELECT doc FROM save_planets WHERE id = ?")
+        .bind(home.id)
+        .first<{ doc: string }>();
+      return (JSON.parse(row?.doc ?? "{}") as { buildings?: { metalMine?: number } }).buildings?.metalMine;
+    };
+    setSaveAbortForTests("before-commit");
+    try {
+      await assert.rejects(
+        () =>
+          runWithScope({ kv: store, db, mode: "d1", method: "POST", cpuMs: 0 }, () =>
+            withUniverse((universe) => {
+              const player = universe.players[alpha.id]!;
+              player.name = "Killed";
+              player.starshards = 999;
+              const planet = universe.planets[home.id]!;
+              planet.buildings = { ...planet.buildings, metalMine: 9 };
+            }, { playerIds: [alpha.id] }),
+          ),
+        (err: unknown) => err instanceof SaveKilledError,
+      );
+    } finally {
+      setSaveAbortForTests(null);
+    }
+    const mid = await readPlayer();
+    assert.equal(mid.doc.name, "OldHand");
+    assert.equal(mid.doc.starshards, 42);
+    assert.equal(await readMine(), 4);
+
+    const started = Date.now();
+    await runWithScope({ kv: store, db, mode: "d1", method: "POST", cpuMs: 0 }, () =>
+      withUniverse((universe) => {
+        const player = universe.players[alpha.id]!;
+        player.name = "After";
+        player.starshards = 49;
+      }, { playerIds: [alpha.id] }),
+    );
+    const elapsed = Date.now() - started;
+    assert.ok(elapsed >= ROW_LOCK_MS - 100, `returned before the lock TTL (${elapsed}ms)`);
+    assert.ok(elapsed < ROW_LOCK_MS + 1_500, `blocked past the lock TTL (${elapsed}ms)`);
+    const after = await readPlayer();
+    assert.equal(after.doc.name, "After");
+    assert.equal(after.doc.starshards, 49);
+    assert.equal(await readMine(), 4);
+    assert.equal(after.version, mid.version + 1);
+  });
+
+  it("a kill after commit keeps the whole save and does not apply it twice", async () => {
+    const { db } = sqliteD1();
+    const source = fixture();
+    await migrateAll(db, source);
+    const store = createD1Store(db);
+    const alpha = Object.values(source.players).find((player) => player.name === "OldHand")!;
+    const home = source.planets[alpha.homePlanetId]!;
+    const before = await db
+      .prepare("SELECT version FROM save_players WHERE id = ?")
+      .bind(alpha.id)
+      .first<{ version: number }>();
+    setSaveAbortForTests("after-commit");
+    try {
+      await assert.rejects(
+        () =>
+          runWithScope({ kv: store, db, mode: "d1", method: "POST", cpuMs: 0 }, () =>
+            withUniverse((universe) => {
+              const player = universe.players[alpha.id]!;
+              player.name = "Landed";
+              player.starshards = 70;
+              const planet = universe.planets[home.id]!;
+              planet.buildings = { ...planet.buildings, metalMine: 8 };
+            }, { playerIds: [alpha.id] }),
+          ),
+        (err: unknown) => err instanceof SaveKilledError,
+      );
+    } finally {
+      setSaveAbortForTests(null);
+    }
+    const playerRow = await db
+      .prepare("SELECT version, doc FROM save_players WHERE id = ?")
+      .bind(alpha.id)
+      .first<{ version: number; doc: string }>();
+    const planetRow = await db
+      .prepare("SELECT doc FROM save_planets WHERE id = ?")
+      .bind(home.id)
+      .first<{ doc: string }>();
+    const player = JSON.parse(playerRow?.doc ?? "{}") as { name: string; starshards: number };
+    const planet = JSON.parse(planetRow?.doc ?? "{}") as { buildings?: { metalMine?: number } };
+    assert.equal(player.name, "Landed");
+    assert.equal(player.starshards, 70);
+    assert.equal(planet.buildings?.metalMine, 8);
+    assert.equal(playerRow?.version, (before?.version ?? 0) + 1);
+
+    const started = Date.now();
+    await runWithScope({ kv: store, db, mode: "d1", method: "POST", cpuMs: 0 }, () =>
+      withUniverse((universe) => {
+        universe.players[alpha.id]!.starshards = 71;
+      }, { playerIds: [alpha.id] }),
+    );
+    const elapsed = Date.now() - started;
+    assert.ok(elapsed >= ROW_LOCK_MS - 100, `returned before the lock TTL (${elapsed}ms)`);
+    assert.ok(elapsed < ROW_LOCK_MS + 1_500, `blocked past the lock TTL (${elapsed}ms)`);
+    const next = JSON.parse(
+      (await db.prepare("SELECT version, doc FROM save_players WHERE id = ?").bind(alpha.id).first<{ version: number; doc: string }>())?.doc ?? "{}",
+    ) as { name: string; starshards: number };
+    const nextVersion = await db
+      .prepare("SELECT version FROM save_players WHERE id = ?")
+      .bind(alpha.id)
+      .first<{ version: number }>();
+    assert.equal(next.name, "Landed");
+    assert.equal(next.starshards, 71);
+    assert.equal(nextVersion?.version, (before?.version ?? 0) + 2);
+  });
+
+  it("stays under the CPU budget on a shaped save and beats the legacy blob", async () => {
+    const source = createUniverse("Alpha Drift", 8, 8, { lazySeed: true });
+    if (source.seedCursor) source.seedCursor.done = true;
+    const now = 1_700_000_000_000;
+    for (let i = 0; i < 20; i++) joinUniverse(source, `Pilot${i}`, now + i);
+    for (let n = 0; n < 100; n++) {
+      const galaxy = 1 + Math.floor(n / 50);
+      const system = (n % 50) + 1;
+      const key = `${galaxy}:${system}:16`;
+      source.debris[key] = { coords: { galaxy, system, slot: 16 }, metal: 1_000 + n, crystal: 400 };
+      source.asteroids[key] = {
+        id: key,
+        coords: { galaxy, system, slot: 16 },
+        metal: 800,
+        crystal: 300,
+        deuterium: 40,
+        richness: 4,
+      };
+    }
+    const { db } = sqliteD1();
+    const stepDb = sqliteD1().db;
+    const stepScope = { kv: null, db: stepDb, mode: "d1" as const, method: "POST", cpuMs: 0 };
+    const steps: number[] = [];
+    await runWithScope(stepScope, async () => {
+      for (let i = 0; i < 10_000; i++) {
+        const before = stepScope.cpuMs;
+        const step = await migrateChunk(stepDb, source);
+        steps.push(Number((stepScope.cpuMs - before).toFixed(3)));
+        if (step.done) break;
+      }
+    });
+    await migrateAll(db, source);
+    const systems = await db.prepare("SELECT COUNT(*) AS n FROM save_systems").bind().first<{ n: number }>();
+    const players = await db.prepare("SELECT COUNT(*) AS n FROM save_players").bind().first<{ n: number }>();
+    assert.ok((systems?.n ?? 0) >= 100, `systems ${systems?.n}`);
+    assert.ok((players?.n ?? 0) >= 20, `players ${players?.n}`);
+
+    const store = createD1Store(db);
+    const alpha = Object.values(source.players).find((player) => player.name === "Pilot0")!;
+    const bravo = Object.values(source.players).find((player) => player.name === "Pilot1")!;
+    const home = source.planets[alpha.homePlanetId]!;
+    const target = source.planets[bravo.homePlanetId]!;
+    const scope = { kv: store, db, mode: "d1" as const, method: "POST", cpuMs: 0 };
+    const blob = JSON.stringify(source);
+    const rich = () => ({ metal: 9_000_000, crystal: 9_000_000, deuterium: 9_000_000 });
+    const calls: Record<string, (universe: UniverseState) => void> = {
+      refresh: (universe) => {
+        playerView(universe, alpha.id, now);
+      },
+      galaxy: (universe) => {
+        playerView(universe, alpha.id, now, 2, 10);
+      },
+      upgrade: (universe) => {
+        const planet = universe.planets[home.id]!;
+        planet.resources = rich();
+        planet.buildQueue = [];
+        const result = queueBuildingUpgrade(universe, alpha.id, "metalMine", now, home.id);
+        if (!result.ok) throw new Error(result.error);
+      },
+      research: (universe) => {
+        const planet = universe.planets[home.id]!;
+        planet.resources = rich();
+        planet.buildings = { ...planet.buildings, researchLab: 1 };
+        planet.buildQueue = [];
+        universe.players[alpha.id]!.researchQueue = null;
+        const result = queueResearch(universe, alpha.id, "energyTech", now);
+        if (!result.ok) throw new Error(result.error);
+      },
+      "build-ship": (universe) => {
+        const planet = universe.planets[home.id]!;
+        planet.resources = rich();
+        planet.buildings = { ...planet.buildings, shipyard: 1 };
+        planet.shipQueue = [];
+        const result = queueShipBuild(universe, alpha.id, "scout", 1, now, home.id);
+        if (!result.ok) throw new Error(result.error);
+      },
+      "send-fleet": (universe) => {
+        const planet = universe.planets[home.id]!;
+        planet.resources = rich();
+        planet.ships = { ...planet.ships, scout: 5 };
+        for (const [id, fleet] of Object.entries(universe.fleets)) {
+          if (fleet.ownerPlayerId === alpha.id) delete universe.fleets[id];
+        }
+        const result = launchFleet(universe, alpha.id, target.id, "deploy", { scout: 1 }, now);
+        if (!result.ok) throw new Error(result.error);
+      },
+      login: (universe) => {
+        playerView(universe, alpha.id, now);
+      },
+      "job-30m": (universe) => {
+        advanceUniverse(universe, now);
+      },
+    };
+    const workFor = (name: string) => {
+      if (name === "galaxy") return { playerIds: [alpha.id], galaxy: 2, system: 10 };
+      if (name === "job-30m") return { maintenance: true as const };
+      if (name === "refresh" || name === "login") return { playerIds: [alpha.id] };
+      return { playerIds: [alpha.id] };
+    };
+    const sampleRow = async (name: string) => {
+      scope.cpuMs = 0;
+      await runWithScope(scope, async () => {
+        if (name === "login") await hashPbkdf2("measure:secret");
+        const run = (universe: UniverseState) => calls[name]!(universe);
+        if (name === "refresh" || name === "galaxy" || name === "login") {
+          await withUniverseRead(run, workFor(name));
+        } else {
+          await withUniverse(run, workFor(name));
+        }
+      });
+      return scope.cpuMs;
+    };
+    const sampleLegacy = async (name: string) => {
+      const started = performance.now();
+      const copy = JSON.parse(blob) as UniverseState;
+      calls[name]!(copy);
+      let ms = performance.now() - started;
+      if (name === "login") {
+        const hashStarted = performance.now();
+        await hashPbkdf2("measure:secret");
+        ms += performance.now() - hashStarted;
+      }
+      return ms;
+    };
+    const names = Object.keys(calls);
+    for (const name of names) {
+      await sampleRow(name);
+      await sampleLegacy(name);
+    }
+    const table: Record<string, { median: number; p95: number; legacy: number }> = {};
+    for (const name of names) {
+      const rows: number[] = [];
+      const legacies: number[] = [];
+      for (let i = 0; i < 9; i++) {
+        rows.push(await sampleRow(name));
+        legacies.push(await sampleLegacy(name));
+      }
+      const sorted = [...rows].sort((a, b) => a - b);
+      const legacySorted = [...legacies].sort((a, b) => a - b);
+      const pick = (values: number[], p: number) => values[Math.min(values.length - 1, Math.ceil((p / 100) * values.length) - 1)]!;
+      table[name] = {
+        median: Number(pick(sorted, 50).toFixed(2)),
+        p95: Number(pick(sorted, 95).toFixed(2)),
+        legacy: Number(pick(legacySorted, 50).toFixed(2)),
+      };
+    }
+    const stepSorted = [...steps].sort((a, b) => a - b);
+    const stepMedian = stepSorted[Math.ceil(0.5 * stepSorted.length) - 1] ?? 0;
+    const stepP95 = stepSorted[Math.min(stepSorted.length - 1, Math.ceil(0.95 * stepSorted.length) - 1)] ?? 0;
+    console.log(`cpu ms ${JSON.stringify({ ...table, migrationSteps: steps.length, stepMedian, stepP95 })}`);
+    for (const [name, row] of Object.entries(table)) {
+      assert.ok(row.median <= 10, `${name} median ${row.median}`);
+      assert.ok(row.p95 <= 20, `${name} p95 ${row.p95}`);
+      assert.ok(row.median < row.legacy, `${name} median ${row.median} is not under legacy ${row.legacy}`);
+    }
+    assert.ok(steps.length > 1);
+    assert.ok(stepMedian <= 10, `migration median ${stepMedian}`);
+    assert.ok(stepP95 <= 20, `migration p95 ${stepP95}`);
   });
 });
 

@@ -14,6 +14,7 @@ import {
   migrateChunk,
   migrationDone,
   rewindMigration,
+  UniverseBusyError,
   withRowUniverse,
   type UniverseWork,
 } from "./row-store.js";
@@ -88,7 +89,10 @@ export function setUniverseFaultForTests(next: UniverseFault): void {
 }
 
 export function isUniverseBusy(err: unknown): boolean {
-  return err instanceof Error && err.message.startsWith("Universe busy");
+  return (
+    err instanceof UniverseBusyError ||
+    (err instanceof Error && err.message.startsWith("Universe busy"))
+  );
 }
 
 function universeName(): string {
@@ -466,7 +470,7 @@ async function withUniverseBody<T>(
   fn: (universe: UniverseState) => T | Promise<T>,
 ): Promise<T> {
   if (universeFault === "busy" || universeFault === "both") {
-    throw new Error("Universe busy — retry in a moment.");
+    throw new UniverseBusyError();
   }
   const client = getKvClient();
   if (!client) {
@@ -527,7 +531,7 @@ async function withUniverseBody<T>(
     }
     await sleep(40 + attempt * 40);
   }
-  throw new Error("Universe busy — retry in a moment.");
+  throw new UniverseBusyError();
 }
 
 /**
@@ -703,7 +707,7 @@ export async function withUniverseRead<T>(
   }
   return withLocalLock(async () => {
     if (universeFault === "read" || universeFault === "both") {
-      throw new Error("Universe busy — retry in a moment.");
+      throw new UniverseBusyError();
     }
     const client = getKvClient();
     const universe = await loadUniverse(client);

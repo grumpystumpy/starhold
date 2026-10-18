@@ -125,6 +125,7 @@ async function startSession(c: Context, account: AccountRecord) {
         error: message.startsWith("Universe busy")
           ? message
           : "Universe busy — retry in a moment.",
+        code: "busy",
         retry: true,
         account: publicAccount(account),
         view: null,

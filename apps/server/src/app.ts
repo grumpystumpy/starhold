@@ -80,7 +80,7 @@ import { mountCpuRoutes } from "./cpu-routes.js";
 import { readCpuMs, reportServerError, currentScope } from "./request-context.js";
 import { respondWithPlayerView } from "./state-response.js";
 import { staticCacheControl } from "./static-cache.js";
-import { storageMode, withUniverse, withUniverseRead } from "./store.js";
+import { storageMode, isUniverseBusy, withUniverse, withUniverseRead } from "./store.js";
 import { rollbackRowsToLegacy } from "./row-store.js";
 
 function allowedOrigins(): Set<string> {
@@ -135,6 +135,18 @@ async function simpleCors(c: Context, next: Next): Promise<Response | void> {
 export function createApp(): Hono {
   const app = new Hono();
 
+  app.use("*", async (c, next) => {
+    try {
+      await next();
+    } catch (err) {
+      if (!isUniverseBusy(err)) throw err;
+      return c.json(
+        { error: "Universe busy — retry in a moment.", code: "busy" },
+        503,
+      );
+    }
+  });
+
   // Gzip JSON when the caller asks. Browsers send Accept-Encoding; unit
   // tests do not, so they still see plain JSON. Vercel will not recompress
   // a response that already has Content-Encoding. Workers skip this: the
@@ -165,6 +177,12 @@ export function createApp(): Hono {
   );
 
   app.onError((err, c) => {
+    if (isUniverseBusy(err)) {
+      return c.json(
+        { error: "Universe busy — retry in a moment.", code: "busy" },
+        503,
+      );
+    }
     console.error("[starhold-api]", err);
     reportServerError(err);
     return c.json(
@@ -231,6 +249,7 @@ export function createApp(): Hono {
         return c.json(playerView(universe, player.id));
       }, { catalog: true });
     } catch (err) {
+      if (isUniverseBusy(err)) throw err;
       return c.json(
         { error: err instanceof Error ? err.message : "Join failed." },
         400,
@@ -258,8 +277,10 @@ export function createApp(): Hono {
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : "State failed.";
-      const status = message.startsWith("Universe busy") ? 503 : 404;
-      return c.json({ error: message }, status);
+      if (message.startsWith("Universe busy")) {
+        return c.json({ error: message, code: "busy" }, 503);
+      }
+      return c.json({ error: message }, 404);
     }
   });
 
