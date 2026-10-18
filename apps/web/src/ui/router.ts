@@ -5,7 +5,6 @@ import {
   type NavPage,
 } from "./nav";
 import { schedulePaint, session } from "../session";
-import { capturePageview } from "../telemetry";
 
 export type DeepLinkQuery = {
   playerId?: string | null;
@@ -91,7 +90,6 @@ export function navigateTo(
   }
   session.activePage = page;
   syncSessionUrl({ replace: opts.replace, page });
-  capturePageview(pathForPage(page));
   schedulePaint();
 }
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { describe, it } from "node:test";
-import { createUniverse, joinUniverse, UNIVERSE_SCHEMA_VERSION } from "@starhold/game";
+import { advanceUniverse, createUniverse, joinUniverse, UNIVERSE_SCHEMA_VERSION } from "@starhold/game";
 import { createApp } from "./app.js";
 import { resetMemoryAccounts } from "./accounts.js";
 import { createD1Store, type D1Like, type D1RunResult, type D1Stmt } from "./d1-store.js";
@@ -329,6 +329,92 @@ describe("version-checked saves and read snapshots", () => {
       else process.env.VERCEL = previousVercel;
       resetMemoryUniverse();
       resetMemoryAccounts();
+    }
+  });
+
+  it("a read that finishes a build does not leave the next write half-saved", async () => {
+    resetMemoryUniverse();
+    const previous = process.env.STARHOLD_RUNTIME;
+    process.env.STARHOLD_RUNTIME = "workers";
+    const store = createD1Store(sqliteD1());
+    const now = 1_700_000_000_000;
+    try {
+      const universe = createUniverse("Alpha Drift", 8, now, { lazySeed: true });
+      const alpha = joinUniverse(universe, "Alpha", now).player;
+      const bravo = joinUniverse(universe, "Bravo", now).player;
+      if (universe.seedCursor) universe.seedCursor.done = true;
+      const home = universe.planets[bravo.homePlanetId]!;
+      const beforeLevel = home.buildings.metalMine ?? 0;
+      home.buildQueue.push({
+        id: "due-build",
+        kind: "building",
+        buildingId: "metalMine",
+        targetLevel: beforeLevel + 1,
+        enqueuedAt: now - 5_000,
+        workSeconds: 1,
+        startedAt: now - 5_000,
+        completesAt: now - 1,
+        paidCost: { metal: 1, crystal: 1, deuterium: 0 },
+      });
+      const parts = splitUniverse(universe);
+      const base = `starhold:universe:v${UNIVERSE_SCHEMA_VERSION}`;
+      await store.set(`${base}:world`, parts.world);
+      await store.set(`${base}:asteroids`, parts.asteroids);
+      await store.set(`${base}:pirates`, parts.pirates);
+      await store.set(`${base}:aliens`, parts.aliens);
+      for (const [id, slice] of Object.entries(parts.players)) {
+        await store.set(`${base}:player:${id}`, slice);
+      }
+      await store.set(`${base}:ver`, "100");
+      resetMemoryUniverse();
+
+      await runWithScope(
+        { kv: store, mode: "d1", method: "GET", cpuMs: 0 },
+        () =>
+          withUniverseRead((loaded) => {
+            advanceUniverse(loaded, now);
+            const planet = loaded.planets[bravo.homePlanetId];
+            assert.ok(planet);
+            assert.equal(planet.buildings.metalMine, beforeLevel + 1);
+            assert.equal(planet.buildQueue.length, 0);
+          }),
+      );
+
+      await runWithScope(
+        { kv: store, mode: "d1", method: "POST", cpuMs: 0 },
+        () =>
+          withUniverse((loaded) => {
+            advanceUniverse(loaded, now);
+            const player = loaded.players[alpha.id];
+            assert.ok(player);
+            player.name = "Renamed";
+          }),
+      );
+
+      resetMemoryUniverse();
+      await runWithScope(
+        { kv: store, mode: "d1", method: "GET", cpuMs: 0 },
+        () =>
+          withUniverseRead((loaded) => {
+            const savedA = loaded.players[alpha.id];
+            const savedB = loaded.players[bravo.id];
+            assert.ok(savedA);
+            assert.ok(savedB);
+            assert.equal(savedA.name, "Renamed");
+            const planetA = loaded.planets[savedA.homePlanetId];
+            const planetB = loaded.planets[savedB.homePlanetId];
+            assert.ok(planetA);
+            assert.equal(planetA.ownerPlayerId, savedA.id);
+            assert.ok(planetB);
+            assert.equal(planetB.buildings.metalMine, beforeLevel + 1);
+            assert.equal(planetB.buildQueue.length, 0);
+            assert.equal(planetB.ownerPlayerId, savedB.id);
+          }),
+      );
+    } finally {
+      if (previous == null) delete process.env.STARHOLD_RUNTIME;
+      else process.env.STARHOLD_RUNTIME = previous;
+      resetMemoryUniverse();
     }
   });
 });

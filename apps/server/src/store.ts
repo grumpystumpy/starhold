@@ -360,11 +360,15 @@ async function saveUniverse(
   state: UniverseState,
   before: SliceStamps,
   expectedVersion: string | null,
+  versionChecked = false,
 ): Promise<void> {
-  const current = await client.get<string>(versionKey(), { fresh: true });
-  if (current !== expectedVersion) {
-    universeCache = null;
-    throw new StaleUniverseError();
+  // The quiet-read path already compared the version under the lock.
+  if (!versionChecked) {
+    const current = await client.get<string>(versionKey(), { fresh: true });
+    if (current !== expectedVersion) {
+      universeCache = null;
+      throw new StaleUniverseError();
+    }
   }
   const after = sliceStamps(state);
   if (stampsEqual(before, after)) {
@@ -470,7 +474,7 @@ async function withUniverseBody<T>(
       try {
         const current = await client.get<string>(versionKey(), { fresh: true });
         if (current === version) {
-          await saveUniverse(client, universe, before, version);
+          await saveUniverse(client, universe, before, version, true);
           return result;
         }
       } catch (err) {
@@ -512,7 +516,10 @@ async function withUniverseBody<T>(
 /**
  * Snapshot read for `/api/state` and `/api/auth/me`.
  * Never takes the distributed universe lock and never writes the snapshot.
- * Resource catch-up is recomputed from clocks on the next cold load.
+ * The callback runs on a copy. A finished build or fleet stays on that copy
+ * so the cached snapshot still matches D1. The next mutation reloads those
+ * rows and writes every slice it changes. Report ids use Math.random, so a
+ * read must not become the base for a later save.
  */
 export async function withUniverseRead<T>(
   fn: (universe: UniverseState) => T | Promise<T>,
@@ -522,7 +529,7 @@ export async function withUniverseRead<T>(
       throw new Error("Universe busy — retry in a moment.");
     }
     const universe = await loadUniverse(getKvClient());
-    return runUniverse(universe, fn);
+    return runUniverse(structuredClone(universe), fn);
   });
 }
 

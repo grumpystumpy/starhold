@@ -45,17 +45,6 @@ export async function initTelemetry(): Promise<void> {
       },
     });
     sentryReady = true;
-    if (typeof window !== "undefined") {
-      window.addEventListener("error", (ev) => {
-        const message = ev.error instanceof Error ? ev.error.message : ev.message;
-        if (!String(message).includes("@")) Sentry.captureException(ev.error ?? message);
-      });
-      window.addEventListener("unhandledrejection", (ev) => {
-        const reason = ev.reason;
-        const message = reason instanceof Error ? reason.message : String(reason);
-        if (!message.includes("@")) Sentry.captureException(reason);
-      });
-    }
   }
 
   const key = __STARHOLD_POSTHOG_KEY__;
@@ -65,7 +54,7 @@ export async function initTelemetry(): Promise<void> {
     client.init(key, {
       api_host: "https://us.i.posthog.com",
       ui_host: "https://us.posthog.com",
-      capture_pageview: true,
+      capture_pageview: "history_change",
       autocapture: false,
       disable_session_recording: true,
       persistence: "localStorage",
@@ -91,10 +80,6 @@ export async function initTelemetry(): Promise<void> {
   setApiFailureReporter((status, message) => {
     void reportFailure(status, message);
   });
-}
-
-export function capturePageview(path: string): void {
-  posthog?.capture("$pageview", { path });
 }
 
 export function identifyCommander(username: string): void {
