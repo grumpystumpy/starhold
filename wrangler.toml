@@ -28,3 +28,8 @@ migrations_dir = "migrations"
 [vars]
 STARHOLD_RUNTIME = "workers"
 STARHOLD_PASSWORD_KDF = "pbkdf2"
+
+# Free-plan logs. Shows exceededCpu vs exceededMemory on a killed request.
+[observability]
+enabled = true
+head_sampling_rate = 1
