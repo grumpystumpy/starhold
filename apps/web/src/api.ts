@@ -12,10 +12,77 @@ import type {
   ShipId,
 } from "@starhold/game";
 
-async function parse<T>(res: Response): Promise<T> {
-  const data = (await res.json()) as T & { error?: string };
+const FRIENDLY_PARSE =
+  "The server sent an unreadable response. Retry in a moment.";
+
+export class ApiError extends Error {
+  readonly status: number;
+  readonly retryable: boolean;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.retryable =
+      status === 0 || status === 408 || status === 429 || status >= 500;
+  }
+}
+
+let reportApiFailure: (status: number, message: string) => void = () => {};
+
+export function setApiFailureReporter(
+  fn: (status: number, message: string) => void,
+): void {
+  reportApiFailure = fn;
+}
+
+function friendlyStatus(status: number): string {
+  if (status === 401) return "Sign in required.";
+  if (status === 503 || status === 502 || status === 504) {
+    return "Universe busy — retry in a moment.";
+  }
+  if (status >= 500 || status === 0) return "Something went wrong. Retry in a moment.";
+  return "Request failed. Retry in a moment.";
+}
+
+/** Never surface JSON.parse / WebKit "expected pattern" errors to players. */
+export async function parse<T>(res: Response): Promise<T> {
+  let text = "";
+  try {
+    text = await res.text();
+  } catch {
+    const err = new ApiError(FRIENDLY_PARSE, res.status || 0);
+    reportApiFailure(err.status, err.message);
+    throw err;
+  }
+  let data: (T & { error?: string }) | null = null;
+  if (text) {
+    try {
+      data = JSON.parse(text) as T & { error?: string };
+    } catch {
+      const err = new ApiError(
+        res.ok ? FRIENDLY_PARSE : friendlyStatus(res.status),
+        res.status || 0,
+      );
+      reportApiFailure(err.status, err.message);
+      throw err;
+    }
+  }
   if (!res.ok) {
-    throw new Error(data.error ?? `Request failed (${res.status})`);
+    const serverMessage =
+      data && typeof data.error === "string" ? data.error.trim() : "";
+    const message =
+      serverMessage && !/expected pattern|SyntaxError|JSON\.parse/i.test(serverMessage)
+        ? serverMessage
+        : friendlyStatus(res.status);
+    const err = new ApiError(message, res.status);
+    reportApiFailure(err.status, err.message);
+    throw err;
+  }
+  if (data == null) {
+    const err = new ApiError(FRIENDLY_PARSE, res.status || 0);
+    reportApiFailure(err.status, err.message);
+    throw err;
   }
   return data;
 }

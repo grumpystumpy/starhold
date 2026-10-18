@@ -5,6 +5,7 @@ import {
   collectInbox,
   messagesPageHtml,
   setConfirmDelete,
+  setInboxFilter,
 } from "./render-messages";
 
 function baseView(overrides: Partial<PlayerView> = {}): PlayerView {
@@ -203,8 +204,9 @@ describe("messages inbox", () => {
     assert.match(combat, /message-combat-c9/);
   });
 
-  it("asks before deleting a category", () => {
+  it("asks before deleting the current category only", () => {
     setConfirmDelete(null);
+    setInboxFilter("alerts");
     const view = baseView({
       player: {
         id: "p1",
@@ -222,8 +224,10 @@ describe("messages inbox", () => {
       } as PlayerView["player"],
     });
     const html = messagesPageHtml(view);
+    assert.equal(html.match(/Delete all/g)?.length, 1);
     assert.match(html, /data-testid="delete-all-alerts"/);
-    assert.match(html, /data-testid="delete-all-combat"[^>]*disabled/);
+    assert.doesNotMatch(html, /data-testid="delete-all-combat"/);
+    assert.doesNotMatch(html, /data-testid="delete-all-all"/);
     assert.doesNotMatch(html, /delete-all-alerts-confirm/);
 
     setConfirmDelete("alerts");
@@ -233,6 +237,8 @@ describe("messages inbox", () => {
     assert.match(confirm, /data-testid="delete-all-alerts-confirm"/);
     assert.match(confirm, />Confirm</);
     assert.match(confirm, />Cancel</);
+    assert.equal(confirm.match(/Delete all/g)?.length ?? 0, 0);
     setConfirmDelete(null);
+    setInboxFilter("all");
   });
 });

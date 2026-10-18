@@ -21,6 +21,7 @@ import {
   setFlash,
 } from "./session";
 import { fmt } from "./ui/format";
+import { captureGameEvent } from "./telemetry";
 
 export async function doUpgrade(buildingId: BuildingId): Promise<void> {
   if (!session.view) return;
@@ -32,6 +33,7 @@ export async function doUpgrade(buildingId: BuildingId): Promise<void> {
   session.busy = true;
   clearFlash();
   schedulePaint();
+  captureGameEvent("build_start", { building: buildingId });
   try {
     session.view = await upgradeBuilding(session.view.player.id, buildingId);
     const q = session.view.planet.buildQueue;
@@ -131,6 +133,7 @@ export async function doResearch(researchId: ResearchId): Promise<void> {
   session.busy = true;
   clearFlash();
   schedulePaint();
+  captureGameEvent("research_start", { research: researchId });
   try {
     session.view = await researchTech(session.view.player.id, researchId);
     const q = session.view.player.researchQueue;

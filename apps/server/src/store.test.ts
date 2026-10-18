@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { redisCredentials } from "./store.js";
+import { redisCredentials, UNIVERSE_LOCK_MS } from "./store.js";
 
 describe("redisCredentials env fallback", () => {
   it("prefers UPSTASH_REDIS_REST_* when both pairs exist", () => {
@@ -35,5 +35,13 @@ describe("redisCredentials env fallback", () => {
       redisCredentials({ KV_REST_API_URL: "https://only-url.example" }),
       null,
     );
+  });
+});
+
+describe("universe lock", () => {
+  it("holds the lock for 2–3 seconds", () => {
+    assert.ok(UNIVERSE_LOCK_MS >= 2_000);
+    assert.ok(UNIVERSE_LOCK_MS <= 3_000);
+    assert.equal(UNIVERSE_LOCK_MS, 2_500);
   });
 });

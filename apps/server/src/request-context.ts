@@ -34,3 +34,20 @@ export function addCpu(ms: number): void {
 export function readCpuMs(): number {
   return scopes.getStore()?.cpuMs ?? 0;
 }
+
+let reportError: ((err: unknown) => void) | null = null;
+
+/** Worker installs this when SENTRY_DSN is set. No-op otherwise. */
+export function setServerErrorReporter(
+  fn: ((err: unknown) => void) | null,
+): void {
+  reportError = fn;
+}
+
+export function reportServerError(err: unknown): void {
+  try {
+    reportError?.(err);
+  } catch {
+    /* a reporter must not replace the player-facing error */
+  }
+}

@@ -8,7 +8,7 @@ Nothing here uses Workers KV. Saves go to **D1** (5 million reads/day, 100,000 w
 
 | Piece | Vercel (live until cut-over) | Workers |
 | --- | --- | --- |
-| Static client | Vercel static | Workers static assets (`apps/web/dist`) |
+| Static client | Vercel static | Workers static assets (`apps/web/dist`). `_headers` sets long cache on hashed JS/CSS and art. The Worker is not invoked for those files. |
 | API | `api/index.js` Node bundle | `worker/index.ts` → same Hono app |
 | Universe + accounts | Upstash / Vercel KV, one JSON document | D1 rows: world, asteroids, pirates, aliens, one document per player |
 | Password | scrypt (`scrypt$…`) | PBKDF2-SHA-256, 10,000 iterations. Imported accounts set a new password with a claim code |
@@ -21,7 +21,9 @@ This branch also contains the usage stack (30-second polling, idle sleep, ETag, 
 
 ## Saves
 
-A GET or HEAD whose only changes are accrued resources and `lastTickAt` does not take the D1 lock and does not write. The next cold load recomputes those stocks from the clocks. When something structural changes, D1 writes the dirty rows only: that player’s document, and the world, asteroid, pirate, or alien row if that part changed. Vercel still stores one JSON document, and it also skips the write on a quiet read.
+A GET or HEAD whose only changes are accrued resources and `lastTickAt` does not take the D1 lock and does not write. `/api/state` and `/api/auth/me` do not wait on the lock and do not copy the universe. They tick the cached snapshot. A resource-only tick stays in memory. A cheap check (not a full-universe hash) notices a build, research job, fleet, report, pirate or alien clock, daily alien seed, or planet move. If that changed, the read hashes the dirty rows, tries the lock once, and saves; if it cannot, it drops the cache so the next write reloads D1 instead of saving a half-updated universe. When a mutation changes something structural, D1 writes the dirty rows only, and only if the version key still matches the snapshot that was loaded. A stale write is thrown away and the handler runs again. The lock itself expires in 2.5 seconds. Vercel still stores one JSON document, and it also skips the write on a quiet read. Memory mode ticks the stored universe in place, so a polled fleet can finish its return.
+
+Hashed `/assets/*.js` and `/assets/*.css` are `public, max-age=31536000, immutable`. Planet art and SVG plates are 30 days. HTML stays `max-age=0, must-revalidate` (the assets default). Those rules live in [apps/web/public/_headers](../apps/web/public/_headers) because `run_worker_first` is only `/api/*` — a Worker `Cache-Control` would never be seen, and running the Worker for every asset would spend a request. `withStaticCache` still covers the case where the Worker fetches `ASSETS` itself.
 
 ## One-time setup
 
@@ -63,7 +65,17 @@ GitHub Actions secrets (repository, not in git):
 
 | Name | Purpose |
 | --- | --- |
-| `CLOUDFLARE_API_TOKEN` | Deploy + D1 migrations. The only GitHub secret. |
+| `CLOUDFLARE_API_TOKEN` | Deploy + D1 migrations. The only required GitHub secret. |
+
+Optional GitHub secrets, all unset means the integration is skipped:
+
+| Name | Purpose |
+| --- | --- |
+| `SENTRY_DSN` | Public DSN inlined into the web build. Also set the same value as a Worker secret so the Worker can report. |
+| `SENTRY_AUTH_TOKEN` | Uploads source maps at build/deploy. Free plan. |
+| `POSTHOG_KEY` | Inlined into the web build. US cloud. No session replay. |
+
+Repository variables for source maps: `SENTRY_ORG`, `SENTRY_PROJECT`.
 
 The account id is `account_id` in `wrangler.toml`. Wrangler reads it from that file. Do not also set `CLOUDFLARE_ACCOUNT_ID` in the Action, or an empty secret would override the file.
 

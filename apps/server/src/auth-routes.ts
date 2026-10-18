@@ -34,7 +34,7 @@ import {
   readSessionId,
   setSessionCookie,
 } from "./cookies.js";
-import { withUniverse } from "./store.js";
+import { withUniverse, withUniverseRead } from "./store.js";
 
 async function sessionAccount(c: Context) {
   const sessionId = readSessionId(c);
@@ -99,7 +99,10 @@ async function startSession(c: Context, account: AccountRecord) {
   let view: ReturnType<typeof playerView> | null = null;
   let linkedPlayerId: string | null = null;
   try {
-    await withUniverse((universe) => {
+    // Login must not take the universe lock. A busy writer used to be
+    // swallowed, which returned ok:true and view:null and left the client
+    // on the sign-in screen.
+    await withUniverseRead((universe) => {
       ensureUniverseShape(universe);
       if (!account.playerId) {
         const linked = playerForAccount(universe, account.id);
@@ -112,8 +115,20 @@ async function startSession(c: Context, account: AccountRecord) {
         view = playerView(universe, account.playerId);
       }
     });
-  } catch {
-    /* ignore — client can refresh */
+  } catch (err) {
+    console.error("[starhold-auth] session view", err);
+    const message = err instanceof Error ? err.message : "Universe busy — retry in a moment.";
+    return c.json(
+      {
+        error: message.startsWith("Universe busy")
+          ? message
+          : "Universe busy — retry in a moment.",
+        retry: true,
+        account: publicAccount(account),
+        view: null,
+      },
+      503,
+    );
   }
   if (linkedPlayerId) {
     await setAccountPlayerId(account.id, linkedPlayerId);
@@ -284,15 +299,22 @@ export function mountAuthRoutes(app: Hono): void {
   });
 
   app.get("/api/auth/me", async (c) => {
-    const ctx = await sessionAccount(c);
-    if (!ctx) {
+    const sessionId = readSessionId(c);
+    if (!sessionId) {
       return c.json({ account: null, view: null }, 200);
     }
-    const { account } = ctx;
+    const session = await getSession(sessionId);
+    if (!session) {
+      return c.json({ account: null, view: null }, 401);
+    }
+    const account = await getAccountById(session.accountId);
+    if (!account) {
+      return c.json({ account: null, view: null }, 401);
+    }
     let view = null;
     let playerId = account.playerId;
     try {
-      await withUniverse((universe) => {
+      await withUniverseRead((universe) => {
         ensureUniverseShape(universe);
         if (!playerId) {
           const linked = playerForAccount(universe, account.id);

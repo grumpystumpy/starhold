@@ -4,6 +4,11 @@
  * 1,000 writes a day, which a universe save would burn through.
  */
 
+export interface KvGetOptions {
+  /** Bypass a per-request read cache. Required for the save version check. */
+  fresh?: boolean;
+}
+
 export interface KvSetOptions {
   /** Expire after this many seconds. */
   exSec?: number;
@@ -19,7 +24,7 @@ export interface KvListRow {
 }
 
 export interface KvStore {
-  get<T>(key: string): Promise<T | null>;
+  get<T>(key: string, opts?: KvGetOptions): Promise<T | null>;
   /** `"OK"` when the write landed. `null` when `nx` lost the race. */
   set(key: string, value: unknown, opts?: KvSetOptions): Promise<"OK" | null>;
   del(key: string): Promise<void>;

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import { createApp } from "./app.js";
 import { preparePasswordClaim, resetMemoryAccounts } from "./accounts.js";
-import { memoryUniverseLoaded, resetMemoryUniverse } from "./store.js";
+import { memoryUniverseLoaded, resetMemoryUniverse, setUniverseFaultForTests } from "./store.js";
 
 describe("health", () => {
   beforeEach(() => {
@@ -35,6 +35,7 @@ describe("auth email+password routes (memory)", () => {
     delete process.env.CLAIM_MAIL_URL;
     delete process.env.STARHOLD_E2E;
     delete process.env.STARHOLD_RUNTIME;
+    setUniverseFaultForTests(null);
   });
 
   it("signup sets session cookie and auth/me resumes player after join", async () => {
@@ -275,5 +276,98 @@ describe("auth email+password routes (memory)", () => {
     assert.equal(res.status, 503);
     const body = (await res.json()) as { error: string };
     assert.ok(body.error.includes("SESSION_SECRET"));
+  });
+
+  it("auth/me is 200 with account null when no cookie and 401 when the session is dead", async () => {
+    const app = createApp();
+    const none = await app.request("/api/auth/me");
+    assert.equal(none.status, 200);
+    const noneBody = (await none.json()) as { account: null };
+    assert.equal(noneBody.account, null);
+
+    const dead = await app.request("/api/auth/me", {
+      headers: { Cookie: "starhold_session=not-a-real-session" },
+    });
+    assert.equal(dead.status, 401);
+    const deadBody = (await dead.json()) as { account: null };
+    assert.equal(deadBody.account, null);
+  });
+
+  it("login with a busy universe still returns the commander view", async () => {
+    const app = createApp();
+    const signup = await app.request("/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "busy@example.com",
+        password: "hunter2xx",
+      }),
+    });
+    const cookie = (signup.headers.get("set-cookie") ?? "").split(";")[0]!;
+    const join = await app.request("/api/auth/join", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ name: "BusyPilot" }),
+    });
+    assert.equal(join.status, 200);
+    const joined = (await join.json()) as { player: { id: string } };
+
+    setUniverseFaultForTests("busy");
+    const login = await app.request("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "busy@example.com",
+        password: "hunter2xx",
+      }),
+    });
+    assert.equal(login.status, 200);
+    const body = (await login.json()) as {
+      ok?: boolean;
+      view: { player: { id: string } } | null;
+    };
+    assert.equal(body.ok, true);
+    assert.equal(body.view?.player.id, joined.player.id);
+  });
+
+  it("login returns 503 instead of a swallowed null view when the snapshot cannot be read", async () => {
+    const app = createApp();
+    const signup = await app.request("/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "noread@example.com",
+        password: "hunter2xx",
+      }),
+    });
+    const cookie = (signup.headers.get("set-cookie") ?? "").split(";")[0]!;
+    const join = await app.request("/api/auth/join", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ name: "NoRead" }),
+    });
+    assert.equal(join.status, 200);
+
+    setUniverseFaultForTests("both");
+    const login = await app.request("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "noread@example.com",
+        password: "hunter2xx",
+      }),
+    });
+    assert.equal(login.status, 503);
+    const body = (await login.json()) as {
+      ok?: boolean;
+      error?: string;
+      view: null;
+      retry?: boolean;
+    };
+    assert.notEqual(body.ok, true);
+    assert.equal(body.view, null);
+    assert.equal(body.retry, true);
+    assert.match(body.error ?? "", /Universe busy/);
+    assert.doesNotMatch(body.error ?? "", /expected pattern|SyntaxError/i);
   });
 });

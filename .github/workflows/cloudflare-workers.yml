@@ -41,7 +41,22 @@ jobs:
 
       - name: Build client
         if: steps.gate.outputs.enabled == 'true'
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
         run: npm run build -w @starhold/game && npm run build -w @starhold/web
+
+      - name: Upload Worker source maps to Sentry
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+        run: node scripts/upload-sentry-sourcemaps.mjs
 
       - name: Apply D1 migrations and deploy
         if: steps.gate.outputs.enabled == 'true'
