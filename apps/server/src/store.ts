@@ -514,12 +514,143 @@ async function withUniverseBody<T>(
 }
 
 /**
+ * Cheap "did anything structural change?" check for a D1 read.
+ * A full slice hash of a seeded universe is slower than the Workers CPU
+ * budget, so a quiet poll must not pay it. This misses resource stocks,
+ * `lastTickAt`, `lastAiSimAt`, and view-only `remainingSeconds`. It does
+ * cover builds, research, fleets, reports, pirate/alien clocks, the alien
+ * daily seed, and planet positions (mini drift).
+ */
+function structuralHint(universe: UniverseState): string {
+  let h1 = 2166136261;
+  let h2 = 2166136261 ^ 0x9e3779b9;
+  const mix = (n: number) => {
+    h1 = Math.imul(h1 ^ (n | 0), 16777619);
+    h2 = Math.imul(h2 ^ ((n * 13) | 0), 2246822519);
+  };
+  const mixStr = (text: string) => {
+    mix(text.length);
+    for (let i = 0; i < text.length; i++) mix(text.charCodeAt(i));
+  };
+  mixStr(universe.alienDailyFindDay ?? "");
+  mix(universe.alienDailyFindSeed ?? 0);
+  mix(universe.alienFoundCountToday ?? 0);
+  mix(Object.keys(universe.seasons ?? {}).length);
+  const fleets = Object.values(universe.fleets ?? {});
+  mix(fleets.length);
+  for (const fleet of fleets) {
+    mixStr(fleet.id);
+    mixStr(fleet.mission);
+    mixStr(fleet.phase);
+    mix(fleet.arrivesAt);
+    mixStr(fleet.reportId ?? "");
+    let ships = 0;
+    for (const count of Object.values(fleet.ships ?? {})) ships += count || 0;
+    mix(ships);
+  }
+  mix(Object.keys(universe.reports ?? {}).length);
+  mix(Object.keys(universe.spyReports ?? {}).length);
+  mix(Object.keys(universe.expeditionReports ?? {}).length);
+  for (const player of Object.values(universe.players)) {
+    mixStr(player.id);
+    mix(player.eventLog?.length ?? 0);
+    mix(player.starshards ?? 0);
+    mix(player.highscoreStarshardsClaimed ? 1 : 0);
+    mixStr(player.season?.seasonId ?? "");
+    mix(player.season?.combat ?? 0);
+    mix(player.season?.economy ?? 0);
+    mix(player.season?.pirateKills ?? 0);
+    const officers = player.officers ?? [];
+    mix(officers.length);
+    for (const officer of officers) mix(officer.expiresAt ?? 0);
+    const researchQueue = player.researchQueue ?? [];
+    mix(researchQueue.length);
+    const front = researchQueue[0];
+    if (front) {
+      mixStr(front.researchId);
+      mix(front.targetLevel);
+      mix(front.completesAt);
+    }
+    for (const [id, level] of Object.entries(player.research ?? {})) {
+      if (typeof level === "number") {
+        mixStr(id);
+        mix(level);
+      }
+    }
+  }
+  for (const planet of Object.values(universe.planets)) {
+    mix(planet.coords?.galaxy ?? 0);
+    mix(planet.coords?.system ?? 0);
+    mix(planet.coords?.slot ?? 0);
+    mix(planet.lastDriftAt ?? 0);
+    if (!planet.ownerPlayerId) continue;
+    mixStr(planet.id);
+    for (const [id, level] of Object.entries(planet.buildings ?? {})) {
+      mixStr(id);
+      mix(level ?? 0);
+    }
+    for (const [id, count] of Object.entries(planet.ships ?? {})) {
+      mixStr(id);
+      mix(count ?? 0);
+    }
+    let defenses = 0;
+    for (const count of Object.values(planet.defenses ?? {})) defenses += count || 0;
+    mix(defenses);
+    const buildQueue = planet.buildQueue ?? [];
+    mix(buildQueue.length);
+    const build = buildQueue[0];
+    if (build) {
+      mixStr(build.buildingId);
+      mix(build.targetLevel);
+      mix(build.completesAt);
+    }
+    mix(planet.shipQueue?.length ?? 0);
+    const ship = planet.shipQueue?.[0];
+    if (ship) {
+      mixStr(ship.shipId ?? "");
+      mix(ship.completesAt);
+    }
+    mix(planet.defenseQueue?.length ?? 0);
+    const defense = planet.defenseQueue?.[0];
+    if (defense) {
+      mixStr(defense.defenseId ?? "");
+      mix(defense.completesAt);
+    }
+  }
+  const pirates = Object.values(universe.pirateBases ?? {});
+  mix(pirates.length);
+  for (const base of pirates) {
+    mixStr(base.id);
+    mix(base.level ?? 0);
+    mix(base.nextRaidAt ?? 0);
+    mix(base.destroyedAt ?? 0);
+    mix(base.lastGrewAt ?? 0);
+  }
+  const aliens = Object.values(universe.alienBases ?? {});
+  mix(aliens.length);
+  for (const base of aliens) {
+    mixStr(base.id);
+    mix(base.level ?? 0);
+    mix(base.nextRaidAt ?? 0);
+    mix(base.destroyedAt ?? 0);
+    mix(base.lastGrewAt ?? 0);
+  }
+  return (h1 >>> 0).toString(16) + (h2 >>> 0).toString(16);
+}
+
+/**
  * Snapshot read for `/api/state` and `/api/auth/me`.
- * Never takes the distributed universe lock and never writes the snapshot.
- * The callback runs on a copy. A finished build or fleet stays on that copy
- * so the cached snapshot still matches D1. The next mutation reloads those
- * rows and writes every slice it changes. Report ids use Math.random, so a
- * read must not become the base for a later save.
+ * Does not wait on the universe lock.
+ *
+ * Memory (and the single Redis document) ticks the stored universe. A polled
+ * fleet has to stay there or the return leg never finishes.
+ *
+ * D1 ticks the cached snapshot. A resource-only tick stays in memory and does
+ * not hash the universe. A structural change (build, research, fleet, report)
+ * is saved the way a quiet read saves: one lock attempt, no wait, and the
+ * rows that actually differ. If the lock is busy or the version moved, the
+ * cache is dropped so that in-memory tick cannot become the base of a partial
+ * write.
  */
 export async function withUniverseRead<T>(
   fn: (universe: UniverseState) => T | Promise<T>,
@@ -528,8 +659,42 @@ export async function withUniverseRead<T>(
     if (universeFault === "read" || universeFault === "both") {
       throw new Error("Universe busy — retry in a moment.");
     }
-    const universe = await loadUniverse(getKvClient());
-    return runUniverse(structuredClone(universe), fn);
+    const client = getKvClient();
+    const universe = await loadUniverse(client);
+    if (!client || storageMode() !== "d1") {
+      return runUniverse(universe, fn);
+    }
+    const version = universeCache?.version ?? null;
+    const beforeHint = structuralHint(universe);
+    const before =
+      universeCache?.universe === universe
+        ? universeCache.slices
+        : sliceStamps(universe);
+    const result = await runUniverse(universe, fn);
+    if (structuralHint(universe) === beforeHint) {
+      return result;
+    }
+    if (await acquireLock(client)) {
+      try {
+        const current = await client.get<string>(versionKey(), { fresh: true });
+        if (current === version) {
+          const after = sliceStamps(universe);
+          if (!stampsEqual(before, after)) {
+            await saveUniverse(client, universe, before, version, true);
+          } else if (universeCache?.universe === universe) {
+            universeCache.slices = after;
+          }
+          return result;
+        }
+      } catch (err) {
+        universeCache = null;
+        if (!(err instanceof StaleUniverseError)) throw err;
+      } finally {
+        await releaseLock(client);
+      }
+    }
+    universeCache = null;
+    return result;
   });
 }
 

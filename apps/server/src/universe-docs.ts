@@ -1,9 +1,9 @@
 /**
  * D1 stores the universe as rows, not one blob.
  * A player action rewrites that player's document. Asteroids, pirates, and
- * aliens are their own rows. Resource stocks and `lastTickAt` are left out
- * of the revision, so a quiet poll can skip every write and the next cold
- * load recomputes accrual from the clocks.
+ * aliens are their own rows. Resource stocks, `lastTickAt`, and `lastAiSimAt`
+ * are left out of the revision, so a quiet poll can skip every write and the
+ * next cold load recomputes accrual from the clocks.
  */
 import type {
   CombatReport,
@@ -65,7 +65,7 @@ function hasher(): Hasher {
   };
 }
 
-const SKIP_KEYS = new Set(["resources", "lastTickAt"]);
+const SKIP_KEYS = new Set(["resources", "lastTickAt", "lastAiSimAt"]);
 
 function hashValue(value: unknown, key: string | undefined, h: Hasher): void {
   if (key && SKIP_KEYS.has(key)) return;
