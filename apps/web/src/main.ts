@@ -117,14 +117,17 @@ async function resumePlayer(
     syncSessionUrl({ replace: true });
     startPolling(playerId);
     setFlash("notice", `Resumed ${session.view.player.name}.`);
+    session.holdJoin = false;
     return "ok";
   } catch (err) {
     const status = err instanceof ApiError ? err.status : 0;
     if (shouldClearSavedPlayer(status)) {
       localStorage.removeItem(SESSION_KEY);
       session.view = null;
+      session.holdJoin = false;
       return "logout";
     }
+    session.holdJoin = true;
     setFlash("notice", "Reconnecting…");
     scheduleReconnect();
     return "retry";

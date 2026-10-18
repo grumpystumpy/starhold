@@ -34,7 +34,7 @@ STARHOLD_PASSWORD_KDF = "pbkdf2"
 enabled = true
 head_sampling_rate = 1
 
-# */10 catches pirate (3h) and alien (1h) raids. */30 rebuilds highscores.
+# */10 catches pirate (90 min) and alien (1h) raids. */30 rebuilds highscores.
 # Page loads do not raid.
 [triggers]
 crons = ["*/10 * * * *", "*/30 * * * *"]

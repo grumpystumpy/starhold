@@ -11,9 +11,10 @@ import {
 import type { KvGetOptions, KvSetOptions, KvStore, StorageMode } from "./kv.js";
 import { addCpu, currentMethod, currentScope } from "./request-context.js";
 import {
+  legacyMirrorIfSealed,
   migrateChunk,
   migrationDone,
-  rewindMigration,
+  mirrorLegacySnapshot,
   UniverseBusyError,
   withRowUniverse,
   type UniverseWork,
@@ -407,6 +408,8 @@ async function saveUniverse(
     const version = String(Date.now());
     await client.set(versionKey(), version);
     remember(state, version, after, false);
+    const db = currentScope()?.db;
+    if (db) await legacyMirrorIfSealed(db, state);
     return;
   }
   await client.set(universeKey(), state);
@@ -781,9 +784,8 @@ async function rowSaveReady(): Promise<boolean> {
     if (step.done) {
       const after = (await client.get<string>(versionKey())) ?? "";
       if (after !== version) {
-        await rewindMigration(db, after);
         const fresh = await loadUniverse(client);
-        await migrateChunk(db, fresh, undefined, undefined, after);
+        await mirrorLegacySnapshot(db, fresh);
       }
     }
     return migrationDone(db);

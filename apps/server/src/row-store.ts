@@ -28,6 +28,8 @@ import { splitUniverse } from "./universe-docs.js";
 export const HIGHSCORE_TTL_MS = 30 * 60 * 1000;
 export const ROW_LOCK_MS = 2_500;
 const CHUNK = 25;
+/** D1 rejects a compound SELECT with 6 or more terms. Keep every multi-row write at or under 5. */
+const SQL_ROWS = 5;
 
 export class RowStaleError extends Error {
   constructor() {
@@ -85,9 +87,11 @@ interface MigrateState {
   v: number;
   stage: string;
   cursor: string;
-  /** 0 copies once. 1 recopies so writes during the copy are kept. */
+  /** 0 copies once. 1 recopies. The seal pass is the last one and cannot be restarted. */
   pass: number;
   seen: string;
+  /** Legacy writes during this pass are mirrored into rows so the copy can finish. */
+  seal?: boolean;
 }
 
 interface SystemRow {
@@ -245,6 +249,7 @@ async function readMigrate(db: D1Like): Promise<MigrateState> {
       cursor: parsed.cursor || "",
       pass: parsed.pass ?? 0,
       seen: parsed.seen ?? "",
+      seal: Boolean(parsed.seal),
     };
   } catch {
     return { v: 0, stage: "world", cursor: "", pass: 0, seen: "" };
@@ -386,8 +391,9 @@ function systemDrafts(universe: UniverseState): SystemRow[] {
 async function upsertWorld(db: D1Like, universe: UniverseState): Promise<void> {
   await run(
     db,
-    `INSERT INTO save_world (id, version, doc) VALUES ('world', 1, ?)
-     ON CONFLICT(id) DO UPDATE SET doc = excluded.doc`,
+    `INSERT INTO save_world (id, version, doc) VALUES ('world', 2, ?)
+     ON CONFLICT(id) DO UPDATE SET doc = excluded.doc, version = excluded.version
+     WHERE save_world.version <= excluded.version`,
     timedStringify(worldDoc(universe)),
   );
 }
@@ -395,8 +401,9 @@ async function upsertWorld(db: D1Like, universe: UniverseState): Promise<void> {
 async function upsertPlayer(db: D1Like, player: PlayerState): Promise<void> {
   await run(
     db,
-    `INSERT INTO save_players (id, version, doc) VALUES (?, 1, ?)
-     ON CONFLICT(id) DO UPDATE SET doc = excluded.doc`,
+    `INSERT INTO save_players (id, version, doc) VALUES (?, 2, ?)
+     ON CONFLICT(id) DO UPDATE SET doc = excluded.doc, version = excluded.version
+     WHERE save_players.version <= excluded.version`,
     player.id,
     timedStringify(playerDoc(player)),
   );
@@ -406,10 +413,11 @@ async function upsertPlanet(db: D1Like, planet: PlanetState): Promise<void> {
   await run(
     db,
     `INSERT INTO save_planets (id, owner_id, galaxy, system, slot, kind, version, doc)
-     VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+     VALUES (?, ?, ?, ?, ?, ?, 2, ?)
      ON CONFLICT(id) DO UPDATE SET
        owner_id = excluded.owner_id, galaxy = excluded.galaxy, system = excluded.system,
-       slot = excluded.slot, kind = excluded.kind, doc = excluded.doc`,
+       slot = excluded.slot, kind = excluded.kind, doc = excluded.doc, version = excluded.version
+     WHERE save_planets.version <= excluded.version`,
     planet.id,
     planet.ownerPlayerId || "",
     planet.coords.galaxy,
@@ -424,9 +432,11 @@ async function upsertFleet(db: D1Like, fleet: FleetMission): Promise<void> {
   await run(
     db,
     `INSERT INTO save_fleets (id, owner_id, target_owner_id, version, doc)
-     VALUES (?, ?, ?, 1, ?)
+     VALUES (?, ?, ?, 2, ?)
      ON CONFLICT(id) DO UPDATE SET
-       owner_id = excluded.owner_id, target_owner_id = excluded.target_owner_id, doc = excluded.doc`,
+       owner_id = excluded.owner_id, target_owner_id = excluded.target_owner_id,
+       doc = excluded.doc, version = excluded.version
+     WHERE save_fleets.version <= excluded.version`,
     fleet.id,
     fleet.ownerPlayerId,
     fleet.targetPlayerId || "",
@@ -438,10 +448,11 @@ async function upsertMessage(db: D1Like, row: MessageDraft): Promise<void> {
   await run(
     db,
     `INSERT INTO save_messages (id, owner_id, defender_id, kind, version, doc)
-     VALUES (?, ?, ?, ?, 1, ?)
+     VALUES (?, ?, ?, ?, 2, ?)
      ON CONFLICT(id) DO UPDATE SET
        owner_id = excluded.owner_id, defender_id = excluded.defender_id,
-       kind = excluded.kind, doc = excluded.doc`,
+       kind = excluded.kind, doc = excluded.doc, version = excluded.version
+     WHERE save_messages.version <= excluded.version`,
     row.id,
     row.owner,
     row.defender,
@@ -454,14 +465,33 @@ async function upsertSystem(db: D1Like, row: SystemRow): Promise<void> {
   await run(
     db,
     `INSERT INTO save_systems (galaxy, system, version, asteroids, debris)
-     VALUES (?, ?, 1, ?, ?)
+     VALUES (?, ?, 2, ?, ?)
      ON CONFLICT(galaxy, system) DO UPDATE SET
-       asteroids = excluded.asteroids, debris = excluded.debris`,
+       asteroids = excluded.asteroids, debris = excluded.debris, version = excluded.version
+     WHERE save_systems.version <= excluded.version`,
     row.galaxy,
     row.system,
     timedStringify(row.asteroids),
     timedStringify(row.debris),
   );
+}
+
+/** Copy the legacy document into rows without letting an older chunk overwrite it. */
+export async function mirrorLegacySnapshot(db: D1Like, universe: UniverseState): Promise<void> {
+  await ensureRowTables(db);
+  await upsertWorld(db, universe);
+  for (const player of Object.values(universe.players)) await upsertPlayer(db, player);
+  for (const planet of Object.values(universe.planets)) await upsertPlanet(db, planet);
+  for (const fleet of Object.values(universe.fleets ?? {})) await upsertFleet(db, fleet);
+  for (const row of messageDrafts(universe)) await upsertMessage(db, row);
+  for (const row of systemDrafts(universe)) await upsertSystem(db, row);
+}
+
+/** While the last migration pass is running, a legacy save must also land in the rows. */
+export async function legacyMirrorIfSealed(db: D1Like, universe: UniverseState): Promise<void> {
+  const state = await readMigrate(db);
+  if (!state.seal || state.v >= 1) return;
+  await mirrorLegacySnapshot(db, universe);
 }
 
 async function writeHighscoreCache(
@@ -540,7 +570,8 @@ export async function migrateChunk(
     if (state.stage === "world") {
       push(
         `INSERT INTO save_world (id, version, doc) VALUES ('world', 1, ?)
-         ON CONFLICT(id) DO UPDATE SET doc = excluded.doc`,
+         ON CONFLICT(id) DO UPDATE SET doc = excluded.doc
+         WHERE save_world.version <= excluded.version`,
         [timedStringify(worldDoc(universe))],
       );
       state.stage = "players";
@@ -556,7 +587,8 @@ export async function migrateChunk(
       }
       push(
         `INSERT INTO save_players (id, version, doc) VALUES (?, 1, ?)
-         ON CONFLICT(id) DO UPDATE SET doc = excluded.doc`,
+         ON CONFLICT(id) DO UPDATE SET doc = excluded.doc
+         WHERE save_players.version <= excluded.version`,
         [next, timedStringify(playerDoc(universe.players[next]!))],
       );
       state.cursor = next;
@@ -575,7 +607,8 @@ export async function migrateChunk(
          VALUES (?, ?, ?, ?, ?, ?, 1, ?)
          ON CONFLICT(id) DO UPDATE SET
            owner_id = excluded.owner_id, galaxy = excluded.galaxy, system = excluded.system,
-           slot = excluded.slot, kind = excluded.kind, doc = excluded.doc`,
+           slot = excluded.slot, kind = excluded.kind, doc = excluded.doc
+         WHERE save_planets.version <= excluded.version`,
         [
           planet.id,
           planet.ownerPlayerId || "",
@@ -601,7 +634,8 @@ export async function migrateChunk(
         `INSERT INTO save_fleets (id, owner_id, target_owner_id, version, doc)
          VALUES (?, ?, ?, 1, ?)
          ON CONFLICT(id) DO UPDATE SET
-           owner_id = excluded.owner_id, target_owner_id = excluded.target_owner_id, doc = excluded.doc`,
+           owner_id = excluded.owner_id, target_owner_id = excluded.target_owner_id, doc = excluded.doc
+         WHERE save_fleets.version <= excluded.version`,
         [fleet.id, fleet.ownerPlayerId, fleet.targetPlayerId || "", timedStringify(fleet)],
       );
       state.cursor = next;
@@ -619,7 +653,8 @@ export async function migrateChunk(
          VALUES (?, ?, ?, ?, 1, ?)
          ON CONFLICT(id) DO UPDATE SET
            owner_id = excluded.owner_id, defender_id = excluded.defender_id,
-           kind = excluded.kind, doc = excluded.doc`,
+           kind = excluded.kind, doc = excluded.doc
+         WHERE save_messages.version <= excluded.version`,
         [next.id, next.owner, next.defender, next.kind, timedStringify(next.doc)],
       );
       state.cursor = next.id;
@@ -636,7 +671,8 @@ export async function migrateChunk(
         `INSERT INTO save_systems (galaxy, system, version, asteroids, debris)
          VALUES (?, ?, 1, ?, ?)
          ON CONFLICT(galaxy, system) DO UPDATE SET
-           asteroids = excluded.asteroids, debris = excluded.debris`,
+           asteroids = excluded.asteroids, debris = excluded.debris
+         WHERE save_systems.version <= excluded.version`,
         [next.galaxy, next.system, timedStringify(next.asteroids), timedStringify(next.debris)],
       );
       state.cursor = systemCursor(next.galaxy, next.system);
@@ -653,7 +689,8 @@ export async function migrateChunk(
         state.stage = "world";
         state.cursor = "";
         state.seen = sourceVersion ?? "";
-      } else if (sourceVersion != null && sourceVersion !== state.seen) {
+      } else if (!state.seal && sourceVersion != null && sourceVersion !== state.seen) {
+        state.seal = true;
         state.pass += 1;
         state.stage = "world";
         state.cursor = "";
@@ -662,6 +699,7 @@ export async function migrateChunk(
         state.v = 1;
         state.stage = "done";
         state.cursor = "";
+        state.seal = false;
       }
       break;
     }
@@ -960,6 +998,26 @@ function systemPairs(planets: Iterable<PlanetState>): Array<[number, number]> {
   return [...systems.values()];
 }
 
+function pirateSitesNeeded(universe: UniverseState): boolean {
+  return Object.values(universe.pirateBases ?? {}).some((base) => base.destroyedAt != null);
+}
+
+async function loadOccupancy(db: D1Like, loaded: LoadedRows): Promise<void> {
+  const rows = await all<{
+    id: string;
+    owner_id: string;
+    galaxy: number;
+    system: number;
+    slot: number;
+    kind: string;
+  }>(db, "SELECT id, owner_id, galaxy, system, slot, kind FROM save_planets");
+  for (const row of rows) {
+    if (loaded.fullPlanetIds.has(row.id) || loaded.universe.planets[row.id]) continue;
+    loaded.universe.planets[row.id] = stubPlanet(row);
+    loaded.stubPlanetIds.add(row.id);
+  }
+}
+
 export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined): Promise<LoadedRows> {
   const world = await first<{ version: number; doc: string }>(
     db,
@@ -1004,9 +1062,7 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
       [],
     );
     await loadSystems(db, loaded, systemPairs(Object.values(loaded.universe.planets)));
-    // Placement walks every empty slot. This load does not have those rows,
-    // so a top-up here would drop a base onto a planet that is not in memory.
-    loaded.universe.skipPirateTopUp = true;
+    // Raids need owned bodies. Placement also needs every occupied slot, below.
   } else if (work?.catalog) {
     const stubs = await all<{
       id: string;
@@ -1091,6 +1147,9 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
   }
 
   if (!work?.npc) loaded.universe.skipNpcRaids = true;
+  const placePirates = Boolean(work?.npc) || pirateSitesNeeded(loaded.universe);
+  if (placePirates) await loadOccupancy(db, loaded);
+  else loaded.universe.skipPirateTopUp = true;
   const now = Date.now();
   if (!work?.npc && !work?.full) {
     if (work?.galaxy && work.system) ensureSystemVisited(loaded.universe, work.galaxy, work.system, now);
@@ -1220,7 +1279,7 @@ function pushUpdate(
 ): number {
   if (!rows.length) return 0;
   let groups = 0;
-  for (const group of chunkRows(rows, 8)) {
+  for (const group of chunkRows(rows, SQL_ROWS)) {
     const incoming = valuesFrom([...columns, ...keyColumns.map((column) => `old_${column}`), "old_version"], group);
     const assignments = columns.map((column) => `${column} = v.${column}`).join(", ");
     const where = [
@@ -1253,7 +1312,7 @@ function pushInsert(
   columnsPerRow: number,
   rows: unknown[][],
 ): void {
-  for (const group of chunkRows(rows, 8)) {
+  for (const group of chunkRows(rows, SQL_ROWS)) {
     const values = group.flat();
     const tuple = `(${new Array(columnsPerRow).fill("?").join(", ")})`;
     stmts.push(bind(db, `${sql} ${group.map(() => tuple).join(", ")}`, values));
@@ -1396,7 +1455,7 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
     if (liveFleets.has(id)) continue;
     fleetDeletes.push([id, version]);
   }
-  for (const group of chunkRows(fleetDeletes, 8)) {
+  for (const group of chunkRows(fleetDeletes, SQL_ROWS)) {
     const clause = group.map(() => "(id = ? AND version = ?)").join(" OR ");
     stmts.push(bind(db, `DELETE FROM save_fleets WHERE ${clause}`, group.flat()));
     stmts.push(bind(db, "INSERT INTO save_assert (ok) SELECT CASE WHEN changes() = ? THEN 1 ELSE 0 END", [group.length]));
@@ -1452,7 +1511,7 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
     if (liveMessages.has(id)) continue;
     messageDeletes.push([id, version]);
   }
-  for (const group of chunkRows(messageDeletes, 8)) {
+  for (const group of chunkRows(messageDeletes, SQL_ROWS)) {
     const clause = group.map(() => "(id = ? AND version = ?)").join(" OR ");
     stmts.push(bind(db, `DELETE FROM save_messages WHERE ${clause}`, group.flat()));
     stmts.push(bind(db, "INSERT INTO save_assert (ok) SELECT CASE WHEN changes() = ? THEN 1 ELSE 0 END", [group.length]));

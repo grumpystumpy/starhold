@@ -65,6 +65,8 @@ export const session = {
   pendingAcsPrefill: null as AcsPrefill | null,
   /** Ignore duplicate click after pointerup already dispatched the armed action. */
   suppressClickUntil: 0,
+  /** A 5xx or network failure must not offer a new commander. */
+  holdJoin: false,
 };
 
 let paintImpl: () => void = () => {};

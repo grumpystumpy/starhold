@@ -34,7 +34,8 @@ import {
   readSessionId,
   setSessionCookie,
 } from "./cookies.js";
-import { withUniverse, withUniverseRead } from "./store.js";
+import { withUniverse, withUniverseRead, isUniverseBusy } from "./store.js";
+import { reportServerError } from "./request-context.js";
 
 async function sessionAccount(c: Context) {
   const sessionId = readSessionId(c);
@@ -328,13 +329,18 @@ export function mountAuthRoutes(app: Hono): void {
         }
       });
     } catch (err) {
+      const message = err instanceof Error ? err.message : "State failed.";
+      if (isUniverseBusy(err)) {
+        return c.json(
+          { error: message, account: publicAccount(account), view: null, code: "busy" },
+          503,
+        );
+      }
+      console.error("[starhold-api]", err);
+      reportServerError(err);
       return c.json(
-        {
-          error: err instanceof Error ? err.message : "State failed.",
-          account: publicAccount(account),
-          view: null,
-        },
-        503,
+        { error: message, account: publicAccount(account), view: null },
+        500,
       );
     }
     if (playerId && playerId !== account.playerId) {

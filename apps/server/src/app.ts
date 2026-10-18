@@ -277,10 +277,12 @@ export function createApp(): Hono {
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : "State failed.";
-      if (message.startsWith("Universe busy")) {
+      if (isUniverseBusy(err)) {
         return c.json({ error: message, code: "busy" }, 503);
       }
-      return c.json({ error: message }, 404);
+      console.error("[starhold-api]", err);
+      reportServerError(err);
+      return c.json({ error: message }, 500);
     }
   });
 

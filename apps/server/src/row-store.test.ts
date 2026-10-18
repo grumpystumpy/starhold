@@ -2,10 +2,16 @@ import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { describe, it } from "node:test";
 import {
+  activePirateBases,
   advanceUniverse,
+  createPirateBase,
   createUniverse,
   joinUniverse,
   launchFleet,
+  MAP_GALAXIES,
+  MAP_SLOTS,
+  MAP_SYSTEMS,
+  PIRATE_TARGET_BASE_COUNT,
   playerView,
   queueBuildingUpgrade,
   queueResearch,
@@ -14,9 +20,11 @@ import {
   UNIVERSE_SCHEMA_VERSION,
   type CombatReport,
   type FleetMission,
+  type PirateBase,
   type PlanetState,
   type UniverseState,
 } from "@starhold/game";
+import { continueUniverseSeed } from "../../../packages/game/src/world-seed.ts";
 import { hashPbkdf2 } from "./password.js";
 import { createD1Store, type D1Like, type D1RunResult, type D1Stmt } from "./d1-store.js";
 import type { KvStore } from "./kv.js";
@@ -1089,6 +1097,216 @@ describe("row save review fixes", () => {
     assert.ok(steps.length > 1);
     assert.ok(stepMedian <= 10, `migration median ${stepMedian}`);
     assert.ok(stepP95 <= 20, `migration p95 ${stepP95}`);
+  });
+
+  it("returns 500 from /api/state for a non-busy error", async () => {
+    let reported = 0;
+    setServerErrorReporter(() => {
+      reported += 1;
+    });
+    try {
+      const app = createApp();
+      const missing = await app.request("/api/state?playerId=no-such-commander");
+      assert.equal(missing.status, 500);
+      const body = (await missing.json()) as { error?: string };
+      assert.match(body.error ?? "", /Unknown player/);
+      assert.equal(reported, 1);
+
+      setUniverseFaultForTests("both");
+      const busy = await app.request("/api/state?playerId=no-such-commander");
+      assert.equal(busy.status, 503);
+      const busyBody = (await busy.json()) as { code?: string };
+      assert.equal(busyBody.code, "busy");
+      assert.equal(reported, 1);
+    } finally {
+      setUniverseFaultForTests(null);
+      setServerErrorReporter(null);
+      resetMemoryUniverse();
+    }
+  });
+
+  it("finishes migration while writes and galaxy seeding keep landing", async () => {
+    resetMemoryUniverse();
+    const { db } = sqliteD1();
+    const now = 1_700_000_000_000;
+    const source = createUniverse("Alpha Drift", 8, 8, { lazySeed: true });
+    const { player } = joinUniverse(source, "Seeder", now);
+    const home = source.planets[player.homePlanetId]!;
+    for (let i = 0; i < 40; i++) {
+      const id = `extra-${i}`;
+      source.planets[id] = {
+        ...home,
+        id,
+        name: id,
+        ownerPlayerId: "",
+        coords: { galaxy: 2, system: i + 1, slot: 3 },
+        moonId: null,
+        parentPlanetId: null,
+      };
+    }
+    const store = createD1Store(db);
+    const key = `starhold:universe:v${UNIVERSE_SCHEMA_VERSION}`;
+    await store.set(key, source);
+    await store.set(`${key}:ver`, "seed-0");
+    let requests = 0;
+    let done = false;
+    const bound = 80;
+    while (requests < bound && !done) {
+      const n = requests;
+      await runWithScope(
+        { kv: store, db, mode: "d1", method: "POST", cpuMs: 0 },
+        () =>
+          withUniverse((universe) => {
+            const who = universe.players[player.id];
+            if (who && n % 3 === 0) {
+              who.starshards = (who.starshards ?? 0) + 1;
+              if (!universe.seedCursor || universe.seedCursor.done) {
+                universe.seedCursor = { at: 0, ranks: [], pirates: 0 };
+              }
+              continueUniverseSeed(universe, now + n * 1_000, {
+                systems: 1,
+                minis: 2,
+                pirates: 0,
+              });
+              universe.asteroids[`proof-${n}`] = {
+                id: `proof-${n}`,
+                coords: { galaxy: 1, system: 40 + (n % 20), slot: 16 },
+                metal: 70 + n,
+                crystal: 1,
+                deuterium: 1,
+                richness: 1,
+              };
+            }
+          }),
+      );
+      requests += 1;
+      done = await migrationDone(db);
+    }
+    console.log(`migration under writes requests=${requests} done=${done}`);
+    assert.equal(done, true);
+    assert.ok(requests < bound, `migration still running after ${requests}`);
+    const loaded = await loadWorkingSet(db, { full: true });
+    const who = loaded.universe.players[player.id];
+    const writes = Math.floor((requests - 1) / 3) + 1;
+    assert.equal(who?.starshards, writes);
+    const proof = loaded.universe.asteroids?.["proof-0"];
+    assert.equal(proof?.metal, 70, `proof asteroid missing after ${requests} requests`);
+    assert.ok(Object.keys(loaded.universe.asteroids ?? {}).length > 0);
+    resetMemoryUniverse();
+  });
+
+  it("restores destroyed pirates on a page load and keeps a base with no site", async () => {
+    resetMemoryUniverse();
+    const { db } = sqliteD1();
+    const source = fixture();
+    source.miniPlanetIds = ["already-seeded"];
+    const alpha = Object.values(source.players).find((player) => player.name === "OldHand")!;
+    const now = Date.now();
+    const day = 24 * 60 * 60 * 1000;
+    source.pirateBases = {};
+    const destroyedIds: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      const base = createPirateBase(source.seed ?? source.id, 1, i + 1, 8, now - 40 * day, 0);
+      base.destroyedAt = now - 40 * day;
+      source.pirateBases[base.id] = base;
+      destroyedIds.push(base.id);
+    }
+    const blocked = { galaxy: 3, system: 12, slot: 4 };
+    const home = source.planets[alpha.homePlanetId]!;
+    source.planets["hidden-rock"] = {
+      ...home,
+      id: "hidden-rock",
+      name: "Hidden",
+      ownerPlayerId: "",
+      kind: "planet",
+      coords: blocked,
+      moonId: null,
+      parentPlanetId: null,
+    };
+    await migrateAll(db, source);
+    const store = createD1Store(db);
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "GET", cpuMs: 0 },
+      () =>
+        withUniverse((universe) => {
+          advanceUniverse(universe, now);
+        }, { playerIds: [alpha.id] }),
+    );
+    const afterPage = await loadWorkingSet(db, { full: true });
+    const living = activePirateBases(afterPage.universe);
+    console.log(`pirate page-load living=${living.length} destroyedLeft=${Object.values(afterPage.universe.pirateBases ?? {}).filter((b) => b.destroyedAt != null).length}`);
+    assert.ok(living.length >= PIRATE_TARGET_BASE_COUNT, `living ${living.length}`);
+    for (const id of destroyedIds) assert.equal(afterPage.universe.pirateBases?.[id], undefined);
+    assert.equal(
+      living.some((base) => base.coords.galaxy === blocked.galaxy && base.coords.system === blocked.system && base.coords.slot === blocked.slot),
+      false,
+    );
+
+    const packed = fixture();
+    packed.miniPlanetIds = ["already-seeded"];
+    const blockedGalaxy = MAP_GALAXIES;
+    const blockedSystem = MAP_SYSTEMS;
+    const bases: Record<string, PirateBase> = {};
+    for (let galaxy = 1; galaxy <= MAP_GALAXIES; galaxy++) {
+      for (let system = 1; system <= MAP_SYSTEMS; system++) {
+        if (galaxy === blockedGalaxy && system === blockedSystem) continue;
+        const id = `blocker-${galaxy}-${system}`;
+        bases[id] = {
+          id,
+          coords: { galaxy, system, slot: 1 },
+          destroyedAt: null,
+          name: id,
+          tier: 0,
+          level: 0,
+          ships: {},
+          defenses: {},
+          resources: { metal: 0, crystal: 0, deuterium: 0 },
+          techs: {},
+          lastGrewAt: now,
+          lastRaidAt: now,
+          nextRaidAt: now + day,
+          lastFreeSpawnAt: now,
+          coalitionId: id,
+          splitDone: false,
+        } as PirateBase;
+      }
+    }
+    const wreck = createPirateBase(packed.seed ?? packed.id, 1, 1, 2, now - 40 * day, 0);
+    wreck.destroyedAt = now - 40 * day;
+    bases[wreck.id] = wreck;
+    packed.pirateBases = bases;
+    for (let slot = 1; slot <= MAP_SLOTS; slot++) {
+      const id = `wall-${slot}`;
+      packed.planets[id] = {
+        ...packed.planets[alpha.homePlanetId]!,
+        id,
+        name: id,
+        ownerPlayerId: "",
+        kind: "planet",
+        coords: { galaxy: blockedGalaxy, system: blockedSystem, slot },
+        moonId: null,
+        parentPlanetId: null,
+      };
+    }
+    const packedDb = sqliteD1();
+    await migrateAll(packedDb.db, packed);
+    const packedStore = createD1Store(packedDb.db);
+    const before = Object.keys(packed.pirateBases).length;
+    await runWithScope(
+      { kv: packedStore, db: packedDb.db, mode: "d1", method: "GET", cpuMs: 0 },
+      () =>
+        withUniverse((universe) => {
+          tickPirates(universe, now);
+        }, { playerIds: [Object.values(packed.players).find((player) => player.name === "OldHand")!.id] }),
+    );
+    const kept = await loadWorkingSet(packedDb.db, { full: true });
+    assert.equal(kept.universe.pirateBases?.[wreck.id]?.destroyedAt != null, true);
+    assert.equal(Object.keys(kept.universe.pirateBases ?? {}).length, before);
+    const parked = Object.values(kept.universe.pirateBases ?? {}).find(
+      (base) => base.coords.galaxy === blockedGalaxy && base.coords.system === blockedSystem,
+    );
+    assert.equal(parked, undefined);
+    resetMemoryUniverse();
   });
 });
 

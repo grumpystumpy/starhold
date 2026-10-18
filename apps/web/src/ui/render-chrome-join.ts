@@ -95,6 +95,26 @@ export function joinScreenHtml(state: JoinScreenState): string {
   `;
 }
 
+/** Shown when resume failed with a 5xx or a network error. No join form. */
+export function reconnectScreenHtml(state: {
+  error: string | null;
+  notice: string | null;
+}): string {
+  return `
+    <header class="join-hero">
+      <img class="thumb thumb-hero" src="${PLANET_ART.rocky}" alt="" width="72" height="72" />
+      <div>
+        <h1 class="brand">Starhold</h1>
+        <p class="tagline">Reconnecting to the universe…</p>
+      </div>
+    </header>
+    <div data-flash-slot>${flashHtml(state.error, state.notice)}</div>
+    <section class="join-panel" data-testid="reconnect">
+      <p>The server had a problem. Your commander is still saved. This page will try again.</p>
+    </section>
+  `;
+}
+
 /** Keep the commander input mounted so automation / IME is not wiped by re-paints. */
 export function renderJoin(root: HTMLElement, state: JoinScreenState): void {
   const existingForm = root.querySelector<HTMLFormElement>("#join-form");

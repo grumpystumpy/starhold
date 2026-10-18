@@ -76,6 +76,7 @@ async function retryResume(): Promise<void> {
       syncSessionUrl({ replace: true });
       startPolling(saved);
       reconnectAttempt = 0;
+      session.holdJoin = false;
       setFlash("notice", `Resumed ${view.player.name}.`);
       schedulePaint();
       return;
@@ -83,11 +84,13 @@ async function retryResume(): Promise<void> {
       if (shouldClearSavedPlayer(httpStatus(err))) {
         localStorage.removeItem(SESSION_KEY);
         session.view = null;
+        session.holdJoin = false;
         reconnectAttempt = 0;
         setFlash("error", "Signed out.");
         schedulePaint();
         return;
       }
+      session.holdJoin = true;
     }
   } else if (outcome === "none") {
     reconnectAttempt = 0;
@@ -339,6 +342,8 @@ export async function doJoin(name: string): Promise<void> {
     syncSessionUrl({ replace: true });
     startPolling(session.view.player.id);
   } catch (err) {
+    const status = err instanceof ApiError ? err.status : 0;
+    session.holdJoin = status === 0 || status >= 500;
     session.error = null;
     setFlash(
       "error",
@@ -589,12 +594,16 @@ export async function resumeFromCookie(): Promise<
 > {
   try {
     const me = await fetchAuthMe();
-    if (!me.account) return "none";
+    if (!me.account) {
+      session.holdJoin = false;
+      return "none";
+    }
     session.account = me.account;
     if (me.view?.player?.id) {
       session.view = me.view;
       session.galaxySystem = me.view.planet.coords.system;
       session.joinDraft = me.view.player.name;
+      session.holdJoin = false;
       localStorage.setItem(SESSION_KEY, me.view.player.id);
       session.claimablePlayerId = null;
       syncSessionUrl({ replace: true });
@@ -607,6 +616,7 @@ export async function resumeFromCookie(): Promise<
     }
     const guest = localStorage.getItem(SESSION_KEY);
     session.claimablePlayerId = guest;
+    session.holdJoin = false;
     if (me.account.email) session.emailDraft = me.account.email;
     return "account";
   } catch (err) {
@@ -614,8 +624,10 @@ export async function resumeFromCookie(): Promise<
       localStorage.removeItem(SESSION_KEY);
       session.account = null;
       session.view = null;
+      session.holdJoin = false;
       return "logout";
     }
+    session.holdJoin = true;
     return "retry";
   }
 }

@@ -891,11 +891,13 @@ export function ensurePiratePopulation(
   if (universe.seedCursor && !universe.seedCursor.done) return;
   if (!universe.pirateBases) universe.pirateBases = {};
   if (!universe.alienBases) universe.alienBases = {};
+  // No occupancy data: placing would land on a planet this request did not load.
+  if (universe.skipPirateTopUp) return;
+  // Ranking every system is a few milliseconds. A budgeted page load skips it.
+  // The npc job (skipNpcRaids is false) still tops up under a Workers budget.
+  if (tickBudget() && universe.skipNpcRaids) return;
   let living = activePirateBases(universe).length;
   if (living >= PIRATE_TARGET_BASE_COUNT) return;
-  // Ranking every system is a few milliseconds. A budgeted job (the 10-minute
-  // cron) skips it. Destroyed bases still return on their respawn timer.
-  if (tickBudget() || universe.skipPirateTopUp) return;
   for (const base of Object.values(universe.pirateBases)) {
     ensurePirateBaseShape(base, now);
   }
@@ -1169,8 +1171,9 @@ function respawnDestroyedPirates(universe: UniverseState, now: number): void {
     if (base.destroyedAt == null) continue;
     if (now < pirateRespawnAt(base.destroyedAt, base.id)) continue;
     const site = findRespawnSite(universe, `${seed}:respawn:${base.id}:${now}`);
-    delete bases[id];
+    // A wreck stays until its replacement is actually placed.
     if (!site) continue;
+    delete bases[id];
     const next = createPirateBase(
       seed,
       site.galaxy,
@@ -1490,15 +1493,20 @@ function catchUpRaidsAlien(universe: UniverseState, base: AlienBase, now: number
 /**
  * Lazy AI catch-up: one in-memory pass over pirate and alien bases.
  * Pirates raid every 90 minutes. Aliens raid every hour. Page loads set
- * skipNpcRaids so this returns after the daily alien seed.
+ * skipNpcRaids so raids wait for the npc job, but top-up and respawn still run
+ * when occupancy was loaded.
  */
 export function tickPirates(universe: UniverseState, now: number): void {
   if (!universe.pirateBases) universe.pirateBases = {};
   if (!universe.alienBases) universe.alienBases = {};
   ensureAlienDailySeed(universe, now);
-  // Page loads must stay inside the CPU budget. Growth and raids run on the
-  // maintenance pass, which holds a full owned-planet set.
+  // Page loads skip raids, but a destroyed base still has to come back and a
+  // short universe still has to fill to 200 when this request loaded occupancy.
   if (universe.skipNpcRaids) {
+    if (!universe.skipPirateTopUp) {
+      ensurePiratePopulation(universe, now);
+      respawnDestroyedPirates(universe, now);
+    }
     universe.lastAiSimAt = now;
     return;
   }
