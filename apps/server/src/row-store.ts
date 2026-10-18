@@ -136,6 +136,7 @@ const OMIT_KEYS = new Set([
   "lastAiSimAt",
   "remainingSeconds",
   "skipNpcRaids",
+  "skipPirateTopUp",
 ]);
 
 function stable(value: unknown): string {
@@ -231,6 +232,7 @@ function worldDoc(universe: UniverseState): UniverseState {
     debris: {},
   };
   delete doc.skipNpcRaids;
+  delete doc.skipPirateTopUp;
   return doc;
 }
 
@@ -931,6 +933,9 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
       [],
     );
     await loadSystems(db, loaded, systemPairs(Object.values(loaded.universe.planets)));
+    // Placement walks every empty slot. This load does not have those rows,
+    // so a top-up here would drop a base onto a planet that is not in memory.
+    loaded.universe.skipPirateTopUp = true;
   } else if (work?.catalog) {
     const stubs = await all<{
       id: string;
@@ -1213,6 +1218,7 @@ function rerank(rows: HighscoreEntry[]): HighscoreEntry[] {
 async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boolean): Promise<void> {
   const universe = loaded.universe;
   delete universe.skipNpcRaids;
+  delete universe.skipPirateTopUp;
   const stmts: D1Stmt[] = [];
   let guards = 0;
   const newPlayerIds: string[] = [];

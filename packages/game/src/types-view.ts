@@ -526,6 +526,11 @@ export interface UniverseState {
    * maintenance pass instead of the page-load tick. Not persisted.
    */
   skipNpcRaids?: boolean;
+  /**
+   * The row-save NPC job does not have every empty slot in memory, so it
+   * must not place new bases. Not persisted.
+   */
+  skipPirateTopUp?: boolean;
 }
 
 export interface PirateBasePublic {

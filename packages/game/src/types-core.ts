@@ -373,7 +373,7 @@ export interface PirateTechs {
 
 /**
  * NPC pirate base (Micah redesign §5): levels to 100, defenses, 3h free ships,
- * split/coalition, hourly random nextRaidAt.
+ * split/coalition, nextRaidAt rolled inside the raid period.
  */
 export interface PirateBase {
   id: string;

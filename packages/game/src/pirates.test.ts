@@ -169,8 +169,8 @@ describe("pirate galaxy + raids", () => {
     assert.ok(at < periodStart + PIRATE_RAID_PERIOD_MS);
   });
 
-  it("raids pirates every 3 hours and aliens every hour", () => {
-    assert.equal(PIRATE_RAID_PERIOD_MS, 3 * 60 * 60 * 1000);
+  it("raids pirates every 90 minutes and aliens every hour", () => {
+    assert.equal(PIRATE_RAID_PERIOD_MS, 90 * 60 * 1000);
     assert.equal(ALIEN_RAID_PERIOD_MS, 60 * 60 * 1000);
   });
 });
@@ -656,10 +656,25 @@ describe("workers tick budget", () => {
       assert.equal(stillDue, 0);
       assert.ok(fired >= 1, "expected at least one pirate raid to resolve");
       assert.equal(fired + destroyed, dueIds.size);
-      // A 12-raid tick is usually ~5ms and sometimes ~12ms on a cold isolate.
-      // The budget stays at 24: the live rate is ~11 raids per 10 minutes, so a
-      // smaller cap would leave a 24h backlog. 16ms fails a real blow-up.
-      assert.ok(cpu < 16, `pirate combat job cpu ${cpu.toFixed(3)}ms`);
+      for (const [id, planet] of Object.entries(universe.planets)) {
+        if (!planet.ownerPlayerId) delete universe.planets[id];
+      }
+      const wave = 31;
+      let armed = 0;
+      for (const other of Object.values(universe.pirateBases ?? {})) {
+        if (other.destroyedAt != null) continue;
+        other.lastGrewAt = now;
+        other.lastFreeSpawnAt = now;
+        other.lastRaidAt = 0;
+        other.nextRaidAt = armed < wave ? now - 1 : now + PIRATE_RAID_PERIOD_MS;
+        armed += 1;
+      }
+      budget = npcJobBudget();
+      const waveBegan = performance.now();
+      tickPirates(universe, now);
+      const waveCpu = performance.now() - waveBegan;
+      console.log(`pirate job wave cpu ms ${waveCpu.toFixed(3)} due ${Math.min(wave, armed)}`);
+      assert.ok(waveCpu < 10, `pirate job wave cpu ${waveCpu.toFixed(3)}ms`);
     } finally {
       bindTickBudget(() => undefined);
       if (previous == null) delete process.env.STARHOLD_E2E;

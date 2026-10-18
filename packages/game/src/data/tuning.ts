@@ -1213,8 +1213,8 @@ export const PIRATE_GROWTH_INTERVAL_MS = PIRATE_LEVEL_GROWTH_INTERVAL_MS;
 
 export const PIRATE_TARGET_BASE_COUNT = 200;
 
-/** Once per 3 hours; each base rolls nextRaidAt = periodStart + offset. */
-export const PIRATE_RAID_PERIOD_MS = 3 * 60 * 60 * 1000;
+/** Once per 90 minutes; each base rolls nextRaidAt = periodStart + offset. */
+export const PIRATE_RAID_PERIOD_MS = 90 * 60 * 1000;
 /** Stretch / skip factor so pirate-vs-pirate is slightly less often. */
 export const PIRATE_VS_PIRATE_RAID_PERIOD_MULT = 1.25;
 /** @deprecated Prefer PIRATE_RAID_PERIOD_MS. */
@@ -1313,10 +1313,10 @@ export const WORKERS_TICK_SEED_MINIS = 1;
 export const WORKERS_TICK_SEED_PIRATES = 4;
 
 /**
- * 10-minute NPC job. 200 bases at one raid per 3 hours is about 12 dues per run.
- * 24 finishes a same-minute wave in under 3 hours without a second cron.
+ * 10-minute NPC job. 200 bases at one raid per 90 minutes is about 23 dues
+ * per run, and a real day peaks around 31. 36 clears that bucket in one pass.
  */
-export const NPC_JOB_RAID_BUDGET = 24;
+export const NPC_JOB_RAID_BUDGET = 36;
 export const NPC_JOB_LEVELUP_BUDGET = 80;
 export const NPC_JOB_FLEET_BUDGET = 8;
 
