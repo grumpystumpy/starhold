@@ -15,34 +15,121 @@ import type {
 const FRIENDLY_PARSE =
   "The server sent an unreadable response. Retry in a moment.";
 
+/** Cloudflare's HTML 502/503/504 (including Error 1102). Not a game lock. */
+export const OVERLOAD_MESSAGE =
+  "The server hiccuped. Checking whether your order went through…";
+
+export const NOT_APPLIED_MESSAGE = "Not applied — tap again.";
+
+export type ApiFailureKind = "busy" | "overload" | "server" | "network" | "client";
+
+export interface ApiFailureContext {
+  method: string;
+  path: string;
+  kind: ApiFailureKind;
+}
+
+export function classifyApiFailure(
+  message: string,
+  status: number,
+  bodyWasJson: boolean,
+  raw = "",
+): ApiFailureKind {
+  if (message.startsWith("Universe busy")) return "busy";
+  if (status === 0) return "network";
+  const platform =
+    status === 502 ||
+    status === 503 ||
+    status === 504 ||
+    status === 1102 ||
+    /1102|exceeded resource/i.test(raw);
+  if (platform && !bodyWasJson) return "overload";
+  if (status >= 500) return "server";
+  return "client";
+}
+
 export class ApiError extends Error {
   readonly status: number;
   readonly retryable: boolean;
+  readonly kind: ApiFailureKind;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, kind?: ApiFailureKind) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.kind = kind ?? classifyApiFailure(message, status, false);
     this.retryable =
       status === 0 || status === 408 || status === 429 || status >= 500;
   }
 }
 
-let reportApiFailure: (status: number, message: string) => void = () => {};
+let reportApiFailure: (
+  status: number,
+  message: string,
+  ctx?: ApiFailureContext,
+) => void = () => {};
 
 export function setApiFailureReporter(
-  fn: (status: number, message: string) => void,
+  fn: (status: number, message: string, ctx?: ApiFailureContext) => void,
 ): void {
   reportApiFailure = fn;
 }
 
+let onStatePollOk: () => void = () => {};
+
+/** Telemetry resets the quiet-poll counter after a state GET succeeds. */
+export function setStatePollOkHandler(fn: () => void): void {
+  onStatePollOk = fn;
+}
+
 function friendlyStatus(status: number): string {
   if (status === 401) return "Sign in required.";
-  if (status === 503 || status === 502 || status === 504) {
-    return "Universe busy — retry in a moment.";
-  }
+  if (status === 503 || status === 502 || status === 504) return OVERLOAD_MESSAGE;
   if (status >= 500 || status === 0) return "Something went wrong. Retry in a moment.";
   return "Request failed. Retry in a moment.";
+}
+
+function pathOnly(input: RequestInfo | URL): string {
+  let raw = "";
+  if (typeof input === "string") raw = input;
+  else if (input instanceof URL) raw = `${input.pathname}${input.search}`;
+  else raw = input.url;
+  try {
+    if (raw.startsWith("http://") || raw.startsWith("https://")) {
+      raw = new URL(raw).pathname + new URL(raw).search;
+    }
+  } catch {
+    /* relative */
+  }
+  const q = raw.indexOf("?");
+  return q === -1 ? raw : raw.slice(0, q);
+}
+
+interface RequestMeta {
+  method: string;
+  path: string;
+}
+
+const requestMeta = new WeakMap<Response, RequestMeta>();
+
+function fail(
+  res: Response,
+  message: string,
+  bodyWasJson: boolean,
+  raw = "",
+): never {
+  const meta = requestMeta.get(res) ?? {
+    method: "GET",
+    path: pathOnly(res.url || ""),
+  };
+  const kind = classifyApiFailure(message, res.status || 0, bodyWasJson, raw);
+  const err = new ApiError(message, res.status || 0, kind);
+  reportApiFailure(err.status, err.message, {
+    method: meta.method,
+    path: meta.path,
+    kind,
+  });
+  throw err;
 }
 
 /** Never surface JSON.parse / WebKit "expected pattern" errors to players. */
@@ -51,21 +138,16 @@ export async function parse<T>(res: Response): Promise<T> {
   try {
     text = await res.text();
   } catch {
-    const err = new ApiError(FRIENDLY_PARSE, res.status || 0);
-    reportApiFailure(err.status, err.message);
-    throw err;
+    fail(res, res.ok ? FRIENDLY_PARSE : friendlyStatus(res.status), false);
   }
   let data: (T & { error?: string }) | null = null;
+  let bodyWasJson = false;
   if (text) {
     try {
       data = JSON.parse(text) as T & { error?: string };
+      bodyWasJson = true;
     } catch {
-      const err = new ApiError(
-        res.ok ? FRIENDLY_PARSE : friendlyStatus(res.status),
-        res.status || 0,
-      );
-      reportApiFailure(err.status, err.message);
-      throw err;
+      fail(res, res.ok ? FRIENDLY_PARSE : friendlyStatus(res.status), false, text);
     }
   }
   if (!res.ok) {
@@ -75,14 +157,10 @@ export async function parse<T>(res: Response): Promise<T> {
       serverMessage && !/expected pattern|SyntaxError|JSON\.parse/i.test(serverMessage)
         ? serverMessage
         : friendlyStatus(res.status);
-    const err = new ApiError(message, res.status);
-    reportApiFailure(err.status, err.message);
-    throw err;
+    fail(res, message, bodyWasJson, text);
   }
   if (data == null) {
-    const err = new ApiError(FRIENDLY_PARSE, res.status || 0);
-    reportApiFailure(err.status, err.message);
-    throw err;
+    fail(res, FRIENDLY_PARSE, bodyWasJson, text);
   }
   return data;
 }
@@ -137,7 +215,17 @@ const credFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   const method = (
     init?.method ?? (input instanceof Request ? input.method : "GET")
   ).toUpperCase();
-  const res = await fetch(input, { credentials: "include", ...init });
+  const path = pathOnly(input);
+  let res: Response;
+  try {
+    res = await fetch(input, { credentials: "include", ...init });
+  } catch {
+    const message = "Something went wrong. Retry in a moment.";
+    const err = new ApiError(message, 0, "network");
+    reportApiFailure(0, message, { method, path, kind: "network" });
+    throw err;
+  }
+  requestMeta.set(res, { method, path });
   if (method !== "GET" && method !== "HEAD" && res.ok) {
     afterPlayerMutation?.();
   }
@@ -267,6 +355,7 @@ export async function fetchState(
   playerId: string,
   galaxy?: number,
   system?: number,
+  opts?: { fresh?: boolean },
 ): Promise<PlayerView> {
   const params = new URLSearchParams();
   params.set("playerId", playerId);
@@ -274,9 +363,10 @@ export async function fetchState(
   if (system) params.set("system", String(system));
   const key = stateCacheKey(playerId, galaxy, system);
   const cached = stateCache.get(key);
+  const fresh = opts?.fresh === true;
   const headers: Record<string, string> = {};
-  if (cached?.etag) headers["If-None-Match"] = cached.etag;
-  if ((cached?.view.officerCatalog?.length ?? 0) > 0) {
+  if (!fresh && cached?.etag) headers["If-None-Match"] = cached.etag;
+  if (!fresh && (cached?.view.officerCatalog?.length ?? 0) > 0) {
     headers["X-Starhold-Have-Catalogs"] = "1";
   }
   const res = await credFetch(`/api/state?${params.toString()}`, { headers });
@@ -296,6 +386,7 @@ export async function fetchState(
       },
     };
     stateCache.set(key, { etag: etag ?? cached.etag, view });
+    onStatePollOk();
     return view;
   }
   let view: PlayerView = data;
@@ -311,6 +402,7 @@ export async function fetchState(
     };
   }
   stateCache.set(key, { etag, view });
+  onStatePollOk();
   return view;
 }
 

@@ -1,0 +1,7 @@
+{
+  "id": "fixture-commander",
+  "name": "Old Hand",
+  "buildings": { "metalMine": 4, "shipyard": 1 },
+  "resources": { "metal": 4321, "crystal": 80, "deuterium": 10 },
+  "fleets": []
+}

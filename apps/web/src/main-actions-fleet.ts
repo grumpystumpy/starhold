@@ -21,6 +21,7 @@ import {
   setFlash,
 } from "./session";
 import { captureGameEvent } from "./telemetry";
+import { settleMutation } from "./recover-action";
 
 function intentMission(intent: FleetPresetIntent): MissionType {
   switch (intent) {
@@ -38,6 +39,33 @@ function intentMission(intent: FleetPresetIntent): MissionType {
       return _exhaustive;
     }
   }
+}
+
+function fleetNotice(view: NonNullable<typeof session.view>, mission: MissionType): string {
+  const live = view.fleets?.[0];
+  return live
+    ? `Fleet ${live.mission} launched · ETA ${Math.ceil((live.arrivesAt - view.now) / 1000)}s.`
+    : `Fleet ${mission} launched.`;
+}
+
+function expeditionNotice(view: NonNullable<typeof session.view>, before: number): string {
+  const launched = Math.max(
+    0,
+    view.fleets.filter((f) => f.mission === "expedition").length - before,
+  );
+  return launched > 0
+    ? `Sent ${launched} expedition${launched === 1 ? "" : "s"} (Expedition preset).`
+    : "No new expeditions launched.";
+}
+
+function scanNotice(view: NonNullable<typeof session.view>, before: number): string {
+  const launched = Math.max(
+    0,
+    view.fleets.filter((f) => f.mission === "espionage").length - before,
+  );
+  return launched > 0
+    ? `Scanning ${launched} owned planet${launched === 1 ? "" : "s"} with Whisper Probes.`
+    : "No scans launched.";
 }
 
 export async function doLaunchFleet(opts: {
@@ -64,18 +92,15 @@ export async function doLaunchFleet(opts: {
   captureGameEvent("fleet_send", { mission: opts.mission });
   try {
     session.view = await launchFleetMission(session.view.player.id, opts);
-    const live = session.view.fleets?.[0];
-    setFlash(
-      "notice",
-      live
-        ? `Fleet ${live.mission} launched · ETA ${Math.ceil((live.arrivesAt - session.view.now) / 1000)}s.`
-        : `Fleet ${opts.mission} launched.`,
-    );
+    setFlash("notice", fleetNotice(session.view, opts.mission));
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Launch failed.",
-    );
+    const before = new Set((session.view?.fleets ?? []).map((fleet) => fleet.id));
+    await settleMutation({
+      err,
+      failureFallback: "Launch failed.",
+      applied: (view) => view.fleets.some((fleet) => !before.has(fleet.id)),
+      successNotice: (view) => fleetNotice(view, opts.mission),
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -236,20 +261,16 @@ export async function doLaunchMaxExpeditions(): Promise<void> {
       system: session.view.galaxy.system,
       originPlanetId: session.view.planet.id,
     });
-    const after = session.view.fleets.filter((f) => f.mission === "expedition")
-      .length;
-    const launched = Math.max(0, after - before);
-    setFlash(
-      "notice",
-      launched > 0
-        ? `Sent ${launched} expedition${launched === 1 ? "" : "s"} (Expedition preset).`
-        : "No new expeditions launched.",
-    );
+    setFlash("notice", expeditionNotice(session.view, before));
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Max expeditions failed.",
-    );
+    const before = session.view?.fleets.filter((f) => f.mission === "expedition").length ?? 0;
+    await settleMutation({
+      err,
+      failureFallback: "Max expeditions failed.",
+      applied: (view) =>
+        view.fleets.filter((f) => f.mission === "expedition").length > before,
+      successNotice: (view) => expeditionNotice(view, before),
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -274,20 +295,16 @@ export async function doScanSystem(): Promise<void> {
       system: session.view.galaxy.system,
       originPlanetId: session.view.planet.id,
     });
-    const after = session.view.fleets.filter((f) => f.mission === "espionage")
-      .length;
-    const launched = Math.max(0, after - before);
-    setFlash(
-      "notice",
-      launched > 0
-        ? `Scanning ${launched} owned planet${launched === 1 ? "" : "s"} with Whisper Probes.`
-        : "No scans launched.",
-    );
+    setFlash("notice", scanNotice(session.view, before));
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "System scan failed.",
-    );
+    const before = session.view?.fleets.filter((f) => f.mission === "espionage").length ?? 0;
+    await settleMutation({
+      err,
+      failureFallback: "Scan failed.",
+      applied: (view) =>
+        view.fleets.filter((f) => f.mission === "espionage").length > before,
+      successNotice: (view) => scanNotice(view, before),
+    });
   } finally {
     session.busy = false;
     schedulePaint();
