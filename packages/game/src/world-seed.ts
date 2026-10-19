@@ -4,6 +4,9 @@ import { seedAsteroidsInSystem } from "./world-asteroids.js";
 import { seedMinisInSystem } from "./world-mini.js";
 import { pirateRankKey, placePiratesFromRanked } from "./world-pirates.js";
 
+/** Bump when pirateRankKey changes so unfinished cursors re-rank. */
+export const PIRATE_RANK_VERSION = 2;
+
 export interface SeedSliceLimits {
   systems: number;
   minis: number;
@@ -56,16 +59,17 @@ export function continueUniverseSeed(
   // pirates on that same call blows the Workers CPU budget.
   if (finishedScan) return true;
 
-  if (!cursor.sorted) {
-    // Recompute every key so a cursor that was partly scanned before the
-    // rank-key change (CI-02) still sorts with one consistent algorithm.
-    // A cursor that was already sorted keeps its order; placement skips
-    // occupied systems, so that stays safe.
-    for (const row of cursor.ranks) row.k = pirateRankKey(seed, row.g, row.s);
-    cursor.ranks.sort(
-      (a, b) => a.k - b.k || a.g - b.g || a.s - b.s,
-    );
+  // CI-02: rank keys changed. Re-rank every unplaced row once with the
+  // current key, whether or not the cursor was sorted under the old one.
+  // Rows before rankAt were already placed or skipped and stay as they are.
+  if (!cursor.sorted || cursor.rankVersion !== PIRATE_RANK_VERSION) {
+    const from = cursor.sorted ? (cursor.rankAt ?? 0) : 0;
+    const tail = cursor.ranks.slice(from);
+    for (const row of tail) row.k = pirateRankKey(seed, row.g, row.s);
+    tail.sort((a, b) => a.k - b.k || a.g - b.g || a.s - b.s);
+    cursor.ranks.splice(from, tail.length, ...tail);
     cursor.sorted = true;
+    cursor.rankVersion = PIRATE_RANK_VERSION;
   }
   const start = cursor.rankAt ?? 0;
   const ranked = cursor.ranks.slice(start).map((row) => ({

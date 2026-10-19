@@ -592,6 +592,36 @@ describe("lazy seed rank keys", () => {
   });
 });
 
+describe("lazy seed cursor sorted with the old key", () => {
+  it("re-ranks the unplaced tail once, then keeps placing in the new order", () => {
+    const universe = createUniverse("Lazy Sorted", 8, 8, { lazySeed: true });
+    const limits = { systems: 500, minis: 10_000, pirates: 20 };
+    let guard = 0;
+    // Finish the scan, then fake a cursor sorted and partly placed with old keys.
+    while (universe.seedCursor && !universe.seedCursor.done && !universe.seedCursor.sorted && guard++ < 200) {
+      const c = universe.seedCursor;
+      if (c.ranks && c.at >= MAP_GALAXIES * MAP_SYSTEMS) {
+        for (const row of c.ranks) row.k = row.g;
+        c.ranks.sort((a, b) => a.k - b.k || a.g - b.g || a.s - b.s);
+        c.sorted = true;
+        c.rankAt = 0;
+        delete c.rankVersion;
+        break;
+      }
+      continueUniverseSeed(universe, Date.now(), limits);
+    }
+    guard = 0;
+    while (universe.seedCursor && !universe.seedCursor.done && guard++ < 200) {
+      continueUniverseSeed(universe, Date.now(), limits);
+    }
+    const per = new Array<number>(MAP_GALAXIES + 1).fill(0);
+    for (const b of activePirateBases(universe)) per[b.coords.galaxy] += 1;
+    for (let g = 1; g <= MAP_GALAXIES; g++) {
+      assert.ok(per[g] >= 5, `galaxy ${g}: ${per[g]} (${per.slice(1).join(",")})`);
+    }
+  });
+});
+
 // silence unused in case of tree shake
 void MAP_GALAXIES;
 void (0 as UniverseState | 0);
