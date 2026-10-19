@@ -25,6 +25,7 @@ export function shipRow(
   _busy: boolean,
 ): string {
   const def = SHIPS[id];
+  const count = planet.ships?.[id] ?? 0;
   const yard = planet.buildings.shipyard ?? 0;
   const locked = yard < def.shipyardLevel;
   const affordable = canAfford(planet.resources, def.cost);
@@ -57,7 +58,7 @@ export function shipRow(
     <article class="item item-thumb" data-testid="ship-${id}">
       <img class="thumb" src="${SHIP_ART[id]}" alt="" width="48" height="48" />
       <div>
-        <h3>${escapeHtml(def.name)} ${tip.html}</h3>
+        <h3>${escapeHtml(def.name)} <span class="meta">Owned ${fmt(count)}</span> ${tip.html}</h3>
         <p>${escapeHtml(def.description)}</p>
         <div class="meta">${fmtCost(def.cost)} each · yard L${fmt(def.shipyardLevel)}+ · cargo ${fmt(def.cargo)} · atk ${fmt(def.attack)}${
           locked ? ` · ${escapeHtml(lockMsg)}` : ""
@@ -108,7 +109,7 @@ export function defenseRow(
     <article class="item item-thumb" data-testid="defense-${id}">
       <img class="thumb" src="${DEFENSE_ART[id]}" alt="" width="48" height="48" />
       <div>
-        <h3>${escapeHtml(def.name)} <span class="meta">×${fmt(have)}</span> ${tip.html}</h3>
+        <h3>${escapeHtml(def.name)} <span class="meta">Owned ${fmt(have)}</span> ${tip.html}</h3>
         <p>${escapeHtml(def.description)}</p>
         <div class="meta">${fmtCost(cost)} each · yard L${fmt(def.shipyardLevel)}+ · atk ${fmt(def.attack)}</div>
       </div>

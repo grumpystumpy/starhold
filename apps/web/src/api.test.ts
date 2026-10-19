@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it, mock } from "node:test";
 import {
   ApiError,
+  fetchState,
+  GET_TIMEOUT_MS,
   OVERLOAD_MESSAGE,
   parse,
+  POST_TIMEOUT_MS,
   setApiFailureReporter,
+  TIMEOUT_MESSAGE,
   upgradeBuilding,
   type ApiFailureContext,
 } from "./api";
@@ -111,5 +115,87 @@ describe("safe JSON parse", () => {
     assert.equal(seen[0]?.ctx?.path, "/api/upgrade");
     assert.equal(seen[0]?.ctx?.kind, "overload");
     assert.doesNotMatch(seen[0]?.message ?? "", /Universe busy|\?/);
+  });
+});
+
+describe("credFetch timeout", () => {
+  it("a GET that never answers rejects with kind timeout at 15 s fake time", async () => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    const seen: Array<{ status: number; message: string; ctx?: ApiFailureContext }> = [];
+    setApiFailureReporter((status, message, ctx) => {
+      seen.push({ status, message, ctx });
+    });
+    const original = globalThis.fetch;
+    globalThis.fetch = (_input, init) => {
+      return new Promise<Response>((_resolve, reject) => {
+        if (init?.signal) {
+          init.signal.addEventListener("abort", () => {
+            reject(new DOMException("The operation was aborted.", "AbortError"));
+          });
+        }
+      });
+    };
+
+    try {
+      const promise = fetchState("p1");
+      mock.timers.tick(GET_TIMEOUT_MS);
+      await assert.rejects(promise, (err: unknown) => {
+        assert.ok(err instanceof ApiError);
+        assert.equal(err.status, 0);
+        assert.equal(err.kind, "timeout");
+        assert.equal(err.retryable, true);
+        assert.equal(err.message, TIMEOUT_MESSAGE);
+        return true;
+      });
+      assert.equal(seen.length, 1);
+      assert.equal(seen[0]?.status, 0);
+      assert.equal(seen[0]?.ctx?.method, "GET");
+      assert.equal(seen[0]?.ctx?.path, "/api/state");
+      assert.equal(seen[0]?.ctx?.kind, "timeout");
+    } finally {
+      globalThis.fetch = original;
+      setApiFailureReporter(() => {});
+      mock.timers.reset();
+    }
+  });
+
+  it("a POST that never answers rejects with kind timeout at 20 s fake time", async () => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    const seen: Array<{ status: number; message: string; ctx?: ApiFailureContext }> = [];
+    setApiFailureReporter((status, message, ctx) => {
+      seen.push({ status, message, ctx });
+    });
+    const original = globalThis.fetch;
+    globalThis.fetch = (_input, init) => {
+      return new Promise<Response>((_resolve, reject) => {
+        if (init?.signal) {
+          init.signal.addEventListener("abort", () => {
+            reject(new DOMException("The operation was aborted.", "AbortError"));
+          });
+        }
+      });
+    };
+
+    try {
+      const promise = upgradeBuilding("p1", "shipyard");
+      mock.timers.tick(POST_TIMEOUT_MS);
+      await assert.rejects(promise, (err: unknown) => {
+        assert.ok(err instanceof ApiError);
+        assert.equal(err.status, 0);
+        assert.equal(err.kind, "timeout");
+        assert.equal(err.retryable, true);
+        assert.equal(err.message, TIMEOUT_MESSAGE);
+        return true;
+      });
+      assert.equal(seen.length, 1);
+      assert.equal(seen[0]?.status, 0);
+      assert.equal(seen[0]?.ctx?.method, "POST");
+      assert.equal(seen[0]?.ctx?.path, "/api/upgrade");
+      assert.equal(seen[0]?.ctx?.kind, "timeout");
+    } finally {
+      globalThis.fetch = original;
+      setApiFailureReporter(() => {});
+      mock.timers.reset();
+    }
   });
 });
