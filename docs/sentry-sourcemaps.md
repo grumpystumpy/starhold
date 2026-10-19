@@ -8,4 +8,4 @@ The root build runs `npm run check:sourcemaps` after the web build. This check f
 
 Create an ignored `.env.sentry` file in the repository root with the Sentry values `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`, and `SENTRY_DSN`. Add `POSTHOG_KEY` if the production client should enable PostHog. Set `CLOUDFLARE_API_TOKEN` in the shell. Keep these values out of source control.
 
-Run `npm run deploy:prod` to build the game, server, and web client, upload Worker source maps to Sentry, then deploy with Wrangler. The web build uploads its maps through the Vite plugin. This command deploys to production; review the build and credentials before running it.
+Run `npm run deploy:prod` to build the game, server, and web client, upload web and Worker source maps to Sentry, apply D1 migrations with `wrangler d1 migrations apply starhold --remote`, then run `wrangler deploy`. The Worker upload injects debug IDs before upload. The web build uploads its maps through the Vite plugin. A migration failure stops the deploy.
