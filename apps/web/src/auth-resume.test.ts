@@ -62,6 +62,8 @@ describe("server error screen", () => {
     });
     assert.match(html, /data-testid="reconnect"/);
     assert.match(html, /Reconnecting/);
+    assert.match(html, /Couldn't sign in — try again/);
+    assert.doesNotMatch(html, /your commander is still saved/);
     assert.doesNotMatch(html, /data-testid="join-form"/);
     assert.doesNotMatch(html, /data-testid="auth-form"/);
     assert.doesNotMatch(html, /id="join-form"/);
