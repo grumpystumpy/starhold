@@ -752,6 +752,21 @@ export function createAlienBase(
   );
 }
 
+/**
+ * Rank key for pirate spawn sites. FNV-1a alone barely changes for keys
+ * that differ only in the last characters, so whole galaxies sorted
+ * together and some got 0 pirates. The murmur3 finalizer spreads the keys.
+ */
+export function pirateRankKey(seed: string, galaxy: number, system: number): number {
+  let h = hashSeed(`${seed}:pirate-rank:${galaxy}:${system}`);
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
+  return h >>> 0;
+}
+
 function collectPirateSpawnSites(
   universe: UniverseState,
   seed: string,
@@ -774,7 +789,7 @@ function collectPirateSpawnSites(
   for (let galaxy = 1; galaxy <= MAP_GALAXIES; galaxy++) {
     for (let system = 1; system <= MAP_SYSTEMS; system++) {
       ranked.push({
-        key: hashSeed(`${seed}:pirate-rank:${galaxy}:${system}`),
+        key: pirateRankKey(seed, galaxy, system),
         galaxy,
         system,
       });

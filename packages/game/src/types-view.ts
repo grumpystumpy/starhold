@@ -469,6 +469,8 @@ export interface UniverseSeedCursor {
   sorted?: boolean;
   /** Next index in the sorted rank list. */
   rankAt?: number;
+  /** Rank-key version the rows were sorted with (CI-02). Missing = old key. */
+  rankVersion?: number;
   pirates: number;
   done?: boolean;
   /**

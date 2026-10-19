@@ -4,7 +4,7 @@ type PostHog = {
   init: (key: string, options: Record<string, unknown>) => void;
   capture: (event: string, properties?: Record<string, unknown>) => void;
   identify: (id: string, properties?: Record<string, unknown>) => void;
-  captureException?: (error: unknown) => void;
+  captureException: (error: unknown, props?: Record<string, unknown>) => void;
 };
 
 let posthog: PostHog | null = null;
@@ -18,16 +18,16 @@ type SentryHint = {
 };
 
 let testSentry: ((err: unknown, hint: SentryHint) => void) | null = null;
-let testPosthog: ((event: string, props: Record<string, unknown>) => void) | null = null;
+let testPosthogException: ((err: unknown, props: Record<string, unknown>) => void) | null = null;
 
 export function setTelemetrySinkForTests(
   sink: {
     sentry?: ((err: unknown, hint: SentryHint) => void) | null;
-    posthog?: ((event: string, props: Record<string, unknown>) => void) | null;
+    posthogException?: ((err: unknown, props: Record<string, unknown>) => void) | null;
   } | null,
 ): void {
   testSentry = sink?.sentry ?? null;
-  testPosthog = sink?.posthog ?? null;
+  testPosthogException = sink?.posthogException ?? null;
 }
 
 export function resetFailureStateForTests(): void {
@@ -110,13 +110,12 @@ export async function reportFailure(
     Sentry.captureException(err, hint);
   }
   const props = {
-    $exception_message: plan.safe,
-    $exception_type: "ApiError",
     ...plan.tags,
     level: plan.level,
+    $exception_fingerprint: plan.fingerprint.join(":"),
   };
-  if (testPosthog) testPosthog("$exception", props);
-  else posthog?.capture("$exception", props);
+  if (testPosthogException) testPosthogException(err, props);
+  else posthog?.captureException(err, props);
 }
 
 setStatePollOkHandler(() => {

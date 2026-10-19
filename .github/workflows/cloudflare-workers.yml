@@ -13,6 +13,9 @@ permissions:
 jobs:
   deploy:
     if: github.ref == 'refs/heads/main' && vars.CLOUDFLARE_DEPLOY_ENABLED == 'true'
+    # Production secrets (Cloudflare, Sentry, PostHog) live in this protected
+    # environment: main branch only, and Micah (grumpystumpy) approves each run.
+    environment: production
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
