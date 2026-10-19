@@ -8,6 +8,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { sentryInjectArgs, sentryUploadArgs } from "./sentry-cli-args.mjs";
 
 const token = process.env.SENTRY_AUTH_TOKEN?.trim();
 const org = process.env.SENTRY_ORG?.trim();
@@ -32,18 +33,19 @@ if (dry.status !== 0) {
   process.exit(dry.status ?? 1);
 }
 
+const inject = spawnSync(
+  "npx",
+  sentryInjectArgs(out),
+  { stdio: "inherit", cwd: root, env: process.env },
+);
+if (inject.status !== 0) {
+  console.error("sentry: debug ID injection failed; Worker source maps were not uploaded");
+  process.exit(inject.status ?? 1);
+}
+
 const upload = spawnSync(
   "npx",
-  [
-    "sentry-cli",
-    "sourcemaps",
-    "upload",
-    "--org",
-    org,
-    "--project",
-    project,
-    out,
-  ],
+  sentryUploadArgs({ org, project, outdir: out }),
   { stdio: "inherit", cwd: root, env: process.env },
 );
 process.exit(upload.status ?? 1);
