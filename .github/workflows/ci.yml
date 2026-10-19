@@ -1,13 +1,22 @@
 name: CI
 
-# GitHub Actions only. Do not call the Vercel CLI, a project deploy hook,
-# or a Vercel API token from this workflow. Production builds come from
-# the Git integration on main. vercel.json skips every other branch, and
-# docs/tests/scripts-only commits.
+# GitHub Actions only. Never deploy from this workflow and never call the
+# Vercel CLI, a deploy hook, or a Cloudflare/Vercel API token here.
+# Deploys are separate (see docs/hosting.md) and need Micah's approval.
+#
+# Runs once per PR (pull_request) and once per push to main. Pushing to a
+# feature branch without a PR does not run CI, so each PR is not tested twice.
+# The job name `unit-and-e2e` is the required check in the protect-main
+# ruleset; keep it unchanged.
 
 on:
   push:
+    branches: [main]
   pull_request:
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
