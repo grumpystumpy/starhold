@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { continueUniverseSeed } from "./world-seed.js";
 import {
   ALIEN_BUILDUP_MS,
   ALIEN_INITIAL_BASE_COUNT,
@@ -568,6 +569,25 @@ describe("pirate spread across galaxies", () => {
       for (let g = 1; g <= MAP_GALAXIES; g++) {
         assert.ok(per[g] >= 5, `universe ${i} galaxy ${g}: ${per[g]} pirates (${per.slice(1).join(",")})`);
       }
+    }
+  });
+});
+
+describe("lazy seed rank keys", () => {
+  it("re-ranks a cursor scanned with old keys before sorting", () => {
+    const universe = createUniverse("Lazy Spread", 8, 8, { lazySeed: true });
+    const limits = { systems: 500, minis: 10_000, pirates: 50 };
+    let guard = 0;
+    while (universe.seedCursor && !universe.seedCursor.done && guard++ < 200) {
+      const c = universe.seedCursor;
+      // Simulate a cursor persisted before the fix: stale keys, unsorted.
+      if (!c.sorted && c.ranks) for (const row of c.ranks) row.k = row.g;
+      continueUniverseSeed(universe, Date.now(), limits);
+    }
+    const per = new Array<number>(MAP_GALAXIES + 1).fill(0);
+    for (const b of activePirateBases(universe)) per[b.coords.galaxy] += 1;
+    for (let g = 1; g <= MAP_GALAXIES; g++) {
+      assert.ok(per[g] >= 5, `galaxy ${g}: ${per[g]} (${per.slice(1).join(",")})`);
     }
   });
 });

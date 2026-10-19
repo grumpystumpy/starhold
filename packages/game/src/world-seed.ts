@@ -57,6 +57,11 @@ export function continueUniverseSeed(
   if (finishedScan) return true;
 
   if (!cursor.sorted) {
+    // Recompute every key so a cursor that was partly scanned before the
+    // rank-key change (CI-02) still sorts with one consistent algorithm.
+    // A cursor that was already sorted keeps its order; placement skips
+    // occupied systems, so that stays safe.
+    for (const row of cursor.ranks) row.k = pirateRankKey(seed, row.g, row.s);
     cursor.ranks.sort(
       (a, b) => a.k - b.k || a.g - b.g || a.s - b.s,
     );
