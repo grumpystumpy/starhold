@@ -38,18 +38,37 @@ async function apiJson(path, init) {
   return res.json();
 }
 
+// Wait on the server's own progress: sleep until the build queue's endsAt
+// and until production (economy.productionPerHour) should cover the gap,
+// re-reading state between sleeps (1s-20s each). The deadline is the larger
+// of `ms` and the server's own ETA plus a 2-minute margin, capped at 15 min,
+// so a slow fresh Workers universe doesn't fail on a fixed clock.
 async function waitMetal(playerId, minMetal, ms = 360_000) {
   const start = Date.now();
-  while (Date.now() - start < ms) {
+  let deadline = start + ms;
+  let last = null;
+  while (Date.now() < deadline) {
     const st = await apiJson(`/api/state?playerId=${encodeURIComponent(playerId)}`);
+    if (st?.error) throw new Error(`waitMetal state: ${st.error}`);
     const buildQ = st.planet.buildQueue;
     const buildIdle = !buildQ || (Array.isArray(buildQ) ? buildQ.length === 0 : false);
-    if (st.planet.resources.metal >= minMetal && buildIdle) {
+    const metal = st.planet.resources.metal;
+    if (metal >= minMetal && buildIdle) {
       return st;
     }
-    await new Promise((r) => setTimeout(r, 1000));
+    const now = Date.now();
+    const queueEnd = Array.isArray(buildQ)
+      ? Math.max(0, ...buildQ.map((q) => q.endsAt ?? 0))
+      : 0;
+    const rate = st.economy?.productionPerHour?.metal ?? 0;
+    const metalEta = rate > 0 ? now + ((minMetal - metal) / rate) * 3_600_000 : 0;
+    const eta = Math.max(queueEnd, metalEta);
+    if (eta > 0) deadline = Math.max(deadline, Math.min(start + 900_000, eta + 120_000));
+    last = { metal: Math.floor(metal), rate, queue: buildQ?.length ?? 0, etaS: eta ? Math.round((eta - now) / 1000) : null };
+    const sleep = Math.min(20_000, Math.max(1_000, eta - now));
+    await new Promise((r) => setTimeout(r, sleep));
   }
-  throw new Error(`timeout waiting for ${minMetal} metal`);
+  throw new Error(`timeout waiting for ${minMetal} metal: ${JSON.stringify(last)}`);
 }
 
 async function apiSmoke() {
@@ -287,25 +306,33 @@ async function uiSmoke() {
   const homeGalaxy = await page.evaluate(
     () => window.starhold?.getState()?.galaxy?.galaxy ?? 1,
   );
-  let pirateHit = null;
-  const galaxyOrder = [
-    homeGalaxy,
-    ...Array.from({ length: 10 }, (_, i) => i + 1).filter((g) => g !== homeGalaxy),
-  ];
-  for (const galaxy of galaxyOrder) {
-    if (pirateHit) break;
+  // Workers seeds pirates lazily, a few per request (world-seed.ts), so a
+  // fresh local universe may not have placed them yet. Scan the home galaxy
+  // once. If it's empty and the API is local, advance the seed with up to
+  // 150 plain state reads, then scan once more. Worst case: 399+150+399
+  // local requests, once per run. Node (CI) seeds eagerly and never waits.
+  const scanHome = async () => {
     for (let system = 1; system <= 399; system++) {
       const st = await apiJson(
-        `/api/state?playerId=${encodeURIComponent(playerIdForPirate)}&galaxy=${galaxy}&system=${system}`,
+        `/api/state?playerId=${encodeURIComponent(playerIdForPirate)}&galaxy=${homeGalaxy}&system=${system}`,
       );
-      if (st.galaxy?.pirateBase) {
-        pirateHit = st.galaxy.pirateBase;
-        break;
-      }
+      if (st?.error) throw new Error(`pirate scan ${homeGalaxy}:${system}: ${st.error}`);
+      if (st.galaxy?.pirateBase) return st.galaxy.pirateBase;
     }
+    return null;
+  };
+  let pirateHit = await scanHome();
+  const localApi = /^https?:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/.test(API);
+  if (!pirateHit && localApi) {
+    console.log("Pirate seed wait: 150 state reads, then one rescan");
+    logs.push("pirate-seed-wait");
+    for (let i = 0; i < 150; i++) {
+      await apiJson(`/api/state?playerId=${encodeURIComponent(playerIdForPirate)}`);
+    }
+    pirateHit = await scanHome();
   }
-  if (!pirateHit) throw new Error("API found no pirate bases (expected ~200)");
-  if (pirateHit.coords.galaxy !== homeGalaxy) {
+  // The UI can't cross galaxies (S2-F2), so only the home galaxy counts.
+  if (!pirateHit) {
     throw new Error(
       `no pirate in home galaxy ${homeGalaxy}; UI cannot cross galaxies`,
     );
@@ -319,7 +346,7 @@ async function uiSmoke() {
   for (let i = 0; i < 450 && !foundPirate; i++) {
     const before =
       (await page.textContent('[data-testid="galaxy-label"]')) ?? "";
-    if (before.startsWith(targetLabel)) {
+    if (before.startsWith(`${targetLabel} `)) {
       foundPirate =
         (await page.locator('[data-testid="galaxy-pirate"]').count()) > 0;
       break;
@@ -401,7 +428,11 @@ async function uiSmoke() {
       undefined,
       { timeout: 15_000 },
     );
-    await page.waitForFunction(
+    // pollUntil asks the server each loop (tick-on-read); background polls
+    // are 30 s apart, which a fresh, still-seeding Workers universe can miss.
+    await pollUntil(
+      page,
+      "shipyard built",
       () => {
         const lvl =
           document.querySelector('[data-testid="building-level-shipyard"]')
@@ -410,8 +441,7 @@ async function uiSmoke() {
         const st = window.starhold?.getState();
         return (lvl.includes("L1") || (st?.buildings?.shipyard ?? 0) >= 1) && !queue;
       },
-      undefined,
-      { timeout: 30_000 },
+      90_000,
     );
   } finally {
     await page.evaluate((id) => window.clearInterval(id), pollHammer);
@@ -684,16 +714,36 @@ async function uiSmoke() {
   }
   logs.push("ui-fleet-mission-launch");
 
-  await pollUntil(
-    page,
-    "fleet report",
-    () => {
+  // Flight time grows with distance to the rival (a reused DB has more
+  // players, so the rival can sit several systems away). Recompute the
+  // deadline on every poll from the fleets' current arrivesAt (+60s margin,
+  // at least 2 min from launch), capped at 10 min from launch, so a fleet the
+  // client hasn't seen yet still extends the wait once it shows up.
+  const reportStart = Date.now();
+  let reportLast = null;
+  let reportMaxWait = 120_000;
+  for (;;) {
+    reportLast = await page.evaluate(() => {
       const st = window.starhold?.getState();
+      const fleets = st?.fleets ?? [];
       const reports = st?.reports?.length ?? 0;
-      return reports >= 1 ? true : { reports, fleets: st?.fleets?.length ?? 0 };
-    },
-    120_000,
-  );
+      const arrivesAt = Math.max(0, ...fleets.map((f) => f.arrivesAt ?? 0));
+      return { reports, fleets: fleets.length, arrivesAt, now: Date.now() };
+    });
+    if (reportLast.reports >= 1) break;
+    if (reportLast.arrivesAt > 0) {
+      reportMaxWait = Math.min(
+        600_000,
+        Math.max(reportMaxWait, reportLast.arrivesAt - reportLast.now + 60_000 + (Date.now() - reportStart)),
+      );
+    }
+    if (Date.now() - reportStart >= reportMaxWait) {
+      throw new Error(`fleet report timed out after ${Math.round(reportMaxWait / 1000)}s: ${JSON.stringify(reportLast)}`);
+    }
+    await page.evaluate(() => window.starhold?.poll());
+    await page.waitForTimeout(2_000);
+  }
+  logs.push(`fleet-report-wait-ms:${Math.round(reportMaxWait)}`);
   await goNav(page, "messages");
   await page.waitForSelector('[data-testid="messages-panel"]', {
     timeout: 10_000,
