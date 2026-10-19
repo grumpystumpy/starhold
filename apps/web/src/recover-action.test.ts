@@ -25,7 +25,7 @@ function view(queue: Array<{ id: string; buildingId: string; targetLevel: number
   } as unknown as PlayerView;
 }
 
-describe("failed actions check state once", () => {
+describe("failed actions check state", () => {
   it("shows success when the queued item is already saved, and posts once", async () => {
     const paints: string[] = [];
     setPaintImpl(() => {
@@ -144,7 +144,7 @@ describe("failed actions check state once", () => {
     assert.equal(session.error, "Not enough metal.");
   });
 
-  it("a timed-out POST mutation goes through settleMutation and is never re-sent", async () => {
+  it("a timed-out POST mutation gives exactly 1 state read, 0 re-sent POSTs, and the correct applied result", async () => {
     mock.timers.enable({ apis: ["setTimeout"] });
     setPaintImpl(() => {});
     session.view = view([]);
@@ -169,10 +169,15 @@ describe("failed actions check state once", () => {
       if (url.includes("/api/state")) {
         states += 1;
         return Promise.resolve(
-          new Response(JSON.stringify(view([])), {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          }),
+          new Response(
+            JSON.stringify(
+              view([{ id: "q1", buildingId: "shipyard", targetLevel: 2 }]),
+            ),
+            {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            },
+          ),
         );
       }
       throw new Error(`unexpected ${url}`);
@@ -187,6 +192,88 @@ describe("failed actions check state once", () => {
     }
     assert.equal(posts, 1);
     assert.equal(states, 1);
+    assert.equal(session.error, null);
+    assert.match(session.notice ?? "", /Queued upgrade/);
+  });
+
+  it("retries state check after 1.5s if check fails once with overload, then succeeds", async () => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    setPaintImpl(() => {});
+    session.view = view([]);
+    session.busy = false;
+    session.error = null;
+    session.notice = null;
+    let posts = 0;
+    let states = 0;
+    const original = globalThis.fetch;
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      if (url.includes("/api/upgrade")) {
+        posts += 1;
+        return new Response("<html>Error 503</html>", { status: 503 });
+      }
+      if (url.includes("/api/state")) {
+        states += 1;
+        if (states === 1) {
+          return new Response("<html>Error 503</html>", { status: 503 });
+        }
+        return new Response(
+          JSON.stringify(
+            view([{ id: "q1", buildingId: "shipyard", targetLevel: 2 }]),
+          ),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      throw new Error(`unexpected ${url}`);
+    };
+    try {
+      const promise = doUpgrade("shipyard");
+      await new Promise((r) => setImmediate(r));
+      mock.timers.tick(1500);
+      await promise;
+    } finally {
+      globalThis.fetch = original;
+      mock.timers.reset();
+    }
+    assert.equal(posts, 1);
+    assert.equal(states, 2);
+    assert.equal(session.error, null);
+    assert.match(session.notice ?? "", /Queued upgrade/);
+  });
+
+  it("shows 'Not applied — tap again' when state check fails twice", async () => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    setPaintImpl(() => {});
+    session.view = view([]);
+    session.busy = false;
+    session.error = null;
+    session.notice = null;
+    let posts = 0;
+    let states = 0;
+    const original = globalThis.fetch;
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      if (url.includes("/api/upgrade")) {
+        posts += 1;
+        return new Response("<html>Error 503</html>", { status: 503 });
+      }
+      if (url.includes("/api/state")) {
+        states += 1;
+        return new Response("<html>Error 503</html>", { status: 503 });
+      }
+      throw new Error(`unexpected ${url}`);
+    };
+    try {
+      const promise = doUpgrade("shipyard");
+      await new Promise((r) => setImmediate(r));
+      mock.timers.tick(1500);
+      await promise;
+    } finally {
+      globalThis.fetch = original;
+      mock.timers.reset();
+    }
+    assert.equal(posts, 1);
+    assert.equal(states, 2);
     assert.equal(session.error, NOT_APPLIED_MESSAGE);
   });
 });
