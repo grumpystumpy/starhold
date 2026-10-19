@@ -362,7 +362,7 @@ async function uiSmoke() {
     const label =
       (await piratePage.textContent('[data-testid="galaxy-label"]')) ?? "";
     return (
-      label.startsWith(targetLabel) &&
+      label.startsWith(`${targetLabel} `) &&
       (await piratePage.locator('[data-testid="galaxy-pirate"]').isVisible())
     );
   };
@@ -370,7 +370,7 @@ async function uiSmoke() {
   for (let i = 0; i < 450 && !foundPirate; i++) {
     const before =
       (await piratePage.textContent('[data-testid="galaxy-label"]')) ?? "";
-    if (before.startsWith(targetLabel)) break;
+    if (before.startsWith(`${targetLabel} `)) break;
     await piratePage.click('[data-testid="galaxy-next"]');
     await piratePage.waitForFunction(
       (prev) =>
