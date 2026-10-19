@@ -134,7 +134,7 @@ export function ensureSystemVisited(
   cursor.ranks.push({
     g,
     s,
-    k: hashSeed(`${seed}:pirate-rank:${g}:${s}`),
+    k: pirateRankKey(seed, g, s),
   });
   cursor.visited[key] = 1;
   return true;
