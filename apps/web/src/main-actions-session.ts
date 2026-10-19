@@ -1,4 +1,4 @@
-import { MAP_SYSTEMS } from "@starhold/game";
+import { MAP_GALAXIES, MAP_SYSTEMS } from "@starhold/game";
 import {
   ApiError,
   authJoin,
@@ -72,6 +72,7 @@ async function retryResume(): Promise<void> {
       const view = await fetchState(saved);
       session.view = view;
       session.galaxySystem = view.planet.coords.system;
+      session.galaxyGalaxy = null;
       session.joinDraft = view.player.name;
       syncSessionUrl({ replace: true });
       startPolling(saved);
@@ -250,7 +251,7 @@ export function bumpInFlightRefresh(): void {
 }
 
 function refreshKey(playerId: string): string {
-  const g = session.view?.galaxy.galaxy ?? "";
+  const g = session.galaxyGalaxy ?? session.view?.galaxy.galaxy ?? "";
   const s = session.galaxySystem ?? session.view?.galaxy.system ?? "";
   return `${playerId}:${g}:${s}`;
 }
@@ -276,7 +277,7 @@ async function refreshOnce(
 ): Promise<void> {
   const gen = ++refreshGen;
   try {
-    const g = session.view?.galaxy.galaxy;
+    const g = session.galaxyGalaxy ?? session.view?.galaxy.galaxy;
     const s = session.galaxySystem ?? session.view?.galaxy.system;
     const view = await fetchState(playerId, g, s);
     if (gen !== refreshGen) return;
@@ -320,6 +321,7 @@ export async function doJoin(name: string): Promise<void> {
       ? await authJoin(trimmed)
       : await joinGame(trimmed);
     session.galaxySystem = session.view.planet.coords.system;
+    session.galaxyGalaxy = null;
     session.joinDraft = session.view.player.name;
     localStorage.setItem(SESSION_KEY, session.view.player.id);
     if (session.account) {
@@ -377,6 +379,7 @@ async function applyAuthSuccess(opts: {
   if (view?.player?.id) {
     session.view = view;
     session.galaxySystem = view.planet.coords.system;
+    session.galaxyGalaxy = null;
     session.joinDraft = view.player.name;
     localStorage.setItem(SESSION_KEY, view.player.id);
     session.claimablePlayerId = null;
@@ -566,6 +569,7 @@ export async function doClaimAnonymous(): Promise<void> {
     session.account = res.account;
     session.view = res.view;
     session.galaxySystem = session.view.planet.coords.system;
+    session.galaxyGalaxy = null;
     session.claimablePlayerId = null;
     localStorage.setItem(SESSION_KEY, session.view.player.id);
     setFlash("notice", `Claimed ${session.view.player.name} to your email.`);
@@ -594,6 +598,7 @@ export async function resumeFromCookie(): Promise<
     if (me.view?.player?.id) {
       session.view = me.view;
       session.galaxySystem = me.view.planet.coords.system;
+      session.galaxyGalaxy = null;
       session.joinDraft = me.view.player.name;
       localStorage.setItem(SESSION_KEY, me.view.player.id);
       session.claimablePlayerId = null;
@@ -656,6 +661,31 @@ export async function doGalaxyNav(dir: "prev" | "next"): Promise<void> {
   }
 }
 
+export async function doGalaxyJump(galaxy: number, system: number): Promise<void> {
+  if (!session.view) return;
+  if (session.view.galaxy.galaxy === galaxy && session.view.galaxy.system === system) return;
+  session.galaxyGalaxy = galaxy;
+  session.galaxySystem = system;
+  session.busy = true;
+  schedulePaint();
+  try {
+    await silentRefresh(session.view.player.id, "Galaxy nav failed.", false);
+  } finally {
+    session.busy = false;
+    schedulePaint();
+    deferBackgroundPoll();
+  }
+}
+
+export async function doGalaxyGalaxyNav(dir: "prev" | "next"): Promise<void> {
+  if (!session.view) return;
+  const current = session.galaxyGalaxy ?? session.view.galaxy.galaxy;
+  const next = dir === "next"
+    ? current >= MAP_GALAXIES ? 1 : current + 1
+    : current <= 1 ? MAP_GALAXIES : current - 1;
+  return doGalaxyJump(next, session.galaxySystem ?? session.view.galaxy.system);
+}
+
 export async function doSelectPlanet(planetId: string): Promise<void> {
   if (!session.view) return;
   if (session.busy) {
@@ -669,6 +699,7 @@ export async function doSelectPlanet(planetId: string): Promise<void> {
   try {
     session.view = await selectPlanet(session.view.player.id, planetId);
     session.galaxySystem = session.view.planet.coords.system;
+    session.galaxyGalaxy = null;
     syncSessionUrl({ replace: true, planetId });
     setFlash("notice", `Switched to ${session.view.planet.name}.`);
   } catch (err) {

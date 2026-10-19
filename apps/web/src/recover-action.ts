@@ -31,8 +31,8 @@ export async function settleMutation(args: {
   );
   schedulePaint();
   const playerId = session.view.player.id;
-  const galaxy = session.view.galaxy?.galaxy;
-  const system = session.view.galaxy?.system;
+  const galaxy = session.galaxyGalaxy ?? session.view.galaxy?.galaxy;
+  const system = session.galaxySystem ?? session.view.galaxy?.system;
 
   const tryFetch = () => fetchState(playerId, galaxy, system, { fresh: true });
 

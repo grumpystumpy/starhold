@@ -8,6 +8,8 @@ export {
   doJoin,
   doRefresh,
   doGalaxyNav,
+  doGalaxyJump,
+  doGalaxyGalaxyNav,
   doSelectPlanet,
   doRenamePlanet,
   doRelocateFortress,
