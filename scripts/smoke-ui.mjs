@@ -288,6 +288,22 @@ async function uiSmoke() {
     () => window.starhold?.getState()?.galaxy?.galaxy ?? 1,
   );
   let pirateHit = null;
+  // Workers seeds pirates lazily across requests (world-seed.ts). On a
+  // fresh universe the home galaxy can still be unseeded, so rescan it a
+  // few times before giving up. Node (CI) seeds eagerly and never waits.
+  for (let wait = 0; wait <= 10 && !pirateHit; wait++) {
+    if (wait > 0) {
+      console.log(`Pirate seed wait ${wait}/10`);
+      logs.push(`pirate-seed-wait:${wait}/10`);
+      await new Promise((r) => setTimeout(r, 3_000));
+    }
+    for (let system = 1; system <= 399 && !pirateHit; system++) {
+      const st = await apiJson(
+        `/api/state?playerId=${encodeURIComponent(playerIdForPirate)}&galaxy=${homeGalaxy}&system=${system}`,
+      );
+      if (st.galaxy?.pirateBase) pirateHit = st.galaxy.pirateBase;
+    }
+  }
   const galaxyOrder = [
     homeGalaxy,
     ...Array.from({ length: 10 }, (_, i) => i + 1).filter((g) => g !== homeGalaxy),
@@ -319,7 +335,7 @@ async function uiSmoke() {
   for (let i = 0; i < 450 && !foundPirate; i++) {
     const before =
       (await page.textContent('[data-testid="galaxy-label"]')) ?? "";
-    if (before.startsWith(targetLabel)) {
+    if (before.startsWith(`${targetLabel} `)) {
       foundPirate =
         (await page.locator('[data-testid="galaxy-pirate"]').count()) > 0;
       break;
@@ -401,7 +417,11 @@ async function uiSmoke() {
       undefined,
       { timeout: 15_000 },
     );
-    await page.waitForFunction(
+    // pollUntil asks the server each loop (tick-on-read); background polls
+    // are 30 s apart, which a fresh, still-seeding Workers universe can miss.
+    await pollUntil(
+      page,
+      "shipyard built",
       () => {
         const lvl =
           document.querySelector('[data-testid="building-level-shipyard"]')
@@ -410,8 +430,7 @@ async function uiSmoke() {
         const st = window.starhold?.getState();
         return (lvl.includes("L1") || (st?.buildings?.shipyard ?? 0) >= 1) && !queue;
       },
-      undefined,
-      { timeout: 30_000 },
+      90_000,
     );
   } finally {
     await page.evaluate((id) => window.clearInterval(id), pollHammer);
@@ -684,6 +703,15 @@ async function uiSmoke() {
   }
   logs.push("ui-fleet-mission-launch");
 
+  // Flight time grows with distance to the rival (a reused DB has more
+  // players, so the rival can sit several systems away). Wait for the
+  // fleet's own arrivesAt plus a margin, capped at 10 minutes.
+  const reportWaitMs = await page.evaluate(() => {
+    const fleets = window.starhold?.getState()?.fleets ?? [];
+    const latest = Math.max(0, ...fleets.map((f) => f.arrivesAt ?? 0));
+    return Math.min(600_000, Math.max(120_000, latest - Date.now() + 60_000));
+  });
+  logs.push(`fleet-report-wait-ms:${Math.round(reportWaitMs)}`);
   await pollUntil(
     page,
     "fleet report",
@@ -692,7 +720,7 @@ async function uiSmoke() {
       const reports = st?.reports?.length ?? 0;
       return reports >= 1 ? true : { reports, fleets: st?.fleets?.length ?? 0 };
     },
-    120_000,
+    reportWaitMs,
   );
   await goNav(page, "messages");
   await page.waitForSelector('[data-testid="messages-panel"]', {

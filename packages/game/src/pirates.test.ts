@@ -559,6 +559,19 @@ describe("workers tick budget", () => {
   });
 });
 
+describe("pirate spread across galaxies", () => {
+  it("every galaxy gets pirates (new commanders spawn in galaxy 1)", () => {
+    for (let i = 0; i < 8; i++) {
+      const universe = createUniverse(`Spread Drift ${i}`, 8);
+      const per = new Array<number>(MAP_GALAXIES + 1).fill(0);
+      for (const b of activePirateBases(universe)) per[b.coords.galaxy] += 1;
+      for (let g = 1; g <= MAP_GALAXIES; g++) {
+        assert.ok(per[g] >= 5, `universe ${i} galaxy ${g}: ${per[g]} pirates (${per.slice(1).join(",")})`);
+      }
+    }
+  });
+});
+
 // silence unused in case of tree shake
 void MAP_GALAXIES;
 void (0 as UniverseState | 0);

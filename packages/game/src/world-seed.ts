@@ -1,9 +1,8 @@
 import { MAP_GALAXIES, MAP_SYSTEMS, PIRATE_TARGET_BASE_COUNT } from "./catalog.js";
-import { hashSeed } from "./formulas-position.js";
 import type { UniverseSeedCursor, UniverseState } from "./types.js";
 import { seedAsteroidsInSystem } from "./world-asteroids.js";
 import { seedMinisInSystem } from "./world-mini.js";
-import { placePiratesFromRanked } from "./world-pirates.js";
+import { pirateRankKey, placePiratesFromRanked } from "./world-pirates.js";
 
 export interface SeedSliceLimits {
   systems: number;
@@ -45,7 +44,7 @@ export function continueUniverseSeed(
     cursor.ranks.push({
       g: galaxy,
       s: system,
-      k: hashSeed(`${seed}:pirate-rank:${galaxy}:${system}`),
+      k: pirateRankKey(seed, galaxy, system),
     });
     cursor.at += 1;
     systems += 1;
