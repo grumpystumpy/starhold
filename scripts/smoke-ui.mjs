@@ -715,24 +715,35 @@ async function uiSmoke() {
   logs.push("ui-fleet-mission-launch");
 
   // Flight time grows with distance to the rival (a reused DB has more
-  // players, so the rival can sit several systems away). Wait for the
-  // fleet's own arrivesAt plus a margin, capped at 10 minutes.
-  const reportWaitMs = await page.evaluate(() => {
-    const fleets = window.starhold?.getState()?.fleets ?? [];
-    const latest = Math.max(0, ...fleets.map((f) => f.arrivesAt ?? 0));
-    return Math.min(600_000, Math.max(120_000, latest - Date.now() + 60_000));
-  });
-  logs.push(`fleet-report-wait-ms:${Math.round(reportWaitMs)}`);
-  await pollUntil(
-    page,
-    "fleet report",
-    () => {
+  // players, so the rival can sit several systems away). Recompute the
+  // deadline on every poll from the fleets' current arrivesAt (+60s margin,
+  // at least 2 min from launch), capped at 10 min from launch, so a fleet the
+  // client hasn't seen yet still extends the wait once it shows up.
+  const reportStart = Date.now();
+  let reportLast = null;
+  let reportMaxWait = 120_000;
+  for (;;) {
+    reportLast = await page.evaluate(() => {
       const st = window.starhold?.getState();
+      const fleets = st?.fleets ?? [];
       const reports = st?.reports?.length ?? 0;
-      return reports >= 1 ? true : { reports, fleets: st?.fleets?.length ?? 0 };
-    },
-    reportWaitMs,
-  );
+      const arrivesAt = Math.max(0, ...fleets.map((f) => f.arrivesAt ?? 0));
+      return { reports, fleets: fleets.length, arrivesAt, now: Date.now() };
+    });
+    if (reportLast.reports >= 1) break;
+    if (reportLast.arrivesAt > 0) {
+      reportMaxWait = Math.min(
+        600_000,
+        Math.max(reportMaxWait, reportLast.arrivesAt - reportLast.now + 60_000 + (Date.now() - reportStart)),
+      );
+    }
+    if (Date.now() - reportStart >= reportMaxWait) {
+      throw new Error(`fleet report timed out after ${Math.round(reportMaxWait / 1000)}s: ${JSON.stringify(reportLast)}`);
+    }
+    await page.evaluate(() => window.starhold?.poll());
+    await page.waitForTimeout(2_000);
+  }
+  logs.push(`fleet-report-wait-ms:${Math.round(reportMaxWait)}`);
   await goNav(page, "messages");
   await page.waitForSelector('[data-testid="messages-panel"]', {
     timeout: 10_000,
