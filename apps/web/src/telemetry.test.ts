@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it, mock } from "node:test";
 import { fetchState, setApiFailureReporter, upgradeBuilding } from "./api";
 import {
   planFailureReport,
@@ -443,6 +443,55 @@ describe("api failure telemetry", () => {
       setTelemetrySinkForTests(null);
       setApiFailureReporter(() => {});
       resetFailureStateForTests();
+    }
+  });
+
+  it("end-to-end: credFetch timeout produces warning event with api_wait_ms tag", async () => {
+    resetFailureStateForTests();
+    mock.timers.enable({ apis: ["setTimeout"] });
+    const sentryCalls: Array<{
+      err: unknown;
+      hint: { level: string; tags: Record<string, string>; fingerprint: string[] };
+    }> = [];
+    setTelemetrySinkForTests({
+      sentry: (err, hint) => sentryCalls.push({ err, hint }),
+    });
+    setApiFailureReporter((status, message, ctx) => {
+      void reportFailure(status, message, ctx);
+    });
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (_input, init) => {
+      return new Promise<Response>((_resolve, reject) => {
+        if (init?.signal) {
+          init.signal.addEventListener("abort", () => {
+            reject(new DOMException("The operation was aborted.", "AbortError"));
+          });
+        }
+      });
+    };
+
+    try {
+      const promise = upgradeBuilding("p1", "shipyard");
+      mock.timers.tick(20000);
+      await assert.rejects(promise);
+      assert.equal(sentryCalls.length, 1);
+      const call = sentryCalls[0]!;
+      assert.equal(call.hint.level, "warning");
+      assert.equal(call.hint.tags.api_status, "0");
+      assert.equal(call.hint.tags.api_path, "/api/upgrade");
+      assert.equal(call.hint.tags.api_method, "POST");
+      assert.equal(call.hint.tags.api_kind, "timeout");
+      assert.ok("api_wait_ms" in call.hint.tags);
+      const waitMs = Number(call.hint.tags.api_wait_ms);
+      assert.ok(!Number.isNaN(waitMs) && waitMs >= 0);
+      assert.deepEqual(call.hint.fingerprint, ["api", "POST", "/api/upgrade", "0", "timeout"]);
+    } finally {
+      globalThis.fetch = originalFetch;
+      setTelemetrySinkForTests(null);
+      setApiFailureReporter(() => {});
+      resetFailureStateForTests();
+      mock.timers.reset();
     }
   });
 });

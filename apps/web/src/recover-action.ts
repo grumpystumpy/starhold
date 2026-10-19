@@ -33,18 +33,36 @@ export async function settleMutation(args: {
   const playerId = session.view.player.id;
   const galaxy = session.view.galaxy?.galaxy;
   const system = session.view.galaxy?.system;
+
+  const tryFetch = () => fetchState(playerId, galaxy, system, { fresh: true });
+
+  let view: PlayerView;
   try {
-    const view = await fetchState(playerId, galaxy, system, { fresh: true });
-    session.view = view;
-    if (args.applied(view)) {
-      setFlash("notice", args.successNotice(view));
+    view = await tryFetch();
+  } catch (checkErr) {
+    if (
+      checkErr instanceof ApiError &&
+      (checkErr.kind === "network" ||
+        checkErr.kind === "timeout" ||
+        checkErr.kind === "overload")
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      try {
+        view = await tryFetch();
+      } catch {
+        setFlash("error", NOT_APPLIED_MESSAGE);
+        return;
+      }
+    } else {
+      setFlash("error", NOT_APPLIED_MESSAGE);
       return;
     }
-    setFlash("error", NOT_APPLIED_MESSAGE);
-  } catch (checkErr) {
-    setFlash(
-      "error",
-      checkErr instanceof Error ? checkErr.message : NOT_APPLIED_MESSAGE,
-    );
   }
+
+  session.view = view;
+  if (args.applied(view)) {
+    setFlash("notice", args.successNotice(view));
+    return;
+  }
+  setFlash("error", NOT_APPLIED_MESSAGE);
 }

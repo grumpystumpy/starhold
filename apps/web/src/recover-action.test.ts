@@ -2,7 +2,12 @@ import "./test-dom";
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import type { PlayerView } from "@starhold/game";
-import { NOT_APPLIED_MESSAGE, OVERLOAD_MESSAGE, POST_TIMEOUT_MS } from "./api";
+import {
+  GET_TIMEOUT_MS,
+  NOT_APPLIED_MESSAGE,
+  OVERLOAD_MESSAGE,
+  POST_TIMEOUT_MS,
+} from "./api";
 
 const { doUpgrade } = await import("./main-actions-build");
 const { session, setPaintImpl } = await import("./session");
@@ -25,7 +30,7 @@ function view(queue: Array<{ id: string; buildingId: string; targetLevel: number
   } as unknown as PlayerView;
 }
 
-describe("failed actions check state once", () => {
+describe("failed actions check state", () => {
   it("shows success when the queued item is already saved, and posts once", async () => {
     const paints: string[] = [];
     setPaintImpl(() => {
@@ -144,7 +149,7 @@ describe("failed actions check state once", () => {
     assert.equal(session.error, "Not enough metal.");
   });
 
-  it("a timed-out POST mutation goes through settleMutation and is never re-sent", async () => {
+  it("a timed-out POST mutation gives exactly 1 state read, 0 re-sent POSTs, and the correct applied result", async () => {
     mock.timers.enable({ apis: ["setTimeout"] });
     setPaintImpl(() => {});
     session.view = view([]);
@@ -169,10 +174,15 @@ describe("failed actions check state once", () => {
       if (url.includes("/api/state")) {
         states += 1;
         return Promise.resolve(
-          new Response(JSON.stringify(view([])), {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          }),
+          new Response(
+            JSON.stringify(
+              view([{ id: "q1", buildingId: "shipyard", targetLevel: 2 }]),
+            ),
+            {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            },
+          ),
         );
       }
       throw new Error(`unexpected ${url}`);
@@ -187,6 +197,235 @@ describe("failed actions check state once", () => {
     }
     assert.equal(posts, 1);
     assert.equal(states, 1);
+    assert.equal(session.error, null);
+    assert.match(session.notice ?? "", /Queued upgrade/);
+  });
+
+  it("retries state check after full 1.5s if check fails once with overload, then succeeds", async () => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    setPaintImpl(() => {});
+    session.view = view([]);
+    session.busy = false;
+    session.error = null;
+    session.notice = null;
+    let posts = 0;
+    let states = 0;
+    const original = globalThis.fetch;
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      if (url.includes("/api/upgrade")) {
+        posts += 1;
+        return new Response("<html>Error 503</html>", { status: 503 });
+      }
+      if (url.includes("/api/state")) {
+        states += 1;
+        if (states === 1) {
+          return new Response("<html>Error 503</html>", { status: 503 });
+        }
+        return new Response(
+          JSON.stringify(
+            view([{ id: "q1", buildingId: "shipyard", targetLevel: 2 }]),
+          ),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      throw new Error(`unexpected ${url}`);
+    };
+    try {
+      const promise = doUpgrade("shipyard");
+      await new Promise((r) => setImmediate(r));
+      assert.equal(states, 1);
+      mock.timers.tick(1499);
+      assert.equal(states, 1);
+      mock.timers.tick(1);
+      await promise;
+    } finally {
+      globalThis.fetch = original;
+      mock.timers.reset();
+    }
+    assert.equal(posts, 1);
+    assert.equal(states, 2);
+    assert.equal(session.error, null);
+    assert.match(session.notice ?? "", /Queued upgrade/);
+  });
+
+  it("retries state check after full 1.5s if check fails once with network error, then succeeds", async () => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    setPaintImpl(() => {});
+    session.view = view([]);
+    session.busy = false;
+    session.error = null;
+    session.notice = null;
+    let posts = 0;
+    let states = 0;
+    const original = globalThis.fetch;
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      if (url.includes("/api/upgrade")) {
+        posts += 1;
+        return new Response("<html>Error 503</html>", { status: 503 });
+      }
+      if (url.includes("/api/state")) {
+        states += 1;
+        if (states === 1) {
+          throw new TypeError("Failed to fetch");
+        }
+        return new Response(
+          JSON.stringify(
+            view([{ id: "q1", buildingId: "shipyard", targetLevel: 2 }]),
+          ),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      throw new Error(`unexpected ${url}`);
+    };
+    try {
+      const promise = doUpgrade("shipyard");
+      await new Promise((r) => setImmediate(r));
+      assert.equal(states, 1);
+      mock.timers.tick(1499);
+      assert.equal(states, 1);
+      mock.timers.tick(1);
+      await promise;
+    } finally {
+      globalThis.fetch = original;
+      mock.timers.reset();
+    }
+    assert.equal(posts, 1);
+    assert.equal(states, 2);
+    assert.equal(session.error, null);
+    assert.match(session.notice ?? "", /Queued upgrade/);
+  });
+
+  it("retries state check after full 1.5s if check fails once with timeout, then succeeds", async () => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    setPaintImpl(() => {});
+    session.view = view([]);
+    session.busy = false;
+    session.error = null;
+    session.notice = null;
+    let posts = 0;
+    let states = 0;
+    const original = globalThis.fetch;
+    globalThis.fetch = (input, init) => {
+      const url = String(input);
+      if (url.includes("/api/upgrade")) {
+        posts += 1;
+        return Promise.resolve(new Response("<html>Error 503</html>", { status: 503 }));
+      }
+      if (url.includes("/api/state")) {
+        states += 1;
+        if (states === 1) {
+          return new Promise<Response>((_resolve, reject) => {
+            if (init?.signal) {
+              init.signal.addEventListener("abort", () => {
+                reject(new DOMException("The operation was aborted.", "AbortError"));
+              });
+            }
+          });
+        }
+        return Promise.resolve(
+          new Response(
+            JSON.stringify(
+              view([{ id: "q1", buildingId: "shipyard", targetLevel: 2 }]),
+            ),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+        );
+      }
+      throw new Error(`unexpected ${url}`);
+    };
+    try {
+      const promise = doUpgrade("shipyard");
+      await new Promise((r) => setImmediate(r));
+      assert.equal(states, 1);
+      mock.timers.tick(GET_TIMEOUT_MS);
+      await new Promise((r) => setImmediate(r));
+      assert.equal(states, 1);
+      mock.timers.tick(1499);
+      assert.equal(states, 1);
+      mock.timers.tick(1);
+      await promise;
+    } finally {
+      globalThis.fetch = original;
+      mock.timers.reset();
+    }
+    assert.equal(posts, 1);
+    assert.equal(states, 2);
+    assert.equal(session.error, null);
+    assert.match(session.notice ?? "", /Queued upgrade/);
+  });
+
+  it("does not retry state check on non-retryable failure (e.g. 400), showing NOT_APPLIED_MESSAGE", async () => {
+    setPaintImpl(() => {});
+    session.view = view([]);
+    session.busy = false;
+    session.error = null;
+    session.notice = null;
+    let posts = 0;
+    let states = 0;
+    const original = globalThis.fetch;
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      if (url.includes("/api/upgrade")) {
+        posts += 1;
+        return new Response("<html>Error 503</html>", { status: 503 });
+      }
+      if (url.includes("/api/state")) {
+        states += 1;
+        return new Response(JSON.stringify({ error: "Invalid player ID." }), {
+          status: 400,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      throw new Error(`unexpected ${url}`);
+    };
+    try {
+      await doUpgrade("shipyard");
+    } finally {
+      globalThis.fetch = original;
+    }
+    assert.equal(posts, 1);
+    assert.equal(states, 1);
+    assert.equal(session.error, NOT_APPLIED_MESSAGE);
+  });
+
+  it("shows 'Not applied — tap again' when state check fails twice", async () => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    setPaintImpl(() => {});
+    session.view = view([]);
+    session.busy = false;
+    session.error = null;
+    session.notice = null;
+    let posts = 0;
+    let states = 0;
+    const original = globalThis.fetch;
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      if (url.includes("/api/upgrade")) {
+        posts += 1;
+        return new Response("<html>Error 503</html>", { status: 503 });
+      }
+      if (url.includes("/api/state")) {
+        states += 1;
+        return new Response("<html>Error 503</html>", { status: 503 });
+      }
+      throw new Error(`unexpected ${url}`);
+    };
+    try {
+      const promise = doUpgrade("shipyard");
+      await new Promise((r) => setImmediate(r));
+      assert.equal(states, 1);
+      mock.timers.tick(1499);
+      assert.equal(states, 1);
+      mock.timers.tick(1);
+      await promise;
+    } finally {
+      globalThis.fetch = original;
+      mock.timers.reset();
+    }
+    assert.equal(posts, 1);
+    assert.equal(states, 2);
     assert.equal(session.error, NOT_APPLIED_MESSAGE);
   });
 });
