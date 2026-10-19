@@ -287,27 +287,71 @@ async function uiSmoke() {
   const homeGalaxy = await page.evaluate(
     () => window.starhold?.getState()?.galaxy?.galaxy ?? 1,
   );
-  let pirateHit = null;
-  const galaxyOrder = [
-    homeGalaxy,
-    ...Array.from({ length: 10 }, (_, i) => i + 1).filter((g) => g !== homeGalaxy),
-  ];
-  for (const galaxy of galaxyOrder) {
-    if (pirateHit) break;
+  const findHomePirate = async (playerId, galaxy) => {
     for (let system = 1; system <= 399; system++) {
       const st = await apiJson(
-        `/api/state?playerId=${encodeURIComponent(playerIdForPirate)}&galaxy=${galaxy}&system=${system}`,
+        `/api/state?playerId=${encodeURIComponent(playerId)}&galaxy=${galaxy}&system=${system}`,
       );
-      if (st.galaxy?.pirateBase) {
-        pirateHit = st.galaxy.pirateBase;
-        break;
+      if (st.galaxy?.pirateBase) return st.galaxy.pirateBase;
+    }
+    return null;
+  };
+
+  let piratePage = page;
+  let pirateHomeGalaxy = homeGalaxy;
+  let pirateHit = await findHomePirate(playerIdForPirate, homeGalaxy);
+  for (let retry = 1; !pirateHit && retry < 5; retry++) {
+    console.log(`Pirate home scan retry ${retry}/4`);
+    logs.push(`pirate-home-retry:${retry}/4`);
+    const retryPage = await browser.newPage({
+      viewport: { width: 1280, height: 800 },
+    });
+    try {
+      const stamp = Date.now().toString(36);
+      const email = `pirate${stamp}${retry}@example.com`;
+      const name = `Pirate${stamp.slice(-4)}${retry}`;
+      await retryPage.goto(`${WEB}/`, { waitUntil: "networkidle" });
+      await retryPage.fill('[data-testid="auth-email"]', email);
+      await retryPage.fill('[data-testid="auth-password"]', "starhold-pirate");
+      await retryPage.click('[data-testid="auth-signup-btn"]');
+      await retryPage.waitForSelector('[data-testid="account-email"]', {
+        timeout: 15_000,
+      });
+      await retryPage.fill('[data-testid="commander-input"]', name);
+      await retryPage.click('[data-testid="join-btn"]');
+      await retryPage.waitForSelector('[data-testid="resources"]', {
+        timeout: 15_000,
+      });
+      const retryPlayerId = await retryPage.evaluate(
+        () => window.starhold.getState().playerId,
+      );
+      if (!retryPlayerId) throw new Error("pirate retry signup missing player");
+      await goNav(retryPage, "galaxy");
+      await retryPage.waitForSelector('[data-testid="galaxy-panel"]', {
+        timeout: 10_000,
+      });
+      const retryGalaxy = await retryPage.evaluate(
+        () => window.starhold?.getState()?.galaxy?.galaxy ?? 1,
+      );
+      pirateHit = await findHomePirate(retryPlayerId, retryGalaxy);
+      if (pirateHit) {
+        piratePage = retryPage;
+        pirateHomeGalaxy = retryGalaxy;
+      } else {
+        await retryPage.close();
       }
+    } catch (error) {
+      await retryPage.close();
+      throw error;
     }
   }
-  if (!pirateHit) throw new Error("API found no pirate bases (expected ~200)");
-  if (pirateHit.coords.galaxy !== homeGalaxy) {
+  if (!pirateHit)
     throw new Error(
-      `no pirate in home galaxy ${homeGalaxy}; UI cannot cross galaxies`,
+      "API found no pirate bases in any of 5 commanders' home galaxies (expected ~200)",
+    );
+  if (pirateHit.coords.galaxy !== pirateHomeGalaxy) {
+    throw new Error(
+      `no pirate in home galaxy ${pirateHomeGalaxy}; UI cannot cross galaxies`,
     );
   }
   logs.push(
@@ -315,17 +359,17 @@ async function uiSmoke() {
   );
   const targetLabel = `${pirateHit.coords.galaxy}:${pirateHit.coords.system}`;
   let foundPirate =
-    (await page.locator('[data-testid="galaxy-pirate"]').count()) > 0;
+    (await piratePage.locator('[data-testid="galaxy-pirate"]').count()) > 0;
   for (let i = 0; i < 450 && !foundPirate; i++) {
     const before =
-      (await page.textContent('[data-testid="galaxy-label"]')) ?? "";
+      (await piratePage.textContent('[data-testid="galaxy-label"]')) ?? "";
     if (before.startsWith(targetLabel)) {
       foundPirate =
-        (await page.locator('[data-testid="galaxy-pirate"]').count()) > 0;
+        (await piratePage.locator('[data-testid="galaxy-pirate"]').count()) > 0;
       break;
     }
-    await page.click('[data-testid="galaxy-next"]');
-    await page.waitForFunction(
+    await piratePage.click('[data-testid="galaxy-next"]');
+    await piratePage.waitForFunction(
       (prev) =>
         (document.querySelector('[data-testid="galaxy-label"]')?.textContent ??
           "") !== prev,
@@ -333,12 +377,13 @@ async function uiSmoke() {
       { timeout: 8_000 },
     );
     foundPirate =
-      (await page.locator('[data-testid="galaxy-pirate"]').count()) > 0;
+      (await piratePage.locator('[data-testid="galaxy-pirate"]').count()) > 0;
   }
   if (!foundPirate) {
     throw new Error(`galaxy UI missing pirate at ${targetLabel}`);
   }
   logs.push("ui-galaxy-pirate-found");
+  if (piratePage !== page) await piratePage.close();
 
   const joined = await page.evaluate(() => window.starhold?.getState());
   if (joined?.name !== urlName) {
