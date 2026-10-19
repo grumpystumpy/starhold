@@ -52,15 +52,15 @@ Starhold is an OGame-like browser space-strategy game for a small group of frien
 - Combat randomness goes only through the seeded RNG passed into `resolveCombat`. Never use `Math.random()` or the wall clock there.
 
 ## 4. Proof every PR must include (paste real output; don't claim what you didn't run)
-1. **Node 22.** Use `npx node@22` or `nvm use 22`, because Node 20 lacks `node:sqlite` and the tests fail on it.
-   - `npm ci`
-   - `npm test`: each suite name with its pass/fail count;
-   - `npm run typecheck`;
-   - `npm run build`.
-2. New or changed behavior has a unit test. Tests run **offline**, with fetch, clock, timers, storage, Sentry and PostHog stubbed.
-3. If you touched save data or the server: an **old-save fixture** loads with identical players, resources, buildings and fleets, and the query-count output is within the budget in section 3.
-4. If you touched the UI: a short note or screenshot from a local production build at phone width (iPhone-size viewport) and desktop width.
-5. The commit sha, and confirmation that the branch is rebased on the current `main`.
+Tiered testing (Micah, Oct 19 2026): run only what your change needs, on **Node 22** (`npx node@22` or `nvm use 22`, because Node 20 lacks `node:sqlite`).
+1. **Every code PR:** unit tests (`npm test -w <package>`) and typecheck for the packages you touched. Paste each suite's pass/fail count. CI runs the rest.
+2. **UI/render files:** also a short UI smoke on a local build at phone width and desktop width (a note or screenshot).
+3. **Server, D1, save schema or migrations:** also the server tests and the old-save (save-compat) check. Migrations must be additive and backward-compatible with live saves.
+4. **Deploy scripts:** also a dry run (e.g. `wrangler deploy --dry-run`). Never a real deploy.
+5. **Docs, config or label-only:** no tests beyond CI.
+6. New or changed behavior has an offline unit test, with fetch, clock, timers, storage, Sentry and PostHog stubbed.
+7. The commit sha, and confirmation that the branch is based on the current `main`.
+Skip browser e2e, save-compat and the full build unless your change touches that area. The full set runs once on the combined batch before merge (see docs/process.md).
 
 ## 5. Repo map
 - `packages/game/`: pure game rules (catalog, tuning, combat, world tick). Unit-test-heavy and deterministic.

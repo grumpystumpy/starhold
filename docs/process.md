@@ -35,6 +35,13 @@ Shared schema: **[design/universe-contract.md](./design/universe-contract.md)** 
 - Run both in **GitHub Actions on every change** (free Actions). **CI required** before merge.
 - **One agent playtest per merged milestone**, not per PR. Automated tests cover the batch.
 
+## Tiered testing (Micah, Oct 19 2026)
+
+- **Per PR (tool work):** unit tests and typecheck for the touched packages, plus a Codex review. Add a UI smoke only for UI/render changes; save-compat and server tests only for server/D1/save-schema/migration changes; a dry run only for deploy-script changes. Docs, config and label-only PRs get CI only.
+- **Codex review:** quick and diff-scoped. It uses the PR's own pasted proof; don't re-run suites the PR already shows.
+- **Combined batch, before merge/deploy:** the full set ONCE: unit, typecheck, build, local-production e2e and save-compat. This protects the live game. Skip re-running anything unchanged since the last green run on the same tree.
+- Re-run a flaky CI job at most once. Don't send PRs back for cosmetic issues.
+
 ## Batching
 
 - Work is split into small GitHub issues (one fix, one branch, one PR each). The router (Coding Bot) assigns them so no two tools do the same work.
