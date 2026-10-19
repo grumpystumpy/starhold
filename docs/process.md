@@ -6,21 +6,19 @@ Canonical working agreements for agents on Starhold. Prefer this over older play
 
 - **No** trycloudflare tunnels, keepalive loops, or failover watchers.
 - **One stable free URL** on a permanent free tier (no paid plans, no credit card).
-- Prefer **Vercel Hobby (free)** for the frontend.
-- **Vercel production branch = `main`.** Live: https://starhold-two.vercel.app
-- Shared multiplayer state: Upstash KV via **`KV_REST_API_*`** (Vercel integration).
+- Live: **Cloudflare Workers free plan + D1** at https://starhold.stumpysgarage.workers.dev
+- Shared multiplayer state: the D1 database `starhold`. Vercel + Upstash is legacy (shutdown tracked in STA-64).
+- Deploys happen only with Micah's approval, from `main`. See [hosting.md](./hosting.md) and [cloudflare.md](./cloudflare.md).
 - If Micah must sign in, connect GitHub, or approve OAuth: **stop** and report exact URLs + clicks. Do not invent credentials.
-
-Redeploy notes: [hosting.md](./hosting.md) · [vercel-deploy.md](./vercel-deploy.md).
 
 ## Git / PRs
 
-- Default branch is **`main`**. **Never** push to `cursor/core-loop-prototype-1093` (retired after merge of PR #1).
-- Each feature batch: branch off **`main`**, open a **small PR into `main`**, merge when **CI is green** (unit + Playwright required).
-- Branch names: `cursor/<short-name>-####` when an agent suffix is required.
+- Default branch is **`main`**, protected by the `protect-main` ruleset: PR required, the `unit-and-e2e` CI check must pass, no force pushes, no deletion. **Never** push to `cursor/core-loop-prototype-1093` (retired after merge of PR #1).
+- One GitHub issue = one small fix = one branch = one PR into `main` (see [AGENTS.md](../AGENTS.md)). Branch names: `agent/<tool>/<issue#>-<short-slug>`. Fill in the PR template (`Closes #N`, `Linear: STA-n`, tool used, tests run).
+- Merge only when **CI is green** (unit + Playwright required) **and Micah approves**. No auto-merge.
 - Prefer real `git push`. Never leave `PLACEHOLDER` file contents.
-- Commit the small `api/index.js` **stub** so Vercel’s `functions` pattern matches a file in git. Do not gitignore it and do not commit the generated bundle. `npm run build:vercel` overwrites the stub. On Vercel, root `vercel-build` regenerates the bundle before the function is traced (`buildCommand` alone does not).
-- Vercel: only production builds of `main` deploy (`vercel.json` → `git.deploymentEnabled` plus `ignoreCommand`). Docs, tests, CI, and scripts-only commits on `main` skip the build. No PR preview deploys. GitHub Actions must not call Vercel.
+- Commit the small `api/index.js` **stub** (legacy Vercel bundle; CI still runs `npm run build:vercel`). Do not gitignore it and do not commit the generated bundle.
+- No PR preview deploys. GitHub Actions must not call Vercel or deploy from a PR.
 - If CI on `main` is red after a merge: open a CI-fix PR from `main` before the next feature batch.
 
 ## Parallel workstreams (post-contract)
@@ -39,8 +37,8 @@ Shared schema: **[design/universe-contract.md](./design/universe-contract.md)** 
 
 ## Batching
 
-- One thread builds a **whole feature group** end-to-end, then tests.
-- No tiny handoffs mid-system.
+- Work is split into small GitHub issues (one fix, one branch, one PR each). The router (Coding Bot) assigns them so no two tools do the same work.
+- Merges and deploys are batched: the router groups verified PRs into Micah's merge list, and deploys stay within Micah's daily cadence.
 
 ## Design first
 
