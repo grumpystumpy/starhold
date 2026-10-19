@@ -288,48 +288,57 @@ async function uiSmoke() {
     () => window.starhold?.getState()?.galaxy?.galaxy ?? 1,
   );
   let pirateHit = null;
-  for (let system = 1; system <= 399; system++) {
-    const st = await apiJson(
-      `/api/state?playerId=${encodeURIComponent(playerIdForPirate)}&galaxy=${homeGalaxy}&system=${system}`,
-    );
-    if (st.galaxy?.pirateBase) {
-      pirateHit = st.galaxy.pirateBase;
-      break;
-    }
-  }
-  if (pirateHit) {
-    logs.push(
-      `api-pirate:${pirateHit.coords.galaxy}:${pirateHit.coords.system}`,
-    );
-    const targetLabel = `${pirateHit.coords.galaxy}:${pirateHit.coords.system}`;
-    let foundPirate =
-      (await page.locator('[data-testid="galaxy-pirate"]').count()) > 0;
-    for (let i = 0; i < 450 && !foundPirate; i++) {
-      const before =
-        (await page.textContent('[data-testid="galaxy-label"]')) ?? "";
-      if (before.startsWith(targetLabel)) {
-        foundPirate =
-          (await page.locator('[data-testid="galaxy-pirate"]').count()) > 0;
+  const galaxyOrder = [
+    homeGalaxy,
+    ...Array.from({ length: 10 }, (_, i) => i + 1).filter((g) => g !== homeGalaxy),
+  ];
+  for (const galaxy of galaxyOrder) {
+    if (pirateHit) break;
+    for (let system = 1; system <= 399; system++) {
+      const st = await apiJson(
+        `/api/state?playerId=${encodeURIComponent(playerIdForPirate)}&galaxy=${galaxy}&system=${system}`,
+      );
+      if (st.galaxy?.pirateBase) {
+        pirateHit = st.galaxy.pirateBase;
         break;
       }
-      await page.click('[data-testid="galaxy-next"]');
-      await page.waitForFunction(
-        (prev) =>
-          (document.querySelector('[data-testid="galaxy-label"]')?.textContent ??
-            "") !== prev,
-        before,
-        { timeout: 8_000 },
-      );
+    }
+  }
+  if (!pirateHit) throw new Error("API found no pirate bases (expected ~200)");
+  if (pirateHit.coords.galaxy !== homeGalaxy) {
+    throw new Error(
+      `no pirate in home galaxy ${homeGalaxy}; UI cannot cross galaxies`,
+    );
+  }
+  logs.push(
+    `api-pirate:${pirateHit.coords.galaxy}:${pirateHit.coords.system}`,
+  );
+  const targetLabel = `${pirateHit.coords.galaxy}:${pirateHit.coords.system}`;
+  let foundPirate =
+    (await page.locator('[data-testid="galaxy-pirate"]').count()) > 0;
+  for (let i = 0; i < 450 && !foundPirate; i++) {
+    const before =
+      (await page.textContent('[data-testid="galaxy-label"]')) ?? "";
+    if (before.startsWith(targetLabel)) {
       foundPirate =
         (await page.locator('[data-testid="galaxy-pirate"]').count()) > 0;
+      break;
     }
-    if (!foundPirate) {
-      throw new Error(`galaxy UI missing pirate at ${targetLabel}`);
-    }
-    logs.push("ui-galaxy-pirate-found");
-  } else {
-    logs.push(`ui-galaxy-no-pirate-in-home-galaxy-${homeGalaxy}`);
+    await page.click('[data-testid="galaxy-next"]');
+    await page.waitForFunction(
+      (prev) =>
+        (document.querySelector('[data-testid="galaxy-label"]')?.textContent ??
+          "") !== prev,
+      before,
+      { timeout: 8_000 },
+    );
+    foundPirate =
+      (await page.locator('[data-testid="galaxy-pirate"]').count()) > 0;
   }
+  if (!foundPirate) {
+    throw new Error(`galaxy UI missing pirate at ${targetLabel}`);
+  }
+  logs.push("ui-galaxy-pirate-found");
 
   const joined = await page.evaluate(() => window.starhold?.getState());
   if (joined?.name !== urlName) {
