@@ -21,7 +21,18 @@ export const OVERLOAD_MESSAGE =
 
 export const NOT_APPLIED_MESSAGE = "Not applied — tap again.";
 
-export type ApiFailureKind = "busy" | "overload" | "server" | "network" | "client";
+export const GET_TIMEOUT_MS = 15000;
+export const POST_TIMEOUT_MS = 20000;
+export const TIMEOUT_MESSAGE =
+  "The server is slow. Checking whether your order went through…";
+
+export type ApiFailureKind =
+  | "busy"
+  | "overload"
+  | "server"
+  | "network"
+  | "client"
+  | "timeout";
 
 export interface ApiFailureContext {
   method: string;
@@ -216,14 +227,41 @@ const credFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     init?.method ?? (input instanceof Request ? input.method : "GET")
   ).toUpperCase();
   const path = pathOnly(input);
+  const timeoutMs = method === "GET" ? GET_TIMEOUT_MS : POST_TIMEOUT_MS;
+
+  const controller = new AbortController();
+  let didTimeout = false;
+  const timer = setTimeout(() => {
+    didTimeout = true;
+    controller.abort();
+  }, timeoutMs);
+
+  if (init?.signal) {
+    if (init.signal.aborted) {
+      controller.abort();
+    } else {
+      init.signal.addEventListener("abort", () => controller.abort(), {
+        once: true,
+      });
+    }
+  }
+
   let res: Response;
   try {
-    res = await fetch(input, { credentials: "include", ...init });
+    res = await fetch(input, { credentials: "include", ...init, signal: controller.signal });
   } catch {
+    if (didTimeout) {
+      const message = TIMEOUT_MESSAGE;
+      const err = new ApiError(message, 0, "timeout");
+      reportApiFailure(0, message, { method, path, kind: "timeout" });
+      throw err;
+    }
     const message = "Something went wrong. Retry in a moment.";
     const err = new ApiError(message, 0, "network");
     reportApiFailure(0, message, { method, path, kind: "network" });
     throw err;
+  } finally {
+    clearTimeout(timer);
   }
   requestMeta.set(res, { method, path });
   if (method !== "GET" && method !== "HEAD" && res.ok) {
