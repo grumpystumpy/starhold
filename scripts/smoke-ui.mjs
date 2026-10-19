@@ -347,7 +347,7 @@ async function uiSmoke() {
   }
   if (!pirateHit)
     throw new Error(
-      "API found no pirate bases in any of 5 commanders' home galaxies (expected ~200)",
+      "no pirate base in the home galaxy of any of 5 commanders",
     );
   if (pirateHit.coords.galaxy !== pirateHomeGalaxy) {
     throw new Error(
@@ -358,16 +358,19 @@ async function uiSmoke() {
     `api-pirate:${pirateHit.coords.galaxy}:${pirateHit.coords.system}`,
   );
   const targetLabel = `${pirateHit.coords.galaxy}:${pirateHit.coords.system}`;
-  let foundPirate =
-    (await piratePage.locator('[data-testid="galaxy-pirate"]').count()) > 0;
+  const isPirateAtTarget = async () => {
+    const label =
+      (await piratePage.textContent('[data-testid="galaxy-label"]')) ?? "";
+    return (
+      label.startsWith(targetLabel) &&
+      (await piratePage.locator('[data-testid="galaxy-pirate"]').isVisible())
+    );
+  };
+  let foundPirate = await isPirateAtTarget();
   for (let i = 0; i < 450 && !foundPirate; i++) {
     const before =
       (await piratePage.textContent('[data-testid="galaxy-label"]')) ?? "";
-    if (before.startsWith(targetLabel)) {
-      foundPirate =
-        (await piratePage.locator('[data-testid="galaxy-pirate"]').count()) > 0;
-      break;
-    }
+    if (before.startsWith(targetLabel)) break;
     await piratePage.click('[data-testid="galaxy-next"]');
     await piratePage.waitForFunction(
       (prev) =>
@@ -376,8 +379,7 @@ async function uiSmoke() {
       before,
       { timeout: 8_000 },
     );
-    foundPirate =
-      (await piratePage.locator('[data-testid="galaxy-pirate"]').count()) > 0;
+    foundPirate = await isPirateAtTarget();
   }
   if (!foundPirate) {
     throw new Error(`galaxy UI missing pirate at ${targetLabel}`);
