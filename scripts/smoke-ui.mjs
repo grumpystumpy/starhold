@@ -38,18 +38,37 @@ async function apiJson(path, init) {
   return res.json();
 }
 
+// Wait on the server's own progress: sleep until the build queue's endsAt
+// and until production (economy.productionPerHour) should cover the gap,
+// re-reading state between sleeps (1s-20s each). The deadline is the larger
+// of `ms` and the server's own ETA plus a 2-minute margin, capped at 15 min,
+// so a slow fresh Workers universe doesn't fail on a fixed clock.
 async function waitMetal(playerId, minMetal, ms = 360_000) {
   const start = Date.now();
-  while (Date.now() - start < ms) {
+  let deadline = start + ms;
+  let last = null;
+  while (Date.now() < deadline) {
     const st = await apiJson(`/api/state?playerId=${encodeURIComponent(playerId)}`);
+    if (st?.error) throw new Error(`waitMetal state: ${st.error}`);
     const buildQ = st.planet.buildQueue;
     const buildIdle = !buildQ || (Array.isArray(buildQ) ? buildQ.length === 0 : false);
-    if (st.planet.resources.metal >= minMetal && buildIdle) {
+    const metal = st.planet.resources.metal;
+    if (metal >= minMetal && buildIdle) {
       return st;
     }
-    await new Promise((r) => setTimeout(r, 1000));
+    const now = Date.now();
+    const queueEnd = Array.isArray(buildQ)
+      ? Math.max(0, ...buildQ.map((q) => q.endsAt ?? 0))
+      : 0;
+    const rate = st.economy?.productionPerHour?.metal ?? 0;
+    const metalEta = rate > 0 ? now + ((minMetal - metal) / rate) * 3_600_000 : 0;
+    const eta = Math.max(queueEnd, metalEta);
+    if (eta > 0) deadline = Math.max(deadline, Math.min(start + 900_000, eta + 120_000));
+    last = { metal: Math.floor(metal), rate, queue: buildQ?.length ?? 0, etaS: eta ? Math.round((eta - now) / 1000) : null };
+    const sleep = Math.min(20_000, Math.max(1_000, eta - now));
+    await new Promise((r) => setTimeout(r, sleep));
   }
-  throw new Error(`timeout waiting for ${minMetal} metal`);
+  throw new Error(`timeout waiting for ${minMetal} metal: ${JSON.stringify(last)}`);
 }
 
 async function apiSmoke() {
