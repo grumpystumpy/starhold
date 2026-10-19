@@ -11,6 +11,10 @@ Canonical working agreements for agents on Starhold. Prefer this over older play
 - Deploys happen only with Micah's approval, from `main`. See [hosting.md](./hosting.md) and [cloudflare.md](./cloudflare.md).
 - If Micah must sign in, connect GitHub, or approve OAuth: **stop** and report exact URLs + clicks. Do not invent credentials.
 
+## Deploys and D1 migrations
+
+Every deploy runs `wrangler d1 migrations apply starhold --remote` before `wrangler deploy`. A migration failure stops the deploy. Migrations must be additive and backward-compatible with live saves. Do not use `DROP`, destructive `ALTER`, or renames. Old code must still run against the new schema. Before every batch merge, check that a save from the current live build loads on the new build and keeps its progress.
+
 ## Git / PRs
 
 - Default branch is **`main`**, protected by the `protect-main` ruleset: PR required, the `unit-and-e2e` CI check must pass, no force pushes, no deletion. **Never** push to `cursor/core-loop-prototype-1093` (retired after merge of PR #1).
