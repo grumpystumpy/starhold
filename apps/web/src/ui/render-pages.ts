@@ -1,5 +1,6 @@
 import {
   DEFENSE_ORDER,
+  DEFENSES,
   MAP_GALAXIES,
   MAP_SYSTEMS,
   MINI_BUILDING_ORDER,
@@ -14,7 +15,9 @@ import {
   fortressRelocateDeutCost,
   fortressRelocateLandingWindow,
   type BuildingId,
+  type DefenseId,
   type PlayerView,
+  type ShipId,
 } from "@starhold/game";
 import { SHIP_ART, UI_ART } from "./assets";
 import { fmt, fmtCoords } from "./format";
@@ -242,10 +245,47 @@ function researchPage(view: PlayerView, busy: boolean): string {
     </section>`;
 }
 
-function shipyardPage(view: PlayerView, busy: boolean): string {
+function shipCombatStrength(id: ShipId): number {
+  const def = SHIPS[id];
+  return (def?.attack ?? 0) + (def?.shield ?? 0) + (def?.hull ?? 0);
+}
+
+function defenseCombatStrength(id: DefenseId): number {
+  const def = DEFENSES[id];
+  return (def?.attack ?? 0) + (def?.shield ?? 0) + (def?.hull ?? 0);
+}
+
+const SHIP_ORDER_INDEX = new Map(SHIP_ORDER.map((id, index) => [id, index]));
+const DEFENSE_ORDER_INDEX = new Map(
+  DEFENSE_ORDER.map((id, index) => [id, index]),
+);
+
+function compareShipsWeakestFirst(a: ShipId, b: ShipId): number {
+  const diff = shipCombatStrength(a) - shipCombatStrength(b);
+  if (diff !== 0) return diff;
+  return (SHIP_ORDER_INDEX.get(a) ?? 0) - (SHIP_ORDER_INDEX.get(b) ?? 0);
+}
+
+function compareDefensesWeakestFirst(a: DefenseId, b: DefenseId): number {
+  const diff = defenseCombatStrength(a) - defenseCombatStrength(b);
+  if (diff !== 0) return diff;
+  return (DEFENSE_ORDER_INDEX.get(a) ?? 0) - (DEFENSE_ORDER_INDEX.get(b) ?? 0);
+}
+
+export const WEAKEST_FIRST_SHIPS: ShipId[] = [...SHIP_ORDER].sort(
+  compareShipsWeakestFirst,
+);
+
+export const WEAKEST_FIRST_DEFENSES: DefenseId[] = [...DEFENSE_ORDER].sort(
+  compareDefensesWeakestFirst,
+);
+
+export function shipyardPage(view: PlayerView, busy: boolean): string {
   const { planet, now } = view;
   const classId = view.player.playerClass?.classId ?? null;
-  const buildable = SHIP_ORDER.filter((id) => shipClassAllowed(id, classId));
+  const buildable = WEAKEST_FIRST_SHIPS.filter((id) =>
+    shipClassAllowed(id, classId),
+  );
   const hangarEmpty = SHIP_ORDER.every((id) => (planet.ships[id] ?? 0) <= 0);
   return `
     <section class="panel" data-testid="hull-bay-panel">
@@ -285,12 +325,12 @@ function shipyardPage(view: PlayerView, busy: boolean): string {
     </section>`;
 }
 
-function defensesPage(view: PlayerView, busy: boolean): string {
+export function defensesPage(view: PlayerView, busy: boolean): string {
   const { planet, now } = view;
   return `
     <section class="panel" data-testid="defenses-panel">
       <h2>Defenses</h2>
-      ${DEFENSE_ORDER.map((id) => defenseRow(id, planet, busy)).join("")}
+      ${WEAKEST_FIRST_DEFENSES.map((id) => defenseRow(id, planet, busy)).join("")}
       ${
         defenseQueueHtml(planet, now) ||
         `<p class="hint">Static guns fight with your hangar on raids.</p>`
