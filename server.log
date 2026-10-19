@@ -1,0 +1,10 @@
+
+> starhold@0.1.0 start
+> npm run start -w @starhold/server
+
+
+> @starhold/server@0.1.0 start
+> node dist/index.js
+
+Starhold API listening on http://localhost:3001
+Storage: memory
