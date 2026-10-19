@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { PostHog } from "posthog-js";
 import {
   planFailureReport,
   reportFailure,
@@ -68,14 +67,85 @@ describe("api failure telemetry", () => {
     ]);
   });
 
-  it("lets posthog-js build a valid exception list", () => {
+  it("lets posthog-js build a valid exception list", async () => {
+    const globals = ["window", "document", "location", "fetch"] as const;
     const originalSetTimeout = globalThis.setTimeout;
     const originalSetInterval = globalThis.setInterval;
     globalThis.setTimeout = (() => 0) as typeof setTimeout;
     globalThis.setInterval = (() => 0) as typeof setInterval;
-    const client = new PostHog();
-    const events: Array<{ event: string; properties?: Record<string, unknown> }> = [];
+    const originalGlobals = new Map(
+      globals.map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)]),
+    );
+    const requests: string[] = [];
+    const location = new URL("https://starhold.test/");
+    const createElement = () => {
+      let parsedUrl = new URL(location);
+      return {
+        set href(value: string) {
+          parsedUrl = new URL(value, location);
+        },
+        get href() {
+          return parsedUrl.href;
+        },
+        get protocol() {
+          return parsedUrl.protocol;
+        },
+        get hostname() {
+          return parsedUrl.hostname;
+        },
+        get host() {
+          return parsedUrl.host;
+        },
+        get port() {
+          return parsedUrl.port;
+        },
+        get pathname() {
+          return parsedUrl.pathname;
+        },
+        get search() {
+          return parsedUrl.search;
+        },
+        get hash() {
+          return parsedUrl.hash;
+        },
+        style: {},
+      };
+    };
+    const browserWindow = {
+      location,
+      navigator: { userAgent: "Mozilla/5.0 Chrome/120.0", onLine: true },
+      screen: { width: 1280, height: 720, colorDepth: 24, pixelDepth: 24 },
+      addEventListener() {},
+      removeEventListener() {},
+      console,
+    };
+    Object.defineProperties(globalThis, {
+      window: { configurable: true, value: browserWindow },
+      document: {
+        configurable: true,
+        value: {
+          location,
+          readyState: "complete",
+          addEventListener() {},
+          removeEventListener() {},
+          documentElement: { clientWidth: 1280, clientHeight: 720 },
+          createElement,
+        },
+      },
+      location: { configurable: true, value: location },
+      fetch: {
+        configurable: true,
+        value: async (_input: RequestInfo | URL, init?: RequestInit) => {
+          if (typeof init?.body === "string") requests.push(init.body);
+          return new Response("{}", { status: 200 });
+        },
+      },
+    });
+
+    let client: InstanceType<(typeof import("posthog-js"))["PostHog"]> | undefined;
     try {
+      const { PostHog } = await import("posthog-js");
+      client = new PostHog();
       client.init("phc_test", {
         api_host: "https://posthog.test",
         persistence: "memory",
@@ -83,22 +153,46 @@ describe("api failure telemetry", () => {
         autocapture: false,
         disable_session_recording: true,
         disable_remote_config: true,
+        disable_external_dependency_loading: true,
+        advanced_disable_decide: true,
+        advanced_disable_feature_flags: true,
+        opt_out_useragent_filter: true,
+        request_batching: false,
+        transport: "fetch",
+        disable_compression: true,
       });
-      client.capture = (event, properties) => {
-        events.push({ event, properties });
-        return undefined;
-      };
       client.captureException(new Error("SDK exception test"));
+      await new Promise((resolve) => setImmediate(resolve));
     } finally {
-      client._handle_unload();
+      await client?.shutdown();
+      for (const name of globals) {
+        const descriptor = originalGlobals.get(name);
+        if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+        else Reflect.deleteProperty(globalThis, name);
+      }
       globalThis.setTimeout = originalSetTimeout;
       globalThis.setInterval = originalSetInterval;
     }
 
-    const event = events.find(({ event }) => event === "$exception");
-    const exception = event?.properties?.$exception_list as Array<{ type?: string; value?: string }> | undefined;
-    assert.ok(exception?.[0]?.type);
-    assert.ok(exception?.[0]?.value);
+    const events = requests.flatMap((body) => {
+      const payload = JSON.parse(body) as { batch?: Array<Record<string, unknown>> };
+      return payload.batch ?? [];
+    });
+    const event = events.find((candidate) => (
+      typeof candidate === "object"
+      && candidate !== null
+      && (candidate as Record<string, unknown>).event === "$exception"
+    )) as Record<string, unknown> | undefined;
+    assert.ok(event, "PostHog request queue should emit a $exception event");
+    const properties = event.properties as Record<string, unknown>;
+    const exception = properties.$exception_list as Array<{ type?: unknown; value?: unknown }> | undefined;
+    assert.ok(Array.isArray(exception) && exception.length > 0);
+    assert.equal(typeof exception[0]?.type, "string");
+    assert.ok(exception[0].type);
+    assert.equal(typeof exception[0]?.value, "string");
+    assert.ok(exception[0].value);
+    assert.equal("$exception_message" in properties, false);
+    assert.equal("$exception_type" in properties, false);
   });
 
   it("keeps client failures and the first two state poll failures quiet", async () => {
