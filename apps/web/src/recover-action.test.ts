@@ -1,8 +1,8 @@
 import "./test-dom";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it, mock } from "node:test";
 import type { PlayerView } from "@starhold/game";
-import { NOT_APPLIED_MESSAGE, OVERLOAD_MESSAGE } from "./api";
+import { NOT_APPLIED_MESSAGE, OVERLOAD_MESSAGE, POST_TIMEOUT_MS } from "./api";
 
 const { doUpgrade } = await import("./main-actions-build");
 const { session, setPaintImpl } = await import("./session");
@@ -142,5 +142,51 @@ describe("failed actions check state once", () => {
     assert.equal(posts, 1);
     assert.equal(states, 0);
     assert.equal(session.error, "Not enough metal.");
+  });
+
+  it("a timed-out POST mutation goes through settleMutation and is never re-sent", async () => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    setPaintImpl(() => {});
+    session.view = view([]);
+    session.busy = false;
+    session.error = null;
+    session.notice = null;
+    let posts = 0;
+    let states = 0;
+    const original = globalThis.fetch;
+    globalThis.fetch = (input, init) => {
+      const url = String(input);
+      if (url.includes("/api/upgrade")) {
+        posts += 1;
+        return new Promise<Response>((_resolve, reject) => {
+          if (init?.signal) {
+            init.signal.addEventListener("abort", () => {
+              reject(new DOMException("The operation was aborted.", "AbortError"));
+            });
+          }
+        });
+      }
+      if (url.includes("/api/state")) {
+        states += 1;
+        return Promise.resolve(
+          new Response(JSON.stringify(view([])), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+        );
+      }
+      throw new Error(`unexpected ${url}`);
+    };
+    try {
+      const promise = doUpgrade("shipyard");
+      mock.timers.tick(POST_TIMEOUT_MS);
+      await promise;
+    } finally {
+      globalThis.fetch = original;
+      mock.timers.reset();
+    }
+    assert.equal(posts, 1);
+    assert.equal(states, 1);
+    assert.equal(session.error, NOT_APPLIED_MESSAGE);
   });
 });
