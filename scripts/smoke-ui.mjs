@@ -287,44 +287,33 @@ async function uiSmoke() {
   const homeGalaxy = await page.evaluate(
     () => window.starhold?.getState()?.galaxy?.galaxy ?? 1,
   );
-  let pirateHit = null;
-  // Workers seeds pirates lazily across requests (world-seed.ts). On a
-  // fresh universe the home galaxy can still be unseeded, so rescan it a
-  // few times before giving up. Node (CI) seeds eagerly and never waits.
-  // Rescans only against a local server (never a live URL), at most 5.
-  const localApi = /^https?:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/.test(API);
-  const maxSeedWaits = localApi ? 5 : 0;
-  for (let wait = 0; wait <= maxSeedWaits && !pirateHit; wait++) {
-    if (wait > 0) {
-      console.log(`Pirate seed wait ${wait}/${maxSeedWaits}`);
-      logs.push(`pirate-seed-wait:${wait}/${maxSeedWaits}`);
-      await new Promise((r) => setTimeout(r, 3_000));
-    }
-    for (let system = 1; system <= 399 && !pirateHit; system++) {
+  // Workers seeds pirates lazily, a few per request (world-seed.ts), so a
+  // fresh local universe may not have placed them yet. Scan the home galaxy
+  // once. If it's empty and the API is local, advance the seed with up to
+  // 150 plain state reads, then scan once more. Worst case: 399+150+399
+  // local requests, once per run. Node (CI) seeds eagerly and never waits.
+  const scanHome = async () => {
+    for (let system = 1; system <= 399; system++) {
       const st = await apiJson(
         `/api/state?playerId=${encodeURIComponent(playerIdForPirate)}&galaxy=${homeGalaxy}&system=${system}`,
       );
-      if (st.galaxy?.pirateBase) pirateHit = st.galaxy.pirateBase;
+      if (st?.error) throw new Error(`pirate scan ${homeGalaxy}:${system}: ${st.error}`);
+      if (st.galaxy?.pirateBase) return st.galaxy.pirateBase;
     }
-  }
-  const galaxyOrder = [
-    homeGalaxy,
-    ...Array.from({ length: 10 }, (_, i) => i + 1).filter((g) => g !== homeGalaxy),
-  ];
-  for (const galaxy of galaxyOrder) {
-    if (pirateHit) break;
-    for (let system = 1; system <= 399; system++) {
-      const st = await apiJson(
-        `/api/state?playerId=${encodeURIComponent(playerIdForPirate)}&galaxy=${galaxy}&system=${system}`,
-      );
-      if (st.galaxy?.pirateBase) {
-        pirateHit = st.galaxy.pirateBase;
-        break;
-      }
+    return null;
+  };
+  let pirateHit = await scanHome();
+  const localApi = /^https?:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/.test(API);
+  if (!pirateHit && localApi) {
+    console.log("Pirate seed wait: 150 state reads, then one rescan");
+    logs.push("pirate-seed-wait");
+    for (let i = 0; i < 150; i++) {
+      await apiJson(`/api/state?playerId=${encodeURIComponent(playerIdForPirate)}`);
     }
+    pirateHit = await scanHome();
   }
-  if (!pirateHit) throw new Error("API found no pirate bases (expected ~200)");
-  if (pirateHit.coords.galaxy !== homeGalaxy) {
+  // The UI can't cross galaxies (S2-F2), so only the home galaxy counts.
+  if (!pirateHit) {
     throw new Error(
       `no pirate in home galaxy ${homeGalaxy}; UI cannot cross galaxies`,
     );
