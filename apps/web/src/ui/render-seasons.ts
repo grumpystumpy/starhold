@@ -6,7 +6,7 @@ import {
   type SeasonClaimView,
   type SeasonStanding,
 } from "@starhold/game";
-import { fmt } from "./format";
+import { fmt, fmtCompact } from "./format";
 import { escapeAttr, escapeHtml } from "./render-escape";
 import { infoTooltip } from "./render-tooltips";
 
@@ -73,7 +73,7 @@ function standingRows(
     ${rows
       .map(
         (row) =>
-          `<li data-testid="season-row-${board}-${row.rank}" data-player-id="${escapeAttr(row.playerId)}"><span>#${fmt(row.rank)} ${escapeHtml(row.name)}${row.playerId === youId ? " (you)" : ""}</span><span>${fmt(row.score)}</span></li>`,
+          `<li data-testid="season-row-${board}-${row.rank}" data-player-id="${escapeAttr(row.playerId)}"><span>#${fmt(row.rank)} ${escapeHtml(row.name)}${row.playerId === youId ? " (you)" : ""}</span><span>${fmtCompact(row.score)}</span></li>`,
       )
       .join("")}
   </ol>`;
@@ -99,7 +99,7 @@ function claimCard(
           ? ""
           : `<button type="button" data-season-claim="${offer.board}" data-season-id="${escapeAttr(claim.seasonId)}" data-testid="${testId}" ${offer.claimed || busy ? "disabled" : ""}>${offer.claimed ? "Claimed" : "Claim"}</button>`;
       return `<li class="season-claim-row">
-        <span>${escapeHtml(boardLabel(offer.board))} · ${rank} · ${fmt(offer.score)} · ${reward}</span>
+        <span>${escapeHtml(boardLabel(offer.board))} · ${rank} · ${fmtCompact(offer.score)} · ${reward}</span>
         ${button}
       </li>`;
     })
@@ -152,7 +152,7 @@ export function seasonsPage(view: PlayerView, busy: boolean): string {
     return `<article class="season-board" data-testid="season-board-${id}">
       <h3>${escapeHtml(boardLabel(id))} ${tip}</h3>
       <p class="hint">${escapeHtml(boardHint(id))}</p>
-      <p data-testid="season-score-${id}">You · ${rank == null ? "unranked" : `#${fmt(rank)}`} · ${fmt(board.scores[id])}</p>
+      <p data-testid="season-score-${id}">You · ${rank == null ? "unranked" : `#${fmt(rank)}`} · ${fmtCompact(board.scores[id])}</p>
       ${standingRows(board.boards[id], view.player.id, id)}
     </article>`;
   }).join("");
