@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { fetchState, setApiFailureReporter, upgradeBuilding } from "./api";
 import {
   planFailureReport,
   reportFailure,
@@ -308,6 +309,139 @@ describe("api failure telemetry", () => {
       assert.equal(exceptions.length, 0);
     } finally {
       setTelemetrySinkForTests(null);
+      resetFailureStateForTests();
+    }
+  });
+
+  it("end-to-end: real rejected fetch via credFetch produces warning event with api_wait_ms", async () => {
+    resetFailureStateForTests();
+    const sentryCalls: Array<{
+      err: unknown;
+      hint: { level: string; tags: Record<string, string>; fingerprint: string[] };
+    }> = [];
+    setTelemetrySinkForTests({
+      sentry: (err, hint) => sentryCalls.push({ err, hint }),
+    });
+    setApiFailureReporter((status, message, ctx) => {
+      void reportFailure(status, message, ctx);
+    });
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => {
+      throw new TypeError("Failed to fetch");
+    };
+
+    try {
+      await assert.rejects(() => upgradeBuilding("p1", "shipyard"));
+      assert.equal(sentryCalls.length, 1);
+      const call = sentryCalls[0]!;
+      assert.equal(call.hint.level, "warning");
+      assert.equal(call.hint.tags.api_status, "0");
+      assert.equal(call.hint.tags.api_path, "/api/upgrade");
+      assert.equal(call.hint.tags.api_method, "POST");
+      assert.equal(call.hint.tags.api_kind, "network");
+      assert.ok("api_wait_ms" in call.hint.tags);
+      const waitMs = Number(call.hint.tags.api_wait_ms);
+      assert.ok(!Number.isNaN(waitMs) && waitMs >= 0);
+      assert.deepEqual(call.hint.fingerprint, ["api", "POST", "/api/upgrade", "0", "network"]);
+    } finally {
+      globalThis.fetch = originalFetch;
+      setTelemetrySinkForTests(null);
+      setApiFailureReporter(() => {});
+      resetFailureStateForTests();
+    }
+  });
+
+  it("end-to-end: request hidden in flight produces NO sink event", async () => {
+    resetFailureStateForTests();
+    const sentryCalls: Array<{ err: unknown; hint: unknown }> = [];
+    setTelemetrySinkForTests({
+      sentry: (err, hint) => sentryCalls.push({ err, hint }),
+    });
+    setApiFailureReporter((status, message, ctx) => {
+      void reportFailure(status, message, ctx);
+    });
+
+    const listeners = new Set<() => void>();
+    const fakeDoc = {
+      visibilityState: "visible" as "visible" | "hidden",
+      addEventListener(event: string, fn: () => void) {
+        if (event === "visibilitychange") listeners.add(fn);
+      },
+      removeEventListener(event: string, fn: () => void) {
+        if (event === "visibilitychange") listeners.delete(fn);
+      },
+    };
+
+    const originalDoc = globalThis.document;
+    const originalFetch = globalThis.fetch;
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: fakeDoc,
+    });
+
+    globalThis.fetch = async () => {
+      fakeDoc.visibilityState = "hidden";
+      for (const fn of listeners) fn();
+      throw new TypeError("Failed to fetch");
+    };
+
+    try {
+      await assert.rejects(() => upgradeBuilding("p1", "shipyard"));
+      assert.equal(sentryCalls.length, 0);
+    } finally {
+      if (originalDoc !== undefined) {
+        Object.defineProperty(globalThis, "document", { configurable: true, value: originalDoc });
+      } else {
+        Reflect.deleteProperty(globalThis, "document");
+      }
+      globalThis.fetch = originalFetch;
+      setTelemetrySinkForTests(null);
+      setApiFailureReporter(() => {});
+      resetFailureStateForTests();
+    }
+  });
+
+  it("end-to-end: 3-in-a-row rule for GET /api/state holds through credFetch", async () => {
+    resetFailureStateForTests();
+    const sentryCalls: Array<{
+      err: unknown;
+      hint: { level: string; tags: Record<string, string>; fingerprint: string[] };
+    }> = [];
+    setTelemetrySinkForTests({
+      sentry: (err, hint) => sentryCalls.push({ err, hint }),
+    });
+    setApiFailureReporter((status, message, ctx) => {
+      void reportFailure(status, message, ctx);
+    });
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => {
+      throw new TypeError("Failed to fetch");
+    };
+
+    try {
+      await assert.rejects(() => fetchState("p1"));
+      assert.equal(sentryCalls.length, 0);
+
+      await assert.rejects(() => fetchState("p1"));
+      assert.equal(sentryCalls.length, 0);
+
+      await assert.rejects(() => fetchState("p1"));
+      assert.equal(sentryCalls.length, 1);
+
+      const call = sentryCalls[0]!;
+      assert.equal(call.hint.level, "warning");
+      assert.equal(call.hint.tags.api_status, "0");
+      assert.equal(call.hint.tags.api_path, "/api/state");
+      assert.equal(call.hint.tags.api_method, "GET");
+      assert.equal(call.hint.tags.api_kind, "network");
+      assert.ok("api_wait_ms" in call.hint.tags);
+      assert.deepEqual(call.hint.fingerprint, ["api", "GET", "/api/state", "0", "network"]);
+    } finally {
+      globalThis.fetch = originalFetch;
+      setTelemetrySinkForTests(null);
+      setApiFailureReporter(() => {});
       resetFailureStateForTests();
     }
   });
