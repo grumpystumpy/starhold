@@ -26,6 +26,7 @@ Starhold is an OGame-like browser space-strategy game for a small group of frien
 - **Stay small:** aim for under ~300 changed lines, not counting tests and fixtures. If the work grows past that, stop. Open the PR with what's done and list what's left. Don't spread into other areas.
 - **No drive-by refactors.** Don't rename, reformat or "clean up" files the issue doesn't name. Don't add new dependencies unless the issue says so.
 - If you find a different bug, **don't fix it**. Write it up in the PR under "Found, not fixed".
+- **Every PR gets a Codex review before it reaches Micah's merge list.** After CI is green and the proof is in the PR, the router runs Codex CLI read-only on the diff (`codex exec --sandbox read-only`, prompt: review the diff against the issue, AGENTS.md and section 4) and posts the result as a PR comment that starts with `Codex review:`. Blocking findings send the PR back (`status:in-review` stays); a clean review plus the router's own check moves it to `status:ready-to-merge`. Codex never pushes, approves or merges. If Codex's free quota is used up, the PR waits; it does not skip the review.
 
 ## 2. Things you must never do
 - **Never merge, never push to `main`, never deploy.** `main` is protected by the `protect-main` ruleset: changes land only through a PR, the `unit-and-e2e` CI check must pass, and force pushes and branch deletion are blocked. Don't run `wrangler deploy`, `npm run deploy:prod`, or anything that touches the live Worker or the live D1 database. Micah approves every merge and deploy.
@@ -51,15 +52,15 @@ Starhold is an OGame-like browser space-strategy game for a small group of frien
 - Combat randomness goes only through the seeded RNG passed into `resolveCombat`. Never use `Math.random()` or the wall clock there.
 
 ## 4. Proof every PR must include (paste real output; don't claim what you didn't run)
-1. **Node 22.** Use `npx node@22` or `nvm use 22`, because Node 20 lacks `node:sqlite` and the tests fail on it.
-   - `npm ci`
-   - `npm test`: each suite name with its pass/fail count;
-   - `npm run typecheck`;
-   - `npm run build`.
-2. New or changed behavior has a unit test. Tests run **offline**, with fetch, clock, timers, storage, Sentry and PostHog stubbed.
-3. If you touched save data or the server: an **old-save fixture** loads with identical players, resources, buildings and fleets, and the query-count output is within the budget in section 3.
-4. If you touched the UI: a short note or screenshot from a local production build at phone width (iPhone-size viewport) and desktop width.
-5. The commit sha, and confirmation that the branch is rebased on the current `main`.
+Tiered testing (Micah, Oct 19 2026): run only what your change needs, on **Node 22** (`npx node@22` or `nvm use 22`, because Node 20 lacks `node:sqlite`).
+1. **Every code PR:** unit tests (`npm test -w <package>`) and typecheck for the packages you touched. Paste each suite's pass/fail count. CI runs the rest.
+2. **UI/render files:** also a short UI smoke on a local build at phone width and desktop width (a note or screenshot).
+3. **Server, D1, save schema or migrations:** also the server tests and the old-save (save-compat) check. Migrations must be additive and backward-compatible with live saves.
+4. **Deploy scripts:** also a dry run (e.g. `wrangler deploy --dry-run`). Never a real deploy.
+5. **Docs, config or label-only:** no tests beyond CI.
+6. New or changed behavior has an offline unit test, with fetch, clock, timers, storage, Sentry and PostHog stubbed.
+7. The commit sha, and confirmation that the branch is based on the current `main`.
+Skip browser e2e, save-compat and the full build unless your change touches that area. The full set runs once on the combined batch before merge (see docs/process.md).
 
 ## 5. Repo map
 - `packages/game/`: pure game rules (catalog, tuning, combat, world tick). Unit-test-heavy and deterministic.
