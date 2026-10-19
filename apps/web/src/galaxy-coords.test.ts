@@ -19,6 +19,17 @@ describe("parseGalaxyCoords", () => {
     assert.deepEqual(parseGalaxyCoords("9,143", 1), { galaxy: 9, system: 143 });
   });
 
+  it("parses with repeated whitespace separator", () => {
+    assert.deepEqual(parseGalaxyCoords("9  143", 1), { galaxy: 9, system: 143 });
+  });
+
+  it("parses with padded and repeated separators", () => {
+    assert.deepEqual(parseGalaxyCoords(" 9 :  143 ", 1), {
+      galaxy: 9,
+      system: 143,
+    });
+  });
+
   it("uses current galaxy when only system is provided", () => {
     assert.deepEqual(parseGalaxyCoords("143", 9), { galaxy: 9, system: 143 });
   });
