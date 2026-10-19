@@ -24,6 +24,7 @@ describe("api failure telemetry", () => {
         method: "POST",
         path: "/api/login",
         kind: "network",
+        durationMs: 120,
       });
       const statePoll = { method: "GET", path: "/api/state?playerId=p1", kind: "overload" as const };
       await reportFailure(503, "state poll failed", statePoll);
@@ -53,7 +54,8 @@ describe("api failure telemetry", () => {
         api_path: "/api/login",
         api_method: "POST",
         api_kind: "network",
-        level: "error",
+        api_wait_ms: "120",
+        level: "warning",
         $exception_fingerprint: "api:POST:/api/login:0:network",
       },
       {
@@ -209,6 +211,101 @@ describe("api failure telemetry", () => {
       await reportFailure(400, "nope", { method: "POST", path: "/api/upgrade", kind: "client" });
       assert.equal(exceptions.length, 0);
       assert.equal(planFailureReport(200, "ok", { method: "GET", path: "/api/state", kind: "client" }).skip, true);
+    } finally {
+      setTelemetrySinkForTests(null);
+      resetFailureStateForTests();
+    }
+  });
+
+  it("reports network and timeout at level warning with api_wait_ms tag", async () => {
+    resetFailureStateForTests();
+    const sentryCalls: Array<{ err: unknown; hint: unknown }> = [];
+    setTelemetrySinkForTests({
+      sentry: (err, hint) => sentryCalls.push({ err, hint }),
+    });
+    try {
+      await reportFailure(0, "Network error", {
+        method: "GET",
+        path: "/api/state",
+        kind: "network",
+        durationMs: 450,
+      });
+      // 3-in-a-row rule: first two state poll failures skipped
+      assert.equal(sentryCalls.length, 0);
+
+      await reportFailure(0, "Network error", {
+        method: "GET",
+        path: "/api/state",
+        kind: "network",
+        durationMs: 450,
+      });
+      assert.equal(sentryCalls.length, 0);
+
+      await reportFailure(0, "Network error", {
+        method: "GET",
+        path: "/api/state",
+        kind: "network",
+        durationMs: 450,
+      });
+      assert.equal(sentryCalls.length, 1);
+      assert.deepEqual(sentryCalls[0]?.hint, {
+        level: "warning",
+        tags: {
+          api_status: "0",
+          api_path: "/api/state",
+          api_method: "GET",
+          api_kind: "network",
+          api_wait_ms: "450",
+        },
+        fingerprint: ["api", "GET", "/api/state", "0", "network"],
+      });
+
+      await reportFailure(0, "Timeout error", {
+        method: "POST",
+        path: "/api/upgrade",
+        kind: "timeout",
+        durationMs: 20000,
+      });
+      assert.equal(sentryCalls.length, 2);
+      assert.deepEqual(sentryCalls[1]?.hint, {
+        level: "warning",
+        tags: {
+          api_status: "0",
+          api_path: "/api/upgrade",
+          api_method: "POST",
+          api_kind: "timeout",
+          api_wait_ms: "20000",
+        },
+        fingerprint: ["api", "POST", "/api/upgrade", "0", "timeout"],
+      });
+    } finally {
+      setTelemetrySinkForTests(null);
+      resetFailureStateForTests();
+    }
+  });
+
+  it("skips reporting if page was hidden during request", async () => {
+    resetFailureStateForTests();
+    const exceptions: unknown[] = [];
+    setTelemetrySinkForTests({
+      posthogException: (err) => exceptions.push(err),
+    });
+    try {
+      const plan = planFailureReport(500, "Server error", {
+        method: "POST",
+        path: "/api/upgrade",
+        kind: "server",
+        wasHidden: true,
+      });
+      assert.equal(plan.skip, true);
+
+      await reportFailure(500, "Server error", {
+        method: "POST",
+        path: "/api/upgrade",
+        kind: "server",
+        wasHidden: true,
+      });
+      assert.equal(exceptions.length, 0);
     } finally {
       setTelemetrySinkForTests(null);
       resetFailureStateForTests();

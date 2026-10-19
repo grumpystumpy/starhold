@@ -192,10 +192,58 @@ describe("credFetch timeout", () => {
       assert.equal(seen[0]?.ctx?.method, "POST");
       assert.equal(seen[0]?.ctx?.path, "/api/upgrade");
       assert.equal(seen[0]?.ctx?.kind, "timeout");
+      assert.equal(typeof seen[0]?.ctx?.durationMs, "number");
     } finally {
       globalThis.fetch = original;
       setApiFailureReporter(() => {});
       mock.timers.reset();
+    }
+  });
+
+  it("tracks visibility state changes during credFetch", async () => {
+    const seen: Array<{ status: number; message: string; ctx?: ApiFailureContext }> = [];
+    setApiFailureReporter((status, message, ctx) => {
+      seen.push({ status, message, ctx });
+    });
+
+    const listeners = new Set<() => void>();
+    const fakeDoc = {
+      visibilityState: "visible" as "visible" | "hidden",
+      addEventListener(event: string, fn: () => void) {
+        if (event === "visibilitychange") listeners.add(fn);
+      },
+      removeEventListener(event: string, fn: () => void) {
+        if (event === "visibilitychange") listeners.delete(fn);
+      },
+    };
+
+    const originalDoc = globalThis.document;
+    const originalFetch = globalThis.fetch;
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: fakeDoc,
+    });
+
+    globalThis.fetch = async () => {
+      // Simulate page hide while request is in flight
+      fakeDoc.visibilityState = "hidden";
+      for (const fn of listeners) fn();
+      return new Response("<html>Error 500</html>", { status: 500 });
+    };
+
+    try {
+      await assert.rejects(() => upgradeBuilding("p1", "shipyard"));
+      assert.equal(seen.length, 1);
+      assert.equal(seen[0]?.ctx?.wasHidden, true);
+      assert.equal(typeof seen[0]?.ctx?.durationMs, "number");
+    } finally {
+      if (originalDoc !== undefined) {
+        Object.defineProperty(globalThis, "document", { configurable: true, value: originalDoc });
+      } else {
+        Reflect.deleteProperty(globalThis, "document");
+      }
+      globalThis.fetch = originalFetch;
+      setApiFailureReporter(() => {});
     }
   });
 });
