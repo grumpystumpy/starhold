@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { PostHog } from "posthog-js";
 import {
   planFailureReport,
   reportFailure,
@@ -8,69 +9,111 @@ import {
 } from "./telemetry";
 
 describe("api failure telemetry", () => {
-  it("reports busy and overload as warnings with a stable fingerprint", async () => {
+  it("sends exception objects with scrubbed messages and diagnostic properties", async () => {
     resetFailureStateForTests();
-    const events: Array<{ message: string; hint: { level: string; tags: Record<string, string>; fingerprint: string[] } }> = [];
-    const props: Array<Record<string, unknown>> = [];
+    const exceptions: Array<{ err: unknown; props: Record<string, unknown> }> = [];
     setTelemetrySinkForTests({
-      sentry: (err, hint) => {
-        events.push({ message: err instanceof Error ? err.message : "", hint });
-      },
-      posthog: (_event, body) => props.push(body),
+      posthogException: (err, props) => exceptions.push({ err, props }),
     });
     try {
-      await reportFailure(503, "Universe busy — retry in a moment.", {
+      await reportFailure(503, "The server is overloaded.", {
         method: "POST",
         path: "/api/upgrade?playerId=secret",
-        kind: "busy",
-      });
-      await reportFailure(503, "The server hiccuped. Checking whether your order went through…", {
-        method: "POST",
-        path: "/api/upgrade",
         kind: "overload",
       });
-      await reportFailure(500, "Boom", {
+      await reportFailure(0, "pilot@example.com could not connect", {
         method: "POST",
-        path: "/api/upgrade",
-        kind: "server",
+        path: "/api/login",
+        kind: "network",
       });
-      await reportFailure(500, "pilot@example.com failed", {
-        method: "POST",
-        path: "/api/upgrade",
-        kind: "server",
-      });
+      const statePoll = { method: "GET", path: "/api/state?playerId=p1", kind: "overload" as const };
+      await reportFailure(503, "state poll failed", statePoll);
+      await reportFailure(503, "state poll failed", statePoll);
+      await reportFailure(503, "state poll failed", statePoll);
     } finally {
       setTelemetrySinkForTests(null);
+      resetFailureStateForTests();
     }
-    assert.equal(events.length, 4);
-    assert.equal(events[0]?.hint.level, "warning");
-    assert.deepEqual(events[0]?.hint.fingerprint, ["api", "POST", "/api/upgrade", "503", "busy"]);
-    assert.equal(events[0]?.hint.tags.api_path, "/api/upgrade");
-    assert.equal(events[0]?.hint.tags.api_method, "POST");
-    assert.equal(events[0]?.hint.tags.api_kind, "busy");
-    assert.equal(events[1]?.hint.level, "warning");
-    assert.deepEqual(events[1]?.hint.fingerprint, ["api", "POST", "/api/upgrade", "503", "overload"]);
-    assert.equal(events[2]?.hint.level, "error");
-    assert.equal(events[3]?.message, "Request failed.");
-    assert.equal(props[0]?.api_kind, "busy");
-    assert.equal(props[0]?.level, "warning");
-    assert.equal(props[1]?.api_kind, "overload");
-    assert.equal(props[3]?.$exception_message, "Request failed.");
-    const quiet = planFailureReport(400, "nope", { method: "POST", path: "/api/upgrade", kind: "client" });
-    assert.equal(quiet.skip, true);
+
+    assert.equal(exceptions.length, 3);
+    assert.deepEqual(
+      exceptions.map(({ err }) => err instanceof Error ? err.message : null),
+      ["The server is overloaded.", "Request failed.", "state poll failed"],
+    );
+    assert.deepEqual(exceptions.map(({ props }) => props), [
+      {
+        api_status: "503",
+        api_path: "/api/upgrade",
+        api_method: "POST",
+        api_kind: "overload",
+        level: "warning",
+        $exception_fingerprint: "api:POST:/api/upgrade:503:overload",
+      },
+      {
+        api_status: "0",
+        api_path: "/api/login",
+        api_method: "POST",
+        api_kind: "network",
+        level: "error",
+        $exception_fingerprint: "api:POST:/api/login:0:network",
+      },
+      {
+        api_status: "503",
+        api_path: "/api/state",
+        api_method: "GET",
+        api_kind: "overload",
+        level: "warning",
+        $exception_fingerprint: "api:GET:/api/state:503:overload",
+      },
+    ]);
   });
 
-  it("stays quiet until three state polls fail in a row", async () => {
+  it("lets posthog-js build a valid exception list", () => {
+    const originalSetTimeout = globalThis.setTimeout;
+    const originalSetInterval = globalThis.setInterval;
+    globalThis.setTimeout = (() => 0) as typeof setTimeout;
+    globalThis.setInterval = (() => 0) as typeof setInterval;
+    const client = new PostHog();
+    const events: Array<{ event: string; properties?: Record<string, unknown> }> = [];
+    try {
+      client.init("phc_test", {
+        api_host: "https://posthog.test",
+        persistence: "memory",
+        capture_pageview: false,
+        autocapture: false,
+        disable_session_recording: true,
+        disable_remote_config: true,
+      });
+      client.capture = (event, properties) => {
+        events.push({ event, properties });
+        return undefined;
+      };
+      client.captureException(new Error("SDK exception test"));
+    } finally {
+      client._handle_unload();
+      globalThis.setTimeout = originalSetTimeout;
+      globalThis.setInterval = originalSetInterval;
+    }
+
+    const event = events.find(({ event }) => event === "$exception");
+    const exception = event?.properties?.$exception_list as Array<{ type?: string; value?: string }> | undefined;
+    assert.ok(exception?.[0]?.type);
+    assert.ok(exception?.[0]?.value);
+  });
+
+  it("keeps client failures and the first two state poll failures quiet", async () => {
     resetFailureStateForTests();
-    let calls = 0;
-    setTelemetrySinkForTests({ sentry: () => { calls += 1; } });
+    const exceptions: unknown[] = [];
+    setTelemetrySinkForTests({
+      posthogException: (err) => exceptions.push(err),
+    });
     try {
       const ctx = { method: "GET", path: "/api/state?playerId=p1", kind: "overload" as const };
       await reportFailure(503, "hiccup", ctx);
       await reportFailure(503, "hiccup", ctx);
-      assert.equal(calls, 0);
-      await reportFailure(503, "hiccup", ctx);
-      assert.equal(calls, 1);
+      assert.equal(exceptions.length, 0);
+      await reportFailure(400, "nope", { method: "POST", path: "/api/upgrade", kind: "client" });
+      assert.equal(exceptions.length, 0);
       assert.equal(planFailureReport(200, "ok", { method: "GET", path: "/api/state", kind: "client" }).skip, true);
     } finally {
       setTelemetrySinkForTests(null);
