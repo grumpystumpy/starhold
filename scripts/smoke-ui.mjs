@@ -291,10 +291,13 @@ async function uiSmoke() {
   // Workers seeds pirates lazily across requests (world-seed.ts). On a
   // fresh universe the home galaxy can still be unseeded, so rescan it a
   // few times before giving up. Node (CI) seeds eagerly and never waits.
-  for (let wait = 0; wait <= 10 && !pirateHit; wait++) {
+  // Rescans only against a local server (never a live URL), at most 5.
+  const localApi = /^https?:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/.test(API);
+  const maxSeedWaits = localApi ? 5 : 0;
+  for (let wait = 0; wait <= maxSeedWaits && !pirateHit; wait++) {
     if (wait > 0) {
-      console.log(`Pirate seed wait ${wait}/10`);
-      logs.push(`pirate-seed-wait:${wait}/10`);
+      console.log(`Pirate seed wait ${wait}/${maxSeedWaits}`);
+      logs.push(`pirate-seed-wait:${wait}/${maxSeedWaits}`);
       await new Promise((r) => setTimeout(r, 3_000));
     }
     for (let system = 1; system <= 399 && !pirateHit; system++) {
