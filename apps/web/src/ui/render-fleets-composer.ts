@@ -3,10 +3,14 @@ import {
   NEWBIE_PROTECTION_POINTS,
   SHIP_ORDER,
   SHIPS,
+  classBonuses,
+  empireExpeditionCap,
   fuelCostOneWay,
   flightSecondsOneWay,
   maxExpeditions,
+  maxFleetSlots,
   normalizeFleetShips,
+  playerBoosts,
   type MissionType,
   type PlayerView,
 } from "@starhold/game";
@@ -16,11 +20,33 @@ import { escapeAttr, escapeHtml } from "./render-escape";
 import { MISSIONS, type FleetDraft } from "./render-fleets-draft.js";
 import { infoTooltip } from "./render-tooltips";
 
+export function fleetSlotCaps(
+  player: PlayerView["player"] | undefined,
+  now: number,
+): { fleetCap: number; expeditionCap: number } {
+  if (!player) return { fleetCap: 1, expeditionCap: 1 };
+  const safePlayer = player.research ? player : { ...player, research: {} as any };
+  const boosts = playerBoosts(safePlayer, now);
+  const cls = classBonuses(safePlayer.playerClass?.classId);
+  const fleetCap =
+    maxFleetSlots(safePlayer.research?.computerTech ?? 0) +
+    boosts.fleetSlots +
+    cls.fleetSlots;
+  const expeditionCap = empireExpeditionCap(safePlayer, maxExpeditions);
+  return { fleetCap, expeditionCap };
+}
+
 export function fleetComposer(
   view: PlayerView,
   busy: boolean,
   draft: FleetDraft | null,
 ): string {
+  const { fleetCap, expeditionCap } = fleetSlotCaps(view.player, view.now);
+  const activeFleets = (view.fleets ?? []).length;
+  const activeExpeditions = (view.fleets ?? []).filter(
+    (f) => f.mission === "expedition",
+  ).length;
+  const expeditionActive = activeExpeditions;
   const mission = draft?.mission ?? "deploy";
   const rivals = view.roster.filter((r) => r.id !== view.player.id);
   const attackableRivals = rivals.filter(
@@ -225,9 +251,6 @@ export function fleetComposer(
         </div>`
       : "";
 
-  const expeditionCap = maxExpeditions(view.player.research.astrophysics ?? 0);
-  const expeditionActive = view.fleets.filter((f) => f.mission === "expedition")
-    .length;
   const protectedFromAttack =
     (mission === "raid" || mission === "deploy") &&
     options.length === 0 &&
@@ -372,6 +395,7 @@ export function fleetComposer(
 
   return `
     <form id="fleet-form" data-testid="fleet-form" class="fleet-form">
+      <p class="hint fleet-slots" data-testid="fleet-slot-counters">Fleets ${fmt(activeFleets)}/${fmt(fleetCap)} · Expeditions ${fmt(activeExpeditions)}/${fmt(expeditionCap)}</p>
       <fieldset class="mission-pick">
         <legend>Mission</legend>
         ${missionRadios}
@@ -387,7 +411,7 @@ export function fleetComposer(
       <div class="fleet-ships" data-testid="fleet-orbit-ships">${shipInputs}</div>
       ${needHint}
       ${acsBlock(view, mission, busy, draft)}
-      <p class="hint">Ships shown are in orbit on the selected colony. Example one-way ETA ~${fmtEta(sampleEta)} · fuel ~${fmt(sampleFuel)} deut (1 scout). Fleet slots: ${fmt(1 + (view.player.research.computerTech ?? 0))}${mission === "expedition" ? ` · expeditions ${fmt(expeditionActive)}/${fmt(expeditionCap)}` : ""}.</p>
+      <p class="hint">Ships shown are in orbit on the selected colony. Example one-way ETA ~${fmtEta(sampleEta)} · fuel ~${fmt(sampleFuel)} deut (1 scout). Fleets ${fmt(activeFleets)}/${fmt(fleetCap)} · Expeditions ${fmt(activeExpeditions)}/${fmt(expeditionCap)}.</p>
       <button type="submit" data-testid="launch-fleet" ${launchBlocked || orbitShipIds.length === 0 ? "disabled" : ""}>Launch fleet</button>
       ${
         view.alliance
