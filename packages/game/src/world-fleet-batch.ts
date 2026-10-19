@@ -1,16 +1,23 @@
-import { EXPEDITION_SLOT, MAP_GALAXIES, MAP_SYSTEMS } from "./catalog.js";
-import { fleetShipCount, normalizeFleetShips } from "./formulas.js";
-import type {
-  FleetMission,
-  FleetShips,
-  UniverseState,
-} from "./types.js";
-import { ensureUniverseShape } from "./world-bootstrap.js";
 import {
-  expeditionPresetShips,
-  getFleetPreset,
-} from "./world-fleet-presets.js";
+  EXPEDITION_SLOT,
+  MAP_GALAXIES,
+  MAP_SYSTEMS,
+  SHIP_ORDER,
+} from "./catalog.js";
+import {
+  classBonuses,
+  empireExpeditionCap,
+  fleetShipCount,
+  isStationaryShip,
+  maxExpeditions,
+  maxFleetSlots,
+  normalizeFleetShips,
+} from "./formulas.js";
+import type { FleetMission, FleetShips, UniverseState } from "./types.js";
+import { playerBoosts } from "./world-boosts.js";
+import { emptyShips, ensureUniverseShape } from "./world-bootstrap.js";
 import { launchFleet } from "./world-launch.js";
+import { empireDriftBeaconExpeditionBonus } from "./world-mini.js";
 
 export type BatchFleetResult =
   | {
@@ -51,18 +58,6 @@ export function launchMaxExpeditions(
   const player = universe.players[opts.playerId];
   if (!player) return { ok: false, error: "Unknown player." };
 
-  const now = opts.now ?? Date.now();
-  const presetId = opts.presetId ?? "expedition";
-  const fromPreset = getFleetPreset(player, presetId);
-  const ships = normalizeFleetShips(
-    opts.ships ??
-      fromPreset?.ships ??
-      expeditionPresetShips(player),
-  );
-  if (fleetShipCount(ships) < 1) {
-    return { ok: false, error: "Expedition preset has no ships." };
-  }
-
   const origin =
     (opts.originPlanetId
       ? universe.planets[opts.originPlanetId]
@@ -72,6 +67,7 @@ export function launchMaxExpeditions(
     return { ok: false, error: "Planet missing." };
   }
 
+  const now = opts.now ?? Date.now();
   const galaxy = Math.min(
     MAP_GALAXIES,
     Math.max(1, Math.floor(opts.galaxy ?? origin.coords.galaxy)),
@@ -84,22 +80,124 @@ export function launchMaxExpeditions(
   const launched: FleetMission[] = [];
   let stoppedReason: string | undefined;
 
-  // Hard cap: avoid pathological loops if slots are huge.
-  for (let i = 0; i < 64; i++) {
-    if (!hangarHasComposition(origin.ships, ships)) {
-      stoppedReason = launched.length
-        ? "Not enough ships in orbit for another expedition."
-        : "Not enough ships in orbit for the Expedition preset.";
-      break;
+  if (opts.ships !== undefined) {
+    const ships = normalizeFleetShips(opts.ships);
+    if (fleetShipCount(ships) < 1) {
+      return { ok: false, error: "Expedition preset has no ships." };
     }
+
+    for (let i = 0; i < 64; i++) {
+      if (!hangarHasComposition(origin.ships, ships)) {
+        stoppedReason = launched.length
+          ? "Not enough ships in orbit for another expedition."
+          : "Not enough ships in orbit for the Expedition preset.";
+        break;
+      }
+      const result = launchFleet(universe, {
+        playerId: player.id,
+        mission: "expedition",
+        ships,
+        targetCoords: { galaxy, system, slot: EXPEDITION_SLOT },
+        originPlanetId: origin.id,
+        now: now + i,
+      });
+      if (!result.ok) {
+        stoppedReason = result.error;
+        break;
+      }
+      launched.push(result.fleet);
+    }
+
+    if (launched.length < 1) {
+      return {
+        ok: false,
+        error: stoppedReason ?? "Could not launch any expeditions.",
+      };
+    }
+    return { ok: true, launched, stoppedReason };
+  }
+
+  // "Send max expeditions" (opts.ships is undefined):
+  // Split EVERY ship type on the origin planet evenly across open expedition slots.
+  const activeExpeditions = Object.values(universe.fleets).filter(
+    (f) => f.ownerPlayerId === player.id && f.mission === "expedition",
+  ).length;
+  const expeditionCap =
+    empireExpeditionCap(player, maxExpeditions) +
+    empireDriftBeaconExpeditionBonus(universe, player.id);
+  const freeExpeditionSlots = Math.max(0, expeditionCap - activeExpeditions);
+
+  const boosts = playerBoosts(player, now);
+  const cls = classBonuses(player.playerClass?.classId);
+  const fleetSlotCap =
+    maxFleetSlots(player.research.computerTech) +
+    boosts.fleetSlots +
+    cls.fleetSlots;
+  const activeFleets = Object.values(universe.fleets).filter(
+    (f) => f.ownerPlayerId === player.id,
+  ).length;
+  const freeFleetSlots = Math.max(0, fleetSlotCap - activeFleets);
+
+  const numOpenSlots = Math.min(freeExpeditionSlots, freeFleetSlots);
+
+  if (numOpenSlots <= 0) {
+    if (activeFleets >= fleetSlotCap) {
+      return {
+        ok: false,
+        error: `Fleet slot limit reached (Fleet OS → ${fleetSlotCap} slots).`,
+      };
+    }
+    return {
+      ok: false,
+      error: `Expedition limit reached (Stellar Cartography → ${expeditionCap} concurrent).`,
+    };
+  }
+
+  const availableShips: Partial<FleetShips> = {};
+  let totalMovable = 0;
+  for (const id of SHIP_ORDER) {
+    if (isStationaryShip(id)) continue;
+    const have = Math.max(0, Math.floor(origin.ships[id] ?? 0));
+    if (have > 0) {
+      availableShips[id] = have;
+      totalMovable += have;
+    }
+  }
+
+  if (totalMovable < 1) {
+    return {
+      ok: false,
+      error: "Not enough ships in orbit for the Expedition preset.",
+    };
+  }
+
+  for (let i = 0; i < numOpenSlots; i++) {
+    const slotShips: FleetShips = emptyShips();
+    for (const id of SHIP_ORDER) {
+      if (isStationaryShip(id)) continue;
+      const count = availableShips[id] ?? 0;
+      if (count <= 0) continue;
+      const base = Math.floor(count / numOpenSlots);
+      const rem = count % numOpenSlots;
+      const share = base + (i < rem ? 1 : 0);
+      if (share > 0) {
+        slotShips[id] = share;
+      }
+    }
+
+    if (fleetShipCount(slotShips) < 1) {
+      continue;
+    }
+
     const result = launchFleet(universe, {
       playerId: player.id,
       mission: "expedition",
-      ships,
+      ships: slotShips,
       targetCoords: { galaxy, system, slot: EXPEDITION_SLOT },
       originPlanetId: origin.id,
       now: now + i,
     });
+
     if (!result.ok) {
       stoppedReason = result.error;
       break;
@@ -113,6 +211,7 @@ export function launchMaxExpeditions(
       error: stoppedReason ?? "Could not launch any expeditions.",
     };
   }
+
   return { ok: true, launched, stoppedReason };
 }
 

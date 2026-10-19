@@ -2037,11 +2037,13 @@ export async function withRowUniverse<T>(
 }
 
 const ROLLBACK_PAGE = 30;
+export const ROLLBACK_STALE_MS = 5 * 60 * 1000;
 
 interface RollbackCursor {
   stage: "world" | "players" | "done";
   cursor: string;
   written: number;
+  updatedAt?: number;
 }
 
 function queueKv(db: D1Like, stmts: D1Stmt[], key: string, value: unknown): void {
@@ -2060,13 +2062,18 @@ function queueKv(db: D1Like, stmts: D1Stmt[], key: string, value: unknown): void
 
 async function readRollback(db: D1Like): Promise<RollbackCursor> {
   const row = await first<{ value: string }>(db, "SELECT value FROM save_meta WHERE id = ?", "rollback");
-  if (!row) return { stage: "world", cursor: "", written: 0 };
+  if (!row) return { stage: "world", cursor: "", written: 0, updatedAt: Date.now() };
   try {
     const parsed = timedParse(row.value) as RollbackCursor;
     const stage = parsed.stage === "players" || parsed.stage === "done" ? parsed.stage : "world";
-    return { stage, cursor: parsed.cursor || "", written: parsed.written ?? 0 };
+    return {
+      stage,
+      cursor: parsed.cursor || "",
+      written: parsed.written ?? 0,
+      updatedAt: parsed.updatedAt ?? 0,
+    };
   } catch {
-    return { stage: "world", cursor: "", written: 0 };
+    return { stage: "world", cursor: "", written: 0, updatedAt: Date.now() };
   }
 }
 
@@ -2079,45 +2086,110 @@ async function readRollback(db: D1Like): Promise<RollbackCursor> {
 export async function rollbackRowsToLegacy(
   db: D1Like,
   _kv: KvStore,
+  options?: { restart?: boolean },
 ): Promise<{ players: number; systems: number; done: boolean }> {
   await ensureRowTables(db);
   if (!(await migrationDone(db))) throw new Error("Row save is not migrated.");
-  const cursor = await readRollback(db);
-  if (cursor.stage === "done") {
-    return { players: cursor.written, systems: 0, done: true };
+
+  const now = Date.now();
+  let cursor = await readRollback(db);
+
+  const isStale = Boolean(cursor.updatedAt && now - cursor.updatedAt > ROLLBACK_STALE_MS);
+  if (options?.restart || cursor.stage === "done" || isStale) {
+    cursor = { stage: "world", cursor: "", written: 0, updatedAt: now };
   }
-  const loaded = await loadWorkingSet(db, { full: true });
-  delete loaded.universe.skipNpcRaids;
-  delete loaded.universe.skipPirateTopUp;
-  const parts = splitUniverse(loaded.universe);
+
   const base =
     process.env.STARHOLD_UNIVERSE_KEY ?? `starhold:universe:v${UNIVERSE_SCHEMA_VERSION}`;
   const stmts: D1Stmt[] = [];
   let stage: RollbackCursor["stage"] = cursor.stage;
   let nextCursor = cursor.cursor;
   let written = cursor.written;
+
+  const playerRows = await all<{ id: string }>(
+    db,
+    "SELECT id FROM save_players WHERE id > ? ORDER BY id ASC LIMIT ?",
+    nextCursor,
+    ROLLBACK_PAGE,
+  );
+  const pageIds = playerRows.map((row) => row.id);
+
+  let loaded: LoadedRows | undefined;
   if (stage === "world") {
+    loaded = await loadWorkingSet(db, { playerIds: pageIds });
+    delete loaded.universe.skipNpcRaids;
+    delete loaded.universe.skipPirateTopUp;
+    await loadAllSystems(db, loaded);
+    await loadPlanetDocs(db, loaded, "SELECT id, version, doc FROM save_planets WHERE owner_id = ''", []);
+    await loadFleets(db, loaded, "WHERE owner_id = ''", []);
+    await loadMessages(db, loaded, "WHERE owner_id = ''", []);
+
+    const parts = splitUniverse(loaded.universe);
     queueKv(db, stmts, `${base}:world`, parts.world);
     queueKv(db, stmts, `${base}:asteroids`, parts.asteroids);
     queueKv(db, stmts, `${base}:pirates`, parts.pirates);
     queueKv(db, stmts, `${base}:aliens`, parts.aliens);
+
     stage = "players";
     nextCursor = "";
     written = 0;
+
+    for (const id of pageIds) {
+      if (parts.players[id]) queueKv(db, stmts, `${base}:player:${id}`, parts.players[id]);
+    }
+    written += pageIds.length;
+    const finished = pageIds.length < ROLLBACK_PAGE;
+    if (finished) {
+      queueKv(db, stmts, `${base}:ver`, String(now));
+      stage = "done";
+      nextCursor = "";
+    } else {
+      nextCursor = pageIds[pageIds.length - 1] ?? nextCursor;
+    }
+
+    const saved: RollbackCursor = { stage, cursor: nextCursor, written, updatedAt: now };
+    queue(
+      db,
+      stmts,
+      "INSERT INTO save_meta (id, value) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET value = excluded.value",
+      ["rollback", timedStringify(saved)],
+    );
+    await db.batch(stmts);
+    return {
+      players: written,
+      systems: loaded.loadedSystemKeys.size,
+      done: finished,
+    };
   }
-  const ids = Object.keys(parts.players).sort();
-  const page = ids.filter((id) => id > nextCursor).slice(0, ROLLBACK_PAGE);
-  for (const id of page) queueKv(db, stmts, `${base}:player:${id}`, parts.players[id]);
-  written += page.length;
-  const finished = page.length < ROLLBACK_PAGE;
-  if (finished) {
-    queueKv(db, stmts, `${base}:ver`, String(Date.now()));
+
+  // stage === "players"
+  let finished = false;
+  if (pageIds.length > 0) {
+    loaded = await loadWorkingSet(db, { playerIds: pageIds });
+    delete loaded.universe.skipNpcRaids;
+    delete loaded.universe.skipPirateTopUp;
+
+    const parts = splitUniverse(loaded.universe);
+    for (const id of pageIds) {
+      if (parts.players[id]) queueKv(db, stmts, `${base}:player:${id}`, parts.players[id]);
+    }
+    written += pageIds.length;
+    finished = pageIds.length < ROLLBACK_PAGE;
+    if (finished) {
+      queueKv(db, stmts, `${base}:ver`, String(now));
+      stage = "done";
+      nextCursor = "";
+    } else {
+      nextCursor = pageIds[pageIds.length - 1] ?? nextCursor;
+    }
+  } else {
+    queueKv(db, stmts, `${base}:ver`, String(now));
     stage = "done";
     nextCursor = "";
-  } else {
-    nextCursor = page[page.length - 1] ?? nextCursor;
+    finished = true;
   }
-  const saved: RollbackCursor = { stage, cursor: nextCursor, written };
+
+  const saved: RollbackCursor = { stage, cursor: nextCursor, written, updatedAt: now };
   queue(
     db,
     stmts,
@@ -2127,7 +2199,7 @@ export async function rollbackRowsToLegacy(
   await db.batch(stmts);
   return {
     players: written,
-    systems: loaded.loadedSystemKeys.size,
+    systems: loaded?.loadedSystemKeys.size ?? 0,
     done: finished,
   };
 }

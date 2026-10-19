@@ -21,7 +21,7 @@ export default defineConfig({
     },
   },
   build: {
-    sourcemap: uploadSourcemaps,
+    sourcemap: uploadSourcemaps ? "hidden" : false,
   },
   plugins: uploadSourcemaps
     ? [

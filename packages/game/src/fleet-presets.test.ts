@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { EXPEDITION_SLOT } from "./catalog.js";
+import { normalizeFleetShips } from "./formulas.js";
 import {
   advanceUniverse,
   batchScanSystem,
@@ -77,21 +78,16 @@ describe("fleet presets + batch galaxy actions", () => {
     );
   });
 
-  it("launchMaxExpeditions fills free expedition slots from Expedition preset", () => {
+  it("launchMaxExpeditions splits every ship type evenly across free expedition slots (leftovers to first slots)", () => {
     const universe = createUniverse("Max Exp Drift", 8);
     const a = joinUniverse(universe, "MaxExp", 150_200_000);
     const player = universe.players[a.player.id];
     player.research.astrophysics = 2; // 3 expedition slots
     player.research.computerTech = 5; // plenty of fleet slots
-    universe.planets[a.planet.id].ships.scout = 20;
+    // 10 cargo (hauler) + 3 fighters (interceptor) over 3 slots -> cargo 4/3/3, fighters 1/1/1
     universe.planets[a.planet.id].ships.hauler = 10;
+    universe.planets[a.planet.id].ships.interceptor = 3;
     universe.planets[a.planet.id].resources.deuterium = 50_000;
-
-    saveFleetPreset(universe, a.player.id, {
-      id: "expedition",
-      name: "Expedition",
-      ships: { scout: 2, hauler: 1 },
-    });
 
     const batch = launchMaxExpeditions(universe, {
       playerId: a.player.id,
@@ -108,14 +104,60 @@ describe("fleet presets + batch galaxy actions", () => {
       batch.launched.every((f) => f.targetCoords.slot === EXPEDITION_SLOT),
       true,
     );
-    assert.equal(universe.planets[a.planet.id].ships.scout, 14);
-    assert.equal(universe.planets[a.planet.id].ships.hauler, 7);
+    assert.deepEqual(
+      batch.launched[0].ships,
+      normalizeFleetShips({ hauler: 4, interceptor: 1 }),
+    );
+    assert.deepEqual(
+      batch.launched[1].ships,
+      normalizeFleetShips({ hauler: 3, interceptor: 1 }),
+    );
+    assert.deepEqual(
+      batch.launched[2].ships,
+      normalizeFleetShips({ hauler: 3, interceptor: 1 }),
+    );
+    assert.equal(universe.planets[a.planet.id].ships.hauler, 0);
+    assert.equal(universe.planets[a.planet.id].ships.interceptor, 0);
 
     const again = launchMaxExpeditions(universe, {
       playerId: a.player.id,
       now: 150_200_200,
     });
     assert.equal(again.ok, false);
+  });
+
+  it("launchMaxExpeditions uses explicit preset/ships when provided by caller", () => {
+    const universe = createUniverse("Max Exp Explicit Drift", 8);
+    const a = joinUniverse(universe, "MaxExpExplicit", 150_250_000);
+    const player = universe.players[a.player.id];
+    player.research.astrophysics = 2; // 3 expedition slots
+    player.research.computerTech = 5; // plenty of fleet slots
+    universe.planets[a.planet.id].ships.scout = 20;
+    universe.planets[a.planet.id].ships.hauler = 10;
+    universe.planets[a.planet.id].resources.deuterium = 50_000;
+
+    const batch = launchMaxExpeditions(universe, {
+      playerId: a.player.id,
+      ships: { scout: 2, hauler: 1 },
+      now: 150_250_100,
+    });
+    assert.equal(batch.ok, true);
+    if (!batch.ok) return;
+    assert.equal(batch.launched.length, 3);
+    assert.deepEqual(
+      batch.launched[0].ships,
+      normalizeFleetShips({ scout: 2, hauler: 1 }),
+    );
+    assert.deepEqual(
+      batch.launched[1].ships,
+      normalizeFleetShips({ scout: 2, hauler: 1 }),
+    );
+    assert.deepEqual(
+      batch.launched[2].ships,
+      normalizeFleetShips({ scout: 2, hauler: 1 }),
+    );
+    assert.equal(universe.planets[a.planet.id].ships.scout, 14);
+    assert.equal(universe.planets[a.planet.id].ships.hauler, 7);
   });
 
   it("batchScanSystem probes every foreign-owned body in the system", () => {

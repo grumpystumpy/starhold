@@ -1,0 +1,71 @@
+name: Small fix (one agent task)
+description: One small fix = one branch = one PR. Created and routed by the router (Coding Bot).
+title: "[ID] short summary"
+labels: ["status:ready"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Read [AGENTS.md](../blob/main/AGENTS.md) first. Only the router adds `agent:*` and `status:*` labels.
+        Never paste secrets, player emails or save dumps into an issue.
+  - type: input
+    id: fix_id
+    attributes:
+      label: Fix ID
+      description: Row id from the router's small-fixes list, e.g. S2-E1
+      placeholder: S2-E1
+    validations:
+      required: true
+  - type: input
+    id: linear
+    attributes:
+      label: Linear issue
+      description: "Linear: STA-n with link"
+      placeholder: "Linear: STA-67 (https://linear.app/starhold-game/issue/STA-67)"
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What should change, in plain words.
+    validations:
+      required: true
+  - type: textarea
+    id: files_allowed
+    attributes:
+      label: Files allowed
+      description: The only files this fix may change (plus their tests).
+    validations:
+      required: true
+  - type: textarea
+    id: files_forbidden
+    attributes:
+      label: Files forbidden
+      description: Files owned by another open PR (for example PR #71) or out of scope.
+      value: See AGENTS.md section 6 (PR #71 files).
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Checklist that must be true before the PR is ready.
+      value: |
+        - [ ]
+        - [ ] Unit test covers the new behavior (offline, stubs only)
+        - [ ] npm test, npm run typecheck and npm run build pass on Node 22
+    validations:
+      required: true
+  - type: input
+    id: depends
+    attributes:
+      label: Depends on
+      description: Issues or PRs that must merge first, e.g. "#71" or "none"
+      placeholder: none
+  - type: dropdown
+    id: size
+    attributes:
+      label: Size
+      options:
+        - S (under ~100 lines)
+        - M (~100 to 300 lines)
+        - L (over 300 lines; split it)
+    validations:
+      required: true

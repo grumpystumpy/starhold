@@ -214,7 +214,8 @@ export function createApp(): Hono {
     }
     const scope = currentScope();
     if (!scope?.db || !scope.kv) return c.json({ error: "No database" }, 400);
-    const result = await rollbackRowsToLegacy(scope.db, scope.kv);
+    const restart = c.req.query("restart") === "1" || c.req.query("restart") === "true";
+    const result = await rollbackRowsToLegacy(scope.db, scope.kv, { restart });
     return c.json({ ok: true, ...result });
   });
 
