@@ -26,6 +26,7 @@ Starhold is an OGame-like browser space-strategy game for a small group of frien
 - **Stay small:** aim for under ~300 changed lines, not counting tests and fixtures. If the work grows past that, stop. Open the PR with what's done and list what's left. Don't spread into other areas.
 - **No drive-by refactors.** Don't rename, reformat or "clean up" files the issue doesn't name. Don't add new dependencies unless the issue says so.
 - If you find a different bug, **don't fix it**. Write it up in the PR under "Found, not fixed".
+- **Every PR gets a Codex review before it reaches Micah's merge list.** After CI is green and the proof is in the PR, the router runs Codex CLI read-only on the diff (`codex exec --sandbox read-only`, prompt: review the diff against the issue, AGENTS.md and section 4) and posts the result as a PR comment that starts with `Codex review:`. Blocking findings send the PR back (`status:in-review` stays); a clean review plus the router's own check moves it to `status:ready-to-merge`. Codex never pushes, approves or merges. If Codex's free quota is used up, the PR waits; it does not skip the review.
 
 ## 2. Things you must never do
 - **Never merge, never push to `main`, never deploy.** `main` is protected by the `protect-main` ruleset: changes land only through a PR, the `unit-and-e2e` CI check must pass, and force pushes and branch deletion are blocked. Don't run `wrangler deploy`, `npm run deploy:prod`, or anything that touches the live Worker or the live D1 database. Micah approves every merge and deploy.

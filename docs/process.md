@@ -38,6 +38,7 @@ Shared schema: **[design/universe-contract.md](./design/universe-contract.md)** 
 ## Batching
 
 - Work is split into small GitHub issues (one fix, one branch, one PR each). The router (Coding Bot) assigns them so no two tools do the same work.
+- Before a PR goes on the merge list: CI green, proof in the PR, a read-only Codex CLI review posted as a `Codex review:` PR comment with no blocking findings, then the router's own check.
 - Merges and deploys are batched: the router groups verified PRs into Micah's merge list, and deploys stay within Micah's daily cadence.
 
 ## Design first
