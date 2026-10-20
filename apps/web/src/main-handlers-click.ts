@@ -30,6 +30,7 @@ import {
   doChooseClass,
   doClaimDaily,
   doClaimGoal,
+  doTradeResources,
   doCreateAlliance,
   doDeleteAllianceIntel,
   doDeleteAllianceMarker,
@@ -85,7 +86,7 @@ import {
 } from "./ui/render-fleets-panels";
 import { readFleetForm } from "./main-fleet-form";
 import { resolveNavPage } from "./ui/nav";
-import { navigateTo } from "./ui/router";
+import { navigateShopTab, navigateTo } from "./ui/router";
 
 export function bindClickHandlers(): void {
   root.addEventListener(
@@ -99,6 +100,26 @@ export function bindClickHandlers(): void {
 
       const target = ev.target;
       if (!(target instanceof Element)) return;
+
+      const shopTab = closestActionEl(target, "[data-shop-tab]");
+      if (shopTab) {
+        ev.preventDefault();
+        const tab = shopTab.getAttribute("data-shop-tab");
+        if (tab === "resources" || tab === "officers" || tab === "skills") {
+          navigateShopTab(tab);
+        }
+        return;
+      }
+
+      const resourceTrade = closestActionEl(target, "[data-trade-resources]");
+      if (resourceTrade) {
+        ev.preventDefault();
+        const direction = resourceTrade.getAttribute("data-trade-resources");
+        if (direction === "buy" || direction === "sell") {
+          void doTradeResources(direction);
+        }
+        return;
+      }
 
       if (closestActionEl(target, "[data-dismiss-flash]")) {
         clearFlash();

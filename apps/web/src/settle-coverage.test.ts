@@ -23,7 +23,7 @@ function playerView(): PlayerView {
   return {
     now: 1_700_000_000_000,
     player: { id: "p1", name: "Commander", research: {}, researchQueue: [], skillsUnlocked: [], fleetPresets: [{ id: "custom-1", name: "Preset", intent: "custom", ships: {} }] },
-    planet: { id: "pl1", name: "Home", coords: { galaxy: 1, system: 4, slot: 1 }, buildings: {}, buildQueue: [], shipQueue: [], defenseQueue: [], ships: {}, defenses: {} },
+    planet: { id: "pl1", name: "Home", coords: { galaxy: 1, system: 4, slot: 1 }, resources: { metal: 0, crystal: 0, deuterium: 0 }, buildings: {}, buildQueue: [], shipQueue: [], defenseQueue: [], ships: {}, defenses: {} },
     galaxy: { galaxy: 1, system: 4 }, fleets: [], openAcsGroups: [], alliances: [], reports: [], spyReports: [], expeditionReports: [], officers: [], skillsUnlocked: [], seasonLeaderboard: { seasonId: "season-1", claims: [] },
   } as unknown as PlayerView;
 }
@@ -37,6 +37,7 @@ function argsFor(name: string): unknown[] {
   if (name === "doCreateAlliance") return ["Test alliance"];
   if (name === "doDeleteMessages" || name === "doMarkEventsRead") return [["id-1"]];
   if (name === "doClaimSeason") return ["combat", "season-1"];
+  if (name === "doTradeResources") return ["buy"];
   if (name === "doRelocateFortress") return [2, 8];
   if (name === "doRenamePlanet") return ["New Home"];
   if (name === "doClaimGoal" || name === "doChooseClass" || name === "doChangeClass" || name === "doActivateOfficer" || name === "doRaiseOfficer" || name === "doUnlockSkill" || name === "doUpgrade" || name === "doBuild" || name === "doBuildDefense" || name === "doResearch" || name === "doCancelQueue") return ["test", 1];
