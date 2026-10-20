@@ -30,6 +30,7 @@ import {
 } from "./session";
 import { syncSessionUrl } from "./ui/router";
 import { captureGameEvent, identifyCommander } from "./telemetry";
+import { settleMutation } from "./recover-action";
 
 /** Background refresh cadence. Actions apply their own response immediately. */
 export const POLL_INTERVAL_MS = 30_000;
@@ -491,10 +492,18 @@ export async function doRequestClaimCode(email: string): Promise<void> {
     const res = await requestClaimCode(trimmed);
     setFlash("notice", res.message);
   } catch (err) {
+    await settleMutation({
+      err,
+      failureFallback: "Could not send a claim code.",
+      // Neither this response nor /api/auth/me exposes whether a code was issued.
+      applied: () => false,
+      successNotice: () => "Claim code sent.",
+    });
     setFlash(
       "error",
       err instanceof Error ? err.message : "Could not send a claim code.",
     );
+    schedulePaint();
   } finally {
     session.busy = false;
     schedulePaint();
@@ -535,10 +544,22 @@ export async function doClaimPassword(
         : "Password set. Enter a commander name to enter.",
     });
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Could not set the password.",
-    );
+    let refreshedAccount: Awaited<ReturnType<typeof fetchAuthMe>>["account"] = null;
+    try {
+      refreshedAccount = (await fetchAuthMe()).account;
+    } catch {
+      // settleMutation still refreshes the player view and reports failure.
+    }
+    await settleMutation({
+      err,
+      failureFallback: "Could not set the password.",
+      applied: (view) => Boolean(
+        refreshedAccount?.email &&
+        refreshedAccount.email.toLowerCase() === trimmed.toLowerCase() &&
+        refreshedAccount.playerId === view.player.id
+      ),
+      successNotice: (view) => `Password set. Signed in as ${view.player.name}.`,
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -573,10 +594,22 @@ export async function doClaimAnonymous(): Promise<void> {
     syncSessionUrl({ replace: true });
     startPolling(session.view.player.id);
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Claim failed.",
-    );
+    let refreshedAccount: Awaited<ReturnType<typeof fetchAuthMe>>["account"] = null;
+    try {
+      refreshedAccount = (await fetchAuthMe()).account;
+    } catch {
+      // settleMutation still refreshes the player view and reports failure.
+    }
+    await settleMutation({
+      err,
+      failureFallback: "Claim failed.",
+      applied: (view) => Boolean(
+        refreshedAccount?.email &&
+        refreshedAccount.playerId === view.player.id &&
+        view.player.id === playerId
+      ),
+      successNotice: (view) => `Claimed ${view.player.name} to your email.`,
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -672,10 +705,12 @@ export async function doSelectPlanet(planetId: string): Promise<void> {
     syncSessionUrl({ replace: true, planetId });
     setFlash("notice", `Switched to ${session.view.planet.name}.`);
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Planet switch failed.",
-    );
+    await settleMutation({
+      err,
+      failureFallback: "Planet switch failed.",
+      applied: (view) => view.planet.id === planetId,
+      successNotice: (view) => `Switched to ${view.planet.name}.`,
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -700,10 +735,12 @@ export async function doRenamePlanet(name: string): Promise<void> {
     );
     setFlash("notice", `Colony renamed to ${session.view.planet.name}.`);
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Rename failed.",
-    );
+    await settleMutation({
+      err,
+      failureFallback: "Rename failed.",
+      applied: (view) => view.planet.name === name,
+      successNotice: (view) => `Colony renamed to ${view.planet.name}.`,
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -736,10 +773,20 @@ export async function doRelocateFortress(
       `Moving Fortress landed at ${c.galaxy}:${c.system}:${c.slot}.`,
     );
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Fortress jump failed.",
-    );
+    const before = session.view.planet.coords;
+    await settleMutation({
+      err,
+      failureFallback: "Fortress jump failed.",
+      applied: (view) =>
+        (view.planet.coords.galaxy !== before.galaxy ||
+          view.planet.coords.system !== before.system) &&
+        view.planet.coords.galaxy === galaxy &&
+        view.planet.coords.system === system,
+      successNotice: (view) => {
+        const c = view.planet.coords;
+        return `Moving Fortress landed at ${c.galaxy}:${c.system}:${c.slot}.`;
+      },
+    });
   } finally {
     session.busy = false;
     schedulePaint();
