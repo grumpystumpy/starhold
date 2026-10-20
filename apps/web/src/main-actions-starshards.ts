@@ -9,6 +9,7 @@ import {
   unlockSkillNode,
 } from "./api";
 import { clearFlash, schedulePaint, session, setFlash } from "./session";
+import { settleMutation } from "./recover-action";
 
 export async function doClaimDaily(): Promise<void> {
   if (!session.view || session.busy) return;
@@ -19,10 +20,13 @@ export async function doClaimDaily(): Promise<void> {
     session.view = await claimDaily(session.view.player.id);
     setFlash("notice", "Daily Starshards claimed.");
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Daily claim failed.",
-    );
+    const before = session.view.player.lastDailyLoginUtc;
+    await settleMutation({
+      err,
+      failureFallback: "Daily claim failed.",
+      applied: (view) => view.player.lastDailyLoginUtc !== before,
+      successNotice: () => "Daily Starshards claimed.",
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -40,10 +44,12 @@ export async function doClaimGoal(goalId: string): Promise<void> {
     session.view = await claimGoalReward(session.view.player.id, goalId);
     setFlash("notice", `Claimed ${title}.`);
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Goal claim failed.",
-    );
+    await settleMutation({
+      err,
+      failureFallback: "Goal claim failed.",
+      applied: (view) => view.player.goals?.claimed.includes(goalId) ?? false,
+      successNotice: () => `Claimed ${title}.`,
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -52,6 +58,12 @@ export async function doClaimGoal(goalId: string): Promise<void> {
 
 export async function doActivateOfficer(officerId: OfficerId): Promise<void> {
   if (!session.view || session.busy) return;
+  const beforeLevel = session.view.officerLevels?.[officerId] ?? 0;
+  const previousHire = session.view.officers.find(
+    (officer) => officer.officerId === officerId,
+  );
+  const beforeActivatedAt = previousHire?.activatedAt;
+  const beforeExpiresAt = previousHire?.expiresAt;
   session.busy = true;
   clearFlash();
   schedulePaint();
@@ -62,10 +74,22 @@ export async function doActivateOfficer(officerId: OfficerId): Promise<void> {
     );
     setFlash("notice", "Officer hired.");
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Officer hire failed.",
-    );
+    await settleMutation({
+      err,
+      failureFallback: "Officer hire failed.",
+      applied: (view) => {
+        const hire = view.officers.find(
+          (officer) => officer.officerId === officerId,
+        );
+        return (
+          (view.officerLevels?.[officerId] ?? 0) > beforeLevel ||
+          (hire !== undefined &&
+            (hire.activatedAt !== beforeActivatedAt ||
+              hire.expiresAt !== beforeExpiresAt))
+        );
+      },
+      successNotice: () => "Officer hired.",
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -74,6 +98,7 @@ export async function doActivateOfficer(officerId: OfficerId): Promise<void> {
 
 export async function doRaiseOfficer(officerId: OfficerId): Promise<void> {
   if (!session.view || session.busy) return;
+  const beforeLevel = session.view.officerLevels?.[officerId] ?? 0;
   session.busy = true;
   clearFlash();
   schedulePaint();
@@ -81,10 +106,13 @@ export async function doRaiseOfficer(officerId: OfficerId): Promise<void> {
     session.view = await raiseOfficerLevel(session.view.player.id, officerId);
     setFlash("notice", "Officer level raised.");
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Could not raise officer level.",
-    );
+    await settleMutation({
+      err,
+      failureFallback: "Could not raise officer level.",
+      applied: (view) =>
+        (view.officerLevels?.[officerId] ?? 0) > beforeLevel,
+      successNotice: () => "Officer level raised.",
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -93,6 +121,10 @@ export async function doRaiseOfficer(officerId: OfficerId): Promise<void> {
 
 export async function doUnlockSkill(skillId: string): Promise<void> {
   if (!session.view || session.busy) return;
+  const beforeLevel =
+    session.view.skillLevels?.[skillId] ??
+    (session.view.skillsUnlocked.includes(skillId) ? 1 : 0);
+  const wasUnlocked = session.view.skillsUnlocked.includes(skillId);
   session.busy = true;
   clearFlash();
   schedulePaint();
@@ -100,10 +132,14 @@ export async function doUnlockSkill(skillId: string): Promise<void> {
     session.view = await unlockSkillNode(session.view.player.id, skillId);
     setFlash("notice", "Skill unlocked.");
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Skill unlock failed.",
-    );
+    await settleMutation({
+      err,
+      failureFallback: "Skill unlock failed.",
+      applied: (view) =>
+        (view.skillLevels?.[skillId] ?? 0) > beforeLevel ||
+        (!wasUnlocked && view.skillsUnlocked.includes(skillId)),
+      successNotice: () => "Skill unlocked.",
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -119,10 +155,12 @@ export async function doChooseClass(classId: PlayerClassId): Promise<void> {
     session.view = await chooseClass(session.view.player.id, classId);
     setFlash("notice", "Class chosen.");
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Class choose failed.",
-    );
+    await settleMutation({
+      err,
+      failureFallback: "Class choose failed.",
+      applied: (view) => view.player.playerClass?.classId === classId,
+      successNotice: () => "Class chosen.",
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -138,10 +176,12 @@ export async function doChangeClass(classId: PlayerClassId): Promise<void> {
     session.view = await changeClass(session.view.player.id, classId);
     setFlash("notice", "Class changed.");
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Class change failed.",
-    );
+    await settleMutation({
+      err,
+      failureFallback: "Class change failed.",
+      applied: (view) => view.player.playerClass?.classId === classId,
+      successNotice: () => "Class changed.",
+    });
   } finally {
     session.busy = false;
     schedulePaint();
