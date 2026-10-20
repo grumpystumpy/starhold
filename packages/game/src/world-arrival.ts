@@ -153,7 +153,7 @@ export function resolveFleetArrival(
         delete universe.fleets[fleet.id];
         return;
       }
-      addCargoToPlanet(target, fleet.cargo);
+      addCargoToPlanet(universe, target, fleet.cargo, now);
       fleet.cargo = emptyCargo();
       addShipsToPlanet(target, fleet.ships);
       delete universe.fleets[fleet.id];
@@ -347,7 +347,7 @@ export function resolveFleetArrival(
   const live = universe.fleets[fleet.id];
   if (!live) return;
   addShipsToPlanet(origin, live.ships);
-  addCargoToPlanet(origin, live.cargo);
+  addCargoToPlanet(universe, origin, live.cargo, now);
   if (owner) {
     const hulls = SHIP_ORDER.filter((id) => (live.ships[id] ?? 0) > 0)
       .map(
@@ -460,7 +460,7 @@ export function advancePlanetNow(
     const payPlanetId =
       occupier?.activePlanetId ?? occupier?.homePlanetId ?? null;
     if (payPlanetId && universe.planets[payPlanetId]) {
-      addCargoToPlanet(universe.planets[payPlanetId], shares.occupier);
+      addCargoToPlanet(universe, universe.planets[payPlanetId]!, shares.occupier, now);
     }
   }
   universe.planets[id] = advanced;
