@@ -7,6 +7,9 @@ import { empirePoints } from "./formulas.js";
 import type { PlayerState, UniverseState } from "./types.js";
 import { utcDayKey } from "./world-boosts.js";
 
+/** Pirates ignore a new player until 48 hours after creation. */
+export const PIRATE_NEW_PLAYER_PROTECTION_MS = 48 * 60 * 60 * 1000;
+
 /** True while empire points are strictly below the permanent end threshold. */
 export function isNewbieProtected(
   universe: UniverseState,
@@ -26,6 +29,14 @@ export function pirateRaidPickWeight(
   player: PlayerState,
   now: number,
 ): number {
+  const attackedPiratesAt = (player as PlayerState & { attackedPiratesAt?: number })
+    .attackedPiratesAt;
+  if (
+    attackedPiratesAt == null &&
+    now - player.createdAt < PIRATE_NEW_PLAYER_PROTECTION_MS
+  ) {
+    return 0;
+  }
   const points = empirePoints(universe, player);
   if (points < NEWBIE_PROTECTION_POINTS) return 0;
   if (points >= PIRATE_FAIRNESS_POINTS_MAX) return 1;

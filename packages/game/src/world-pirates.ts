@@ -16,7 +16,6 @@ import {
   ALIEN_MAX_BASE_COUNT,
   ALIEN_MAX_LEVEL,
   ALIEN_RAID_PERIOD_MS,
-  ALIEN_SETTLE_SLOT,
   ALIEN_SPLIT_CHILD_COUNT,
   ALIEN_SPLIT_CHILD_LEVEL,
   ALIEN_SPLIT_LEVEL,
@@ -80,6 +79,7 @@ import {
   xpForPirateShipKills,
 } from "./formulas.js";
 import { hashSeed } from "./formulas-position.js";
+import { coordDistance } from "./formulas-travel.js";
 import {
   awardSeasonPirateKill,
   awardSeasonPveWin,
@@ -605,34 +605,71 @@ function pickEmptySlot(
   return null;
 }
 
-/** Nearest open ALIEN_SETTLE_SLOT (slot-1) to origin. */
+/** Nearest open slot 1-3 to origin, with the existing open-slot fallback. */
 export function findNearestOpenSlot1(
   universe: UniverseState,
   origin: Coordinates,
   seedKey: string,
 ): Coordinates | null {
-  const wantSlot = ALIEN_SETTLE_SLOT;
-  const maxRadius = MAP_SYSTEMS + MAP_GALAXIES;
-  for (let radius = 0; radius <= maxRadius; radius++) {
-    const candidates: Coordinates[] = [];
-    for (let dg = -radius; dg <= radius; dg++) {
-      for (let ds = -radius; ds <= radius; ds++) {
-        if (radius > 0 && Math.max(Math.abs(dg), Math.abs(ds)) !== radius) continue;
-        const galaxy = origin.galaxy + dg;
-        const system = origin.system + ds;
-        if (galaxy < 1 || galaxy > MAP_GALAXIES) continue;
-        if (system < 1 || system > MAP_SYSTEMS) continue;
-        const coords = { galaxy, system, slot: wantSlot };
-        if (slotBlocked(universe, coords)) continue;
-        if (systemOccupiedByNpc(universe, galaxy, system)) continue;
-        candidates.push(coords);
+  const occupiedCoords = new Set<string>();
+  const occupiedSystems = new Set<string>();
+  for (const planet of Object.values(universe.planets)) {
+    if (planet.kind !== "moon") {
+      occupiedCoords.add(`${planet.coords.galaxy}:${planet.coords.system}:${planet.coords.slot}`);
+    }
+  }
+  for (const base of [...activePirateBases(universe), ...activeAlienBases(universe)]) {
+    const systemKey = `${base.coords.galaxy}:${base.coords.system}`;
+    occupiedSystems.add(systemKey);
+    occupiedCoords.add(`${systemKey}:${base.coords.slot}`);
+  }
+  const isOccupied = (galaxy: number, system: number) =>
+    occupiedSystems.has(`${galaxy}:${system}`);
+
+  const preferred: Coordinates[] = [];
+  for (let galaxy = 1; galaxy <= MAP_GALAXIES; galaxy++) {
+    for (let system = 1; system <= MAP_SYSTEMS; system++) {
+      if (isOccupied(galaxy, system)) continue;
+      for (let slot = 1; slot <= 3; slot++) {
+        const coords = { galaxy, system, slot };
+        if (!occupiedCoords.has(`${galaxy}:${system}:${slot}`)) preferred.push(coords);
       }
     }
-    if (!candidates.length) continue;
-    candidates.sort((a, b) => a.galaxy - b.galaxy || a.system - b.system);
-    return candidates[hashSeed(`${seedKey}:slot1:${radius}`) % candidates.length]!;
   }
-  return null;
+  if (preferred.length) {
+    preferred.sort((a, b) =>
+      coordDistance(origin, a) - coordDistance(origin, b) ||
+      a.galaxy - b.galaxy ||
+      a.system - b.system ||
+      a.slot - b.slot,
+    );
+    const nearestDistance = coordDistance(origin, preferred[0]!);
+    const nearest = preferred.filter((coords) => coordDistance(origin, coords) === nearestDistance);
+    return nearest[hashSeed(`${seedKey}:nearest-slot`) % nearest.length]!;
+  }
+
+  // If no preferred slot is free anywhere, use the same seeded any-slot choice.
+  const fallback: Coordinates[] = [];
+  for (let galaxy = 1; galaxy <= MAP_GALAXIES; galaxy++) {
+    for (let system = 1; system <= MAP_SYSTEMS; system++) {
+      if (isOccupied(galaxy, system)) continue;
+      const slotStart = 1 + (hashSeed(`${seedKey}:fallback:${galaxy}:${system}`) % MAP_SLOTS);
+      let slot: number | null = null;
+      for (let i = 0; i < MAP_SLOTS; i++) {
+        const candidate = ((slotStart - 1 + i) % MAP_SLOTS) + 1;
+        if (!occupiedCoords.has(`${galaxy}:${system}:${candidate}`)) {
+          slot = candidate;
+          break;
+        }
+      }
+      if (slot != null) fallback.push({ galaxy, system, slot });
+    }
+  }
+  if (!fallback.length) return null;
+  fallback.sort((a, b) => coordDistance(origin, a) - coordDistance(origin, b));
+  const nearestDistance = coordDistance(origin, fallback[0]!);
+  const nearest = fallback.filter((coords) => coordDistance(origin, coords) === nearestDistance);
+  return nearest[hashSeed(`${seedKey}:fallback`) % nearest.length]!;
 }
 
 function findNearbyEmptySlots(
