@@ -87,21 +87,32 @@ export async function doUpgrade(buildingId: BuildingId): Promise<void> {
   clearFlash();
   schedulePaint();
   captureGameEvent("build_start", { building: buildingId });
+
+  const beforeQueue = session.view.planet.buildQueue.filter(
+    (item) => item.buildingId === buildingId,
+  );
+  const beforeIds = new Set(beforeQueue.map((item) => item.id));
+  const beforeLevel = session.view.planet.buildings[buildingId] ?? 0;
+  const beforeTotal = beforeLevel + beforeQueue.length;
+
   try {
     session.view = await upgradeBuilding(session.view.player.id, buildingId);
     setFlash("notice", upgradeNotice(session.view));
   } catch (err) {
-    const beforeLevel = session.view?.planet.buildings[buildingId] ?? 0;
-    const beforeQueued =
-      session.view?.planet.buildQueue.filter((item) => item.buildingId === buildingId)
-        .length ?? 0;
     await settleMutation({
       err,
       failureFallback: "Upgrade failed.",
-      applied: (view) =>
-        (view.planet.buildings[buildingId] ?? 0) > beforeLevel ||
-        view.planet.buildQueue.filter((item) => item.buildingId === buildingId).length >
-          beforeQueued,
+      applied: (view) => {
+        const queueForBuilding = view.planet.buildQueue.filter(
+          (item) => item.buildingId === buildingId,
+        );
+        const hasNewId = queueForBuilding.some((item) => !beforeIds.has(item.id));
+        if (hasNewId) return true;
+
+        const currentLevel = view.planet.buildings[buildingId] ?? 0;
+        const currentTotal = currentLevel + queueForBuilding.length;
+        return currentTotal - beforeTotal >= 1;
+      },
       successNotice: upgradeNotice,
     });
   } finally {
@@ -120,19 +131,40 @@ export async function doBuild(shipId: ShipId, count: number): Promise<void> {
   session.busy = true;
   clearFlash();
   schedulePaint();
+
+  const beforeQueue = session.view.planet.shipQueue.filter(
+    (item) => item.shipId === shipId,
+  );
+  const beforeIds = new Set(beforeQueue.map((item) => item.id));
+  const beforeQueued = beforeQueue.reduce(
+    (sum, item) => sum + (item.count ?? 0),
+    0,
+  );
+  const beforeHangar = session.view.planet.ships[shipId] ?? 0;
+  const beforeTotal = beforeHangar + beforeQueued;
+
   try {
     session.view = await buildShip(session.view.player.id, shipId, count);
     setFlash("notice", shipNotice(session.view, shipId));
   } catch (err) {
-    const beforeQueued =
-      session.view?.planet.shipQueue.filter((item) => item.shipId === shipId).length ?? 0;
-    const beforeHangar = session.view?.planet.ships[shipId] ?? 0;
     await settleMutation({
       err,
       failureFallback: "Build failed.",
-      applied: (view) =>
-        view.planet.shipQueue.filter((item) => item.shipId === shipId).length > beforeQueued ||
-        (view.planet.ships[shipId] ?? 0) > beforeHangar,
+      applied: (view) => {
+        const queueForShip = view.planet.shipQueue.filter(
+          (item) => item.shipId === shipId,
+        );
+        const hasNewId = queueForShip.some((item) => !beforeIds.has(item.id));
+        if (hasNewId) return true;
+
+        const currentQueued = queueForShip.reduce(
+          (sum, item) => sum + (item.count ?? 0),
+          0,
+        );
+        const currentHangar = view.planet.ships[shipId] ?? 0;
+        const currentTotal = currentHangar + currentQueued;
+        return currentTotal - beforeTotal >= count;
+      },
       successNotice: (view) => shipNotice(view, shipId),
     });
   } finally {
@@ -154,20 +186,40 @@ export async function doBuildDefense(
   session.busy = true;
   clearFlash();
   schedulePaint();
+
+  const beforeQueue = session.view.planet.defenseQueue.filter(
+    (item) => item.defenseId === defenseId,
+  );
+  const beforeIds = new Set(beforeQueue.map((item) => item.id));
+  const beforeQueued = beforeQueue.reduce(
+    (sum, item) => sum + (item.count ?? 0),
+    0,
+  );
+  const beforeStock = session.view.planet.defenses[defenseId] ?? 0;
+  const beforeTotal = beforeStock + beforeQueued;
+
   try {
     session.view = await buildDefense(session.view.player.id, defenseId, count);
     setFlash("notice", defenseNotice(session.view, defenseId));
   } catch (err) {
-    const beforeQueued =
-      session.view?.planet.defenseQueue.filter((item) => item.defenseId === defenseId)
-        .length ?? 0;
-    const beforeStock = session.view?.planet.defenses[defenseId] ?? 0;
     await settleMutation({
       err,
       failureFallback: "Defense build failed.",
-      applied: (view) =>
-        view.planet.defenseQueue.filter((item) => item.defenseId === defenseId).length >
-          beforeQueued || (view.planet.defenses[defenseId] ?? 0) > beforeStock,
+      applied: (view) => {
+        const queueForDefense = view.planet.defenseQueue.filter(
+          (item) => item.defenseId === defenseId,
+        );
+        const hasNewId = queueForDefense.some((item) => !beforeIds.has(item.id));
+        if (hasNewId) return true;
+
+        const currentQueued = queueForDefense.reduce(
+          (sum, item) => sum + (item.count ?? 0),
+          0,
+        );
+        const currentStock = view.planet.defenses[defenseId] ?? 0;
+        const currentTotal = currentStock + currentQueued;
+        return currentTotal - beforeTotal >= count;
+      },
       successNotice: (view) => defenseNotice(view, defenseId),
     });
   } finally {
@@ -187,20 +239,32 @@ export async function doResearch(researchId: ResearchId): Promise<void> {
   clearFlash();
   schedulePaint();
   captureGameEvent("research_start", { research: researchId });
+
+  const beforeQueue = session.view.player.researchQueue.filter(
+    (item) => item.researchId === researchId,
+  );
+  const beforeIds = new Set(beforeQueue.map((item) => item.id));
+  const beforeLevel = session.view.player.research[researchId] ?? 0;
+  const beforeTotal = beforeLevel + beforeQueue.length;
+
   try {
     session.view = await researchTech(session.view.player.id, researchId);
     setFlash("notice", researchNotice(session.view, researchId));
   } catch (err) {
-    const beforeQueued =
-      session.view?.player.researchQueue.filter((item) => item.researchId === researchId)
-        .length ?? 0;
-    const beforeLevel = session.view?.player.research[researchId] ?? 0;
     await settleMutation({
       err,
       failureFallback: "Research failed.",
-      applied: (view) =>
-        view.player.researchQueue.filter((item) => item.researchId === researchId).length >
-          beforeQueued || (view.player.research[researchId] ?? 0) > beforeLevel,
+      applied: (view) => {
+        const queueForResearch = view.player.researchQueue.filter(
+          (item) => item.researchId === researchId,
+        );
+        const hasNewId = queueForResearch.some((item) => !beforeIds.has(item.id));
+        if (hasNewId) return true;
+
+        const currentLevel = view.player.research[researchId] ?? 0;
+        const currentTotal = currentLevel + queueForResearch.length;
+        return currentTotal - beforeTotal >= 1;
+      },
       successNotice: (view) => researchNotice(view, researchId),
     });
   } finally {
