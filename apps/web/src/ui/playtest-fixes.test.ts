@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 import type { PlayerView } from "@starhold/game";
 import { buildingRow, joinScreenHtml } from "./render-chrome-join";
@@ -39,6 +40,11 @@ function planet(): PlayerView["planet"] {
 }
 
 describe("playtest fixes", () => {
+  it("does not render a manual refresh button in the header", async () => {
+    const shell = await readFile(new URL("./render-shell.ts", import.meta.url), "utf8");
+    assert.doesNotMatch(shell, /refresh-btn|>Refresh</);
+  });
+
   it("disables an unaffordable Solar Array upgrade", () => {
     const html = buildingRow(
       "solarPlant",

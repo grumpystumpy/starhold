@@ -50,7 +50,6 @@ import {
   doPostAllianceChat,
   doProposeJointStrike,
   doRaiseOfficer,
-  doRefresh,
   doRenamePlanet,
   doRelocateFortress,
   doLogin,
@@ -473,11 +472,6 @@ export function bindClickHandlers(): void {
         ) as PlayerClassId | null;
         if (classId) void doChangeClass(classId);
         return;
-      }
-
-      if (closestActionEl(target, "#refresh-btn")) {
-        ev.preventDefault();
-        void doRefresh();
       }
 
       const joinAlly = closestActionEl(target, "[data-alliance-join]");
