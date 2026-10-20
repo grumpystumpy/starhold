@@ -104,6 +104,7 @@ async function resumePlayer(
   try {
     session.view = await fetchState(playerId);
     session.galaxySystem = session.view.planet.coords.system;
+    session.galaxyGalaxy = null;
     localStorage.setItem(SESSION_KEY, playerId);
     const wantPlanet = planetParam?.trim();
     if (
@@ -113,6 +114,7 @@ async function resumePlayer(
     ) {
       session.view = await selectPlanet(playerId, wantPlanet);
       session.galaxySystem = session.view.planet.coords.system;
+      session.galaxyGalaxy = null;
     }
     syncSessionUrl({ replace: true });
     startPolling(playerId);
