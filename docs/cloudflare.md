@@ -1,12 +1,14 @@
 # Cloudflare Workers
 
-Cloudflare Workers on the free plan is the next host for Starhold. **Vercel stays the live site** (`https://starhold-two.vercel.app`) until the cut-over checklist at the bottom of this file is done. Do not merge this branch or deploy it until Micah says so. Do not delete the Vercel build before that checklist.
+Starhold is live on Cloudflare Workers Free with D1 at https://starhold.stumpysgarage.workers.dev. Vercel (`starhold-two.vercel.app`) is retired and is not a deploy target.
+
+Production deploys use `npm run deploy:prod` with Node 22. The script applies D1 migrations before deploying the Worker. Only Coding Bot runs production deploys, with Micah's approval.
 
 Nothing here uses Workers KV. Saves go to **D1** (5 million reads/day, 100,000 writes/day on the free plan). Workers KV’s free tier allows 1,000 writes a day.
 
 ## What runs where
 
-| Piece | Vercel (live until cut-over) | Workers |
+| Piece | Retired Vercel (historical) | Workers (live) |
 | --- | --- | --- |
 | Static client | Vercel static | Workers static assets (`apps/web/dist`). `_headers` sets long cache on hashed JS/CSS and art. The Worker is not invoked for those files. |
 | API | `api/index.js` Node bundle | `worker/index.ts` → same Hono app |
@@ -15,40 +17,17 @@ Nothing here uses Workers KV. Saves go to **D1** (5 million reads/day, 100,000 w
 | Tick | Full catch-up | Per-request budgets in `packages/game/src/data/tuning.ts` (`WORKERS_TICK_*`) |
 | Poll | 30 seconds, and the tab sleeps when it is hidden or idle | Same client |
 
-Game rules are not forked. A request-local tick budget is installed only by the worker. Vercel never calls `bindTickBudget`.
+Game rules are not forked. A request-local tick budget is installed only by the Worker.
 
-This branch also contains the usage stack (30-second polling, idle sleep, ETag, delete-all messages, locked buttons, storage x3, skill and officer levels). Those behaviors run on Workers through the same Hono app.
+The client uses 30-second polling, idle sleep, and ETags. The Worker serves the same Hono app used in local development.
 
 ## Saves
 
-A GET or HEAD whose only changes are accrued resources and `lastTickAt` does not take the D1 lock and does not write. `/api/state` and `/api/auth/me` do not wait on the lock and do not copy the universe. They tick the cached snapshot. A resource-only tick stays in memory. A cheap check (not a full-universe hash) notices a build, research job, fleet, report, pirate or alien clock, daily alien seed, or planet move. If that changed, the read hashes the dirty rows, tries the lock once, and saves; if it cannot, it drops the cache so the next write reloads D1 instead of saving a half-updated universe. When a mutation changes something structural, D1 writes the dirty rows only, and only if the version key still matches the snapshot that was loaded. A stale write is thrown away and the handler runs again. The lock itself expires in 2.5 seconds. Vercel still stores one JSON document, and it also skips the write on a quiet read. Memory mode ticks the stored universe in place, so a polled fleet can finish its return.
+A GET or HEAD whose only changes are accrued resources and `lastTickAt` does not take the D1 lock and does not write. `/api/state` and `/api/auth/me` do not wait on the lock and do not copy the universe. They tick the cached snapshot. A resource-only tick stays in memory. A cheap check (not a full-universe hash) notices a build, research job, fleet, report, pirate or alien clock, daily alien seed, or planet move. If that changed, the read hashes the dirty rows, tries the lock once, and saves; if it cannot, it drops the cache so the next write reloads D1 instead of saving a half-updated universe. When a mutation changes something structural, D1 writes the dirty rows only, and only if the version key still matches the snapshot that was loaded. A stale write is thrown away and the handler runs again. The lock itself expires in 2.5 seconds. The retired Vercel implementation stored one JSON document and skipped writes on a quiet read. Memory mode ticks the stored universe in place, so a polled fleet can finish its return.
 
 Hashed `/assets/*.js` and `/assets/*.css` are `public, max-age=31536000, immutable`. Planet art and SVG plates are 30 days. HTML stays `max-age=0, must-revalidate` (the assets default). Those rules live in [apps/web/public/_headers](../apps/web/public/_headers) because `run_worker_first` is only `/api/*` — a Worker `Cache-Control` would never be seen, and running the Worker for every asset would spend a request. `withStaticCache` still covers the case where the Worker fetches `ASSETS` itself.
 
-## One-time setup
-
-Micah does this once. D1 database `starhold` already exists. `wrangler.toml` has `account_id` `0de4d3787cea977fbe8952ba924adea7` and `database_id` `d3d8d52e-9272-40cd-b8ae-3012cef6c8ca`. Neither is a secret. The API token is not in the repo.
-
-1. Install the CLI from the repo (`npm ci` brings in Wrangler 4).
-2. `npx wrangler login` (or export `CLOUDFLARE_API_TOKEN` — see permissions below). Add that token as the GitHub secret `CLOUDFLARE_API_TOKEN` at deploy time. Do not commit it.
-3. Apply the schema when the cut-over checklist says to. Do not run this as part of a normal PR:
-
-   ```bash
-   npx wrangler d1 migrations apply starhold --remote
-   ```
-
-4. Set a **new** session pepper (do not commit it). Do not reuse the Vercel `SESSION_SECRET`. That value is unrecoverable, and imported hashes were peppered with it, so they are dropped on import.
-
-   ```bash
-   openssl rand -base64 32
-   npx wrangler secret put SESSION_SECRET
-   ```
-
-   Use this same new value when you run the import, so claim-code hashes match the Worker. Existing Vercel sessions are not copied.
-
-5. Build the client. Deploy only through the GitHub Action on `main` after `CLOUDFLARE_DEPLOY_ENABLED=true`. Do not `wrangler deploy` from a laptop for a branch, and do not turn on Cloudflare’s Git integration (that creates preview URLs).
-
-Local:
+## Local development
 
 ```bash
 printf 'SESSION_SECRET=local-dev-secret\n' > .dev.vars
@@ -59,15 +38,11 @@ npm run cf:dev
 
 `.dev.vars` and `.wrangler/` are gitignored. `[limits] cpu_ms = 10` makes local dev enforce the free-plan CPU cap. `preview_urls = false` so a deploy does not publish a branch preview.
 
-## Secrets and token permissions
+## Secrets
 
-GitHub Actions secrets (repository, not in git):
+Cloudflare credentials are managed outside the repository. Never commit tokens or session secrets.
 
-| Name | Purpose |
-| --- | --- |
-| `CLOUDFLARE_API_TOKEN` | Deploy + D1 migrations. The only required GitHub secret. |
-
-Optional GitHub secrets, all unset means the integration is skipped:
+Optional integrations documented in the project:
 
 | Name | Purpose |
 | --- | --- |
@@ -75,37 +50,13 @@ Optional GitHub secrets, all unset means the integration is skipped:
 | `SENTRY_AUTH_TOKEN` | Uploads source maps at build/deploy. Free plan. |
 | `POSTHOG_KEY` | Inlined into the web build. US cloud. No session replay. |
 
-Repository variables for source maps: `SENTRY_ORG`, `SENTRY_PROJECT`.
-
-The account id is `account_id` in `wrangler.toml`. Wrangler reads it from that file. Do not also set `CLOUDFLARE_ACCOUNT_ID` in the Action, or an empty secret would override the file.
-
-Repository variable (not a secret): `CLOUDFLARE_DEPLOY_ENABLED=true` is the approval switch. Leave it unset until cut-over.
-
-Worker secret (Cloudflare, not GitHub): `SESSION_SECRET`. Generate a new one. It is not the Vercel pepper.
-
-Optional Worker secret: `CLAIM_MAIL_URL`. When set, “Email me a code” POSTs `{ email, code, expiresInMinutes }` to that URL. When it is unset, the import script writes `claim-codes.txt` instead. Do not commit that file.
-
-API token permissions, created under My Profile → API Tokens → Custom token:
-
-- **Account / Workers Scripts / Edit**
-- **Account / D1 / Edit**
-- **Account / Account Settings / Read**
-
-No other permissions. Do not use a global API key.
-
-## GitHub Action
-
-`.github/workflows/cloudflare-workers.yml` runs on **push to `main` only**. It does not run on pull requests, other branches, or `workflow_dispatch`.
-
-The job does not start unless `github.ref` is `refs/heads/main` and `CLOUDFLARE_DEPLOY_ENABLED` is `true`. If `CLOUDFLARE_API_TOKEN` is missing, the job succeeds and skips deploy. The account id comes from `wrangler.toml`. There is no preview or branch deploy.
-
-Vercel’s own deploy is unchanged and still follows `main` only, until the checklist below.
+`SESSION_SECRET` and `CLAIM_MAIL_URL` are Worker secrets when those features are configured. `CLAIM_MAIL_URL`, when set, receives `{ email, code, expiresInMinutes }` for claim-code delivery. When unset, the import script writes `claim-codes.txt` instead; do not commit that file.
 
 ## Passwords
 
 Workers free plan allows 10 ms of CPU per request. A full scrypt verify (N=16384, r=8, p=1) is about 30 ms in Node and does not fit in one request. PBKDF2-SHA-256 at **10,000** iterations is about 2 ms. OWASP’s 600,000 iterations do not fit in 10 ms.
 
-New Workers accounts use PBKDF2. Vercel accounts stay scrypt. Imported accounts do not keep either hash: the Vercel pepper cannot be recovered, so the import sets `needsPasswordReset` and stores no password. The player enters their email and a one-time claim code, then sets a new PBKDF2 password.
+New Workers accounts use PBKDF2. The retired Vercel implementation used scrypt. Imported accounts do not keep either hash: the Vercel pepper could not be recovered, so the import set `needsPasswordReset` and stored no password. The player enters their email and a one-time claim code, then sets a new PBKDF2 password.
 
 The code is 8 characters, works once, and is rate-limited (10 attempts per email and IP per 15 minutes, same bucket as submitting a code). A code from `claim-codes.txt` lasts 7 days. A code sent by email lasts 30 minutes. D1 stores `sha256(SESSION_SECRET:code)` at `starhold:claim-code:{accountId}`. The plaintext is not stored.
 
@@ -115,7 +66,9 @@ Re-running the import leaves an account alone once Workers has a password for it
 
 `SESSION_SECRET` on Workers is a new pepper. Existing sessions are left out of the import, and the SQL deletes any `starhold:session:*` rows already in D1.
 
-## Transfer (do not run against production yet)
+## Historical Vercel-to-D1 transfer reference
+
+The Vercel-to-Cloudflare cut-over is complete. The following notes describe the one-time transfer and are retained as historical reference; do not repeat the transfer for normal deploys.
 
 Export is read-only (`SCAN`, `GET`, `TTL`) using `KV_REST_API_URL` and `KV_REST_API_TOKEN`. `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are accepted aliases. Import writes a SQL file. Applying that file is a separate command. The SQL is idempotent: it replaces the same keys, and running it twice leaves the same rows. Players, planets, fleets, messages, alliances, and password hashes are kept. Lock and version keys are dropped. The universe blob is split into the D1 rows the worker reads.
 
@@ -132,7 +85,7 @@ node --import tsx scripts/kv-to-d1.mjs export kv-export.json
 node --import tsx scripts/kv-to-d1.mjs import --dry-run kv-export.json
 ```
 
-When the checklist says to apply it:
+At the time of the transfer, the generated SQL was applied with:
 
 ```bash
 node --import tsx scripts/kv-to-d1.mjs import kv-export.json kv-import.sql
@@ -174,19 +127,8 @@ Node `performance.now()` on the synchronous game work (one commander, Workers bu
 
 A quiet poll no longer writes the universe or the lock. A 200-player cold highscore board (8.7 ms on Node) still does not fit beside a tick. The warm board (2.2 ms) does. Steady polls are the cheap path.
 
-Budgets (per request, then the next request continues): 2 raids, 40 pirate level-ups, 2 fleets, 8 drift steps, 8 systems / 1 new mini of bootstrap, 4 pirate placements. Vercel does not use these caps.
+Budgets (per request, then the next request continues): 2 raids, 40 pirate level-ups, 2 fleets, 8 drift steps, 8 systems / 1 new mini of bootstrap, 4 pirate placements. The retired Vercel implementation did not use these caps.
 
 `STARHOLD_E2E=1` is for local Playwright only. It is not in `wrangler.toml`. While it is set, `POST /api/e2e/prepare-password-claim` can mint a claim code for an account. Do not set it on the deployed Worker.
 
-## Cut-over checklist
-
-Do these in order. Stop if a dry-run count looks wrong. **Leave the Vercel project, `vercel.json`, `api/index.js`, and `npm run build:vercel` in place until the last step.**
-
-1. D1 `database_id` and `account_id` are already in `wrangler.toml`.
-2. Set the GitHub secret `CLOUDFLARE_API_TOKEN`, and a **new** Worker secret `SESSION_SECRET` (`openssl rand -base64 32`). Do not reuse the Vercel pepper.
-3. `export --dry-run`, then `export`, then `import --dry-run`. Confirm players, planets, fleets, messages, alliances, and `needsPasswordReset` (imported accounts that must set a new password). Sessions are counted and are not copied.
-4. Export `SESSION_SECRET` as that same new Worker secret, then `import` the SQL file and `wrangler d1 execute` it. This is the first write to D1. If email is not configured, `claim-codes.txt` is written beside the SQL. Hand it out privately. Those codes last 7 days. Re-running the import does not clear passwords already set on Workers. Pass `--force` only when those passwords should be replaced.
-5. Set the repository variable `CLOUDFLARE_DEPLOY_ENABLED=true`. The next push to `main` deploys Workers. Pushes to other branches do not.
-6. On the Workers host, open the join screen, enter the account email, the claim code, and a new password. Confirm a second login with that password and a refresh. The old password does not work.
-7. Point players at the Workers URL only after that claim works.
-8. **Only then** remove the Vercel deploy: disconnect the Vercel project (or set `git.deploymentEnabled` false for every branch, which is already the case off `main`), delete the Upstash / `KV_REST_API_*` env vars, and retire `api/index.js` plus `scripts/bundle-api.mjs` if nothing else calls them. Do not do this step in the same change as the Workers port.
+The one-time transfer and cut-over are complete. Production deploys now use `npm run deploy:prod` with Node 22, run only by Coding Bot with Micah's approval.

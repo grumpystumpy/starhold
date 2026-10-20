@@ -28,7 +28,7 @@ Starhold is an OGame-like browser space-strategy game for a small group of frien
 - If you find a different bug, **don't fix it**. Write it up in the PR under "Found, not fixed".
 
 ## 2. Things you must never do
-- **Never merge, never push to `main`, never deploy.** `main` is protected by the `protect-main` ruleset: changes land only through a PR, the `unit-and-e2e` CI check must pass, and force pushes and branch deletion are blocked. Don't run `wrangler deploy`, `npm run deploy:prod`, or anything that touches the live Worker or the live D1 database. Micah approves every merge and deploy.
+- **Never merge, push to `main`, or deploy.** `main` is protected by the `protect-main` ruleset: changes land only through a PR, the `unit-and-e2e` CI check must pass, and force pushes and branch deletion are blocked. Production deploys use `npm run deploy:prod` with Node 22 and are run only by Coding Bot with Micah's approval. Do not run deploy commands or touch the live Worker or live D1 database.
 - **Never reset or wipe saves.** Every player keeps every planet, ship, defense, resource, research level, fleet in flight, message, officer, skill and star-shard balance across versions.
   - Save-format changes must be additive only: new optional fields with defaults.
   - D1 migrations must be additive only: no DROP and no destructive ALTER.
@@ -75,7 +75,7 @@ Starhold is an OGame-like browser space-strategy game for a small group of frien
   - `telemetry.ts`: Sentry and PostHog.
 - `worker/index.ts`: the Worker entry. `migrations/`: D1 SQL (additive only).
 - `docs/cloudflare.md`: hosting and deploys. `docs/design/`: per-system contracts. Open only the one you touch.
-- Hosting is Cloudflare Workers + D1 (`docs/hosting.md`, `docs/process.md`). `docs/vercel-deploy.md`, `vercel.json`, `api/` and the Upstash code paths are **legacy**: Vercel is no longer the live site and its shutdown is tracked in STA-64. Don't extend them. The intro of `docs/cloudflare.md` still says Vercel is live; that is out of date and PR #71 updates that file.
+- Hosting is Cloudflare Workers + D1 (`docs/hosting.md`, `docs/process.md`). `docs/vercel-deploy.md`, `vercel.json`, `api/` and the Upstash code paths are **legacy**: Vercel is no longer the live site. Don't extend them.
 
 ## 6. Work in progress you must not collide with
 - **PR #71 (batch 2, branch `batch-2-save-split`, owned by Grok Build)** rewrites:
