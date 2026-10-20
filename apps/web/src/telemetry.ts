@@ -69,16 +69,24 @@ export function planFailureReport(
   const method = (ctx?.method ?? "GET").toUpperCase();
   const path = stripQuery(ctx?.path ?? "");
   const kind = ctx?.kind ?? (status === 0 ? "network" : "server");
-  const tags = {
+  const tags: Record<string, string> = {
     api_status: String(status),
     api_path: path,
     api_method: method,
     api_kind: kind,
   };
+  if (typeof ctx?.durationMs === "number") {
+    tags.api_wait_ms = String(Math.round(ctx.durationMs));
+  }
   const fingerprint = ["api", method, path, String(status), kind];
   const level: "warning" | "error" =
-    kind === "busy" || kind === "overload" ? "warning" : "error";
+    kind === "busy" || kind === "overload" || kind === "network" || kind === "timeout"
+      ? "warning"
+      : "error";
   const safe = scrub(message);
+  if (ctx?.wasHidden) {
+    return { skip: true, safe, level, tags, fingerprint };
+  }
   if (status !== 0 && status < 500) {
     return { skip: true, safe, level, tags, fingerprint };
   }

@@ -1,4 +1,7 @@
 import {
+  NPC_JOB_FLEET_BUDGET,
+  NPC_JOB_LEVELUP_BUDGET,
+  NPC_JOB_RAID_BUDGET,
   WORKERS_TICK_DRIFT_BUDGET,
   WORKERS_TICK_FLEET_BUDGET,
   WORKERS_TICK_LEVELUP_BUDGET,
@@ -82,6 +85,20 @@ export function workersTickBudget(): TickBudget {
     seedSystems: WORKERS_TICK_SEED_SYSTEMS,
     seedMinis: WORKERS_TICK_SEED_MINIS,
     seedPirates: WORKERS_TICK_SEED_PIRATES,
+    lazyPlanets: true,
+  };
+}
+
+/** Budget for the 10-minute pirate and alien job. Not used on page loads. */
+export function npcJobBudget(): TickBudget {
+  return {
+    raids: NPC_JOB_RAID_BUDGET,
+    levelUps: NPC_JOB_LEVELUP_BUDGET,
+    fleets: NPC_JOB_FLEET_BUDGET,
+    driftSteps: 0,
+    seedSystems: 0,
+    seedMinis: 0,
+    seedPirates: 0,
     lazyPlanets: true,
   };
 }

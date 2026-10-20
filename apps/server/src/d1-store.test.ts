@@ -270,7 +270,7 @@ describe("version-checked saves and read snapshots", () => {
     }
   });
 
-  it("does not take the universe lock for /api/state or /api/auth/me", async () => {
+  it("never waits on the universe lock for /api/state or /api/auth/me", async () => {
     resetMemoryUniverse();
     resetMemoryAccounts();
     const previousRuntime = process.env.STARHOLD_RUNTIME;
@@ -309,7 +309,10 @@ describe("version-checked saves and read snapshots", () => {
       });
       assert.equal(join.status, 200);
       const joined = (await join.json()) as { player: { id: string } };
+      const base = `starhold:universe:v${UNIVERSE_SCHEMA_VERSION}`;
+      await store.set(`${base}:lock`, "held", { nx: true, px: 60_000 });
       lockWrites = 0;
+      const started = Date.now();
       const state = await call(
         "GET",
         `/api/state?playerId=${encodeURIComponent(joined.player.id)}`,
@@ -319,9 +322,11 @@ describe("version-checked saves and read snapshots", () => {
         headers: { Cookie: cookie },
       });
       assert.equal(me.status, 200);
+      const elapsed = Date.now() - started;
       const meBody = (await me.json()) as { view: { player: { id: string } } | null };
       assert.equal(meBody.view?.player.id, joined.player.id);
-      assert.equal(lockWrites, 0);
+      // A read may try the lock once. It must not sleep out the 2.5s lease.
+      assert.ok(elapsed < 1_000, `read waited on the lock (${elapsed}ms)`);
     } finally {
       if (previousRuntime == null) delete process.env.STARHOLD_RUNTIME;
       else process.env.STARHOLD_RUNTIME = previousRuntime;

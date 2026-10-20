@@ -4,7 +4,7 @@ import { startCountdownTick } from "./countdown";
 import type { NavPage } from "./nav";
 import { morphHtml } from "./morph-dom";
 import { canPatchShell, patchLiveChrome } from "./patch-chrome";
-import { renderJoin } from "./render-chrome";
+import { renderJoin, reconnectScreenHtml } from "./render-chrome";
 import {
   fleetDraftWithAcsPrefill,
   salvageFleetForm,
@@ -40,6 +40,10 @@ export function renderApp(
   _handlers: UiHandlers,
 ): void {
   if (!state.view) {
+    if (session.holdJoin) {
+      root.innerHTML = reconnectScreenHtml(state);
+      return;
+    }
     renderJoin(root, state);
     return;
   }

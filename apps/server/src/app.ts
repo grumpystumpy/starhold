@@ -77,10 +77,11 @@ import { sessionSecretConfigured } from "./accounts.js";
 import { mountAllianceIntelRoutes } from "./alliance-intel-routes.js";
 import { mountAuthRoutes } from "./auth-routes.js";
 import { mountCpuRoutes } from "./cpu-routes.js";
-import { readCpuMs, reportServerError } from "./request-context.js";
+import { readCpuMs, reportServerError, currentScope } from "./request-context.js";
 import { respondWithPlayerView } from "./state-response.js";
 import { staticCacheControl } from "./static-cache.js";
-import { storageMode, withUniverse, withUniverseRead } from "./store.js";
+import { storageMode, isUniverseBusy, withUniverse, withUniverseRead } from "./store.js";
+import { rollbackRowsToLegacy } from "./row-store.js";
 
 function allowedOrigins(): Set<string> {
   const fromEnv = (process.env.ALLOWED_ORIGINS ?? "")
@@ -134,6 +135,18 @@ async function simpleCors(c: Context, next: Next): Promise<Response | void> {
 export function createApp(): Hono {
   const app = new Hono();
 
+  app.use("*", async (c, next) => {
+    try {
+      await next();
+    } catch (err) {
+      if (!isUniverseBusy(err)) throw err;
+      return c.json(
+        { error: "Universe busy — retry in a moment.", code: "busy" },
+        503,
+      );
+    }
+  });
+
   // Gzip JSON when the caller asks. Browsers send Accept-Encoding; unit
   // tests do not, so they still see plain JSON. Vercel will not recompress
   // a response that already has Content-Encoding. Workers skip this: the
@@ -164,6 +177,12 @@ export function createApp(): Hono {
   );
 
   app.onError((err, c) => {
+    if (isUniverseBusy(err)) {
+      return c.json(
+        { error: "Universe busy — retry in a moment.", code: "busy" },
+        503,
+      );
+    }
     console.error("[starhold-api]", err);
     reportServerError(err);
     return c.json(
@@ -185,6 +204,19 @@ export function createApp(): Hono {
         passwordAuth: true,
       },
     });
+  });
+
+  // Copies save_* back into the kv slices main loads. 404 unless the token matches.
+  app.post("/api/admin/rollback-rows", async (c) => {
+    const token = process.env.STARHOLD_ADMIN_TOKEN;
+    if (!token || c.req.header("x-starhold-admin") !== token) {
+      return c.json({ error: "Not found" }, 404);
+    }
+    const scope = currentScope();
+    if (!scope?.db || !scope.kv) return c.json({ error: "No database" }, 400);
+    const restart = c.req.query("restart") === "1" || c.req.query("restart") === "true";
+    const result = await rollbackRowsToLegacy(scope.db, scope.kv, { restart });
+    return c.json({ ok: true, ...result });
   });
 
   app.get("/api/universe", async (c) => {
@@ -216,8 +248,9 @@ export function createApp(): Hono {
       return await withUniverse((universe) => {
         const { player } = joinUniverse(universe, body.name ?? "");
         return c.json(playerView(universe, player.id));
-      });
+      }, { catalog: true });
     } catch (err) {
+      if (isUniverseBusy(err)) throw err;
       return c.json(
         { error: err instanceof Error ? err.message : "Join failed." },
         400,
@@ -235,16 +268,25 @@ export function createApp(): Hono {
     try {
       const galaxy = Number(c.req.query("galaxy") || 0) || undefined;
       const system = Number(c.req.query("system") || 0) || undefined;
-      return await withUniverseRead((universe) =>
-        respondWithPlayerView(
-          c,
-          playerView(universe, playerId, Date.now(), galaxy, system),
-        ),
+      return await withUniverseRead(
+        (universe) =>
+          respondWithPlayerView(
+            c,
+            playerView(universe, playerId, Date.now(), galaxy, system),
+          ),
+        { playerIds: [playerId], galaxy, system },
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : "State failed.";
-      const status = message.startsWith("Universe busy") ? 503 : 404;
-      return c.json({ error: message }, status);
+      if (isUniverseBusy(err)) {
+        return c.json({ error: message, code: "busy" }, 503);
+      }
+      if (message === "Unknown player.") {
+        return c.json({ error: message }, 404);
+      }
+      console.error("[starhold-api]", err);
+      reportServerError(err);
+      return c.json({ error: message }, 500);
     }
   });
 
@@ -267,7 +309,7 @@ export function createApp(): Hono {
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId] });
   });
 
   app.post("/api/build-ship", async (c) => {
@@ -291,7 +333,7 @@ export function createApp(): Hono {
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId] });
   });
 
   app.post("/api/build-defense", async (c) => {
@@ -315,7 +357,7 @@ export function createApp(): Hono {
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId] });
   });
 
   app.post("/api/research", async (c) => {
@@ -330,7 +372,7 @@ export function createApp(): Hono {
       const result = queueResearch(universe, body.playerId!, body.researchId!);
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId] });
   });
 
   /** Round 2 aliases — same handlers as upgrade / build-ship / build-defense / research. */
@@ -353,7 +395,7 @@ export function createApp(): Hono {
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId] });
   });
 
   app.post("/api/queue/ship", async (c) => {
@@ -377,7 +419,7 @@ export function createApp(): Hono {
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId] });
   });
 
   app.post("/api/queue/defense", async (c) => {
@@ -401,7 +443,7 @@ export function createApp(): Hono {
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId] });
   });
 
   app.post("/api/queue/research", async (c) => {
@@ -416,7 +458,7 @@ export function createApp(): Hono {
       const result = queueResearch(universe, body.playerId!, body.researchId!);
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId] });
   });
 
   app.post("/api/queue/cancel", async (c) => {
@@ -437,7 +479,7 @@ export function createApp(): Hono {
       });
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId] });
   });
 
   app.post("/api/queue/reorder", async (c) => {
@@ -461,7 +503,7 @@ export function createApp(): Hono {
       });
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId] });
   });
 
   app.post("/api/select-planet", async (c) => {
@@ -480,7 +522,7 @@ export function createApp(): Hono {
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId], planetIds: [body.planetId] });
   });
 
   app.post("/api/rename-planet", async (c) => {
@@ -504,7 +546,7 @@ export function createApp(): Hono {
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId], planetIds: [body.planetId] });
   });
 
   app.post("/api/launch-fleet", async (c) => {
@@ -542,6 +584,12 @@ export function createApp(): Hono {
       });
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
+    }, {
+      playerIds: [body.playerId],
+      planetIds: [body.targetPlanetId],
+      galaxy: body.targetCoords?.galaxy,
+      system: body.targetCoords?.system,
+      slot: body.targetCoords?.slot,
     });
   });
 
@@ -576,7 +624,7 @@ export function createApp(): Hono {
       });
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId] });
   });
 
   app.post("/api/launch-max-expeditions", async (c) => {
@@ -602,7 +650,7 @@ export function createApp(): Hono {
       });
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId], galaxy: body.galaxy, system: body.system });
   });
 
   app.post("/api/scan-system", async (c) => {
@@ -629,7 +677,7 @@ export function createApp(): Hono {
       });
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId], galaxy: body.galaxy, system: body.system, lockSystemOwners: true });
   });
 
   // Single-segment paths (Vercel catch-all); contract names map here.
@@ -649,7 +697,7 @@ export function createApp(): Hono {
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId] });
   });
 
   app.post("/api/claim-daily", async (c) => {
@@ -663,7 +711,7 @@ export function createApp(): Hono {
       const result = claimDailyLogin(universe, body.playerId!);
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId] });
   });
 
   app.post("/api/activate-officer", async (c) => {
@@ -682,7 +730,7 @@ export function createApp(): Hono {
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId] });
   });
 
   app.post("/api/raise-officer", async (c) => {
@@ -701,7 +749,7 @@ export function createApp(): Hono {
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId] });
   });
 
   app.post("/api/delete-messages", async (c) => {
@@ -720,7 +768,7 @@ export function createApp(): Hono {
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId] });
   });
 
   app.post("/api/unlock-skill", async (c) => {
@@ -735,7 +783,7 @@ export function createApp(): Hono {
       const result = unlockSkill(universe, body.playerId!, body.skillId!);
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId] });
   });
 
   // Alliances foundation (backlog #7).
@@ -744,7 +792,7 @@ export function createApp(): Hono {
     if (!playerId) return c.json({ error: "playerId required." }, 400);
     return withUniverse((universe) => {
       return c.json(playerView(universe, playerId));
-    });
+    }, { playerIds: [playerId] });
   });
 
   app.get("/api/alliance/list", async (c) => {
@@ -753,7 +801,7 @@ export function createApp(): Hono {
     return withUniverse((universe) => {
       const view = playerView(universe, playerId);
       return c.json({ alliances: view.allianceDirectory });
-    });
+    }, { playerIds: [playerId] });
   });
 
   app.post("/api/alliance/create", async (c) => {
@@ -780,7 +828,7 @@ export function createApp(): Hono {
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId] });
   });
 
   app.post("/api/alliance/join", async (c) => {
@@ -802,7 +850,7 @@ export function createApp(): Hono {
       });
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId] });
   });
 
   app.post("/api/alliance/leave", async (c) => {
@@ -814,7 +862,7 @@ export function createApp(): Hono {
       const result = leaveAlliance(universe, body.playerId!);
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId] });
   });
 
   app.post("/api/alliance/invite", async (c) => {
@@ -833,7 +881,7 @@ export function createApp(): Hono {
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId, body.targetPlayerId] });
   });
 
   app.post("/api/alliance/kick", async (c) => {
@@ -852,7 +900,7 @@ export function createApp(): Hono {
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId, body.targetPlayerId] });
   });
 
   app.post("/api/alliance/set-role", async (c) => {
@@ -879,7 +927,7 @@ export function createApp(): Hono {
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId, body.targetPlayerId] });
   });
 
   app.post("/api/alliance/set-join-mode", async (c) => {
@@ -901,7 +949,7 @@ export function createApp(): Hono {
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId] });
   });
 
   mountAllianceIntelRoutes(app);
@@ -915,7 +963,7 @@ export function createApp(): Hono {
       const result = disbandAlliance(universe, body.playerId!);
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId] });
   });
 
   // Round 3 player class.
@@ -942,7 +990,7 @@ export function createApp(): Hono {
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId] });
   });
 
   app.post("/api/class/change", async (c) => {
@@ -964,7 +1012,7 @@ export function createApp(): Hono {
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId] });
   });
 
   // Round 2 fleet hooks (single-segment paths for Vercel catch-all).
@@ -985,7 +1033,7 @@ export function createApp(): Hono {
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId] });
   });
 
   app.post("/api/abandon-occupation", async (c) => {
@@ -1005,7 +1053,7 @@ export function createApp(): Hono {
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId], planetIds: [body.planetId] });
   });
 
   app.post("/api/swarm-produce", async (c) => {
@@ -1029,7 +1077,7 @@ export function createApp(): Hono {
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId] });
   });
 
   app.post("/api/events/read", async (c) => {
@@ -1056,7 +1104,7 @@ export function createApp(): Hono {
       const result = markEventsRead(universe, playerId, ids, now);
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, playerId, now));
-    });
+    }, { playerIds: [playerId] });
   });
 
   app.post("/api/season/claim", async (c) => {
@@ -1081,7 +1129,7 @@ export function createApp(): Hono {
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId] });
   });
 
   app.post("/api/cosmetics/title", async (c) => {
@@ -1101,7 +1149,7 @@ export function createApp(): Hono {
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId] });
   });
 
   app.post("/api/cosmetics/planet-skin", async (c) => {
@@ -1121,7 +1169,7 @@ export function createApp(): Hono {
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId] });
   });
 
   app.post("/api/season/hook", async (c) => {
@@ -1153,7 +1201,7 @@ export function createApp(): Hono {
         rollSeasons(universe, body.rollAt);
       }
       return c.json(playerView(universe, body.playerId!, now));
-    });
+    }, { playerIds: [body.playerId] });
   });
 
   app.post("/api/mini-resolve", async (c) => {
@@ -1175,7 +1223,7 @@ export function createApp(): Hono {
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId] });
   });
 
   app.post("/api/mini-relocate", async (c) => {
@@ -1208,7 +1256,7 @@ export function createApp(): Hono {
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    });
+    }, { playerIds: [body.playerId], planetIds: [body.planetId], galaxy: Number(body.galaxy), system: Number(body.system) });
   });
 
   /**
@@ -1410,7 +1458,7 @@ export function createApp(): Hono {
           ok: true,
           points: empirePoints(universe, player),
         });
-      });
+      }, { playerIds: [body.playerId] });
   });
 
   return app;
