@@ -827,7 +827,7 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
     id: "driftBeacon",
     name: "Drift Beacon",
     description:
-      "Mini-planet special — +1 expedition slot at level 1 (higher levels reserved).",
+      "Mini-planet special — +1 fleet slot and +1 expedition slot at level 1 (higher levels reserved).",
     baseCost: { metal: 2000, crystal: 1500, deuterium: 1000 },
     costGrowth: 2.0,
     baseBuildSeconds: 60,

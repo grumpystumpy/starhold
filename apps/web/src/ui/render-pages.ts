@@ -193,7 +193,7 @@ function buildingsPage(view: PlayerView, busy: boolean): string {
       ${
         buildQueueHtml(planet, now) ||
         (isMini
-          ? `<p class="hint">Minis allow normal buildings plus Rift Siphon, Echo Vault, Anomaly Forge, and Drift Beacon.</p>`
+          ? `<p class="hint">Minis allow normal buildings plus Rift Siphon, Echo Vault, Anomaly Forge, and Drift Beacon (+1 fleet slot and +1 expedition slot per owned mini with a beacon).</p>`
           : planet.kind === "moon"
           ? `<p class="hint">Moons have no mines — expand crater structures on the moon.</p>`
           : `<p class="hint">One construction at a time. Upgrade the Solar Array if mines stall.</p>`)

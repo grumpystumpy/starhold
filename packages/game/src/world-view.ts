@@ -62,7 +62,7 @@ import { stampQueueView } from "./world-queue-manage.js";
 import { inSensorPhalanxRange, ownedPlanetCount } from "./world-moons.js";
 import { goalsView } from "./world-goals.js";
 import { occupationForPlanet } from "./world-occupation.js";
-import { empireDriftBeaconExpeditionBonus, playerKnowsMini } from "./world-mini.js";
+import { empireDriftBeaconCount, playerKnowsMini } from "./world-mini.js";
 import { seasonLeaderboardView } from "./world-seasons.js";
 import { getDebris } from "./world-tick.js";
 
@@ -301,13 +301,15 @@ export function playerView(
   universe.players[player.id] = player;
   const boosts = playerBoosts(player, now);
   const cls = classBonuses(player.playerClass?.classId);
+  const driftBeaconCount = empireDriftBeaconCount(universe, player.id);
   const fleetSlotCap =
     maxFleetSlots(player.research.computerTech ?? 0) +
     boosts.fleetSlots +
-    cls.fleetSlots;
+    cls.fleetSlots +
+    driftBeaconCount;
   const expeditionSlotCap =
     empireExpeditionCap(player, maxExpeditions) +
-    empireDriftBeaconExpeditionBonus(universe, player.id);
+    driftBeaconCount;
 
   const fleets = Object.values(universe.fleets)
     .filter((f) => f.ownerPlayerId === playerId)

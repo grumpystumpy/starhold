@@ -44,7 +44,7 @@ export function recommendedNext(view: PlayerView): string {
       return "Recommended next: raise an Anomaly Forge to speed ship builds here.";
     }
     if (beacon < 1) {
-      return "Recommended next: raise a Drift Beacon for +1 expedition slot.";
+      return "Recommended next: raise a Drift Beacon for +1 fleet slot and +1 expedition slot.";
     }
     if (yard < 1) {
       return "Recommended next: raise the Shipyard on this mini colony.";
