@@ -2,6 +2,7 @@ import {
   ANOMALY_FORGE_SHIP_TIME_PER,
   BUILDINGS,
   DEFENSES,
+  ENERGY_TECH_ENERGY_PER_LEVEL,
   ECHO_VAULT_STORAGE_PER,
   MANTLE_LOOM_FIELDS_USED,
   MINE_BASE_PER_HOUR,
@@ -388,16 +389,17 @@ export function productionPerHour(
   energyTechLevel = 0,
   boosts?: ProductionBoosts,
 ): Resources {
-  const energyMult = boosts?.energyOutput ?? 1;
+  const energyMult =
+    (boosts?.energyOutput ?? 1) *
+    (1 + energyTechLevel * ENERGY_TECH_ENERGY_PER_LEVEL);
   const mineMult = boosts?.mineOutput ?? 1;
   const factor = energyFactor(planet, energyMult);
-  const techBonus = 1 + energyTechLevel * 0.02;
   // universe.speed scales timers + income; PRODUCTION_MULT is income-only test tuning.
   const vein = veinAnchorMineMult(planet);
   const rift = riftSiphonMineMult(planet);
   const rich = isMiniBody(planet) ? MINI_RICH_MINE_MULT : 1;
   const incomeScale =
-    universeSpeed * PRODUCTION_MULT * techBonus * mineMult * vein * rift * rich;
+    universeSpeed * PRODUCTION_MULT * mineMult * vein * rift * rich;
   // Mini planets use slot-8 neutral mults (out-of-band slots already neutral).
   const pos = productionMultForSlot(planet.coords.slot);
   const ironwaterDeut =

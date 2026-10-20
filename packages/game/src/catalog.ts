@@ -15,6 +15,7 @@ export {
 } from "./catalog-officers.js";
 export { SKILLS, SKILL_ORDER } from "./catalog-skills.js";
 export {
+  ENERGY_TECH_ENERGY_PER_LEVEL,
   FLAT_BONUS_LEVELS_PER_STEP,
   OFFICER_MAX_LEVEL,
   SKILL_MAX_LEVEL,

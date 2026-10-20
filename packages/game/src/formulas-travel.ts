@@ -1,6 +1,7 @@
 import {
   BUILDINGS,
   DEFENSES,
+  ENERGY_TECH_ENERGY_PER_LEVEL,
   MIN_FLIGHT_SECONDS,
   RESEARCH,
   SHIPS,
@@ -157,7 +158,9 @@ export function economySnapshot(
   boosts?: { mineOutput?: number; energyOutput?: number },
 ): EconomySnapshot {
   const used = fieldsUsed(planet);
-  const energyMult = boosts?.energyOutput ?? 1;
+  const energyMult =
+    (boosts?.energyOutput ?? 1) *
+    (1 + energyTechLevel * ENERGY_TECH_ENERGY_PER_LEVEL);
   const slot = planet.coords.slot;
   return {
     productionPerHour: productionPerHour(

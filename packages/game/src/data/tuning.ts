@@ -836,11 +836,13 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
 
 };
 
+export const ENERGY_TECH_ENERGY_PER_LEVEL = 0.05;
+
 export const RESEARCH: Record<ResearchId, ResearchDef> = {
   energyTech: {
     id: "energyTech",
     name: "Power Discipline",
-    description: "+2% mine output per level (energy discipline).",
+    description: "+5% energy production per level.",
     baseCost: { metal: 0, crystal: 80, deuterium: 40 },
     costGrowth: 2,
     baseResearchSeconds: 20,
