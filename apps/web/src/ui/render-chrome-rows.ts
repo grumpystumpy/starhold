@@ -65,7 +65,7 @@ export function shipRow(
         }</div>
       </div>
       <div class="actions">
-        <input type="number" min="1" max="50" value="1" data-ship-count="${id}" data-testid="ship-count-${id}" ${locked ? "disabled" : ""} style="min-width:4rem;width:4.5rem" />
+        <input type="number" min="1" max="999999" value="1" data-ship-count="${id}" data-testid="ship-count-${id}" ${locked ? "disabled" : ""} style="min-width:4rem;width:4.5rem" />
         <button type="button" data-ship="${id}" data-locked="${locked ? "1" : "0"}" data-testid="build-${id}" ${locked ? "disabled" : ""} title="${tip.title}">${label}</button>
       </div>
     </article>
@@ -114,7 +114,7 @@ export function defenseRow(
         <div class="meta">${fmtCost(cost)} each · yard L${fmt(def.shipyardLevel)}+ · atk ${fmt(def.attack)}</div>
       </div>
       <div class="actions">
-        <input type="number" min="1" max="50" value="1" data-defense-count="${id}" data-testid="defense-count-${id}" ${locked ? "disabled" : ""} style="min-width:4rem;width:4.5rem" />
+        <input type="number" min="1" max="999999" value="1" data-defense-count="${id}" data-testid="defense-count-${id}" ${locked ? "disabled" : ""} style="min-width:4rem;width:4.5rem" />
         <button type="button" data-defense="${id}" data-locked="${locked ? "1" : "0"}" data-testid="build-defense-${id}" ${locked ? "disabled" : ""} title="${tip.title}">${label}</button>
       </div>
     </article>
@@ -137,7 +137,6 @@ function researchButtonLabel(error: string | null): string {
   if (error.includes("queue is full")) return "Queue full";
   const needs = error.match(/Needs Research Lab level (\d+)/);
   if (needs) return `Needs lab ${fmt(Number(needs[1]))}`;
-  if (error.includes("can only research")) return "Lab cap";
   if (error.startsWith("Not enough")) return "Can't afford";
   return "Unavailable";
 }
@@ -150,16 +149,18 @@ export function researchRow(
   const def = RESEARCH[id];
   const level = view.player.research?.[id] ?? 0;
   const lab = bestResearchLab(view);
+  const localLab = view.planet.buildings.researchLab ?? 0;
   const preview = previewResearchUpgrade(
     view.player,
     view.planet,
     id,
     lab,
     view.now,
+    localLab,
   );
   const cost = preview.cost;
   const secs = Math.ceil(
-    researchUpgradeSeconds(id, preview.current, Math.max(1, lab)) /
+    researchUpgradeSeconds(id, preview.current, localLab) /
       view.universe.speed,
   );
   const blocked = preview.ok ? null : preview.error;
