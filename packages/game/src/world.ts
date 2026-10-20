@@ -204,6 +204,7 @@ export {
   playerBoosts,
   pruneExpiredOfficers,
   raiseOfficer,
+  tradeStarshardsForResources,
   unlockSkill,
   utcDayKey,
   type PlayerBoosts,
