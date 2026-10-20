@@ -69,6 +69,7 @@ import {
   setSeasonTitle,
   startOccupation,
   swarmProduce,
+  tradeStarshardsForResources,
   unlockSkill,
   type AllianceJoinMode,
   type AllianceRole,
@@ -801,6 +802,40 @@ export function createApp(): Hono {
     }
     return withUniverse((universe) => {
       const result = unlockSkill(universe, body.playerId!, body.skillId!);
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    }, { playerIds: [body.playerId] });
+  });
+
+  app.post("/api/shop/trade", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      planetId?: string;
+      direction?: string;
+    };
+    if (!body.playerId || !body.direction) {
+      return c.json({ error: "playerId and direction required." }, 400);
+    }
+    const sessionId = readSessionId(c);
+    if (!sessionId) return c.json({ error: "Sign in required." }, 401);
+    const session = await getSession(sessionId);
+    if (!session) return c.json({ error: "Sign in required." }, 401);
+    const account = await getAccountById(session.accountId);
+    if (!account?.playerId) return c.json({ error: "Sign in required." }, 401);
+    if (account.playerId !== body.playerId) {
+      return c.json({ error: "You do not own this player." }, 403);
+    }
+    const direction = body.direction;
+    if (direction !== "buy" && direction !== "sell") {
+      return c.json({ error: "direction must be buy or sell." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = tradeStarshardsForResources(
+        universe,
+        body.playerId!,
+        body.planetId,
+        direction,
+      );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
     }, { playerIds: [body.playerId] });

@@ -2,22 +2,10 @@
  * Account / session / password auth persistence.
  * Uses Upstash/KV when configured, D1 on Workers, otherwise process-local Maps.
  * Vercel passwords stay Node scrypt. Workers use WebCrypto PBKDF2 (10k).
- * Imported Vercel accounts have no password hash: the old pepper is gone,
- * so the player sets a new PBKDF2 password with a one-time claim code.
+ * Imported accounts without a usable password hash must ask an admin for a reset.
  */
 
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import {
-  CLAIM_CODE_TTL_SEC,
-  claimCodeKey,
-  claimMailConfigured,
-  hashClaimCode,
-  isValidClaimCode,
-  newClaimCode,
-  normalizeClaimCode,
-  sendClaimCode,
-  type ClaimCodeRecord,
-} from "./claim-code.js";
+import { createHash, randomBytes } from "node:crypto";
 import type { KvStore } from "./kv.js";
 import { hashPbkdf2, verifyPbkdf2 } from "./password.js";
 import { hashScrypt, verifyScrypt } from "./password-scrypt.js";
@@ -31,7 +19,7 @@ export const PASSWORD_MIN = 8;
 export const PASSWORD_MAX = 128;
 
 export const PASSWORD_RESET_MESSAGE =
-  "This account needs a new password. Enter the claim code you were given.";
+  "This account needs a password reset. Please ask an admin to reset your password.";
 
 export interface AccountRecord {
   id: string;
@@ -47,7 +35,7 @@ export interface AccountRecord {
    * peppered with the unrecoverable Vercel secret.
    */
   passwordHashPbkdf2?: string;
-  /** Set on import. Login is refused until a claim code sets a new password. */
+  /** Set on import. Login is refused until an admin resets the password. */
   needsPasswordReset?: boolean;
   playerId: string | null;
   createdAt: number;
@@ -65,7 +53,6 @@ const memAccounts = new Map<string, AccountRecord>();
 const memEmailIndex = new Map<string, string>();
 const memSessions = new Map<string, SessionRecord>();
 const memRate = new Map<string, { count: number; expiresAt: number }>();
-const memClaimCodes = new Map<string, ClaimCodeRecord>();
 
 /**
  * Pepper / signing secret.
@@ -206,7 +193,7 @@ export async function verifyPassword(
  * Returns remaining wait seconds when blocked, else null.
  */
 export async function checkAuthRateLimit(
-  action: "signup" | "login" | "claim",
+  action: "signup" | "login",
   email: string,
   ip?: string | null,
 ): Promise<{ limited: boolean; retryAfterSec: number }> {
@@ -322,8 +309,7 @@ export async function authenticateEmailPassword(
   if (account?.needsPasswordReset) {
     return { ok: false, error: PASSWORD_RESET_MESSAGE, status: 401 };
   }
-  // Workers never verifies scrypt. A leftover hash cannot be checked
-  // without the Vercel pepper, so the player must use a claim code.
+  // Workers cannot verify scrypt without the Vercel pepper. Ask an admin to reset it.
   if (
     account &&
     isWorkersRuntime() &&
@@ -343,143 +329,6 @@ export async function authenticateEmailPassword(
   account.lastLoginAt = now;
   await saveAccount(account);
   return { ok: true, account };
-}
-
-async function saveClaimCode(record: ClaimCodeRecord): Promise<void> {
-  const client = getKvClient();
-  if (!client) {
-    memClaimCodes.set(record.accountId, record);
-    return;
-  }
-  await kvSet(client, claimCodeKey(record.accountId), record, CLAIM_CODE_TTL_SEC);
-}
-
-async function loadClaimCode(accountId: string): Promise<ClaimCodeRecord | null> {
-  const client = getKvClient();
-  if (!client) return memClaimCodes.get(accountId) ?? null;
-  return kvGet<ClaimCodeRecord>(client, claimCodeKey(accountId));
-}
-
-async function deleteClaimCode(accountId: string): Promise<void> {
-  const client = getKvClient();
-  if (!client) {
-    memClaimCodes.delete(accountId);
-    return;
-  }
-  await kvDel(client, claimCodeKey(accountId));
-}
-
-export async function issueClaimCode(
-  accountId: string,
-  now = Date.now(),
-): Promise<{ code: string; expiresAt: number }> {
-  const code = newClaimCode();
-  const expiresAt = now + CLAIM_CODE_TTL_SEC * 1000;
-  await saveClaimCode({
-    accountId,
-    codeHash: hashClaimCode(code, sessionSecret()),
-    expiresAt,
-  });
-  return { code, expiresAt };
-}
-
-/** True only when the code matches, is unexpired, and had not been used. */
-export async function consumeClaimCode(
-  accountId: string,
-  code: string,
-  now = Date.now(),
-): Promise<boolean> {
-  const provided = hashClaimCode(normalizeClaimCode(code), sessionSecret());
-  const record = await loadClaimCode(accountId);
-  if (record && record.expiresAt <= now) {
-    await deleteClaimCode(accountId);
-  }
-  const live = record && record.expiresAt > now ? record : null;
-  const expected = live?.codeHash ?? "0".repeat(64);
-  if (!live || !safeEqual(provided, expected)) return false;
-  await deleteClaimCode(accountId);
-  return true;
-}
-
-/**
- * Email a fresh code when mail is configured and this account must reset.
- * Does not rotate a code when mail is off — that file is the only copy.
- * Always safe to call for an unknown email: it sends nothing.
- */
-export async function requestClaimCode(
-  email: string,
-  now = Date.now(),
-): Promise<void> {
-  if (!claimMailConfigured()) return;
-  const account = await getAccountByEmail(normalizeEmail(email));
-  if (!account?.needsPasswordReset) return;
-  const issued = await issueClaimCode(account.id, now);
-  const sent = await sendClaimCode(account.email, issued.code);
-  if (!sent) await deleteClaimCode(account.id);
-}
-
-export async function setAccountPassword(
-  account: AccountRecord,
-  password: string,
-  now = Date.now(),
-): Promise<AccountRecord> {
-  account.passwordHash = await hashPassword(password);
-  account.needsPasswordReset = false;
-  delete account.passwordHashPbkdf2;
-  account.lastLoginAt = now;
-  await saveAccount(account);
-  return account;
-}
-
-export async function claimNewPassword(
-  email: string,
-  code: string,
-  password: string,
-  now = Date.now(),
-): Promise<
-  | { ok: true; account: AccountRecord }
-  | { ok: false; error: string; status: 400 | 401 }
-> {
-  const normalized = normalizeEmail(email);
-  if (!isValidEmail(normalized)) {
-    return { ok: false, error: "Valid email required.", status: 400 };
-  }
-  if (!isValidPassword(password)) {
-    return {
-      ok: false,
-      error: `Password must be ${PASSWORD_MIN}–${PASSWORD_MAX} characters.`,
-      status: 400,
-    };
-  }
-  const normalizedCode = normalizeClaimCode(code);
-  if (!isValidClaimCode(normalizedCode)) {
-    return { ok: false, error: "That claim code is not valid.", status: 401 };
-  }
-  const account = await getAccountByEmail(normalized);
-  if (!account?.needsPasswordReset) {
-    return { ok: false, error: "That claim code is not valid.", status: 401 };
-  }
-  const match = await consumeClaimCode(account.id, normalizedCode, now);
-  if (!match) {
-    return { ok: false, error: "That claim code is not valid.", status: 401 };
-  }
-  await setAccountPassword(account, password, now);
-  return { ok: true, account };
-}
-
-/** Test / local e2e helper: drop the password and issue one claim code. */
-export async function preparePasswordClaim(
-  email: string,
-  now = Date.now(),
-): Promise<{ ok: true; code: string } | { ok: false; error: string }> {
-  const account = await getAccountByEmail(normalizeEmail(email));
-  if (!account) return { ok: false, error: "Account not found." };
-  account.needsPasswordReset = true;
-  account.passwordHash = "";
-  delete account.passwordHashPbkdf2;
-  await saveAccount(account);
-  const issued = await issueClaimCode(account.id, now);
-  return { ok: true, code: issued.code };
 }
 
 async function saveAccount(account: AccountRecord): Promise<void> {
@@ -560,14 +409,6 @@ export function resetMemoryAccounts(): void {
   memEmailIndex.clear();
   memSessions.clear();
   memRate.clear();
-  memClaimCodes.clear();
-}
-
-export function safeEqual(a: string, b: string): boolean {
-  const ab = Buffer.from(a);
-  const bb = Buffer.from(b);
-  if (ab.length !== bb.length) return false;
-  return timingSafeEqual(ab, bb);
 }
 
 export function appBaseUrl(reqUrl?: string): string {
