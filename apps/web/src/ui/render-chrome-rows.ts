@@ -137,7 +137,6 @@ function researchButtonLabel(error: string | null): string {
   if (error.includes("queue is full")) return "Queue full";
   const needs = error.match(/Needs Research Lab level (\d+)/);
   if (needs) return `Needs lab ${fmt(Number(needs[1]))}`;
-  if (error.includes("can only research")) return "Lab cap";
   if (error.startsWith("Not enough")) return "Can't afford";
   return "Unavailable";
 }

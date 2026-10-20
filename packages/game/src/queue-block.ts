@@ -178,9 +178,6 @@ export function previewResearchUpgrade(
       `Needs Research Lab level ${def.labLevel} (best lab ${lab}).`,
     );
   }
-  if (current + 1 > lab) {
-    return fail(`Lab level ${lab} can only research up to level ${lab}.`);
-  }
   if (!canAfford(planet.resources, cost)) {
     return fail("Not enough resources on active planet.");
   }

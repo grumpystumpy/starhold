@@ -208,18 +208,28 @@ describe("Round 2 multi-item queues", () => {
       crystal: 50_000,
       deuterium: 50_000,
     };
-    universe.planets[planet.id].buildings.researchLab = 3;
+    universe.planets[planet.id].buildings.researchLab = 1;
     const t0 = 305_000_100;
     assert.ok(queueResearch(universe, player.id, "energyTech", t0).ok);
     const second = queueResearch(universe, player.id, "combustionDrive", t0 + 1);
     assert.equal(second.ok, false);
 
     // Finish first, raise logistics, then allow multi research.
+    const afterFirst = universe.players[player.id].researchQueue[0]!.completesAt;
+    advanceUniverse(universe, afterFirst);
+    const stillLocked = queueResearch(universe, player.id, "shieldingTech", afterFirst + 1);
+    assert.equal(stillLocked.ok, false);
+    if (!stillLocked.ok) {
+      assert.match(stillLocked.error, /Needs Research Lab level 2/);
+    }
+    universe.players[player.id].research.queueLogistics = 3;
+    const aboveLab = queueResearch(universe, player.id, "energyTech", afterFirst + 2);
+    assert.equal(aboveLab.ok, true);
+    assert.equal(universe.players[player.id].researchQueue[0]!.targetLevel, 2);
     advanceUniverse(
       universe,
       universe.players[player.id].researchQueue[0]!.completesAt,
     );
-    universe.players[player.id].research.queueLogistics = 3;
     assert.equal(researchQueueCap(universe.players[player.id]), 2);
     assert.ok(
       queueResearch(universe, player.id, "combustionDrive", t0 + 50_000).ok,
