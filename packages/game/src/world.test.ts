@@ -3,8 +3,23 @@ import { describe, it } from "node:test";
 import { PRODUCTION_MULT } from "./catalog.js";
 import { productionPerHour } from "./formulas.js";
 import { createUniverse, joinUniverse, advancePlanet, advanceUniverse } from "./world.js";
+import { ensureUniverseShape } from "./world-bootstrap.js";
 
 describe("advancePlanet fractional accrual", () => {
+  it("names a new player's homeworld and preserves names in old-shaped saves", () => {
+    const universe = createUniverse("Homeworld", 1);
+    const joined = joinUniverse(universe, "Nova", 1_499_999);
+    assert.equal(joined.planet.name, "Nova homeworld");
+
+    const oldSave = structuredClone(universe);
+    oldSave.planets[joined.planet.id]!.name = "Nova's Colony";
+    delete oldSave.planets[joined.planet.id]!.flags;
+    ensureUniverseShape(oldSave);
+    const loadedPlanet = oldSave.planets[joined.planet.id]!;
+    assert.equal(loadedPlanet.name, "Nova's Colony");
+    assert.equal(loadedPlanet.resources.metal, joined.planet.resources.metal);
+  });
+
   it("adds flat base income after multipliers, including to mini planets but not moons", () => {
     const universe = createUniverse("Flat Income", 8);
     const { planet } = joinUniverse(universe, "Income", 1_500_000);
