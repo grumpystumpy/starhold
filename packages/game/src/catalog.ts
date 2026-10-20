@@ -12,6 +12,8 @@ export {
   OFFICERS,
   OFFICER_ORDER,
   OFFICER_DURATION_MS,
+  officerRenewalCost,
+  officerRenewalDurationMs,
 } from "./catalog-officers.js";
 export { SKILLS, SKILL_ORDER } from "./catalog-skills.js";
 export {

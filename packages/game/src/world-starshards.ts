@@ -1,4 +1,4 @@
-import { OFFICERS } from "./catalog-officers.js";
+import { OFFICERS, officerRenewalCost, officerRenewalDurationMs } from "./catalog-officers.js";
 import { SKILLS } from "./catalog-skills.js";
 import { OFFICER_MAX_LEVEL, SKILL_MAX_LEVEL, STARSHARDS_DAILY_LOGIN } from "./catalog.js";
 import { levelUpCost } from "./formulas-levels.js";
@@ -68,7 +68,7 @@ export function claimPlayerGoal(
   return claimGoal(universe, playerId, goalId, now);
 }
 
-/** Hire / renew an officer for Starshards (7d wall-clock). */
+/** Hire / renew an officer for Starshards. */
 export function activateOfficer(
   universe: UniverseState,
   playerId: string,
@@ -83,24 +83,32 @@ export function activateOfficer(
   advanceUniverse(universe, now);
   pruneExpiredOfficers(player, now);
 
+  const renewals = Math.max(0, Math.floor(player.officerRenewals?.[officerId] ?? 0));
+  const cost = officerRenewalCost(def.cost, renewals);
+  const durationMs = officerRenewalDurationMs(renewals);
+
   const balance = Math.floor(player.starshards ?? 0);
-  if (balance < def.cost) {
+  if (balance < cost) {
     return {
       ok: false,
-      error: `Need ${def.cost} Starshards (have ${balance}).`,
+      error: `Need ${cost} Starshards (have ${balance}).`,
     };
   }
 
-  player.starshards = balance - def.cost;
+  player.starshards = balance - cost;
   const others = (player.officers ?? []).filter(
     (o) => o.officerId !== officerId,
   );
   others.push({
     officerId,
     activatedAt: now,
-    expiresAt: now + def.durationMs,
+    expiresAt: now + durationMs,
   });
   player.officers = others;
+  player.officerRenewals = {
+    ...(player.officerRenewals ?? {}),
+    [officerId]: renewals + 1,
+  };
   ensureProgressionLevels(player);
   if ((player.officerLevels?.[officerId] ?? 0) < 1) {
     player.officerLevels = { ...(player.officerLevels ?? {}), [officerId]: 1 };
