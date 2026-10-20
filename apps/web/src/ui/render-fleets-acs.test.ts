@@ -61,8 +61,9 @@ describe("fleet slot counters", () => {
     ] as unknown as PlayerView["fleets"];
     const noBeacon = fleetComposer(view, false, null);
     assert.match(noBeacon, /Fleets 2\/5 · Expeditions 1\/2/);
+    view.fleetSlotCap = 6;
     view.expeditionSlotCap = 3;
     const withBeacon = fleetComposer(view, false, null);
-    assert.match(withBeacon, /Fleets 2\/5 · Expeditions 1\/3/);
+    assert.match(withBeacon, /Fleets 2\/6 · Expeditions 1\/3/);
   });
 });

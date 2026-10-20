@@ -133,6 +133,31 @@ describe("P2 expeditions", () => {
     assert.match(second.error, /expedition limit/i);
   });
 
+  it("Drift Beacons add expedition slots and launch enforcement uses the added cap", () => {
+    const universe = createUniverse("Beacon Expedition Cap", 8);
+    const a = joinUniverse(universe, "Beacon Voyager", 142_000_000);
+    const mini = universe.planets[universe.miniPlanetIds![0]!]!;
+    mini.ownerPlayerId = a.player.id;
+    a.player.planetIds.push(mini.id);
+    mini.buildings.driftBeacon = 1;
+    universe.planets[a.planet.id]!.ships.scout = 3;
+    universe.planets[a.planet.id]!.resources.deuterium = 10_000;
+    a.player.research.computerTech = 3;
+
+    const launch = (now: number) => launchFleet(universe, {
+      playerId: a.player.id,
+      mission: "expedition",
+      targetCoords: { ...a.planet.coords, slot: EXPEDITION_SLOT },
+      ships: { scout: 1 },
+      now,
+    });
+    assert.equal(launch(142_000_100).ok, true);
+    assert.equal(launch(142_000_200).ok, true);
+    const overCap = launch(142_000_300);
+    assert.equal(overCap.ok, false);
+    if (!overCap.ok) assert.match(overCap.error, /expedition limit/i);
+  });
+
   it("expeditionRoll is stable for a fleet id + time", () => {
     assert.equal(
       expeditionRoll("flt_demo", 1_000_000),

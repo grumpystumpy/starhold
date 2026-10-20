@@ -70,6 +70,26 @@ describe("fleet formulas", () => {
 });
 
 describe("launchFleet + travel resolve", () => {
+  it("Drift Beacons add fleet slots and fleet launch enforcement uses the added cap", () => {
+    const universe = createUniverse("Beacon Fleet Cap", 8);
+    const a = joinUniverse(universe, "Beacon Admiral", 9_000_000);
+    const b = joinUniverse(universe, "Destination", 9_000_001);
+    const mini = universe.planets[universe.miniPlanetIds![0]!]!;
+    mini.ownerPlayerId = a.player.id;
+    a.player.planetIds.push(mini.id);
+    mini.buildings.driftBeacon = 1;
+    universe.planets[a.planet.id]!.ships.scout = 3;
+    universe.planets[a.planet.id]!.resources.deuterium = 10_000;
+
+    const first = launchFleet(universe, a.player.id, b.planet.id, "deploy", { scout: 1 }, 9_000_100);
+    const second = launchFleet(universe, a.player.id, b.planet.id, "deploy", { scout: 1 }, 9_000_200);
+    const overCap = launchFleet(universe, a.player.id, b.planet.id, "deploy", { scout: 1 }, 9_000_300);
+    assert.equal(first.ok, true);
+    assert.equal(second.ok, true);
+    assert.equal(overCap.ok, false);
+    if (!overCap.ok) assert.match(overCap.error, /fleet slot limit/i);
+  });
+
   it("deploy round-trips ships home without combat", () => {
     const universe = createUniverse("Fleet Drift", 8);
     const a = joinUniverse(universe, "Alpha", 10_000_000);
