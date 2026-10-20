@@ -90,6 +90,38 @@ describe("planet fields curve", () => {
 });
 
 describe("position production multipliers", () => {
+  it("Power Discipline boosts energy production without boosting mine output", () => {
+    const universe = createUniverse("Power Discipline", 8);
+    const { planet } = joinUniverse(universe, "Power", 201_500_000);
+    const powered = {
+      ...planet,
+      coords: { ...planet.coords, slot: 8 },
+      buildings: {
+        ...planet.buildings,
+        metalMine: 5,
+        solarPlant: 10,
+      },
+    };
+    const baseEnergy = economySnapshot(powered, 1, 0).energy.produced;
+    const baseMetal = productionPerHour(powered, 1, 0).metal;
+
+    for (const level of [0, 1, 4]) {
+      assert.equal(
+        economySnapshot(powered, 1, level).energy.produced,
+        Math.floor(baseEnergy * (1 + 0.05 * level)),
+        `energy production at Power Discipline level ${level}`,
+      );
+    }
+
+    for (const level of [1, 4]) {
+      assert.equal(
+        productionPerHour(powered, 1, level).metal,
+        baseMetal,
+        `mine output at Power Discipline level ${level}`,
+      );
+    }
+  });
+
   it("slot 8 is neutral 1.0×", () => {
     const m = productionMultForSlot(8);
     assert.deepEqual(m, {

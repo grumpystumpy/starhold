@@ -827,7 +827,7 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
     id: "driftBeacon",
     name: "Drift Beacon",
     description:
-      "Mini-planet special — +1 expedition slot at level 1 (higher levels reserved).",
+      "Mini-planet special — +1 fleet slot and +1 expedition slot at level 1 (higher levels reserved).",
     baseCost: { metal: 2000, crystal: 1500, deuterium: 1000 },
     costGrowth: 2.0,
     baseBuildSeconds: 60,
@@ -836,11 +836,13 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
 
 };
 
+export const ENERGY_TECH_ENERGY_PER_LEVEL = 0.05;
+
 export const RESEARCH: Record<ResearchId, ResearchDef> = {
   energyTech: {
     id: "energyTech",
     name: "Power Discipline",
-    description: "+2% mine output per level (energy discipline).",
+    description: "+5% energy production per level.",
     baseCost: { metal: 0, crystal: 80, deuterium: 40 },
     costGrowth: 2,
     baseResearchSeconds: 20,

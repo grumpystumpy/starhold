@@ -29,6 +29,8 @@ function fleetView(): PlayerView {
       asteroids: [],
     },
     fleets: [],
+    fleetSlotCap: 5,
+    expeditionSlotCap: 2,
     universe: { speed: 1, fleetSpeed: 1 },
     alliance: { id: "ally_1", tag: "SOL" },
     openAcsGroups: [],
@@ -47,5 +49,21 @@ describe("Joint Strike fleet prefill", () => {
     assert.match(html, /data-testid="mission-raid"[^>]*checked/);
     assert.match(html, /value="coords:1:1:1" selected/);
     assert.match(html, /data-testid="fleet-open-acs"[^>]*checked/);
+  });
+});
+
+describe("fleet slot counters", () => {
+  it("shows server expedition cap with and without the beacon bonus", () => {
+    const view = fleetView();
+    view.fleets = [
+      { id: "f1", mission: "expedition" },
+      { id: "f2", mission: "deploy" },
+    ] as unknown as PlayerView["fleets"];
+    const noBeacon = fleetComposer(view, false, null);
+    assert.match(noBeacon, /Fleets 2\/5 · Expeditions 1\/2/);
+    view.fleetSlotCap = 6;
+    view.expeditionSlotCap = 3;
+    const withBeacon = fleetComposer(view, false, null);
+    assert.match(withBeacon, /Fleets 2\/6 · Expeditions 1\/3/);
   });
 });

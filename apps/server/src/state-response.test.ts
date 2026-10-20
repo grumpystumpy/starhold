@@ -2,12 +2,57 @@ import assert from "node:assert/strict";
 import type { PlayerView } from "@starhold/game";
 import { beforeEach, describe, it } from "node:test";
 import { createApp } from "./app.js";
+import { resetMemoryAccounts } from "./accounts.js";
 import { stateRevision } from "./state-response.js";
-import { resetMemoryUniverse } from "./store.js";
+import { memoryUniverseLoaded, resetMemoryUniverse, setUniverseFaultForTests } from "./store.js";
 
 describe("player state payload", () => {
   beforeEach(() => {
+    resetMemoryAccounts();
     resetMemoryUniverse();
+    setUniverseFaultForTests(null);
+  });
+
+  it("rejects unauthenticated universe reads before loading the universe", async () => {
+    const app = createApp();
+    setUniverseFaultForTests("read");
+    const response = await app.request("/api/universe");
+    assert.equal(response.status, 401);
+    assert.equal(memoryUniverseLoaded(), false);
+  });
+
+  it("serves the compact universe summary to an authenticated session", async () => {
+    const app = createApp();
+    const signup = await app.request("/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "universe@example.com", password: "hunter2xx" }),
+    });
+    assert.equal(signup.status, 200);
+    const cookie = (signup.headers.get("set-cookie") ?? "").split(";")[0]!;
+    const join = await app.request("/api/auth/join", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ name: "UniversePilot" }),
+    });
+    assert.equal(join.status, 200);
+    const joined = (await join.json()) as { player: { id: string; name: string; homePlanetId: string } };
+
+    const response = await app.request("/api/universe", { headers: { Cookie: cookie } });
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as {
+      now: number; id: string; name: string; speed: number; fleetSpeed: number;
+      players: Array<{ id: string; name: string; coords: unknown; planetId: string }>;
+    };
+    assert.equal(typeof body.now, "number");
+    assert.equal(typeof body.id, "string");
+    assert.equal(typeof body.name, "string");
+    assert.equal(typeof body.speed, "number");
+    assert.equal(typeof body.fleetSpeed, "number");
+    assert.deepEqual(Object.keys(body.players[0]!).sort(), ["coords", "id", "name", "planetId"]);
+    assert.equal(body.players[0]?.id, joined.player.id);
+    assert.equal(body.players[0]?.name, joined.player.name);
+    assert.equal(body.players[0]?.planetId, joined.player.homePlanetId);
   });
 
   it("sends a tiny body for an unchanged empire and gzips when asked", async () => {
