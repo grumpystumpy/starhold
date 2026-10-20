@@ -8,8 +8,7 @@ export const NAV_PAGES = [
   "research",
   "fleet",
   "galaxy",
-  "officers",
-  "skills",
+  "shop",
   "highscore",
   "alliances",
   "seasons",
@@ -17,6 +16,26 @@ export const NAV_PAGES = [
 ] as const;
 
 export type NavPage = (typeof NAV_PAGES)[number];
+export type ShopTab = "resources" | "officers" | "skills";
+
+export const SHOP_TABS: readonly ShopTab[] = [
+  "resources",
+  "officers",
+  "skills",
+];
+
+export function isShopTab(value: string | null | undefined): value is ShopTab {
+  return typeof value === "string" && SHOP_TABS.some((tab) => tab === value);
+}
+
+export function shopTabFromUrl(pathname: string, search: string): ShopTab {
+  const queryTab = new URLSearchParams(search).get("shopTab");
+  if (isShopTab(queryTab)) return queryTab;
+  const path = pathname.replace(/\/+$/, "");
+  if (path === "/officers") return "officers";
+  if (path === "/skills") return "skills";
+  return "resources";
+}
 
 export const NAV_LABELS: Record<NavPage, string> = {
   overview: "Overview",
@@ -27,8 +46,7 @@ export const NAV_LABELS: Record<NavPage, string> = {
   research: "Research",
   fleet: "Fleet",
   galaxy: "Galaxy",
-  officers: "Officers",
-  skills: "Skills",
+  shop: "Shop",
   highscore: "Highscore",
   alliances: "Alliances",
   seasons: "Seasons",
@@ -45,8 +63,7 @@ export const NAV_PATHS: Record<NavPage, string> = {
   research: "/research",
   fleet: "/fleet",
   galaxy: "/galaxy",
-  officers: "/officers",
-  skills: "/skills",
+  shop: "/shop",
   highscore: "/highscore",
   alliances: "/alliances",
   seasons: "/seasons",
@@ -58,6 +75,8 @@ const LEGACY_PAGE_ALIASES: Record<string, NavPage> = {
   resources: "buildings",
   facilities: "buildings",
   defense: "defenses",
+  officers: "shop",
+  skills: "shop",
 };
 
 export function isNavPage(value: string | null | undefined): value is NavPage {
@@ -73,7 +92,7 @@ export function pathForPage(page: NavPage): string {
 
 /**
  * Map a pathname (no query) to a nav page.
- * Accepts `/`, `/overview`, and legacy `/resources` · `/facilities` · `/defense`.
+ * Accepts `/`, `/overview`, and legacy panel paths including `/officers` and `/skills`.
  */
 export function pageFromPath(pathname: string): NavPage {
   const raw = pathname.replace(/\/+$/, "") || "/";

@@ -54,7 +54,7 @@ function resourceBar(view: PlayerView, busy: boolean): string {
     lines: [
       "Premium in-game currency (no real money).",
       "Earn from expeditions, pirates, and daily login.",
-      "Spend on officers and skills.",
+      "Spend in the Shop on resources, officers, and skills.",
     ],
     testId: "res-tip-starshards",
   });

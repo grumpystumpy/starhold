@@ -46,10 +46,7 @@ import { alliancesPageHtml } from "./render-alliances";
 import { recommendedNext } from "./render-helpers";
 import { goalsPageHtml } from "./render-goals";
 import { messagesPageHtml } from "./render-messages";
-import {
-  officersPanelHtml,
-  skillsPanelHtml,
-} from "./render-officers-skills";
+import { shopPageHtml } from "./render-shop";
 import {
   buildQueueHtml,
   defenseQueueHtml,
@@ -418,10 +415,8 @@ export function pageHtml(
       return fleetPage(view, busy, fleetDraft);
     case "galaxy":
       return galaxyPanel(view, busy);
-    case "officers":
-      return officersPanelHtml(view, busy);
-    case "skills":
-      return skillsPanelHtml(view, busy);
+    case "shop":
+      return shopPageHtml(view, busy);
     case "highscore":
       return highscorePage(view);
     case "alliances":
