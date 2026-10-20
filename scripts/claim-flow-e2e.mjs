@@ -1,3 +1,4 @@
+import { createActiveWaitClock } from "./active-wait-clock.mjs";
 /**
  * Playwright claim flow against `wrangler dev --local` at 390×844.
  * Signup via the API, mark the account needsPasswordReset, then set a
@@ -12,8 +13,8 @@ const require = createRequire(import.meta.url);
 const { chromium } = require("playwright");
 
 async function waitHealthy() {
-  const start = Date.now();
-  while (Date.now() - start < 30_000) {
+  const activeClock = createActiveWaitClock();
+  while (activeClock.elapsed() < 30_000) {
     try {
       const res = await fetch(`${WEB}/api/health`);
       if (res.ok) return;

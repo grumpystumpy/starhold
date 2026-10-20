@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createActiveWaitClock } from "./active-wait-clock.mjs";
 /**
  * Local smoke: UI join (URL + typed + helper), upgrade level via click, build-ship,
  * P1 flashes, fleet mission (attack + loot report).
@@ -20,8 +21,8 @@ const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:5173";
 const API = process.env.STARHOLD_API ?? "http://127.0.0.1:3001";
 
 async function waitHealthy(ms = 30_000) {
-  const start = Date.now();
-  while (Date.now() - start < ms) {
+  const activeClock = createActiveWaitClock();
+  while (activeClock.elapsed() < ms) {
     try {
       const res = await fetch(`${API}/api/health`);
       if (res.ok) return;
@@ -44,10 +45,11 @@ async function apiJson(path, init) {
 // of `ms` and the server's own ETA plus a 2-minute margin, capped at 15 min,
 // so a slow fresh Workers universe doesn't fail on a fixed clock.
 async function waitMetal(playerId, minMetal, ms = 360_000) {
-  const start = Date.now();
-  let deadline = start + ms;
+  const activeClock = createActiveWaitClock();
+  const activeStart = activeClock.now();
+  let deadline = activeStart + ms;
   let last = null;
-  while (Date.now() < deadline) {
+  while (activeClock.now() < deadline) {
     const st = await apiJson(`/api/state?playerId=${encodeURIComponent(playerId)}`);
     if (st?.error) throw new Error(`waitMetal state: ${st.error}`);
     const buildQ = st.planet.buildQueue;
@@ -63,7 +65,12 @@ async function waitMetal(playerId, minMetal, ms = 360_000) {
     const rate = st.economy?.productionPerHour?.metal ?? 0;
     const metalEta = rate > 0 ? now + ((minMetal - metal) / rate) * 3_600_000 : 0;
     const eta = Math.max(queueEnd, metalEta);
-    if (eta > 0) deadline = Math.max(deadline, Math.min(start + 900_000, eta + 120_000));
+    if (eta > 0) {
+      deadline = Math.max(
+        deadline,
+        Math.min(activeStart + 900_000, activeClock.now() + eta - now + 120_000),
+      );
+    }
     last = { metal: Math.floor(metal), rate, queue: buildQ?.length ?? 0, etaS: eta ? Math.round((eta - now) / 1000) : null };
     const sleep = Math.min(20_000, Math.max(1_000, eta - now));
     await new Promise((r) => setTimeout(r, sleep));
@@ -194,10 +201,11 @@ async function apiSmoke() {
   }
 
   const outboundMs = Math.max(0, launch.fleets[0].arrivesAt - Date.now());
-  const deadline = Date.now() + Math.max(90_000, outboundMs * 3 + 20_000);
+  const activeClock = createActiveWaitClock();
+  const deadline = activeClock.now() + Math.max(90_000, outboundMs * 3 + 20_000);
   let reportSeen = false;
   let lootOk = false;
-  while (Date.now() < deadline) {
+  while (activeClock.now() < deadline) {
     const st = await apiJson(`/api/state?playerId=${encodeURIComponent(playerId)}`);
     if ((st.reports?.length ?? 0) >= 1) {
       reportSeen = true;
@@ -232,9 +240,9 @@ const NAV_ALIAS = {
 
 /** Background polls are 30s, so waits that need tick-on-read call poll() themselves. */
 async function pollUntil(page, label, ready, timeoutMs) {
-  const start = Date.now();
+  const activeClock = createActiveWaitClock();
   let last = null;
-  while (Date.now() - start < timeoutMs) {
+  while (activeClock.elapsed() < timeoutMs) {
     last = await page.evaluate(ready);
     if (last === true) return;
     await page.evaluate(() => window.starhold?.poll());
@@ -719,7 +727,7 @@ async function uiSmoke() {
   // deadline on every poll from the fleets' current arrivesAt (+60s margin,
   // at least 2 min from launch), capped at 10 min from launch, so a fleet the
   // client hasn't seen yet still extends the wait once it shows up.
-  const reportStart = Date.now();
+  const activeClock = createActiveWaitClock();
   let reportLast = null;
   let reportMaxWait = 120_000;
   for (;;) {
@@ -734,10 +742,10 @@ async function uiSmoke() {
     if (reportLast.arrivesAt > 0) {
       reportMaxWait = Math.min(
         600_000,
-        Math.max(reportMaxWait, reportLast.arrivesAt - reportLast.now + 60_000 + (Date.now() - reportStart)),
+        Math.max(reportMaxWait, Math.max(0, reportLast.arrivesAt - reportLast.now) + 60_000 + activeClock.elapsed()),
       );
     }
-    if (Date.now() - reportStart >= reportMaxWait) {
+    if (activeClock.elapsed() >= reportMaxWait) {
       throw new Error(`fleet report timed out after ${Math.round(reportMaxWait / 1000)}s: ${JSON.stringify(reportLast)}`);
     }
     await page.evaluate(() => window.starhold?.poll());

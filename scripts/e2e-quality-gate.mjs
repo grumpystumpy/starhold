@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createActiveWaitClock } from "./active-wait-clock.mjs";
 /**
  * Quality-gate Playwright vs local prod build (API+static on :3001).
  * Covers: signup → join → login → session persist, and mini-planet discovery UI.
@@ -13,8 +14,8 @@ const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:3001";
 const API = process.env.STARHOLD_API ?? "http://127.0.0.1:3001";
 
 async function waitHealthy(ms = 60_000) {
-  const start = Date.now();
-  while (Date.now() - start < ms) {
+  const activeClock = createActiveWaitClock();
+  while (activeClock.elapsed() < ms) {
     try {
       const res = await fetch(`${API}/api/health`);
       if (res.ok) return await res.json();
