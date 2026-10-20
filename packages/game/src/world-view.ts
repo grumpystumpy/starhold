@@ -11,9 +11,12 @@ import {
 } from "./catalog.js";
 import {
   classBonuses,
+  empireExpeditionCap,
   economySnapshot,
   empirePoints,
   levelBonuses,
+  maxExpeditions,
+  maxFleetSlots,
   planetPoints,
   playerProgressView,
 } from "./formulas.js";
@@ -59,7 +62,7 @@ import { stampQueueView } from "./world-queue-manage.js";
 import { inSensorPhalanxRange, ownedPlanetCount } from "./world-moons.js";
 import { goalsView } from "./world-goals.js";
 import { occupationForPlanet } from "./world-occupation.js";
-import { playerKnowsMini } from "./world-mini.js";
+import { empireDriftBeaconCount, playerKnowsMini } from "./world-mini.js";
 import { seasonLeaderboardView } from "./world-seasons.js";
 import { getDebris } from "./world-tick.js";
 
@@ -326,6 +329,16 @@ export function playerView(
   universe.planets[planet.id] = planet;
   universe.players[player.id] = player;
   const boosts = playerBoosts(player, now);
+  const cls = classBonuses(player.playerClass?.classId);
+  const driftBeaconCount = empireDriftBeaconCount(universe, player.id);
+  const fleetSlotCap =
+    maxFleetSlots(player.research.computerTech ?? 0) +
+    boosts.fleetSlots +
+    cls.fleetSlots +
+    driftBeaconCount;
+  const expeditionSlotCap =
+    empireExpeditionCap(player, maxExpeditions) +
+    driftBeaconCount;
 
   const fleets = Object.values(universe.fleets)
     .filter((f) => f.ownerPlayerId === playerId)
@@ -443,6 +456,8 @@ export function playerView(
     highscores,
     galaxy: galaxyViewFor(universe, playerId, g, s, now),
     fleets,
+    fleetSlotCap,
+    expeditionSlotCap,
     reports,
     spyReports,
     expeditionReports,
@@ -453,6 +468,7 @@ export function playerView(
     skillsUnlocked: player.skillsUnlocked ?? [],
     skillLevels: { ...(player.skillLevels ?? {}) },
     officerLevels: { ...(player.officerLevels ?? {}) },
+    officerRenewals: { ...(player.officerRenewals ?? {}) },
     officerCatalog: OFFICER_ORDER.map((id) => OFFICERS[id]),
     skillCatalog: SKILL_ORDER.map((id) => SKILLS[id]),
     dailyLoginAvailable: canClaimDailyLogin(player, now),

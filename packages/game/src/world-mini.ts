@@ -734,20 +734,26 @@ export function applyMiniPlanetResolve(
   return { ok: true, planet, choice: "capture" };
 }
 
-/** Empire Drift Beacon bonus: +1 expedition slot if any owned mini has beacon ≥1. */
-export function empireDriftBeaconExpeditionBonus(
+/** Number of fleet and expedition slots granted by owned Drift Beacons. */
+export function empireDriftBeaconCount(
   universe: UniverseState,
   playerId: string,
 ): number {
   const player = universe.players[playerId];
   if (!player) return 0;
+  let count = 0;
   for (const id of player.planetIds) {
     const p = universe.planets[id];
-    if (p && isMiniPlanet(p) && (p.buildings.driftBeacon ?? 0) >= 1) {
-      return 1;
+    if (
+      p &&
+      p.ownerPlayerId === playerId &&
+      isMiniPlanet(p) &&
+      (p.buildings.driftBeacon ?? 0) >= 1
+    ) {
+      count += 1;
     }
   }
-  return 0;
+  return count;
 }
 
 /** Relic World: research time factor for empire (1 if none owned). */

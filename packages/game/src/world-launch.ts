@@ -28,6 +28,7 @@ import type { FleetActionResult } from "./world-queues.js";
 import { resolveActionPlanet } from "./world-queues.js";
 import { attachFleetToAcs } from "./world-acs.js";
 import { resolveLaunchTarget } from "./world-launch-target.js";
+import { empireDriftBeaconCount } from "./world-mini.js";
 
 const MISSIONS: MissionType[] = [
   "deploy",
@@ -122,7 +123,8 @@ export function launchFleet(
   const slotCap =
     maxFleetSlots(player.research.computerTech) +
     boosts.fleetSlots +
-    cls.fleetSlots;
+    cls.fleetSlots +
+    empireDriftBeaconCount(universe, player.id);
   const activeFleets = Object.values(universe.fleets).filter(
     (f) => f.ownerPlayerId === player.id,
   ).length;
