@@ -432,7 +432,14 @@ export function playerView(
         energyOutput: boosts.energyOutput,
       },
     ),
-    roster: provided ? highscoreRoster(provided) : publicRoster(universe, pointsById),
+    roster: provided
+      ? [
+          ...highscoreRoster(provided),
+          ...publicRoster(universe, pointsById).filter(
+            (entry) => entry.id === playerId && !provided.some((row) => row.playerId === playerId),
+          ),
+        ]
+      : publicRoster(universe, pointsById),
     highscores,
     galaxy: galaxyViewFor(universe, playerId, g, s, now),
     fleets,
