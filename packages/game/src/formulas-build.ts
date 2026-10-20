@@ -267,13 +267,16 @@ export function defenseBuildSeconds(
 export function researchUpgradeCost(
   researchId: ResearchId,
   currentLevel: number,
+  labLevel = 0,
 ): Resources {
   const def = RESEARCH[researchId];
-  const factor = Math.pow(def.costGrowth, currentLevel);
+  const factor =
+    Math.pow(def.costGrowth, currentLevel) *
+    Math.max(0, 1 - 0.01 * Math.max(0, labLevel));
   return {
-    metal: Math.floor(def.baseCost.metal * factor),
-    crystal: Math.floor(def.baseCost.crystal * factor),
-    deuterium: Math.floor(def.baseCost.deuterium * factor),
+    metal: Math.max(0, Math.floor(def.baseCost.metal * factor)),
+    crystal: Math.max(0, Math.floor(def.baseCost.crystal * factor)),
+    deuterium: Math.max(0, Math.floor(def.baseCost.deuterium * factor)),
   };
 }
 
@@ -283,12 +286,12 @@ export function researchUpgradeSeconds(
   labLevel: number,
 ): number {
   const def = RESEARCH[researchId];
-  const labFactor = 1 + Math.max(0, labLevel - 1) * 0.15;
   return Math.max(
     1,
     Math.floor(
-      (def.baseResearchSeconds * Math.pow(def.costGrowth, currentLevel)) /
-        labFactor,
+      def.baseResearchSeconds *
+        Math.pow(def.costGrowth, currentLevel) *
+        Math.pow(0.97, Math.max(0, labLevel)),
     ),
   );
 }
