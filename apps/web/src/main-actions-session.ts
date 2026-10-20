@@ -30,6 +30,7 @@ import {
 } from "./session";
 import { syncSessionUrl } from "./ui/router";
 import { captureGameEvent, identifyCommander } from "./telemetry";
+import { settleMutation } from "./recover-action";
 
 /** Background refresh cadence. Actions apply their own response immediately. */
 export const POLL_INTERVAL_MS = 30_000;
@@ -700,10 +701,12 @@ export async function doRenamePlanet(name: string): Promise<void> {
     );
     setFlash("notice", `Colony renamed to ${session.view.planet.name}.`);
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Rename failed.",
-    );
+    await settleMutation({
+      err,
+      failureFallback: "Rename failed.",
+      applied: (view) => view.planet.name === name,
+      successNotice: (view) => `Colony renamed to ${view.planet.name}.`,
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -736,10 +739,20 @@ export async function doRelocateFortress(
       `Moving Fortress landed at ${c.galaxy}:${c.system}:${c.slot}.`,
     );
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Fortress jump failed.",
-    );
+    const before = session.view.planet.coords;
+    await settleMutation({
+      err,
+      failureFallback: "Fortress jump failed.",
+      applied: (view) =>
+        (view.planet.coords.galaxy !== before.galaxy ||
+          view.planet.coords.system !== before.system) &&
+        view.planet.coords.galaxy === galaxy &&
+        view.planet.coords.system === system,
+      successNotice: (view) => {
+        const c = view.planet.coords;
+        return `Moving Fortress landed at ${c.galaxy}:${c.system}:${c.slot}.`;
+      },
+    });
   } finally {
     session.busy = false;
     schedulePaint();

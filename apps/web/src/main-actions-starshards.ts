@@ -9,6 +9,7 @@ import {
   unlockSkillNode,
 } from "./api";
 import { clearFlash, schedulePaint, session, setFlash } from "./session";
+import { settleMutation } from "./recover-action";
 
 export async function doClaimDaily(): Promise<void> {
   if (!session.view || session.busy) return;
@@ -19,10 +20,13 @@ export async function doClaimDaily(): Promise<void> {
     session.view = await claimDaily(session.view.player.id);
     setFlash("notice", "Daily Starshards claimed.");
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Daily claim failed.",
-    );
+    const before = session.view.player.lastDailyLoginUtc;
+    await settleMutation({
+      err,
+      failureFallback: "Daily claim failed.",
+      applied: (view) => view.player.lastDailyLoginUtc !== before,
+      successNotice: () => "Daily Starshards claimed.",
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -40,10 +44,12 @@ export async function doClaimGoal(goalId: string): Promise<void> {
     session.view = await claimGoalReward(session.view.player.id, goalId);
     setFlash("notice", `Claimed ${title}.`);
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Goal claim failed.",
-    );
+    await settleMutation({
+      err,
+      failureFallback: "Goal claim failed.",
+      applied: (view) => view.player.goals?.claimed.includes(goalId) ?? false,
+      successNotice: () => `Claimed ${title}.`,
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -119,10 +125,12 @@ export async function doChooseClass(classId: PlayerClassId): Promise<void> {
     session.view = await chooseClass(session.view.player.id, classId);
     setFlash("notice", "Class chosen.");
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Class choose failed.",
-    );
+    await settleMutation({
+      err,
+      failureFallback: "Class choose failed.",
+      applied: (view) => view.player.playerClass?.classId === classId,
+      successNotice: () => "Class chosen.",
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -138,10 +146,12 @@ export async function doChangeClass(classId: PlayerClassId): Promise<void> {
     session.view = await changeClass(session.view.player.id, classId);
     setFlash("notice", "Class changed.");
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Class change failed.",
-    );
+    await settleMutation({
+      err,
+      failureFallback: "Class change failed.",
+      applied: (view) => view.player.playerClass?.classId === classId,
+      successNotice: () => "Class changed.",
+    });
   } finally {
     session.busy = false;
     schedulePaint();
