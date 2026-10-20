@@ -13,6 +13,12 @@ import {
 import { dashboardHtml } from "./render-dashboard";
 import type { UiHandlers } from "./render-helpers";
 import { pageHtml } from "./render-pages";
+import {
+  eventsBannerHtml,
+  startEventsCountdown,
+  stopEventsCountdown,
+  watchFleetLaunches,
+} from "./render-events";
 
 /**
  * Render UI. Interactive actions are handled by event delegation in main.ts
@@ -33,10 +39,12 @@ export function renderApp(
           accountEmail?: string | null;
     claimablePlayerId?: string | null;
     activePage: NavPage;
+    onEventsRefresh: () => void;
   },
   _handlers: UiHandlers,
 ): void {
   if (!state.view) {
+    stopEventsCountdown();
     if (session.holdJoin) {
       root.innerHTML = reconnectScreenHtml(state);
       return;
@@ -46,6 +54,8 @@ export function renderApp(
   }
 
   const fleetDraft = fleetDraftForPage(root, state.activePage);
+  watchFleetLaunches(state.view, state.onEventsRefresh);
+  startEventsCountdown(state.view, state.onEventsRefresh);
 
   if (canPatchShell(root, state.view, state.activePage)) {
     patchLiveChrome(root, state.view, state);
@@ -53,7 +63,8 @@ export function renderApp(
     if (main) {
       morphHtml(
         main,
-        pageHtml(state.activePage, state.view, state.busy, fleetDraft),
+        eventsBannerHtml(state.view) +
+          pageHtml(state.activePage, state.view, state.busy, fleetDraft),
       );
     }
     startCountdownTick();
@@ -66,6 +77,9 @@ export function renderApp(
     fleetDraft,
     state.activePage,
   );
+  root
+    .querySelector<HTMLElement>("#page-main")
+    ?.insertAdjacentHTML("afterbegin", eventsBannerHtml(state.view));
   startCountdownTick();
 }
 
