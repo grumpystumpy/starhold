@@ -4,6 +4,62 @@
   height: 36px;
 }
 
+.events-banner {
+  margin: 0 0 0.85rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--bg2) 70%, transparent);
+}
+
+.events-banner h2 {
+  margin: 0 0 0.25rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.events-banner ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.event-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.65rem;
+  padding: 0.25rem 0;
+  font-size: 0.83rem;
+  border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+}
+
+.event-row:first-child {
+  border-top: none;
+}
+
+.event-kind {
+  font-weight: 700;
+}
+
+.event-outgoing .event-kind {
+  color: var(--ok);
+}
+
+.event-returning .event-kind {
+  color: #77baff;
+}
+
+.event-hostile .event-kind {
+  color: var(--bad);
+}
+
+.event-arrival {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .defense-row {
   display: flex;
   flex-direction: column;

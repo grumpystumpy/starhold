@@ -62,6 +62,9 @@ function paint(): void {
       accountEmail: session.account?.email ?? null,
       claimablePlayerId: session.claimablePlayerId,
       activePage: session.activePage,
+      onEventsRefresh: () => {
+        if (session.view) void silentRefresh(session.view.player.id);
+      },
     },
     {
       onJoinDraft: (name) => {
