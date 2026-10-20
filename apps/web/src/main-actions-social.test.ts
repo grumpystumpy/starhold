@@ -2,6 +2,7 @@ import "./test-dom";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { PlayerView } from "@starhold/game";
+import { NOT_APPLIED_MESSAGE } from "./api";
 
 const { doPostAllianceChat } = await import("./main-actions-alliances");
 const { doSetSeasonTitle } = await import("./main-actions-seasons");
@@ -121,6 +122,54 @@ describe("social and season actions settleMutation recovery", () => {
     assert.equal(states, 1);
     assert.equal(session.error, null);
     assert.equal(session.notice, "Message posted.");
+  });
+
+  it("alliance chat: 503 + unapplied with existing same-body message → shows NOT_APPLIED_MESSAGE", async () => {
+    setPaintImpl(() => {});
+    const existing = baseView();
+    existing.alliance!.chat = [
+      {
+        id: "msg1",
+        playerId: "p1",
+        displayName: "Player 1",
+        body: "Hello alliance!",
+        createdAt: 1_700_000_000_000,
+      },
+    ];
+    session.view = existing;
+    session.busy = false;
+    session.error = null;
+    session.notice = null;
+
+    let posts = 0;
+    let states = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      if (url.includes("/api/alliance/chat")) {
+        posts += 1;
+        return new Response("<html>Error 503</html>", { status: 503 });
+      }
+      if (url.includes("/api/state")) {
+        states += 1;
+        // Unchanged state: no new message added
+        return new Response(JSON.stringify(existing), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      throw new Error(`unexpected ${url}`);
+    };
+
+    try {
+      await doPostAllianceChat("Hello alliance!");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    assert.equal(posts, 1);
+    assert.equal(states, 1);
+    assert.equal(session.error, NOT_APPLIED_MESSAGE);
   });
 
   it("season action: 503 + applied → success with 1 POST", async () => {

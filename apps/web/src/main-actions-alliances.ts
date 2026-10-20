@@ -328,7 +328,7 @@ export async function doPostAllianceChat(body: string): Promise<void> {
       failureFallback: "Chat post failed.",
       applied: (view) =>
         view.alliance?.chat?.some(
-          (m) => !beforeChatIds.has(m.id) || m.body === body,
+          (m) => !beforeChatIds.has(m.id) && m.body === body,
         ) ?? false,
       successNotice: () => "Message posted.",
     });
@@ -360,7 +360,7 @@ export async function doShareAllianceIntel(spyReportId: string): Promise<void> {
       failureFallback: "Intel share failed.",
       applied: (view) =>
         view.alliance?.intel?.some(
-          (i) => !beforeIntelIds.has(i.id) || i.spyReportId === spyReportId,
+          (i) => !beforeIntelIds.has(i.id) && i.spyReportId === spyReportId,
         ) ?? false,
       successNotice: () => "Spy report shared with the alliance.",
     });
@@ -524,10 +524,10 @@ export async function doProposeJointStrike(
       applied: (view) =>
         view.openAcsGroups.some(
           (g) =>
-            !beforeAcsIds.has(g.id) ||
-            (g.targetCoords.galaxy === coords.galaxy &&
-              g.targetCoords.system === coords.system &&
-              g.targetCoords.slot === coords.slot),
+            !beforeAcsIds.has(g.id) &&
+            g.targetCoords.galaxy === coords.galaxy &&
+            g.targetCoords.system === coords.system &&
+            g.targetCoords.slot === coords.slot,
         ),
       successNotice: () => `Proposed Joint Strike on ${label}.`,
     });
@@ -580,7 +580,7 @@ export async function doInviteAlliance(targetPlayerId: string): Promise<void> {
       failureFallback: "Invite failed.",
       applied: (view) =>
         view.alliance?.pendingInvites?.some(
-          (i) => i.playerId === targetPlayerId || !beforeInvites.has(i.playerId),
+          (i) => i.playerId === targetPlayerId && !beforeInvites.has(i.playerId),
         ) ?? false,
       successNotice: () => "Invite sent.",
     });
