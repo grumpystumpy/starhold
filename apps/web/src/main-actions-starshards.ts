@@ -6,6 +6,7 @@ import {
   claimDaily,
   claimGoalReward,
   raiseOfficerLevel,
+  tradeResources,
   unlockSkillNode,
 } from "./api";
 import { clearFlash, schedulePaint, session, setFlash } from "./session";
@@ -139,6 +140,44 @@ export async function doUnlockSkill(skillId: string): Promise<void> {
         (view.skillLevels?.[skillId] ?? 0) > beforeLevel ||
         (!wasUnlocked && view.skillsUnlocked.includes(skillId)),
       successNotice: () => "Skill unlocked.",
+    });
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doTradeResources(
+  direction: "buy" | "sell",
+): Promise<void> {
+  if (!session.view || session.busy) return;
+  const beforeStarshards = session.view.starshards ?? 0;
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    session.view = await tradeResources(
+      session.view.player.id,
+      session.view.planet.id,
+      direction,
+    );
+    setFlash(
+      "notice",
+      direction === "buy"
+        ? "Resource bundle purchased."
+        : "Resource bundle sold for Starshards.",
+    );
+  } catch (err) {
+    await settleMutation({
+      err,
+      failureFallback: "Resource trade failed.",
+      applied: (view) =>
+        (view.starshards ?? 0) ===
+        beforeStarshards + (direction === "sell" ? 1500 : -1500),
+      successNotice: () =>
+        direction === "buy"
+          ? "Resource bundle purchased."
+          : "Resource bundle sold for Starshards.",
     });
   } finally {
     session.busy = false;
