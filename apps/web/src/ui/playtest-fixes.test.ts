@@ -347,7 +347,7 @@ describe("playtest fixes", () => {
       joinDraft: "",
     });
     assert.match(guest, /data-testid="auth-form"/);
-    assert.match(guest, /data-testid="password-claim-form"/);
+    assert.doesNotMatch(guest, /password-claim-form|claim code|claim-email|claim-password/);
     assert.doesNotMatch(guest, /Automation/);
     assert.doesNotMatch(guest, /commander=/);
 
@@ -361,7 +361,7 @@ describe("playtest fixes", () => {
     assert.match(signedIn, /data-testid="join-form"/);
     assert.match(signedIn, /Signed in as/);
     assert.doesNotMatch(signedIn, /data-testid="auth-form"/);
-    assert.doesNotMatch(signedIn, /data-testid="password-claim-form"/);
+    assert.doesNotMatch(signedIn, /password-claim-form|claim code|claim-email|claim-password/);
     assert.doesNotMatch(signedIn, /Automation/);
     assert.doesNotMatch(signedIn, /commander=/);
     assert.doesNotMatch(signedIn, /window\.starhold/);
