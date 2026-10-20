@@ -119,20 +119,57 @@ describe("P2 multi-round combat + rapid fire", () => {
     assert.equal(res1.summary, res2.summary);
   });
 
-  it("B3-06: 3-layer damage flow per shot & full shield recharge per round (max 8 rounds)", () => {
+  it("B3-06: 3-layer damage flow (shield -> armor -> hull) with round-by-round shield recharge and destruction on hull 0", () => {
+    // 1 Scout vs 1 Scout (both attack 8, shield 4, armor 8, hull 20)
+    // Hand-computed step-by-step:
+    // R1: 8 dmg -> shield 4->0, armor 8->4, hull 20. (0 kills)
+    // R2: shield recharges to 4. 8 dmg -> shield 4->0, armor 4->0, hull 20. (0 kills)
+    // R3: shield recharges to 4. 8 dmg -> shield 4->0, armor 0->0, hull 20->16. (0 kills)
+    // R4: shield recharges to 4. 8 dmg -> shield 4->0, armor 0->0, hull 16->12. (0 kills)
+    // R5: shield recharges to 4. 8 dmg -> shield 4->0, armor 0->0, hull 12->8. (0 kills)
+    // R6: shield recharges to 4. 8 dmg -> shield 4->0, armor 0->0, hull 8->4. (0 kills)
+    // R7: shield recharges to 4. 8 dmg -> shield 4->0, armor 0->0, hull 4->0 -> Destroyed! (1 kill)
+    const combat = resolveCombat(
+      normalizeFleetShips({ scout: 1 }),
+      normalizeFleetShips({ scout: 1 }),
+    );
+
+    assert.equal(combat.outcome, "draw");
+    assert.equal(combat.rounds, 7);
+    assert.equal(combat.attackerAfter.scout, 0);
+    assert.equal(combat.defenderAfter.scout, 0);
+
+    // Verify 0 losses in rounds 1..6, and 1 loss each in round 7
+    for (let r = 0; r < 6; r++) {
+      assert.deepEqual(combat.roundLog[r]!.attackerLosses.ships, {});
+      assert.deepEqual(combat.roundLog[r]!.defenderLosses.ships, {});
+    }
+    assert.equal(combat.roundLog[6]!.attackerLosses.ships.scout, 1);
+    assert.equal(combat.roundLog[6]!.defenderLosses.ships.scout, 1);
+  });
+
+  it("B3-06: combat stops after max 8 rounds when neither side is wiped", () => {
     assert.equal(MAX_COMBAT_ROUNDS, 8);
+    // 1 Hauler (attack 4) vs 1 Hauler (attack 4)
+    // Hauler stats: shield 10, armor 24, hull 60
+    // In every round, 4 attack is fully absorbed by the 10 shield.
+    // Shields recharge to 10 every round, so armor/hull never take damage.
+    // Fight never finishes naturally -> capped at exactly 8 rounds (draw).
+    const combat = resolveCombat(
+      normalizeFleetShips({ hauler: 1 }),
+      normalizeFleetShips({ hauler: 1 }),
+    );
 
-    // Scout has shield: 4, armor: 8, hull: 20
-    // Attack of 10 vs 1 Scout in round 1:
-    // Shield absorbs min(10, 4) = 4 (shield becomes 0).
-    // Armor absorbs min(6, 8) = 6 (armor becomes 2).
-    // Scout survives round 1.
-    // In round 2, shield recharges to 4!
-    const atk = normalizeFleetShips({ scout: 1 }); // 8 attack
-    const def = normalizeFleetShips({ scout: 1 }); // 8 attack
+    assert.equal(combat.outcome, "draw");
+    assert.equal(combat.rounds, 8);
+    assert.equal(combat.attackerAfter.hauler, 1);
+    assert.equal(combat.defenderAfter.hauler, 1);
+    assert.equal(combat.roundLog.length, 8);
 
-    const combat = resolveCombat(atk, def);
-    assert.ok(combat.rounds >= 1 && combat.rounds <= MAX_COMBAT_ROUNDS);
+    for (let r = 0; r < 8; r++) {
+      assert.deepEqual(combat.roundLog[r]!.attackerLosses.ships, {});
+      assert.deepEqual(combat.roundLog[r]!.defenderLosses.ships, {});
+    }
   });
 
   it("Old saves: old-shaped universe state without armor fields loads and battles resolve", () => {
