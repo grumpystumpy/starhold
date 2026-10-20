@@ -2,6 +2,8 @@ import {
   NAV_PAGES,
   pageFromPath,
   pathForPage,
+  shopTabFromUrl,
+  type ShopTab,
   type NavPage,
 } from "./nav";
 import { schedulePaint, session } from "../session";
@@ -23,6 +25,15 @@ export function pageFromLocation(
   loc: Pick<Location, "pathname"> = window.location,
 ): NavPage {
   return pageFromPath(loc.pathname);
+}
+
+export function shopTabFromLocation(
+  loc?: Pick<Location, "pathname" | "search">,
+): ShopTab {
+  const current =
+    loc ?? (typeof window === "undefined" ? null : window.location);
+  if (!current) return "resources";
+  return shopTabFromUrl(current.pathname, current.search);
 }
 
 /** Build a path + query for a nav destination. */
@@ -53,8 +64,15 @@ export function syncSessionUrl(opts: SessionUrlOpts = {}): void {
   session.activePage = page;
 
   const url = new URL(window.location.href);
+  const legacyShopPath =
+    url.pathname.replace(/\/+$/, "") === "/officers" ||
+    url.pathname.replace(/\/+$/, "") === "/skills";
+  const shopTab = shopTabFromUrl(url.pathname, url.search);
   url.pathname = pathForPage(page);
   url.searchParams.delete("commander");
+  if (page === "shop" && (legacyShopPath || url.searchParams.has("shopTab"))) {
+    url.searchParams.set("shopTab", shopTab);
+  }
 
   const playerId =
     opts.playerId !== undefined
@@ -93,6 +111,17 @@ export function navigateTo(
   schedulePaint();
 }
 
+export function navigateShopTab(tab: ShopTab): void {
+  if (typeof window === "undefined") return;
+  session.activePage = "shop";
+  const url = new URL(window.location.href);
+  url.pathname = pathForPage("shop");
+  url.searchParams.delete("commander");
+  url.searchParams.set("shopTab", tab);
+  window.history.pushState({ page: "shop", shopTab: tab }, "", url);
+  schedulePaint();
+}
+
 let popBound = false;
 
 /** Bind once: back/forward restores the routed page. */
@@ -101,10 +130,8 @@ export function ensurePopstateHandler(): void {
   popBound = true;
   window.addEventListener("popstate", () => {
     const page = pageFromLocation();
-    if (session.activePage !== page) {
-      session.activePage = page;
-      schedulePaint();
-    }
+    session.activePage = page;
+    schedulePaint();
   });
 }
 

@@ -256,6 +256,28 @@ a.message-title:hover {
   margin: 0.15rem 0;
 }
 
+.shop-tabs,
+.shop-trade-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.45rem 0 0.75rem;
+}
+
+.shop-tab[aria-selected="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.shop-resource-balances {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  list-style: none;
+  margin: 0.5rem 0;
+  padding: 0;
+}
+
 .alliance-form {
   display: flex;
   flex-wrap: wrap;
