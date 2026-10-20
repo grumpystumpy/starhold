@@ -52,6 +52,7 @@ import {
 } from "./world.js";
 import type { TickBudget } from "./tick-budget.js";
 import type { FleetMission, UniverseState } from "./types.js";
+import { findNearestOpenSlot1 } from "./world-pirates.js";
 
 describe("pirate balance helpers", () => {
   it("pays Starshards by tier on destroy", () => {
@@ -140,6 +141,29 @@ describe("pirate density 200 + zero aliens", () => {
     const before = activePirateBases(universe).length;
     ensurePiratePopulation(universe, Date.now());
     assert.equal(activePirateBases(universe).length, before);
+  });
+
+  it("advancing does not reseed or strengthen existing pirate bases", () => {
+    const universe = createUniverse("Existing pirate bases", 8);
+    const bases = activePirateBases(universe);
+    const before = bases.map((base) => ({
+      id: base.id,
+      ships: { ...base.ships },
+      defenses: { ...base.defenses },
+      level: base.level,
+    }));
+    advanceUniverse(universe, Date.now() + 1_000);
+    const after = activePirateBases(universe);
+    assert.equal(after.length, before.length);
+    assert.deepEqual(
+      after.map((base) => ({
+        id: base.id,
+        ships: base.ships,
+        defenses: base.defenses,
+        level: base.level,
+      })),
+      before,
+    );
   });
 });
 
@@ -252,6 +276,32 @@ describe("pirate growth, free spawn defenses, split", () => {
 });
 
 describe("pirateRaid mission", () => {
+  it("resolves an already launched player raid against a new player", () => {
+    const universe = createUniverse("In-flight raid", 8);
+    const attacker = joinUniverse(universe, "Attacker", Date.now());
+    const defender = joinUniverse(universe, "New defender", Date.now() + 1);
+    const now = defender.player.createdAt + 60 * 60 * 1000;
+    const fleet: FleetMission = {
+      id: "old-in-flight-raid",
+      ownerPlayerId: attacker.player.id,
+      originPlanetId: attacker.planet.id,
+      targetPlanetId: defender.planet.id,
+      targetPlayerId: defender.player.id,
+      targetCoords: defender.planet.coords,
+      mission: "raid",
+      ships: { ...emptyFleetShips(), lightFighter: 1 },
+      cargo: { metal: 0, crystal: 0, deuterium: 0 },
+      departedAt: now - 1000,
+      arrivesAt: now,
+      phase: "outbound",
+      reportId: null,
+    };
+    universe.fleets[fleet.id] = fleet;
+    if (universe.seedCursor) universe.seedCursor.done = true;
+    advanceUniverse(universe, now);
+    assert.ok(Object.keys(universe.reports).length > 0);
+  });
+
   it("destroys a base, grants Starshards, and returns with loot", () => {
     const now = Date.now();
     const universe = createUniverse("Raid Drift", 8);
@@ -337,6 +387,34 @@ describe("pirateRaid mission", () => {
 });
 
 describe("aliens", () => {
+  it("settles into the nearest open slot among 1-3", () => {
+    const universe = createUniverse("Alien slots", 8);
+    const { planet } = joinUniverse(universe, "Finder", 490_000_000);
+    const origin = { galaxy: 1, system: 1, slot: 1 };
+    universe.planets = {};
+    universe.planets.blocker = { ...planet, id: "blocker", coords: origin };
+    // Slot 1 is occupied; slot 2 is the nearest free choice.
+    const site = findNearestOpenSlot1(universe, origin, "nearest-slot-test");
+    assert.deepEqual(site, { ...origin, slot: 2 });
+  });
+
+  it("falls back to any open slot when slots 1-3 are occupied", () => {
+    const universe = createUniverse("Alien slot fallback", 8);
+    const { planet } = joinUniverse(universe, "Finder", 495_000_000);
+    const origin = planet.coords;
+    for (let galaxy = 1; galaxy <= MAP_GALAXIES; galaxy++) {
+      for (let system = 1; system <= MAP_SYSTEMS; system++) {
+        for (let slot = 1; slot <= 3; slot++) {
+          const id = `blocker-${galaxy}-${system}-${slot}`;
+          universe.planets[id] = { ...planet, id, coords: { galaxy, system, slot } };
+        }
+      }
+    }
+    const site = findNearestOpenSlot1(universe, origin, "fallback-slot-test");
+    assert.ok(site);
+    assert.ok(site.slot > 3);
+  });
+
   it("does not seed aliens; find settles nearest slot-1 after roll", () => {
     const universe = createUniverse("Alien Find", 8);
     assert.equal(activeAlienBases(universe).length, 0);

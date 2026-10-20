@@ -305,5 +305,9 @@ export function launchFleet(
     }
   }
 
+  if (targetPirateBaseId || targetAlienBaseId) {
+    player.attackedPiratesAt = now;
+  }
+
   return { ok: true, fleet, planet: origin };
 }

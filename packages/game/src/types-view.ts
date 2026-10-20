@@ -363,6 +363,8 @@ export interface PlayerState {
   /** Ordered multi-item empire research queue (Round 2). */
   researchQueue: ResearchQueueItem[];
   createdAt: number;
+  /** Last launch time when this player attacked a pirate or alien base. */
+  attackedPiratesAt?: number;
   /** Player level — starts at 1, no max (Round 2). */
   level?: number;
   /** XP into the current level (0 .. xpToNext-1). */
