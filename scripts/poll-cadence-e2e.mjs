@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createActiveWaitClock } from "./active-wait-clock.mjs";
 /**
  * Local production check: background polls are one GET /api/state,
  * 30s apart, paused while the tab is hidden, and a player action
@@ -34,9 +35,9 @@ async function readLog(page) {
 }
 
 async function waitForLog(page, pred, ms = 8_000) {
-  const start = Date.now();
+  const activeClock = createActiveWaitClock();
   let last = [];
-  while (Date.now() - start < ms) {
+  while (activeClock.elapsed() < ms) {
     last = await readLog(page);
     if (pred(last)) return last;
     await new Promise((resolve) => setTimeout(resolve, 40));
