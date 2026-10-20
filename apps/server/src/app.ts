@@ -73,7 +73,12 @@ import {
   type AllianceJoinMode,
   type AllianceRole,
 } from "@starhold/game";
-import { sessionSecretConfigured } from "./accounts.js";
+import {
+  getAccountById,
+  getSession,
+  sessionSecretConfigured,
+} from "./accounts.js";
+import { readSessionId } from "./cookies.js";
 import { mountAllianceIntelRoutes } from "./alliance-intel-routes.js";
 import { mountAuthRoutes } from "./auth-routes.js";
 import { mountCpuRoutes } from "./cpu-routes.js";
@@ -220,26 +225,41 @@ export function createApp(): Hono {
   });
 
   app.get("/api/universe", async (c) => {
-    return withUniverse((universe) => {
-      ensureUniverseShape(universe);
-      const now = Date.now();
-      return c.json({
-        now,
-        id: universe.id,
-        name: universe.name,
-        speed: universe.speed,
-        fleetSpeed: universe.fleetSpeed,
-        players: Object.values(universe.players).map((p) => {
-          const planet = universe.planets[p.homePlanetId];
-          return {
-            id: p.id,
-            name: p.name,
-            coords: planet?.coords ?? null,
-            planetId: p.homePlanetId,
-          };
-        }),
+    const sessionId = readSessionId(c);
+    if (!sessionId) return c.json({ error: "Sign in required." }, 401);
+    const session = await getSession(sessionId);
+    if (!session) return c.json({ error: "Sign in required." }, 401);
+    const account = await getAccountById(session.accountId);
+    if (!account?.playerId) return c.json({ error: "Sign in required." }, 401);
+    try {
+      return await withUniverseRead((universe) => {
+        const now = Date.now();
+        return c.json({
+          now,
+          id: universe.id,
+          name: universe.name,
+          speed: universe.speed,
+          fleetSpeed: universe.fleetSpeed,
+          players: Object.values(universe.players).map((p) => {
+            const planet = universe.planets[p.homePlanetId];
+            return {
+              id: p.id,
+              name: p.name,
+              coords: planet?.coords ?? null,
+              planetId: p.homePlanetId,
+            };
+          }),
+        });
       });
-    });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Universe failed.";
+      if (isUniverseBusy(err)) {
+        return c.json({ error: message, code: "busy" }, 503);
+      }
+      console.error("[starhold-api]", err);
+      reportServerError(err);
+      return c.json({ error: message }, 500);
+    }
   });
 
   app.post("/api/join", async (c) => {
