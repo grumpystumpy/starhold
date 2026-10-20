@@ -7,13 +7,13 @@ Canonical working agreements for agents on Starhold. Prefer this over older play
 - **No** trycloudflare tunnels, keepalive loops, or failover watchers.
 - **One stable free URL** on a permanent free tier (no paid plans, no credit card).
 - Live: **Cloudflare Workers free plan + D1** at https://starhold.stumpysgarage.workers.dev
-- Shared multiplayer state: the D1 database `starhold`. Vercel + Upstash is legacy (shutdown tracked in STA-64).
-- Deploys happen only with Micah's approval, from `main`. See [hosting.md](./hosting.md) and [cloudflare.md](./cloudflare.md).
+- Shared multiplayer state: the D1 database `starhold`. Vercel + Upstash is retired.
+- Production deploys happen only by Coding Bot with Micah's approval, using `npm run deploy:prod` with Node 22. See [hosting.md](./hosting.md) and [cloudflare.md](./cloudflare.md).
 - If Micah must sign in, connect GitHub, or approve OAuth: **stop** and report exact URLs + clicks. Do not invent credentials.
 
 ## Deploys and D1 migrations
 
-Every deploy runs `wrangler d1 migrations apply starhold --remote` before `wrangler deploy`. A migration failure stops the deploy. Migrations must be additive and backward-compatible with live saves. Do not use `DROP`, destructive `ALTER`, or renames. Old code must still run against the new schema. Before every batch merge, check that a save from the current live build loads on the new build and keeps its progress.
+`npm run deploy:prod` applies D1 migrations before deploying the Worker. Migrations must be additive and backward-compatible with live saves. Do not use `DROP`, destructive `ALTER`, or renames. Old code must still run against the new schema. Before every batch merge, check that a save from the current live build loads on the new build and keeps its progress.
 
 ## Git / PRs
 
@@ -21,7 +21,7 @@ Every deploy runs `wrangler d1 migrations apply starhold --remote` before `wrang
 - One GitHub issue = one small fix = one branch = one PR into `main` (see [AGENTS.md](../AGENTS.md)). Branch names: `agent/<tool>/<issue#>-<short-slug>`. Fill in the PR template (`Closes #N`, `Linear: STA-n`, tool used, tests run).
 - Merge only when **CI is green** (unit + Playwright required) **and Micah approves**. No auto-merge.
 - Prefer real `git push`. Never leave `PLACEHOLDER` file contents.
-- Commit the small `api/index.js` **stub** (legacy Vercel bundle; CI still runs `npm run build:vercel`). Do not gitignore it and do not commit the generated bundle.
+- Commit the small `api/index.js` **stub** (legacy Vercel bundle; CI runs the production build). Do not gitignore it and do not commit the generated bundle.
 - No PR preview deploys. GitHub Actions must not call Vercel or deploy from a PR.
 - If CI on `main` is red after a merge: open a CI-fix PR from `main` before the next feature batch.
 
@@ -53,7 +53,7 @@ Shared schema: **[design/universe-contract.md](./design/universe-contract.md)** 
 ## Reporting
 
 - **No** self-wakes for health checks.
-- Milestone reports only: feature batch merged, hosting cutover done, or a real blocker.
+- Milestone reports only: feature batch merged, hosting cut-over complete, or a real blocker.
 - Use `READY_FOR_USER_REPORT: yes` only at those milestones.
 
 ## Related

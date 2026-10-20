@@ -1,3 +1,7 @@
+# Historical reference: Vercel is retired
+
+Starhold is live on Cloudflare Workers Free with D1. This document describes the retired Vercel deployment and is retained for historical reference only; do not use it to deploy production.
+
 # Deploy Starhold on Vercel Hobby (Micah)
 
 **Live:** https://starhold-two.vercel.app  
