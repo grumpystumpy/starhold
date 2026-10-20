@@ -150,16 +150,18 @@ export function researchRow(
   const def = RESEARCH[id];
   const level = view.player.research?.[id] ?? 0;
   const lab = bestResearchLab(view);
+  const localLab = view.planet.buildings.researchLab ?? 0;
   const preview = previewResearchUpgrade(
     view.player,
     view.planet,
     id,
     lab,
     view.now,
+    localLab,
   );
   const cost = preview.cost;
   const secs = Math.ceil(
-    researchUpgradeSeconds(id, preview.current, Math.max(1, lab)) /
+    researchUpgradeSeconds(id, preview.current, localLab) /
       view.universe.speed,
   );
   const blocked = preview.ok ? null : preview.error;
