@@ -2,6 +2,8 @@ import {
   OFFICER_MAX_LEVEL,
   SKILL_MAX_LEVEL,
   levelUpCost,
+  officerRenewalCost,
+  officerRenewalDurationMs,
   scaleEffect,
   type OfficerEffect,
   type OfficerId,
@@ -59,13 +61,16 @@ export function officersPanelHtml(
       const officerId = def.id as OfficerId;
       const hire = active.get(officerId);
       const level = view.officerLevels?.[officerId] ?? 0;
+      const renewals = view.officerRenewals?.[officerId] ?? 0;
+      const hireCost = officerRenewalCost(def.cost, renewals);
+      const hireDurationHours = officerRenewalDurationMs(renewals) / (60 * 60 * 1000);
       const effects = def.effects
         .map((e) => effectLine(e, level))
         .join(" · ");
       const status = hire
         ? `Level ${fmt(level)} / ${fmt(OFFICER_MAX_LEVEL)} · Active · ${fmtEta(remainingSeconds(hire.expiresAt, view.now))} left`
         : `Level ${fmt(level)} / ${fmt(OFFICER_MAX_LEVEL)} · Off duty`;
-      const canAfford = balance >= def.cost;
+      const canAfford = balance >= hireCost;
       const raiseCost =
         level >= 1 && level < OFFICER_MAX_LEVEL
           ? levelUpCost(def.cost, level)
@@ -76,7 +81,7 @@ export function officersPanelHtml(
         lines: [
           def.description,
           level >= 1 ? `Now: ${effects}` : `At level 1: ${effects}`,
-          `${hire ? "Renew" : "Hire"}: ${fmt(def.cost)} Starshards · lasts 7 days`,
+          `${hire ? "Renew" : "Hire"}: ${fmt(hireCost)} Starshards · lasts ${fmt(hireDurationHours)} hours`,
           raiseCost != null
             ? `Raise to level ${fmt(level + 1)}: ${fmt(raiseCost)} Starshards`
             : level >= OFFICER_MAX_LEVEL
@@ -100,7 +105,7 @@ export function officersPanelHtml(
           <span class="hint" data-testid="officer-level-${escapeAttr(def.id)}">${escapeHtml(status)}</span>
         </div>
         <span class="actions">
-          <button type="button" data-activate-officer="${escapeAttr(def.id)}" data-testid="activate-officer-${escapeAttr(def.id)}" ${busy || !canAfford ? "disabled" : ""} title="${tip.title}">${hire ? "Renew" : "Hire"} · ${fmt(def.cost)} ✦</button>
+          <button type="button" data-activate-officer="${escapeAttr(def.id)}" data-testid="activate-officer-${escapeAttr(def.id)}" ${busy || !canAfford ? "disabled" : ""} title="${tip.title}">${hire ? "Renew" : "Hire"} · ${fmt(hireCost)} ✦</button>
           ${raiseBtn}
         </span>
       </li>`;
@@ -109,7 +114,7 @@ export function officersPanelHtml(
 
   return `<section class="panel" data-testid="officers-panel" id="officers">
     <h2>Officers</h2>
-    <p class="hint">Hire with Starshards (earned in-game only — no real money). Each hire lasts 7 days. Levels stay after duty ends, up to level 10.</p>
+    <p class="hint">Hire with Starshards (earned in-game only — no real money). First hire lasts 20 hours; each renewal costs 50% more and lasts 15% longer. Levels stay after duty ends, up to level 10.</p>
     <ul class="officer-list">${rows}</ul>
   </section>`;
 }
