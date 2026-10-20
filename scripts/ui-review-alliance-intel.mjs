@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createActiveWaitClock } from "./active-wait-clock.mjs";
 /** Dual-viewport screenshots for alliance chat, intel, and galaxy markers. */
 import { createRequire } from "node:module";
 import fs from "node:fs";
@@ -10,8 +11,8 @@ const OUT =
   "/opt/cursor/artifacts/ui-review/alliance-chat-intel";
 
 async function waitHealthy(ms = 60_000) {
-  const start = Date.now();
-  while (Date.now() - start < ms) {
+  const activeClock = createActiveWaitClock();
+  while (activeClock.elapsed() < ms) {
     try {
       const res = await fetch(`${WEB}/api/health`);
       if (res.ok) return;

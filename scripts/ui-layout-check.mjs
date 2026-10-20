@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createActiveWaitClock } from "./active-wait-clock.mjs";
 /**
  * UI layout check: screenshots + bounding-box overlap/overflow detection.
  * Viewports: desktop 1280×800, phone 390×844.
@@ -85,8 +86,8 @@ const SKIP_OVERLAP = new Set([
 ]);
 
 async function waitHealthy(ms = 45_000) {
-  const start = Date.now();
-  while (Date.now() - start < ms) {
+  const activeClock = createActiveWaitClock();
+  while (activeClock.elapsed() < ms) {
     try {
       const res = await fetch(`${API}/api/health`);
       if (res.ok) return;
