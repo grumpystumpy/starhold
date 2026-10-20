@@ -170,7 +170,7 @@ describe("monthly seasons", () => {
     const before = universe.players[player.id]!.season!.economy;
     const beforeRem = universe.players[player.id]!.season!.economyRemainder ?? 0;
     advanceUniverse(universe, researchDone);
-    const researchSpend = spendOf(researchUpgradeCost("energyTech", 0));
+    const researchSpend = spendOf(researchUpgradeCost("energyTech", 0, 1));
     const nextBank = beforeRem + researchSpend;
     assert.equal(
       universe.players[player.id]!.season!.economy,

@@ -152,6 +152,7 @@ export function previewResearchUpgrade(
   researchId: ResearchId,
   lab: number,
   now = Date.now(),
+  bonusLab = lab,
 ): QueuePreview {
   const empty: Resources = { metal: 0, crystal: 0, deuterium: 0 };
   const def = RESEARCH[researchId];
@@ -161,7 +162,7 @@ export function previewResearchUpgrade(
   const queue = player.researchQueue ?? [];
   const pendingSame = queue.filter((q) => q.researchId === researchId).length;
   const current = (player.research?.[researchId] ?? 0) + pendingSame;
-  const cost = researchUpgradeCost(researchId, current);
+  const cost = researchUpgradeCost(researchId, current, bonusLab);
   const fail = (error: string): QueuePreview => ({
     ok: false,
     error,

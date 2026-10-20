@@ -15,6 +15,8 @@ import {
   queueCapForKind,
   queueResearch,
   queueShipBuild,
+  previewResearchUpgrade,
+  researchUpgradeSeconds,
   reorderQueue,
   researchQueueCap,
   shipUnitBuildSeconds,
@@ -22,6 +24,47 @@ import {
 } from "./index.js";
 
 describe("Round 2 multi-item queues", () => {
+  it("uses the active planet lab bonus for research preview and queue", () => {
+    const universe = createUniverse("Local Lab", 8);
+    const { player, planet } = joinUniverse(universe, "Local", 306_500_000);
+    const owner = universe.players[player.id]!;
+    const active = universe.planets[planet.id]!;
+    active.buildings.researchLab = 2;
+    active.resources = { metal: 50_000, crystal: 50_000, deuterium: 50_000 };
+
+    const other = structuredClone(active);
+    other.id = `${active.id}-colony`;
+    other.buildings.researchLab = 10;
+    universe.planets[other.id] = other;
+    owner.planetIds.push(other.id);
+
+    const preview = previewResearchUpgrade(
+      owner,
+      active,
+      "energyTech",
+      10,
+      306_500_100,
+      2,
+    );
+    assert.equal(preview.ok, true);
+    if (!preview.ok) return;
+
+    const result = queueResearch(universe, owner.id, "energyTech", 306_500_100);
+    assert.equal(result.ok, true);
+    const queued = universe.players[owner.id]!.researchQueue[0]!;
+    assert.deepEqual(queued.paidCost, preview.cost);
+    const previewSeconds = Math.max(
+      1,
+      Math.ceil(
+        researchUpgradeSeconds("energyTech", preview.current, 2) /
+          universe.speed,
+      ),
+    );
+    assert.equal(queued.workSeconds, previewSeconds);
+    assert.equal(previewSeconds, 3);
+    assert.deepEqual(queued.paidCost, { metal: 0, crystal: 78, deuterium: 39 });
+  });
+
   it("schema version is 4", () => {
     assert.equal(UNIVERSE_SCHEMA_VERSION, 5);
     const u = createUniverse("Queue Drift", 8);
@@ -256,6 +299,10 @@ describe("Round 2 multi-item queues", () => {
     assert.ok(result.universe.planets[planet.id].buildQueue[0]!.id);
     assert.ok(Array.isArray(result.universe.players[player.id].researchQueue));
     assert.equal(result.universe.players[player.id].researchQueue.length, 1);
+    assert.equal(
+      result.universe.players[player.id].researchQueue[0]!.completesAt,
+      306_200_000,
+    );
     assert.ok(result.universe.players[player.id].playerClass);
 
     // Idempotent
