@@ -51,6 +51,7 @@ import {
   grantStarshards,
   playerBoosts,
   pruneExpiredOfficers,
+  storageForPlanet,
 } from "./world-boosts.js";
 import {
   activePlanet,
@@ -433,7 +434,8 @@ export function playerView(
         };
       })
       .filter((x): x is NonNullable<typeof x> => x !== null),
-    economy: economySnapshot(
+    economy: {
+      ...economySnapshot(
       planet,
       universe.speed,
       player.research.energyTech ?? 0,
@@ -444,7 +446,9 @@ export function playerView(
           classBonuses(player.playerClass?.classId).mineOutput,
         energyOutput: boosts.energyOutput,
       },
-    ),
+      ),
+      storage: storageForPlanet(universe, planet, now),
+    },
     roster: provided
       ? [
           ...highscoreRoster(provided),
