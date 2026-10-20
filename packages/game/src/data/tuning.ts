@@ -11,6 +11,13 @@ import type {
   ShipId,
 } from "../types.js";
 
+/** Flat hourly income for each owned planet body, independent of all multipliers. */
+export const BASE_INCOME_PER_HOUR = {
+  metal: 500,
+  crystal: 250,
+  deuterium: 100,
+} as const;
+
 /**
  * Lane-c balance / content tuning — single source for ship, defense,
  * building, and research numbers (plus Round 2 combat/economy constants).

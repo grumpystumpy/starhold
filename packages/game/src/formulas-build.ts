@@ -41,6 +41,7 @@ import {
   solarTempFactor,
   veinAnchorMineMult,
 } from "./formulas-round3.js";
+import { BASE_INCOME_PER_HOUR } from "./data/tuning.js";
 
 export function isMoon(planet: PlanetState): boolean {
   return planet.kind === "moon";
@@ -406,23 +407,29 @@ export function productionPerHour(
     isMiniBody(planet) && planet.flags?.miniKind === "ironwater"
       ? MINI_IRONWATER_DEUT_MULT
       : 1;
+  const baseIncome = isMoon(planet) || !planet.ownerPlayerId
+    ? { metal: 0, crystal: 0, deuterium: 0 }
+    : BASE_INCOME_PER_HOUR;
   return {
     metal:
       mineOutputPerHour("metal", planet.buildings.metalMine ?? 0) *
       factor *
       incomeScale *
-      pos.metal,
+      pos.metal +
+      baseIncome.metal,
     crystal:
       mineOutputPerHour("crystal", planet.buildings.crystalMine ?? 0) *
       factor *
       incomeScale *
-      pos.crystal,
+      pos.crystal +
+      baseIncome.crystal,
     deuterium:
       mineOutputPerHour("deuterium", planet.buildings.deutSynth ?? 0) *
       factor *
       incomeScale *
       pos.deuterium *
-      ironwaterDeut,
+      ironwaterDeut +
+      baseIncome.deuterium,
   };
 }
 
