@@ -4,6 +4,7 @@
  * It stays as the rollback snapshot from before the switch.
  */
 import {
+  advancePlanetNow,
   ensureSystemVisited,
   ensureUniverseShape,
   highscoresBoard,
@@ -129,6 +130,8 @@ interface LoadedRows {
   fleetSnapshots: Map<string, FleetMission>;
   pendingSystems: SystemWrite[];
   fingerprints: Map<string, string>;
+  /** Planet rows as loaded, so a resource-only change can be told apart from growth. */
+  planetDocs: Map<string, string>;
 }
 
 const TABLE_SQL = [
@@ -1036,6 +1039,7 @@ async function loadPlanetDocs(
     into.stubPlanetIds.delete(planet.id);
     into.absentPlanetIds.delete(planet.id);
     into.fingerprints.set(`planet:${planet.id}`, stable(planet));
+    into.planetDocs.set(planet.id, row.doc);
   }
   if (expectIds) {
     for (const id of expectIds) {
@@ -1234,6 +1238,7 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
     fleetSnapshots: new Map(),
     pendingSystems: [],
     fingerprints: new Map([["world", stable(worldDoc(universe))]]),
+    planetDocs: new Map(),
   };
   await loadPlayers(db, loaded);
 
@@ -1615,7 +1620,7 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
       ]);
       continue;
     }
-    if (previous === next) continue;
+    if (!planetChanged(loaded, planet, next)) continue;
     const version = (loaded.planetVersions.get(planet.id) ?? 0) + 1;
     planetUpdates.push([
       planet.ownerPlayerId || "",
@@ -1916,6 +1921,47 @@ async function expandDueFleets(
   return { planetIds: [...planetIds], owners: [...owners], systems: [...systems.values()] };
 }
 
+/** Resources may drift this far from plain growth (float noise) and still count as untouched. */
+const RESOURCE_EPSILON = 1e-6;
+
+function sameResources(a: PlanetState["resources"], b: PlanetState["resources"]): boolean {
+  return (
+    Math.abs(a.metal - b.metal) <= RESOURCE_EPSILON &&
+    Math.abs(a.crystal - b.crystal) <= RESOURCE_EPSILON &&
+    Math.abs(a.deuterium - b.deuterium) <= RESOURCE_EPSILON
+  );
+}
+
+/**
+ * The fingerprint ignores resources so a tick-on-read does not rewrite the row.
+ * A planet whose resources differ from plain growth of its loaded row (the same
+ * tick, replayed on a copy) was changed by the request and must be written.
+ */
+function resourcesMoved(loaded: LoadedRows, planet: PlanetState): boolean {
+  const raw = loaded.planetDocs.get(planet.id);
+  if (raw === undefined) return false;
+  const base = timedParse(raw) as PlanetState;
+  if (sameResources(base.resources, planet.resources)) return false;
+  const started = performance.now();
+  try {
+    const owner = loaded.universe.players[base.ownerPlayerId];
+    const shadow = {
+      ...loaded.universe,
+      planets: { [base.id]: base },
+      players: owner ? { [owner.id]: structuredClone(owner) } : {},
+    } as UniverseState;
+    if (planet.lastTickAt > base.lastTickAt) advancePlanetNow(shadow, base.id, planet.lastTickAt);
+    return !sameResources(shadow.planets[base.id]!.resources, planet.resources);
+  } finally {
+    addCpu(performance.now() - started);
+  }
+}
+
+function planetChanged(loaded: LoadedRows, planet: PlanetState, next: string): boolean {
+  if (next !== loaded.fingerprints.get(`planet:${planet.id}`)) return true;
+  return resourcesMoved(loaded, planet);
+}
+
 function changed(loaded: LoadedRows): boolean {
   const universe = loaded.universe;
   if (stable(worldDoc({ ...universe, skipNpcRaids: undefined })) !== loaded.fingerprints.get("world")) {
@@ -1926,7 +1972,7 @@ function changed(loaded: LoadedRows): boolean {
   }
   for (const planet of Object.values(universe.planets)) {
     if (loaded.stubPlanetIds.has(planet.id) && !loaded.fullPlanetIds.has(planet.id)) continue;
-    if (stable(planet) !== loaded.fingerprints.get(`planet:${planet.id}`)) return true;
+    if (planetChanged(loaded, planet, stable(planet))) return true;
   }
   for (const fleet of Object.values(universe.fleets ?? {})) {
     if (stable(fleet) !== loaded.fingerprints.get(`fleet:${fleet.id}`)) return true;

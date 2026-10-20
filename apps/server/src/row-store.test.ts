@@ -723,6 +723,146 @@ describe("row save review fixes", () => {
     }
   });
 
+  it("keeps a write made without player ids (e2e grant) for an existing player", async () => {
+    resetMemoryUniverse();
+    const { db } = sqliteD1();
+    await migrateAll(db, fixture());
+    const store = createD1Store(db);
+    const app = createApp();
+    const previous = process.env.STARHOLD_E2E;
+    process.env.STARHOLD_E2E = "1";
+    const request = (method: string, path: string, body?: unknown) =>
+      runWithScope({ kv: store, db, mode: "d1", method, cpuMs: 0 }, () =>
+        app.request(path, body === undefined ? { method } : {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      );
+    try {
+      const join = await request("POST", "/api/join", { name: "Granted" });
+      const joined = (await join.json()) as PlayerView;
+      const grant = await request("POST", "/api/e2e/grant", {
+        playerId: joined.player.id,
+        resources: { metal: 800 },
+      });
+      assert.equal(grant.status, 200);
+      const state = await request("GET", `/api/state?playerId=${encodeURIComponent(joined.player.id)}`);
+      const view = (await state.json()) as PlayerView;
+      assert.ok(view.planet.resources.metal >= 800, `grant lost: metal ${view.planet.resources.metal}`);
+    } finally {
+      if (previous == null) delete process.env.STARHOLD_E2E;
+      else process.env.STARHOLD_E2E = previous;
+    }
+  });
+
+  it("writes the loot a raid takes from a victim planet that is otherwise untouched", async () => {
+    const { db } = sqliteD1();
+    const source = fixture();
+    const alpha = Object.values(source.players).find((player) => player.name === "OldHand")!;
+    const bravo = Object.values(source.players).find((player) => player.name === "Other")!;
+    const origin = source.planets[alpha.homePlanetId]!;
+    const target = source.planets[bravo.homePlanetId]!;
+    target.ships = { hauler: 0 };
+    target.defenses = {} as PlanetState["defenses"];
+    target.resources = { metal: 50_000, crystal: 50_000, deuterium: 50_000 };
+    const now = Date.now();
+    source.fleets["fleet-loot"] = {
+      id: "fleet-loot",
+      ownerPlayerId: alpha.id,
+      originPlanetId: origin.id,
+      targetPlanetId: target.id,
+      targetPlayerId: bravo.id,
+      targetCoords: target.coords,
+      mission: "raid",
+      ships: { hauler: 5 },
+      cargo: { metal: 0, crystal: 0, deuterium: 0 },
+      departedAt: now - 60_000,
+      arrivesAt: now - 1_000,
+      phase: "outbound",
+      reportId: null,
+    };
+    await migrateAll(db, source);
+    const store = createD1Store(db);
+    let before = 0;
+    let after = 0;
+    let carried = 0;
+    await runWithScope({ kv: store, db, mode: "d1", method: "POST", cpuMs: 0 }, () =>
+      withUniverse((universe) => {
+        const victim = universe.planets[target.id]!;
+        before = victim.resources.metal + victim.resources.crystal + victim.resources.deuterium;
+        advanceUniverse(universe, Date.now());
+        const fleet = universe.fleets["fleet-loot"]!;
+        carried = fleet.cargo.metal + fleet.cargo.crystal + fleet.cargo.deuterium;
+        const looted = universe.planets[target.id]!;
+        after = looted.resources.metal + looted.resources.crystal + looted.resources.deuterium;
+      }, { playerIds: [alpha.id] }),
+    );
+    assert.ok(carried > 0, "raid carried no loot");
+    assert.ok(after < before, "raid took nothing in memory");
+    const stored = await loadWorkingSet(db, { playerIds: [bravo.id] });
+    const res = stored.universe.planets[target.id]!.resources;
+    const total = res.metal + res.crystal + res.deuterium;
+    assert.ok(total <= after + 1, `victim kept loot: stored ${total}, after raid ${after}, carried ${carried}`);
+  });
+
+  it("writes a build cost deduction", async () => {
+    const { db } = sqliteD1();
+    const source = fixture();
+    const alpha = Object.values(source.players).find((player) => player.name === "OldHand")!;
+    const home = source.planets[alpha.homePlanetId]!;
+    home.resources = { metal: 100_000, crystal: 100_000, deuterium: 100_000 };
+    home.buildQueue = [];
+    await migrateAll(db, source);
+    const store = createD1Store(db);
+    let spent = 0;
+    await runWithScope({ kv: store, db, mode: "d1", method: "POST", cpuMs: 0 }, () =>
+      withUniverse((universe) => {
+        const result = queueBuildingUpgrade(universe, alpha.id, "metalMine", Date.now(), home.id);
+        assert.ok(result.ok, JSON.stringify(result));
+        spent = universe.planets[home.id]!.resources.metal;
+      }, { playerIds: [alpha.id] }),
+    );
+    assert.ok(spent < 100_000);
+    const stored = await loadWorkingSet(db, { playerIds: [alpha.id] });
+    assert.ok(stored.universe.planets[home.id]!.resources.metal <= spent + 1, "build cost not saved");
+  });
+
+  it("writes harvested debris delivered home when only the planet's resources change", async () => {
+    const { db } = sqliteD1();
+    const source = fixture();
+    const alpha = Object.values(source.players).find((player) => player.name === "OldHand")!;
+    const home = source.planets[alpha.homePlanetId]!;
+    home.resources = { metal: 1_000, crystal: 1_000, deuterium: 0 };
+    const now = Date.now();
+    source.fleets["fleet-harvest"] = {
+      id: "fleet-harvest",
+      ownerPlayerId: alpha.id,
+      originPlanetId: home.id,
+      targetPlanetId: null,
+      targetPlayerId: null,
+      targetCoords: { ...home.coords, slot: 16 },
+      mission: "harvest",
+      ships: { recycler: 1 },
+      cargo: { metal: 7_000, crystal: 3_000, deuterium: 0 },
+      departedAt: now - 120_000,
+      arrivesAt: now - 1_000,
+      phase: "returning",
+      reportId: null,
+    } as unknown as FleetMission;
+    await migrateAll(db, source);
+    const store = createD1Store(db);
+    await runWithScope({ kv: store, db, mode: "d1", method: "POST", cpuMs: 0 }, () =>
+      withUniverse((universe) => {
+        advanceUniverse(universe, Date.now());
+        assert.equal(universe.fleets["fleet-harvest"], undefined);
+        assert.ok(universe.planets[home.id]!.resources.metal >= 8_000);
+      }, { playerIds: [alpha.id] }),
+    );
+    const stored = await loadWorkingSet(db, { playerIds: [alpha.id] });
+    assert.ok(stored.universe.planets[home.id]!.resources.metal >= 8_000, "harvest delivery lost");
+  });
+
   it("stays inside the D1 query budget", async () => {
     const { db: inner } = sqliteD1();
     let n = 0;
