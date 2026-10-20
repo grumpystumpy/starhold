@@ -65,7 +65,7 @@ export function shipRow(
         }</div>
       </div>
       <div class="actions">
-        <input type="number" min="1" max="50" value="1" data-ship-count="${id}" data-testid="ship-count-${id}" ${locked ? "disabled" : ""} style="min-width:4rem;width:4.5rem" />
+        <input type="number" min="1" max="999999" value="1" data-ship-count="${id}" data-testid="ship-count-${id}" ${locked ? "disabled" : ""} style="min-width:4rem;width:4.5rem" />
         <button type="button" data-ship="${id}" data-locked="${locked ? "1" : "0"}" data-testid="build-${id}" ${locked ? "disabled" : ""} title="${tip.title}">${label}</button>
       </div>
     </article>
@@ -114,7 +114,7 @@ export function defenseRow(
         <div class="meta">${fmtCost(cost)} each · yard L${fmt(def.shipyardLevel)}+ · atk ${fmt(def.attack)}</div>
       </div>
       <div class="actions">
-        <input type="number" min="1" max="50" value="1" data-defense-count="${id}" data-testid="defense-count-${id}" ${locked ? "disabled" : ""} style="min-width:4rem;width:4.5rem" />
+        <input type="number" min="1" max="999999" value="1" data-defense-count="${id}" data-testid="defense-count-${id}" ${locked ? "disabled" : ""} style="min-width:4rem;width:4.5rem" />
         <button type="button" data-defense="${id}" data-locked="${locked ? "1" : "0"}" data-testid="build-defense-${id}" ${locked ? "disabled" : ""} title="${tip.title}">${label}</button>
       </div>
     </article>

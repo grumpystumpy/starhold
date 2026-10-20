@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  DEFENSES,
+  SHIPS,
   UNIVERSE_SCHEMA_VERSION,
   advancePlanet,
   advanceUniverse,
@@ -15,6 +17,7 @@ import {
   queueCapForKind,
   queueResearch,
   queueShipBuild,
+  queueDefenseBuild,
   reorderQueue,
   researchQueueCap,
   shipUnitBuildSeconds,
@@ -22,6 +25,46 @@ import {
 } from "./index.js";
 
 describe("Round 2 multi-item queues", () => {
+  it("accepts build quantities through 999,999 and scales cost and time", () => {
+    const universe = createUniverse("Large batches", 8);
+    const { player, planet } = joinUniverse(universe, "Batcher", 310_000_000);
+    const p = universe.planets[planet.id];
+    p.buildings.shipyard = 1;
+    p.resources = { metal: 1_000_000_000_000, crystal: 1_000_000_000_000, deuterium: 1_000_000_000_000 };
+    p.lastTickAt = 310_000_100;
+
+    const ship = queueShipBuild(universe, player.id, "scout", 999_999, 310_000_100);
+    assert.equal(ship.ok, true);
+    if (!ship.ok) return;
+    const shipItem = ship.planet.shipQueue[0]!;
+    assert.equal(shipItem.count, 999_999);
+    assert.equal(shipItem.paidCost.metal, SHIPS.scout.cost.metal * 999_999);
+    assert.equal(shipItem.workSeconds, shipItem.unitSeconds * 999_999);
+
+    const current = universe.planets[planet.id];
+    current.shipQueue = [];
+    current.resources = { metal: 1_000_000_000_000, crystal: 1_000_000_000_000, deuterium: 1_000_000_000_000 };
+    current.lastTickAt = 310_000_200;
+    const defense = queueDefenseBuild(universe, player.id, "laserBattery", 999_999, 310_000_200);
+    assert.equal(defense.ok, true);
+    if (!defense.ok) return;
+    const defenseItem = defense.planet.defenseQueue[0]!;
+    assert.equal(defenseItem.count, 999_999);
+    assert.equal(defenseItem.paidCost.metal, DEFENSES.laserBattery.cost.metal * 999_999);
+    assert.equal(defenseItem.workSeconds, defenseItem.unitSeconds * 999_999);
+  });
+
+  it("rejects zero, fractional, and over-limit ship and defense quantities", () => {
+    const universe = createUniverse("Invalid batches", 8);
+    const { player, planet } = joinUniverse(universe, "Validator", 311_000_000);
+    const p = universe.planets[planet.id];
+    p.buildings.shipyard = 1;
+    for (const qty of [0, 0.5, 1_000_000]) {
+      assert.equal(queueShipBuild(universe, player.id, "scout", qty, 311_000_100).ok, false);
+      assert.equal(queueDefenseBuild(universe, player.id, "laserBattery", qty, 311_000_100).ok, false);
+    }
+  });
+
   it("schema version is 4", () => {
     assert.equal(UNIVERSE_SCHEMA_VERSION, 5);
     const u = createUniverse("Queue Drift", 8);

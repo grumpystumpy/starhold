@@ -17,6 +17,7 @@ export const FLASH_TTL_MS = 12_000;
  * pointerup action) can land before a background poll replaces the button.
  */
 export const GESTURE_PAINT_GRACE_MS = 200;
+export const MAX_BUILD_COUNT = 999_999;
 
 const rootEl = document.querySelector<HTMLElement>("#app");
 if (!rootEl) {
@@ -151,14 +152,20 @@ export function readShipCount(shipId: ShipId): number {
   const countInput = root.querySelector<HTMLInputElement>(
     `[data-ship-count="${shipId}"]`,
   );
-  return Math.max(1, Math.min(50, Number(countInput?.value) || 1));
+  return Math.max(
+    1,
+    Math.min(MAX_BUILD_COUNT, Math.floor(Number(countInput?.value) || 1)),
+  );
 }
 
 export function readDefenseCount(defenseId: DefenseId): number {
   const countInput = root.querySelector<HTMLInputElement>(
     `[data-defense-count="${defenseId}"]`,
   );
-  return Math.max(1, Math.min(50, Number(countInput?.value) || 1));
+  return Math.max(
+    1,
+    Math.min(MAX_BUILD_COUNT, Math.floor(Number(countInput?.value) || 1)),
+  );
 }
 
 /**
