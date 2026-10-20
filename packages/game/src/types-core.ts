@@ -455,7 +455,8 @@ export type OfficerId =
   | "navigator"
   | "warden"
   | "engineer"
-  | "spymaster";
+  | "spymaster"
+  | "vaultkeeper";
 
 export type OfficerEffectKind =
   | "mineOutput"
@@ -464,7 +465,8 @@ export type OfficerEffectKind =
   | "fleetSlots"
   | "defensePower"
   | "energyOutput"
-  | "espionageLevel";
+  | "espionageLevel"
+  | "storageCapacity";
 
 export interface OfficerEffect {
   kind: OfficerEffectKind;
