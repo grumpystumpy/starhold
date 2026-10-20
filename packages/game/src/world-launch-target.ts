@@ -25,7 +25,7 @@ import type {
 } from "./types.js";
 import { planetAtCoords } from "./world-bootstrap.js";
 import {
-  empireDriftBeaconExpeditionBonus,
+  empireDriftBeaconCount,
   isMiniPlanet,
   isUnclaimedMini,
   playerKnowsMini,
@@ -87,7 +87,7 @@ export function resolveLaunchTarget(
     ).length;
     const cap =
       empireExpeditionCap(player, maxExpeditions) +
-      empireDriftBeaconExpeditionBonus(universe, player.id);
+      empireDriftBeaconCount(universe, player.id);
     if (activeExpeditions >= cap) {
       return {
         ok: false,
