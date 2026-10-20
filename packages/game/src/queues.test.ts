@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  DEFENSES,
+  SHIPS,
   UNIVERSE_SCHEMA_VERSION,
   advancePlanet,
   advanceUniverse,
@@ -15,6 +17,9 @@ import {
   queueCapForKind,
   queueResearch,
   queueShipBuild,
+  queueDefenseBuild,
+  previewResearchUpgrade,
+  researchUpgradeSeconds,
   reorderQueue,
   researchQueueCap,
   shipUnitBuildSeconds,
@@ -22,6 +27,87 @@ import {
 } from "./index.js";
 
 describe("Round 2 multi-item queues", () => {
+  it("accepts build quantities through 999,999 and scales cost and time", () => {
+    const universe = createUniverse("Large batches", 8);
+    const { player, planet } = joinUniverse(universe, "Batcher", 310_000_000);
+    const p = universe.planets[planet.id];
+    p.buildings.shipyard = 1;
+    p.resources = { metal: 1_000_000_000_000, crystal: 1_000_000_000_000, deuterium: 1_000_000_000_000 };
+    p.lastTickAt = 310_000_100;
+
+    const ship = queueShipBuild(universe, player.id, "scout", 999_999, 310_000_100);
+    assert.equal(ship.ok, true);
+    if (!ship.ok) return;
+    const shipItem = ship.planet.shipQueue[0]!;
+    assert.equal(shipItem.count, 999_999);
+    assert.equal(shipItem.paidCost.metal, SHIPS.scout.cost.metal * 999_999);
+    assert.equal(shipItem.workSeconds, shipItem.unitSeconds * 999_999);
+
+    const current = universe.planets[planet.id];
+    current.shipQueue = [];
+    current.resources = { metal: 1_000_000_000_000, crystal: 1_000_000_000_000, deuterium: 1_000_000_000_000 };
+    current.lastTickAt = 310_000_200;
+    const defense = queueDefenseBuild(universe, player.id, "laserBattery", 999_999, 310_000_200);
+    assert.equal(defense.ok, true);
+    if (!defense.ok) return;
+    const defenseItem = defense.planet.defenseQueue[0]!;
+    assert.equal(defenseItem.count, 999_999);
+    assert.equal(defenseItem.paidCost.metal, DEFENSES.laserBattery.cost.metal * 999_999);
+    assert.equal(defenseItem.workSeconds, defenseItem.unitSeconds * 999_999);
+  });
+
+  it("rejects zero, fractional, and over-limit ship and defense quantities", () => {
+    const universe = createUniverse("Invalid batches", 8);
+    const { player, planet } = joinUniverse(universe, "Validator", 311_000_000);
+    const p = universe.planets[planet.id];
+    p.buildings.shipyard = 1;
+    for (const qty of [0, 0.5, 1_000_000]) {
+      assert.equal(queueShipBuild(universe, player.id, "scout", qty, 311_000_100).ok, false);
+      assert.equal(queueDefenseBuild(universe, player.id, "laserBattery", qty, 311_000_100).ok, false);
+    }
+  });
+
+  it("uses the active planet lab bonus for research preview and queue", () => {
+    const universe = createUniverse("Local Lab", 8);
+    const { player, planet } = joinUniverse(universe, "Local", 306_500_000);
+    const owner = universe.players[player.id]!;
+    const active = universe.planets[planet.id]!;
+    active.buildings.researchLab = 2;
+    active.resources = { metal: 50_000, crystal: 50_000, deuterium: 50_000 };
+
+    const other = structuredClone(active);
+    other.id = `${active.id}-colony`;
+    other.buildings.researchLab = 10;
+    universe.planets[other.id] = other;
+    owner.planetIds.push(other.id);
+
+    const preview = previewResearchUpgrade(
+      owner,
+      active,
+      "energyTech",
+      10,
+      306_500_100,
+      2,
+    );
+    assert.equal(preview.ok, true);
+    if (!preview.ok) return;
+
+    const result = queueResearch(universe, owner.id, "energyTech", 306_500_100);
+    assert.equal(result.ok, true);
+    const queued = universe.players[owner.id]!.researchQueue[0]!;
+    assert.deepEqual(queued.paidCost, preview.cost);
+    const previewSeconds = Math.max(
+      1,
+      Math.ceil(
+        researchUpgradeSeconds("energyTech", preview.current, 2) /
+          universe.speed,
+      ),
+    );
+    assert.equal(queued.workSeconds, previewSeconds);
+    assert.equal(previewSeconds, 3);
+    assert.deepEqual(queued.paidCost, { metal: 0, crystal: 78, deuterium: 39 });
+  });
+
   it("schema version is 4", () => {
     assert.equal(UNIVERSE_SCHEMA_VERSION, 5);
     const u = createUniverse("Queue Drift", 8);
@@ -208,18 +294,28 @@ describe("Round 2 multi-item queues", () => {
       crystal: 50_000,
       deuterium: 50_000,
     };
-    universe.planets[planet.id].buildings.researchLab = 3;
+    universe.planets[planet.id].buildings.researchLab = 1;
     const t0 = 305_000_100;
     assert.ok(queueResearch(universe, player.id, "energyTech", t0).ok);
     const second = queueResearch(universe, player.id, "combustionDrive", t0 + 1);
     assert.equal(second.ok, false);
 
     // Finish first, raise logistics, then allow multi research.
+    const afterFirst = universe.players[player.id].researchQueue[0]!.completesAt;
+    advanceUniverse(universe, afterFirst);
+    const stillLocked = queueResearch(universe, player.id, "shieldingTech", afterFirst + 1);
+    assert.equal(stillLocked.ok, false);
+    if (!stillLocked.ok) {
+      assert.match(stillLocked.error, /Needs Research Lab level 2/);
+    }
+    universe.players[player.id].research.queueLogistics = 3;
+    const aboveLab = queueResearch(universe, player.id, "energyTech", afterFirst + 2);
+    assert.equal(aboveLab.ok, true);
+    assert.equal(universe.players[player.id].researchQueue[0]!.targetLevel, 2);
     advanceUniverse(
       universe,
       universe.players[player.id].researchQueue[0]!.completesAt,
     );
-    universe.players[player.id].research.queueLogistics = 3;
     assert.equal(researchQueueCap(universe.players[player.id]), 2);
     assert.ok(
       queueResearch(universe, player.id, "combustionDrive", t0 + 50_000).ok,
@@ -256,6 +352,10 @@ describe("Round 2 multi-item queues", () => {
     assert.ok(result.universe.planets[planet.id].buildQueue[0]!.id);
     assert.ok(Array.isArray(result.universe.players[player.id].researchQueue));
     assert.equal(result.universe.players[player.id].researchQueue.length, 1);
+    assert.equal(
+      result.universe.players[player.id].researchQueue[0]!.completesAt,
+      306_200_000,
+    );
     assert.ok(result.universe.players[player.id].playerClass);
 
     // Idempotent

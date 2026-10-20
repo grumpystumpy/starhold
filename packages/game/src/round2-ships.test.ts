@@ -227,7 +227,9 @@ describe("Swarm combat intercept + kamikaze", () => {
         swarmHarvester: 3,
       }),
       defenses: emptyDefenses(),
-      residual: { swarmMothership: (450_000 + 100_000) * 0.75 },
+      unitDamage: {
+        swarmMothership: { frontShieldDmg: 450_000, frontArmorDmg: 40_000, frontHullDmg: 75_000 },
+      },
     };
     const enemy = {
       ships: normalizeFleetShips({ scout: 5 }),
