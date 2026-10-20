@@ -35,9 +35,11 @@ function coordDistance(a, b) {
 }
 
 /** Closest foreign homeworld so a probe deploy round-trips in seconds, not minutes. */
-async function nearestRivalPlanet(selfId, origin) {
+async function nearestRivalPlanet(selfId, origin, cookie) {
   const load = async () => {
-    const res = await fetch(`${API}/api/universe`);
+    const res = await fetch(`${API}/api/universe`, {
+      headers: { cookie },
+    });
     if (!res.ok) throw new Error(`universe ${res.status}`);
     return res.json();
   };
@@ -180,7 +182,14 @@ async function main() {
     () => window.starhold?.getState()?.playerId ?? null,
   );
   if (!selfId) throw new Error("missing player id after probe build");
-  const rival = await nearestRivalPlanet(selfId, origin);
+  const cookies = await context.cookies(API);
+  const sessionCookie = cookies.find((cookie) => cookie.name === "starhold_session");
+  if (!sessionCookie) throw new Error("signup session cookie missing");
+  const rival = await nearestRivalPlanet(
+    selfId,
+    origin,
+    `${sessionCookie.name}=${sessionCookie.value}`,
+  );
   const launched = await page.evaluate(async (targetPlanetId) => {
     try {
       await window.starhold.launch({
