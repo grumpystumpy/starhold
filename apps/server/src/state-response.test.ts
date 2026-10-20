@@ -4,7 +4,12 @@ import { beforeEach, describe, it } from "node:test";
 import { createApp } from "./app.js";
 import { resetMemoryAccounts } from "./accounts.js";
 import { stateRevision } from "./state-response.js";
-import { memoryUniverseLoaded, resetMemoryUniverse, setUniverseFaultForTests } from "./store.js";
+import {
+  memoryUniverseLoaded,
+  resetMemoryUniverse,
+  setUniverseFaultForTests,
+  withUniverse,
+} from "./store.js";
 
 describe("player state payload", () => {
   beforeEach(() => {
@@ -128,5 +133,104 @@ describe("player state payload", () => {
     const bytes = new Uint8Array(await gzipped.arrayBuffer());
     assert.equal(bytes[0], 0x1f);
     assert.equal(bytes[1], 0x8b);
+  });
+
+  it("routes validated Shop trades in both directions", async () => {
+    const originalNow = Date.now;
+    Date.now = () => 1_700_000_000_000;
+    try {
+      const app = createApp();
+      const signup = await app.request("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "shop-trader@example.com", password: "hunter2xx" }),
+      });
+      assert.equal(signup.status, 200);
+      const cookie = (signup.headers.get("set-cookie") ?? "").split(";")[0]!;
+      const join = await app.request("/api/auth/join", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: cookie },
+        body: JSON.stringify({ name: "ShopTrader" }),
+      });
+      assert.equal(join.status, 200);
+      const initial = (await join.json()) as PlayerView;
+      const otherJoin = await app.request("/api/join", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "OtherShopTrader" }),
+      });
+      const other = (await otherJoin.json()) as PlayerView;
+      await withUniverse((universe) => {
+        universe.players[initial.player.id]!.starshards = 1500;
+        universe.planets[initial.planet.id]!.resources = {
+          metal: 100,
+          crystal: 200,
+          deuterium: 300,
+        };
+      });
+
+      const unauthenticated = await app.request("/api/shop/trade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerId: initial.player.id, direction: "buy" }),
+      });
+      assert.equal(unauthenticated.status, 401);
+
+      const forbidden = await app.request("/api/shop/trade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: cookie },
+        body: JSON.stringify({ playerId: other.player.id, direction: "buy" }),
+      });
+      assert.equal(forbidden.status, 403);
+
+      const bought = await app.request("/api/shop/trade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: cookie },
+        body: JSON.stringify({
+          playerId: initial.player.id,
+          planetId: initial.planet.id,
+          direction: "buy",
+        }),
+      });
+      assert.equal(bought.status, 200);
+      const afterBuy = (await bought.json()) as PlayerView;
+      assert.equal(afterBuy.starshards, 50);
+      assert.deepEqual(afterBuy.planet.resources, {
+        metal: 3100,
+        crystal: 2200,
+        deuterium: 1300,
+      });
+
+      const sold = await app.request("/api/shop/trade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: cookie },
+        body: JSON.stringify({
+          playerId: initial.player.id,
+          planetId: initial.planet.id,
+          direction: "sell",
+        }),
+      });
+      assert.equal(sold.status, 200);
+      const afterSell = (await sold.json()) as PlayerView;
+      assert.equal(afterSell.starshards, 1550);
+      assert.deepEqual(afterSell.planet.resources, {
+        metal: 100,
+        crystal: 200,
+        deuterium: 300,
+      });
+
+      const invalid = await app.request("/api/shop/trade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: cookie },
+        body: JSON.stringify({
+          playerId: initial.player.id,
+          planetId: initial.planet.id,
+          direction: "exchange",
+        }),
+      });
+      assert.equal(invalid.status, 400);
+    } finally {
+      Date.now = originalNow;
+    }
   });
 });

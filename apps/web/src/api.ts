@@ -676,6 +676,19 @@ export async function claimDaily(playerId: string): Promise<PlayerView> {
   return parse<PlayerView>(res);
 }
 
+export async function tradeResources(
+  playerId: string,
+  planetId: string,
+  direction: "buy" | "sell",
+): Promise<PlayerView> {
+  const res = await credFetch("/api/shop/trade", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, planetId, direction }),
+  });
+  return parse<PlayerView>(res);
+}
+
 export async function activateOfficerHire(
   playerId: string,
   officerId: OfficerId,
