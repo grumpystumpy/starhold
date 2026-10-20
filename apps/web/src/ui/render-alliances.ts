@@ -7,7 +7,7 @@ import {
   type AllianceRole,
   type PlayerView,
 } from "@starhold/game";
-import { fmt, fmtCoords } from "./format";
+import { fmt, fmtCompact, fmtCoords } from "./format";
 import { escapeAttr, escapeHtml } from "./render-escape";
 
 function canModerate(role: AllianceRole): boolean {
@@ -232,7 +232,7 @@ function rosterHtml(view: PlayerView, busy: boolean): string {
           }
           return `<li class="alliance-member" data-testid="alliance-member-${escapeAttr(m.playerId)}">
             <span><strong>${escapeHtml(m.name)}</strong>${isSelf ? " (you)" : ""} · ${escapeHtml(roleLabel(m.role))}</span>
-            <span class="meta">${fmt(m.pointsHint)} pts</span>
+            <span class="meta">${fmtCompact(m.pointsHint)} pts</span>
             ${actions.length ? `<span class="alliance-member-actions">${actions.join(" ")}</span>` : ""}
           </li>`;
         })

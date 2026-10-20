@@ -108,9 +108,9 @@ export function reconnectScreenHtml(state: {
         <p class="tagline">Reconnecting to the universe…</p>
       </div>
     </header>
-    <div data-flash-slot>${flashHtml(state.error, state.notice)}</div>
+    <div data-flash-slot>${flashHtml(state.error, null)}</div>
     <section class="join-panel" data-testid="reconnect">
-      <p>Reconnecting… your commander is still saved.</p>
+      <p>Couldn't sign in — try again</p>
     </section>
   `;
 }
