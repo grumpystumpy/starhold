@@ -9,20 +9,157 @@ import {
   STARSHARDS_DAILY_LOGIN,
 } from "./catalog.js";
 import { expeditionKindFromRoll } from "./world-expedition.js";
+import { storageFor } from "./formulas-build.js";
 import {
   activateOfficer,
   claimDailyLogin,
   createUniverse,
+  ensureUniverseShape,
   grantPirateDestroyStarshards,
   grantPirateFleetKillStarshards,
   joinUniverse,
   playerBoosts,
   playerView,
+  tradeStarshardsForResources,
   unlockSkill,
   utcDayKey,
 } from "./world.js";
 
 describe("Thread D Starshards / officers / skills", () => {
+  it("trades 1500 Starshards for the fixed resource bundle and back", () => {
+    const universe = createUniverse("Shard Exchange", 8);
+    const a = joinUniverse(universe, "Trader", 159_900_000);
+    universe.players[a.player.id]!.starshards = 1500;
+    universe.planets[a.planet.id]!.resources = {
+      metal: 100,
+      crystal: 200,
+      deuterium: 300,
+    };
+
+    const bought = tradeStarshardsForResources(
+      universe,
+      a.player.id,
+      a.planet.id,
+      "buy",
+      159_900_000,
+    );
+    assert.equal(bought.ok, true);
+    assert.equal(universe.players[a.player.id]!.starshards, 0);
+    assert.deepEqual(universe.planets[a.planet.id]!.resources, {
+      metal: 3100,
+      crystal: 2200,
+      deuterium: 1300,
+    });
+
+    universe.players[a.player.id]!.starshards = 0;
+    const sold = tradeStarshardsForResources(
+      universe,
+      a.player.id,
+      a.planet.id,
+      "sell",
+      159_900_000,
+    );
+    assert.equal(sold.ok, true);
+    assert.equal(universe.players[a.player.id]!.starshards, 1500);
+    assert.deepEqual(universe.planets[a.planet.id]!.resources, {
+      metal: 100,
+      crystal: 200,
+      deuterium: 300,
+    });
+  });
+
+  it("rejects trades without sufficient currency, resources, or storage", () => {
+    const universe = createUniverse("Blocked Exchange", 8);
+    const a = joinUniverse(universe, "Trader", 159_910_000);
+    universe.players[a.player.id]!.starshards = 1499;
+    const before = { ...universe.planets[a.planet.id]!.resources };
+    assert.equal(
+      tradeStarshardsForResources(
+        universe,
+        a.player.id,
+        a.planet.id,
+        "buy",
+        159_910_000,
+      ).ok,
+      false,
+    );
+    assert.equal(universe.players[a.player.id]!.starshards, 1499);
+    assert.deepEqual(universe.planets[a.planet.id]!.resources, before);
+
+    universe.players[a.player.id]!.starshards = 0;
+    universe.planets[a.planet.id]!.resources = {
+      metal: 2999,
+      crystal: 2000,
+      deuterium: 1000,
+    };
+    const lowResources = { ...universe.planets[a.planet.id]!.resources };
+    assert.equal(
+      tradeStarshardsForResources(
+        universe,
+        a.player.id,
+        a.planet.id,
+        "sell",
+        159_910_000,
+      ).ok,
+      false,
+    );
+    assert.equal(universe.players[a.player.id]!.starshards, 0);
+    assert.deepEqual(universe.planets[a.planet.id]!.resources, lowResources);
+
+    universe.players[a.player.id]!.starshards = 1500;
+    const planet = universe.planets[a.planet.id]!;
+    const caps = storageFor(planet);
+    planet.resources = {
+      metal: caps.metal - 2999,
+      crystal: 0,
+      deuterium: 0,
+    };
+    const beforeFull = { ...planet.resources };
+    assert.equal(
+      tradeStarshardsForResources(
+        universe,
+        a.player.id,
+        a.planet.id,
+        "buy",
+        159_910_000,
+      ).ok,
+      false,
+    );
+    assert.equal(universe.players[a.player.id]!.starshards, 1500);
+    assert.deepEqual(universe.planets[a.planet.id]!.resources, beforeFull);
+  });
+
+  it("keeps legacy progress when optional Starshards are absent", () => {
+    const universe = createUniverse("Legacy Exchange", 8);
+    const a = joinUniverse(universe, "Legacy trader", 159_920_000);
+    const player = universe.players[a.player.id]!;
+    const planet = universe.planets[a.planet.id]!;
+    planet.buildings.metalMine = 7;
+    planet.ships.smallCargo = 9;
+    planet.resources = { metal: 4000, crystal: 2500, deuterium: 1400 };
+    delete player.starshards;
+
+    const legacy = JSON.parse(JSON.stringify(universe)) as typeof universe;
+    ensureUniverseShape(legacy);
+    assert.equal(legacy.planets[a.planet.id]!.buildings.metalMine, 7);
+    assert.equal(legacy.planets[a.planet.id]!.ships.smallCargo, 9);
+
+    const sold = tradeStarshardsForResources(
+      legacy,
+      a.player.id,
+      a.planet.id,
+      "sell",
+      159_920_000,
+    );
+    assert.equal(sold.ok, true);
+    assert.equal(legacy.players[a.player.id]!.starshards, 1500);
+    assert.deepEqual(legacy.planets[a.planet.id]!.resources, {
+      metal: 1000,
+      crystal: 500,
+      deuterium: 400,
+    });
+  });
+
   it("maps expedition rolls including 5% starshards band", () => {
     assert.equal(expeditionKindFromRoll(67), "nothing");
     assert.equal(expeditionKindFromRoll(68), "miniPlanet");
