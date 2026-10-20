@@ -23,20 +23,19 @@ function playerView(): PlayerView {
   return {
     now: 1_700_000_000_000,
     player: { id: "p1", name: "Commander", research: {}, researchQueue: [], skillsUnlocked: [], fleetPresets: [{ id: "custom-1", name: "Preset", intent: "custom", ships: {} }] },
-    planet: { id: "pl1", name: "Home", coords: { galaxy: 1, system: 4, slot: 1 }, buildings: {}, buildQueue: [], shipQueue: [], defenseQueue: [], ships: {}, defenses: {} },
+    planet: { id: "pl1", name: "Home", coords: { galaxy: 1, system: 4, slot: 1 }, resources: { metal: 0, crystal: 0, deuterium: 0 }, buildings: {}, buildQueue: [], shipQueue: [], defenseQueue: [], ships: {}, defenses: {} },
     galaxy: { galaxy: 1, system: 4 }, fleets: [], openAcsGroups: [], alliances: [], reports: [], spyReports: [], expeditionReports: [], officers: [], skillsUnlocked: [], seasonLeaderboard: { seasonId: "season-1", claims: [] },
   } as unknown as PlayerView;
 }
 
 function argsFor(name: string): unknown[] {
   if (name === "doSelectPlanet") return ["pl1"];
-  if (name === "doRequestClaimCode") return ["test@example.com"];
   if (name === "doClaimAnonymous" || name === "doDeleteFleetPreset") return [];
-  if (name === "doClaimPassword") return ["test@example.com", "ABC123", "password123"];
   if (name === "doLaunchFleet") return [{ mission: "transport", target: { galaxy: 1, system: 4, slot: 2 }, ships: { smallCargo: 1 } }];
   if (name === "doCreateAlliance") return ["Test alliance"];
   if (name === "doDeleteMessages" || name === "doMarkEventsRead") return [["id-1"]];
   if (name === "doClaimSeason") return ["combat", "season-1"];
+  if (name === "doTradeResources") return ["buy"];
   if (name === "doRelocateFortress") return [2, 8];
   if (name === "doRenamePlanet") return ["New Home"];
   if (name === "doClaimGoal" || name === "doChooseClass" || name === "doChangeClass" || name === "doActivateOfficer" || name === "doRaiseOfficer" || name === "doUnlockSkill" || name === "doUpgrade" || name === "doBuild" || name === "doBuildDefense" || name === "doResearch" || name === "doCancelQueue") return ["test", 1];
@@ -97,7 +96,7 @@ describe("settleMutation coverage for exported POST actions", () => {
             throw new TypeError("Failed to fetch");
           };
           await (module[name] as (...args: unknown[]) => Promise<void>)(...argsFor(name));
-          assert.deepEqual(events, name === "doClaimAnonymous" || name === "doClaimPassword"
+          assert.deepEqual(events, name === "doClaimAnonymous"
             ? ["POST", "GET", "GET"]
             : ["POST", "GET"], `${name} must make exactly one POST followed by refreshed state reads`);
           covered.push(name);
@@ -113,9 +112,9 @@ describe("settleMutation coverage for exported POST actions", () => {
     assert.ok(covered.length > 0);
   });
 
-  it("only reports claim success when refreshed auth/me owns the refreshed save", async () => {
+  it("only reports guest-save claim success when refreshed auth/me owns the refreshed save", async () => {
     const { session, root, setPaintImpl } = await import("./session");
-    const { doClaimAnonymous, doClaimPassword } = await import("./main-actions-session");
+    const { doClaimAnonymous } = await import("./main-actions-session");
     const initial = playerView();
     const originalFetch = globalThis.fetch;
     const originalQuerySelector = root.querySelector;
@@ -128,7 +127,7 @@ describe("settleMutation coverage for exported POST actions", () => {
     root.querySelector = (() => ({ value: "test", checked: false, querySelector: () => null, querySelectorAll: () => [] })) as typeof root.querySelector;
     setPaintImpl(() => {});
     try {
-      for (const action of ["anonymous", "password"] as const) {
+      for (const action of ["anonymous"] as const) {
         for (const claimed of [false, true]) {
           session.view = initial;
           session.account = { id: "account-1", email: "test@example.com", playerId: null };
@@ -147,10 +146,9 @@ describe("settleMutation coverage for exported POST actions", () => {
             }
             return new Response(JSON.stringify(initial), { status: 200, headers: { "content-type": "application/json" } });
           };
-          if (action === "anonymous") await doClaimAnonymous();
-          else await doClaimPassword("test@example.com", "ABC123", "password123");
+          await doClaimAnonymous();
           if (claimed) {
-            assert.match(session.notice ?? "", /Claimed|Password set/);
+            assert.match(session.notice ?? "", /Claimed/);
             assert.equal(session.error, null);
           } else {
             assert.equal(session.notice, null);
