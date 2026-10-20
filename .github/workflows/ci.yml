@@ -1,7 +1,7 @@
 name: CI
 
-# GitHub Actions only. Never deploy from this workflow and never call the
-# Wrangler, a deploy hook, or a Cloudflare API token here.
+# GitHub Actions only. Never deploy from this workflow and never
+# call Wrangler, a deploy hook, or a Cloudflare API token here.
 # Deploys are separate (see docs/hosting.md) and need Micah's approval.
 #
 # Runs once per PR (pull_request) and once per push to main. Pushing to a
