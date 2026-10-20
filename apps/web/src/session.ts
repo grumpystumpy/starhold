@@ -59,6 +59,8 @@ export const session = {
   armedEventRead: null as { kind: "one"; id: string } | { kind: "all" } | null,
   /** Galaxy browser system override (null = follow active planet). */
   galaxySystem: null as number | null,
+  /** Galaxy browser override (null = follow active planet). */
+  galaxyGalaxy: null as number | null,
   /** Active routed page (synced to URL pathname). */
   activePage: "overview" as NavPage,
   /** Fleet deep-link from Propose Joint Strike. Cleared once the form is armed. */

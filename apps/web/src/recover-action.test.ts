@@ -7,9 +7,13 @@ import {
   NOT_APPLIED_MESSAGE,
   OVERLOAD_MESSAGE,
   POST_TIMEOUT_MS,
+  setApiFailureReporter,
 } from "./api";
 
-const { doUpgrade } = await import("./main-actions-build");
+const { doUpgrade, doBuild, doBuildDefense, doResearch } = await import("./main-actions-build");
+const { doActivateOfficer, doRaiseOfficer, doUnlockSkill } = await import(
+  "./main-actions-starshards"
+);
 const { session, setPaintImpl } = await import("./session");
 
 function view(queue: Array<{ id: string; buildingId: string; targetLevel: number }>): PlayerView {
@@ -30,7 +34,183 @@ function view(queue: Array<{ id: string; buildingId: string; targetLevel: number
   } as unknown as PlayerView;
 }
 
+function starshardsView(options: {
+  officerLevels?: Record<string, number>;
+  officers?: Array<{ officerId: string; activatedAt: number; expiresAt: number }>;
+  skillsUnlocked?: string[];
+  skillLevels?: Record<string, number>;
+} = {}): PlayerView {
+  return {
+    ...view([]),
+    officerLevels: options.officerLevels ?? {},
+    officers: options.officers ?? [],
+    skillsUnlocked: options.skillsUnlocked ?? [],
+    skillLevels: options.skillLevels ?? {},
+  } as unknown as PlayerView;
+}
+
 describe("failed actions check state", () => {
+  it("shows raise success when an HTML 503 state check sees the officer level increase, and posts once", async () => {
+    mock.timers.enable({ apis: ["Date", "setTimeout"] });
+    setApiFailureReporter(() => {});
+    setPaintImpl(() => {});
+    session.view = starshardsView({ officerLevels: { engineer: 1 } });
+    session.busy = false;
+    session.error = null;
+    session.notice = null;
+    let posts = 0;
+    let states = 0;
+    const original = globalThis.fetch;
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      if (url.includes("/api/raise-officer")) {
+        posts += 1;
+        return new Response("<html>Error 1102</html>", { status: 503 });
+      }
+      if (url.includes("/api/state")) {
+        states += 1;
+        return new Response(
+          JSON.stringify(starshardsView({ officerLevels: { engineer: 2 } })),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      throw new Error(`unexpected ${url}`);
+    };
+    try {
+      await doRaiseOfficer("engineer");
+    } finally {
+      globalThis.fetch = original;
+      mock.timers.reset();
+    }
+    assert.equal(posts, 1);
+    assert.equal(states, 1);
+    assert.equal(session.error, null);
+    assert.equal(session.notice, "Officer level raised.");
+  });
+
+  it("says not applied when a failed raise leaves the officer level unchanged", async () => {
+    mock.timers.enable({ apis: ["Date", "setTimeout"] });
+    setApiFailureReporter(() => {});
+    setPaintImpl(() => {});
+    session.view = starshardsView({ officerLevels: { engineer: 1 } });
+    session.busy = false;
+    session.error = null;
+    session.notice = null;
+    let posts = 0;
+    let states = 0;
+    const original = globalThis.fetch;
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      if (url.includes("/api/raise-officer")) {
+        posts += 1;
+        return new Response("<html>Error 503</html>", { status: 503 });
+      }
+      if (url.includes("/api/state")) {
+        states += 1;
+        return new Response(
+          JSON.stringify(starshardsView({ officerLevels: { engineer: 1 } })),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      throw new Error(`unexpected ${url}`);
+    };
+    try {
+      await doRaiseOfficer("engineer");
+    } finally {
+      globalThis.fetch = original;
+      mock.timers.reset();
+    }
+    assert.equal(posts, 1);
+    assert.equal(states, 1);
+    assert.equal(session.error, NOT_APPLIED_MESSAGE);
+  });
+
+  it("recognizes a hired officer after an HTML 503 without reposting", async () => {
+    mock.timers.enable({ apis: ["Date", "setTimeout"] });
+    setApiFailureReporter(() => {});
+    setPaintImpl(() => {});
+    session.view = starshardsView();
+    session.busy = false;
+    session.error = null;
+    session.notice = null;
+    let posts = 0;
+    let states = 0;
+    const original = globalThis.fetch;
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      if (url.includes("/api/activate-officer")) {
+        posts += 1;
+        return new Response("<html>Error 503</html>", { status: 503 });
+      }
+      if (url.includes("/api/state")) {
+        states += 1;
+        return new Response(
+          JSON.stringify(
+            starshardsView({
+              officerLevels: { engineer: 1 },
+              officers: [{ officerId: "engineer", activatedAt: 10, expiresAt: 20 }],
+            }),
+          ),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      throw new Error(`unexpected ${url}`);
+    };
+    try {
+      await doActivateOfficer("engineer");
+    } finally {
+      globalThis.fetch = original;
+      mock.timers.reset();
+    }
+    assert.equal(posts, 1);
+    assert.equal(states, 1);
+    assert.equal(session.error, null);
+    assert.equal(session.notice, "Officer hired.");
+  });
+
+  it("recognizes an unlocked skill after an HTML 503 without reposting", async () => {
+    mock.timers.enable({ apis: ["Date", "setTimeout"] });
+    setApiFailureReporter(() => {});
+    setPaintImpl(() => {});
+    session.view = starshardsView();
+    session.busy = false;
+    session.error = null;
+    session.notice = null;
+    let posts = 0;
+    let states = 0;
+    const original = globalThis.fetch;
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      if (url.includes("/api/unlock-skill")) {
+        posts += 1;
+        return new Response("<html>Error 503</html>", { status: 503 });
+      }
+      if (url.includes("/api/state")) {
+        states += 1;
+        return new Response(
+          JSON.stringify(
+            starshardsView({
+              skillsUnlocked: ["eco_mines_1"],
+              skillLevels: { eco_mines_1: 1 },
+            }),
+          ),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      throw new Error(`unexpected ${url}`);
+    };
+    try {
+      await doUnlockSkill("eco_mines_1");
+    } finally {
+      globalThis.fetch = original;
+      mock.timers.reset();
+    }
+    assert.equal(posts, 1);
+    assert.equal(states, 1);
+    assert.equal(session.error, null);
+    assert.equal(session.notice, "Skill unlocked.");
+  });
+
   it("shows success when the queued item is already saved, and posts once", async () => {
     const paints: string[] = [];
     setPaintImpl(() => {
@@ -427,5 +607,417 @@ describe("failed actions check state", () => {
     assert.equal(posts, 1);
     assert.equal(states, 2);
     assert.equal(session.error, NOT_APPLIED_MESSAGE);
+  });
+
+  it("build-ship gets 503 while older batch finishes: reports applied if new batch saved, 1 POST made", async () => {
+    setPaintImpl(() => {});
+    session.view = {
+      now: 1_700_000_000_000,
+      player: { id: "p1", research: {}, researchQueue: [] },
+      planet: {
+        id: "pl1",
+        buildings: {},
+        buildQueue: [],
+        shipQueue: [{ id: "q1", shipId: "scout", count: 5 }],
+        defenseQueue: [],
+        ships: { scout: 0 },
+        defenses: {},
+      },
+      galaxy: { galaxy: 1, system: 4 },
+      fleets: [],
+    } as unknown as PlayerView;
+    session.busy = false;
+    session.error = null;
+    session.notice = null;
+
+    let posts = 0;
+    let states = 0;
+    const original = globalThis.fetch;
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      if (url.includes("/api/build-ship")) {
+        posts += 1;
+        return new Response("<html>Error 503</html>", { status: 503 });
+      }
+      if (url.includes("/api/state")) {
+        states += 1;
+        return new Response(
+          JSON.stringify({
+            now: 1_700_000_000_000,
+            player: { id: "p1", research: {}, researchQueue: [] },
+            planet: {
+              id: "pl1",
+              buildings: {},
+              buildQueue: [],
+              shipQueue: [{ id: "q2", shipId: "scout", count: 10 }],
+              defenseQueue: [],
+              ships: { scout: 5 },
+              defenses: {},
+            },
+            galaxy: { galaxy: 1, system: 4 },
+            fleets: [],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      throw new Error(`unexpected ${url}`);
+    };
+    try {
+      await doBuild("scout", 10);
+    } finally {
+      globalThis.fetch = original;
+    }
+
+    assert.equal(posts, 1);
+    assert.equal(states, 1);
+    assert.equal(session.error, null);
+    assert.match(session.notice ?? "", /Queued 10× Scout/);
+  });
+
+  it("build-ship gets 503 while older batch finishes: reports not applied if new batch NOT saved, 1 POST made", async () => {
+    setPaintImpl(() => {});
+    session.view = {
+      now: 1_700_000_000_000,
+      player: { id: "p1", research: {}, researchQueue: [] },
+      planet: {
+        id: "pl1",
+        buildings: {},
+        buildQueue: [],
+        shipQueue: [{ id: "q1", shipId: "scout", count: 5 }],
+        defenseQueue: [],
+        ships: { scout: 0 },
+        defenses: {},
+      },
+      galaxy: { galaxy: 1, system: 4 },
+      fleets: [],
+    } as unknown as PlayerView;
+    session.busy = false;
+    session.error = null;
+    session.notice = null;
+
+    let posts = 0;
+    let states = 0;
+    const original = globalThis.fetch;
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      if (url.includes("/api/build-ship")) {
+        posts += 1;
+        return new Response("<html>Error 503</html>", { status: 503 });
+      }
+      if (url.includes("/api/state")) {
+        states += 1;
+        return new Response(
+          JSON.stringify({
+            now: 1_700_000_000_000,
+            player: { id: "p1", research: {}, researchQueue: [] },
+            planet: {
+              id: "pl1",
+              buildings: {},
+              buildQueue: [],
+              shipQueue: [],
+              defenseQueue: [],
+              ships: { scout: 5 },
+              defenses: {},
+            },
+            galaxy: { galaxy: 1, system: 4 },
+            fleets: [],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      throw new Error(`unexpected ${url}`);
+    };
+    try {
+      await doBuild("scout", 10);
+    } finally {
+      globalThis.fetch = original;
+    }
+
+    assert.equal(posts, 1);
+    assert.equal(states, 1);
+    assert.equal(session.error, NOT_APPLIED_MESSAGE);
+  });
+
+  it("build-ship timeout (hang) checks state correctly without resending POST", async () => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    setPaintImpl(() => {});
+    session.view = {
+      now: 1_700_000_000_000,
+      player: { id: "p1", research: {}, researchQueue: [] },
+      planet: {
+        id: "pl1",
+        buildings: {},
+        buildQueue: [],
+        shipQueue: [],
+        defenseQueue: [],
+        ships: { scout: 0 },
+        defenses: {},
+      },
+      galaxy: { galaxy: 1, system: 4 },
+      fleets: [],
+    } as unknown as PlayerView;
+    session.busy = false;
+    session.error = null;
+    session.notice = null;
+
+    let posts = 0;
+    let states = 0;
+    const original = globalThis.fetch;
+    globalThis.fetch = (input, init) => {
+      const url = String(input);
+      if (url.includes("/api/build-ship")) {
+        posts += 1;
+        return new Promise<Response>((_resolve, reject) => {
+          if (init?.signal) {
+            init.signal.addEventListener("abort", () => {
+              reject(new DOMException("The operation was aborted.", "AbortError"));
+            });
+          }
+        });
+      }
+      if (url.includes("/api/state")) {
+        states += 1;
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              now: 1_700_000_000_000,
+              player: { id: "p1", research: {}, researchQueue: [] },
+              planet: {
+                id: "pl1",
+                buildings: {},
+                buildQueue: [],
+                shipQueue: [{ id: "q1", shipId: "scout", count: 10 }],
+                defenseQueue: [],
+                ships: { scout: 0 },
+                defenses: {},
+              },
+              galaxy: { galaxy: 1, system: 4 },
+              fleets: [],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+        );
+      }
+      throw new Error(`unexpected ${url}`);
+    };
+    try {
+      const promise = doBuild("scout", 10);
+      mock.timers.tick(POST_TIMEOUT_MS);
+      await promise;
+    } finally {
+      globalThis.fetch = original;
+      mock.timers.reset();
+    }
+
+    assert.equal(posts, 1);
+    assert.equal(states, 1);
+    assert.equal(session.error, null);
+    assert.match(session.notice ?? "", /Queued 10× Scout/);
+  });
+
+  it("build-defense gets 503 while older batch finishes: reports applied if new batch saved, 1 POST made", async () => {
+    setPaintImpl(() => {});
+    session.view = {
+      now: 1_700_000_000_000,
+      player: { id: "p1", research: {}, researchQueue: [] },
+      planet: {
+        id: "pl1",
+        buildings: {},
+        buildQueue: [],
+        shipQueue: [],
+        defenseQueue: [{ id: "dq1", defenseId: "laserBattery", count: 3 }],
+        ships: {},
+        defenses: { laserBattery: 0 },
+      },
+      galaxy: { galaxy: 1, system: 4 },
+      fleets: [],
+    } as unknown as PlayerView;
+    session.busy = false;
+    session.error = null;
+    session.notice = null;
+
+    let posts = 0;
+    let states = 0;
+    const original = globalThis.fetch;
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      if (url.includes("/api/build-defense")) {
+        posts += 1;
+        return new Response("<html>Error 503</html>", { status: 503 });
+      }
+      if (url.includes("/api/state")) {
+        states += 1;
+        return new Response(
+          JSON.stringify({
+            now: 1_700_000_000_000,
+            player: { id: "p1", research: {}, researchQueue: [] },
+            planet: {
+              id: "pl1",
+              buildings: {},
+              buildQueue: [],
+              shipQueue: [],
+              defenseQueue: [{ id: "dq2", defenseId: "laserBattery", count: 5 }],
+              ships: {},
+              defenses: { laserBattery: 3 },
+            },
+            galaxy: { galaxy: 1, system: 4 },
+            fleets: [],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      throw new Error(`unexpected ${url}`);
+    };
+    try {
+      await doBuildDefense("laserBattery", 5);
+    } finally {
+      globalThis.fetch = original;
+    }
+
+    assert.equal(posts, 1);
+    assert.equal(states, 1);
+    assert.equal(session.error, null);
+    assert.match(session.notice ?? "", /Queued 5× Beam Emplacement/);
+  });
+
+  it("build-defense gets 503 while older batch finishes: reports not applied if new batch NOT saved, 1 POST made", async () => {
+    setPaintImpl(() => {});
+    session.view = {
+      now: 1_700_000_000_000,
+      player: { id: "p1", research: {}, researchQueue: [] },
+      planet: {
+        id: "pl1",
+        buildings: {},
+        buildQueue: [],
+        shipQueue: [],
+        defenseQueue: [{ id: "dq1", defenseId: "laserBattery", count: 3 }],
+        ships: {},
+        defenses: { laserBattery: 0 },
+      },
+      galaxy: { galaxy: 1, system: 4 },
+      fleets: [],
+    } as unknown as PlayerView;
+    session.busy = false;
+    session.error = null;
+    session.notice = null;
+
+    let posts = 0;
+    let states = 0;
+    const original = globalThis.fetch;
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      if (url.includes("/api/build-defense")) {
+        posts += 1;
+        return new Response("<html>Error 503</html>", { status: 503 });
+      }
+      if (url.includes("/api/state")) {
+        states += 1;
+        return new Response(
+          JSON.stringify({
+            now: 1_700_000_000_000,
+            player: { id: "p1", research: {}, researchQueue: [] },
+            planet: {
+              id: "pl1",
+              buildings: {},
+              buildQueue: [],
+              shipQueue: [],
+              defenseQueue: [],
+              ships: {},
+              defenses: { laserBattery: 3 },
+            },
+            galaxy: { galaxy: 1, system: 4 },
+            fleets: [],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      throw new Error(`unexpected ${url}`);
+    };
+    try {
+      await doBuildDefense("laserBattery", 5);
+    } finally {
+      globalThis.fetch = original;
+    }
+
+    assert.equal(posts, 1);
+    assert.equal(states, 1);
+    assert.equal(session.error, NOT_APPLIED_MESSAGE);
+  });
+
+  it("build-defense timeout (hang) checks state correctly without resending POST", async () => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    setPaintImpl(() => {});
+    session.view = {
+      now: 1_700_000_000_000,
+      player: { id: "p1", research: {}, researchQueue: [] },
+      planet: {
+        id: "pl1",
+        buildings: {},
+        buildQueue: [],
+        shipQueue: [],
+        defenseQueue: [],
+        ships: {},
+        defenses: { laserBattery: 0 },
+      },
+      galaxy: { galaxy: 1, system: 4 },
+      fleets: [],
+    } as unknown as PlayerView;
+    session.busy = false;
+    session.error = null;
+    session.notice = null;
+
+    let posts = 0;
+    let states = 0;
+    const original = globalThis.fetch;
+    globalThis.fetch = (input, init) => {
+      const url = String(input);
+      if (url.includes("/api/build-defense")) {
+        posts += 1;
+        return new Promise<Response>((_resolve, reject) => {
+          if (init?.signal) {
+            init.signal.addEventListener("abort", () => {
+              reject(new DOMException("The operation was aborted.", "AbortError"));
+            });
+          }
+        });
+      }
+      if (url.includes("/api/state")) {
+        states += 1;
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              now: 1_700_000_000_000,
+              player: { id: "p1", research: {}, researchQueue: [] },
+              planet: {
+                id: "pl1",
+                buildings: {},
+                buildQueue: [],
+                shipQueue: [],
+                defenseQueue: [{ id: "dq1", defenseId: "laserBattery", count: 5 }],
+                ships: {},
+                defenses: { laserBattery: 0 },
+              },
+              galaxy: { galaxy: 1, system: 4 },
+              fleets: [],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+        );
+      }
+      throw new Error(`unexpected ${url}`);
+    };
+    try {
+      const promise = doBuildDefense("laserBattery", 5);
+      mock.timers.tick(POST_TIMEOUT_MS);
+      await promise;
+    } finally {
+      globalThis.fetch = original;
+      mock.timers.reset();
+    }
+
+    assert.equal(posts, 1);
+    assert.equal(states, 1);
+    assert.equal(session.error, null);
+    assert.match(session.notice ?? "", /Queued 5× Beam Emplacement/);
   });
 });
