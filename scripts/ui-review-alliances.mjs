@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createActiveWaitClock } from "./active-wait-clock.mjs";
 /** Capture dual-viewport Alliances screenshots for UI sign-off. */
 import { createRequire } from "node:module";
 import fs from "node:fs";
@@ -10,8 +11,8 @@ const OUT =
   "/cursor/stores/bc-01a12e04-be8f-7aec-99ea-b8b747ed7516/media/ui-review/pr-alliances";
 
 async function waitHealthy(ms = 60_000) {
-  const start = Date.now();
-  while (Date.now() - start < ms) {
+  const activeClock = createActiveWaitClock();
+  while (activeClock.elapsed() < ms) {
     try {
       const res = await fetch(`${WEB}/api/health`);
       if (res.ok) return;

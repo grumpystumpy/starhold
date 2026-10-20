@@ -5,6 +5,80 @@ import { productionPerHour } from "./formulas.js";
 import { createUniverse, joinUniverse, advancePlanet, advanceUniverse } from "./world.js";
 
 describe("advancePlanet fractional accrual", () => {
+  it("adds flat base income after multipliers, including to mini planets but not moons", () => {
+    const universe = createUniverse("Flat Income", 8);
+    const { planet } = joinUniverse(universe, "Income", 1_500_000);
+    planet.buildings = {};
+    planet.coords.slot = 8;
+
+    assert.deepEqual(productionPerHour(planet, universe.speed), {
+      metal: 500,
+      crystal: 250,
+      deuterium: 100,
+    });
+
+    const mini = structuredClone(planet);
+    mini.flags = { mini: true, miniKind: "standard" };
+    assert.deepEqual(productionPerHour(mini, universe.speed), {
+      metal: 500,
+      crystal: 250,
+      deuterium: 100,
+    });
+
+    const moon = structuredClone(planet);
+    moon.kind = "moon";
+    assert.deepEqual(productionPerHour(moon, universe.speed), {
+      metal: 0,
+      crystal: 0,
+      deuterium: 0,
+    });
+  });
+
+  it("applies flat base income only to owned bodies at every universe speed", () => {
+    const expected = { metal: 500, crystal: 250, deuterium: 100 };
+    const speedOne = createUniverse("Flat Income Speed 1", 1);
+    const ownedAtSpeedOne = joinUniverse(speedOne, "Income", 1_500_001).planet;
+    ownedAtSpeedOne.buildings = {};
+    assert.deepEqual(productionPerHour(ownedAtSpeedOne, speedOne.speed), expected);
+
+    const speedEight = createUniverse("Flat Income Speed 8", 8);
+    const ownedAtSpeedEight = joinUniverse(speedEight, "Income", 1_500_002).planet;
+    ownedAtSpeedEight.buildings = {};
+    assert.deepEqual(productionPerHour(ownedAtSpeedEight, speedEight.speed), expected);
+
+    const unownedMini = structuredClone(ownedAtSpeedEight);
+    unownedMini.ownerPlayerId = "";
+    unownedMini.flags = { mini: true, miniKind: "standard" };
+    unownedMini.buildings = {};
+    assert.deepEqual(productionPerHour(unownedMini, speedEight.speed), {
+      metal: 0,
+      crystal: 0,
+      deuterium: 0,
+    });
+  });
+
+  it("accrues flat income during offline catch-up and ticks an old save shape", () => {
+    const universe = createUniverse("Old Save", 8);
+    const { planet } = joinUniverse(universe, "Legacy", 1_600_000);
+    planet.buildings = {};
+    planet.coords.slot = 8;
+    // The old saved shape has no base-income field; production is derived.
+    const oldSave = structuredClone(planet) as typeof planet & {
+      baseIncome?: unknown;
+    };
+    delete oldSave.baseIncome;
+    oldSave.resources = { metal: 0, crystal: 0, deuterium: 0 };
+    const start = oldSave.lastTickAt;
+    const hours = 3;
+
+    const caughtUp = advancePlanet(oldSave, universe.speed, start + hours * 3_600_000);
+    assert.deepEqual(caughtUp.resources, {
+      metal: hours * 500,
+      crystal: hours * 250,
+      deuterium: hours * 100,
+    });
+  });
+
   it("accumulates non-zero growth across many short ticks (1s polls)", () => {
     const universe = createUniverse("Test Drift", 2);
     const { planet: joined } = joinUniverse(universe, "Ticker", 1_000_000);

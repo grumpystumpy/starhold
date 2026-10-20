@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { BASE_INCOME_PER_HOUR } from "./data/tuning.js";
 import { UNIVERSE_SCHEMA_VERSION } from "./catalog.js";
 import {
   buildingUpgradeSeconds,
@@ -301,13 +302,18 @@ describe("Thread I level bonuses wired", () => {
     body().buildings.researchLab = 5;
 
     const baseView = playerView(universe, a.player.id, 304_000_100);
-    const baseMetal = baseView.economy.productionPerHour.metal;
+    const baseMetal =
+      baseView.economy.productionPerHour.metal - BASE_INCOME_PER_HOUR.metal;
 
     player.level = 21; // n = 20 → +10% prod
     const boosted = playerView(universe, a.player.id, 304_000_200);
     assert.ok(
-      Math.abs(boosted.economy.productionPerHour.metal / baseMetal - 1.1) <
-        0.02,
+      Math.abs(
+        (boosted.economy.productionPerHour.metal -
+          BASE_INCOME_PER_HOUR.metal) /
+          baseMetal -
+          1.1,
+      ) < 0.02,
     );
     assert.equal(boosted.progress.level, 21);
 

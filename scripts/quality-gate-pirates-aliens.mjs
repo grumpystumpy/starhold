@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createActiveWaitClock } from "./active-wait-clock.mjs";
 /**
  * Local prod quality gate: signup → login → cookie persist + pirates/aliens smoke.
  *
@@ -48,8 +49,8 @@ async function findPirateViaApi(playerId, homeGalaxy = 1) {
 }
 
 async function waitHealthy(ms = 45_000) {
-  const start = Date.now();
-  while (Date.now() - start < ms) {
+  const activeClock = createActiveWaitClock();
+  while (activeClock.elapsed() < ms) {
     try {
       const res = await fetch(`${API}/api/health`);
       if (res.ok) {

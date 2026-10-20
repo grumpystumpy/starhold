@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createActiveWaitClock } from "./active-wait-clock.mjs";
 /**
  * Local prod Playwright for playtest bugs 1–9.
  * Desktop 1280×800 and phone 390×844.
@@ -60,9 +61,9 @@ async function state(playerId) {
 }
 
 async function until(label, pred, ms = 60_000) {
-  const start = Date.now();
+  const activeClock = createActiveWaitClock();
   let last;
-  while (Date.now() - start < ms) {
+  while (activeClock.elapsed() < ms) {
     last = await pred();
     if (last) return last;
     await new Promise((r) => setTimeout(r, 400));

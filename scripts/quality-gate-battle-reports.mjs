@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createActiveWaitClock } from "./active-wait-clock.mjs";
 /**
  * Quality gate for replayable battle reports — local production build only.
  * Covers: signup → login → cookie persist + raid with rounds → replay UI + share copy.
@@ -12,8 +13,8 @@ const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:3001";
 const API = process.env.STARHOLD_API ?? WEB;
 
 async function waitHealthy(ms = 60_000) {
-  const start = Date.now();
-  while (Date.now() - start < ms) {
+  const activeClock = createActiveWaitClock();
+  while (activeClock.elapsed() < ms) {
     try {
       const res = await fetch(`${API}/api/health`);
       if (res.ok) return;
@@ -141,8 +142,8 @@ async function main() {
   logs.push("raid_launched");
 
   let report = null;
-  const waitStart = Date.now();
-  while (Date.now() - waitStart < 180_000) {
+  const activeClock = createActiveWaitClock();
+  while (activeClock.elapsed() < 180_000) {
     const st = await apiJson(
       `/api/state?playerId=${encodeURIComponent(attackerId)}`,
     );
