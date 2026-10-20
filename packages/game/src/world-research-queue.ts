@@ -33,8 +33,16 @@ export function queueResearch(
   const lab = bestLabLevel(universe, player);
   const planet = activePlanet(universe, player);
   if (!planet) return { ok: false, error: "Planet missing." };
+  const localLab = planet.buildings.researchLab ?? 0;
 
-  const preview = previewResearchUpgrade(player, planet, researchId, lab, now);
+  const preview = previewResearchUpgrade(
+    player,
+    planet,
+    researchId,
+    lab,
+    now,
+    localLab,
+  );
   if (!preview.ok) return { ok: false, error: preview.error };
   const { current, cost } = preview;
 
@@ -47,7 +55,7 @@ export function queueResearch(
   const seconds = Math.max(
     1,
     Math.ceil(
-      (researchUpgradeSeconds(researchId, current, lab) *
+      (researchUpgradeSeconds(researchId, current, localLab) *
         lb.researchTime *
         cls.researchTime *
         astrolabe *

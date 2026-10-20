@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { BUILDINGS } from "./catalog.js";
-import { buildingUpgradeCost } from "./formulas-build.js";
+import { buildingUpgradeCost, researchUpgradeCost, spend } from "./formulas-build.js";
 import {
   createUniverse,
   joinUniverse,
@@ -11,6 +11,33 @@ import {
 } from "./world.js";
 
 describe("upgrade and research gates", () => {
+  it("applies the local Research Lab bonus to research cost", () => {
+    assert.deepEqual(researchUpgradeCost("energyTech", 0, 0), {
+      metal: 0,
+      crystal: 80,
+      deuterium: 40,
+    });
+    assert.deepEqual(researchUpgradeCost("energyTech", 0, 1), {
+      metal: 0,
+      crystal: 79,
+      deuterium: 39,
+    });
+    assert.deepEqual(researchUpgradeCost("energyTech", 0, 10), {
+      metal: 0,
+      crystal: 72,
+      deuterium: 36,
+    });
+  });
+
+  it("keeps research cost at zero for labs at and above level 100", () => {
+    const resources = { metal: 100, crystal: 100, deuterium: 100 };
+    for (const labLevel of [100, 150]) {
+      const cost = researchUpgradeCost("energyTech", 0, labLevel);
+      assert.ok(cost.metal >= 0 && cost.crystal >= 0 && cost.deuterium >= 0);
+      assert.deepEqual(spend(resources, cost), resources);
+    }
+  });
+
   it("blocks an unaffordable Solar Array upgrade, including a queued level", () => {
     const universe = createUniverse("Gate Solar", 8);
     const { player, planet } = joinUniverse(universe, "Solar", 1_700_000_000_000);
@@ -102,6 +129,7 @@ describe("upgrade and research gates", () => {
       1_700_000_000_000,
     );
     assert.equal(ready.ok, true);
+    assert.deepEqual(ready.cost, researchUpgradeCost("energyTech", 0, 1));
 
     const higher = previewResearchUpgrade(
       owner,

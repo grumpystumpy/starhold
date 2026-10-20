@@ -1,6 +1,7 @@
 import "../test-dom";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { readDefenseCount, readShipCount, root } from "../session";
 import {
   DEFENSES,
   DEFENSE_ORDER,
@@ -18,6 +19,23 @@ import {
   defensesPage,
   shipyardPage,
 } from "./render-pages";
+
+describe("build count inputs", () => {
+  it("allows up to 999999 ships and defenses, flooring and clamping counts", () => {
+    let value = "999999";
+    root.querySelector = (() => ({ value })) as typeof root.querySelector;
+    assert.equal(readShipCount("scout"), 999_999);
+    assert.equal(readDefenseCount("needleTurret"), 999_999);
+
+    value = "1000001";
+    assert.equal(readShipCount("scout"), 999_999);
+    assert.equal(readDefenseCount("needleTurret"), 999_999);
+
+    value = "12.9";
+    assert.equal(readShipCount("scout"), 12);
+    assert.equal(readDefenseCount("needleTurret"), 12);
+  });
+});
 
 function dummyPlanet(): PlayerView["planet"] {
   return {
@@ -63,6 +81,7 @@ describe("Shipyard and Defenses owned count and weakest-first ordering", () => {
       assert.match(html, /Owned 0/);
       assert.match(html, /data-testid="ship-scout"/);
       assert.match(html, /data-testid="ship-count-scout"/);
+      assert.match(html, /max="999999"[^>]*data-ship-count="scout"/);
       assert.match(html, /data-testid="build-scout"/);
     });
 
@@ -96,6 +115,7 @@ describe("Shipyard and Defenses owned count and weakest-first ordering", () => {
       assert.doesNotMatch(html, />×0</);
       assert.match(html, /data-testid="defense-needleTurret"/);
       assert.match(html, /data-testid="defense-count-needleTurret"/);
+      assert.match(html, /max="999999"[^>]*data-defense-count="needleTurret"/);
       assert.match(html, /data-testid="build-defense-needleTurret"/);
     });
 

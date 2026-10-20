@@ -145,9 +145,9 @@ export function queueShipBuild(
   if (!player) return { ok: false, error: "Unknown player." };
   const def = SHIPS[shipId];
   if (!def) return { ok: false, error: "Unknown ship." };
-  const qty = Math.floor(count);
-  if (qty < 1 || qty > 50) {
-    return { ok: false, error: "Build between 1 and 50 ships at a time." };
+  const qty = count;
+  if (!Number.isInteger(qty) || qty < 1 || qty > 999_999) {
+    return { ok: false, error: "Build between 1 and 999,999 ships at a time." };
   }
 
   advanceUniverse(universe, now);
@@ -235,9 +235,9 @@ export function queueDefenseBuild(
   if (!player) return { ok: false, error: "Unknown player." };
   const def = DEFENSES[defenseId];
   if (!def) return { ok: false, error: "Unknown defense." };
-  const qty = Math.floor(count);
-  if (qty < 1 || qty > 50) {
-    return { ok: false, error: "Build between 1 and 50 defenses at a time." };
+  const qty = count;
+  if (!Number.isInteger(qty) || qty < 1 || qty > 999_999) {
+    return { ok: false, error: "Build between 1 and 999,999 defenses at a time." };
   }
 
   advanceUniverse(universe, now);

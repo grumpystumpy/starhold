@@ -7,10 +7,8 @@ import {
   fetchState,
   invalidateCachedState,
   joinGame,
-  claimPassword,
   loginAccount,
   relocateMiniFortress,
-  requestClaimCode,
   renamePlanet,
   selectPlanet,
   setAfterPlayerMutation,
@@ -455,7 +453,7 @@ export async function doSignup(
       view: res.view ?? null,
       notice: res.view
         ? `Signed up — welcome back, ${res.view.player.name}.`
-        : "Account created — enter a commander name or claim your guest save.",
+        : "Account created — enter a commander name.",
     });
   } catch (err) {
     setFlash(
@@ -491,7 +489,7 @@ export async function doLogin(
       view: res.view,
       notice: res.view
         ? `Signed in as ${res.view.player.name}.`
-        : "Signed in — enter a commander name or claim your guest save.",
+        : "Signed in — enter a commander name.",
     });
   } catch (err) {
     const status = err instanceof ApiError ? err.status : 0;
@@ -506,95 +504,6 @@ export async function doLogin(
         err instanceof Error ? err.message : "Log in failed.",
       );
     }
-  } finally {
-    session.busy = false;
-    schedulePaint();
-  }
-}
-
-export async function doRequestClaimCode(email: string): Promise<void> {
-  const trimmed = email.trim();
-  session.claimEmailDraft = email;
-  if (!trimmed) {
-    setFlash("error", "Email is required.");
-    schedulePaint();
-    return;
-  }
-  session.busy = true;
-  clearFlash();
-  schedulePaint();
-  try {
-    const res = await requestClaimCode(trimmed);
-    setFlash("notice", res.message);
-  } catch (err) {
-    await settleMutation({
-      err,
-      failureFallback: "Could not send a claim code.",
-      // Neither this response nor /api/auth/me exposes whether a code was issued.
-      applied: () => false,
-      successNotice: () => "Claim code sent.",
-    });
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Could not send a claim code.",
-    );
-    schedulePaint();
-  } finally {
-    session.busy = false;
-    schedulePaint();
-  }
-}
-
-export async function doClaimPassword(
-  email: string,
-  code: string,
-  password: string,
-): Promise<void> {
-  session.claimEmailDraft = email;
-  session.claimCodeDraft = code;
-  session.claimPasswordDraft = password;
-  const trimmed = email.trim();
-  if (!trimmed || !code.trim()) {
-    setFlash("error", "Email and claim code are required.");
-    schedulePaint();
-    return;
-  }
-  if (!password || password.length < 8) {
-    setFlash("error", "Password must be at least 8 characters.");
-    schedulePaint();
-    return;
-  }
-  session.busy = true;
-  clearFlash();
-  schedulePaint();
-  try {
-    const res = await claimPassword(trimmed, code.trim(), password);
-    session.claimCodeDraft = "";
-    session.claimPasswordDraft = "";
-    await applyAuthSuccess({
-      account: res.account,
-      view: res.view,
-      notice: res.view
-        ? `Password set. Signed in as ${res.view.player.name}.`
-        : "Password set. Enter a commander name to enter.",
-    });
-  } catch (err) {
-    let refreshedAccount: Awaited<ReturnType<typeof fetchAuthMe>>["account"] = null;
-    try {
-      refreshedAccount = (await fetchAuthMe()).account;
-    } catch {
-      // settleMutation still refreshes the player view and reports failure.
-    }
-    await settleMutation({
-      err,
-      failureFallback: "Could not set the password.",
-      applied: (view) => Boolean(
-        refreshedAccount?.email &&
-        refreshedAccount.email.toLowerCase() === trimmed.toLowerCase() &&
-        refreshedAccount.playerId === view.player.id
-      ),
-      successNotice: (view) => `Password set. Signed in as ${view.player.name}.`,
-    });
   } finally {
     session.busy = false;
     schedulePaint();

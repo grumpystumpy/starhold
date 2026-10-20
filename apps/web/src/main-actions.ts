@@ -16,8 +16,6 @@ export {
   doSignup,
   doLogin,
   doClaimAnonymous,
-  doClaimPassword,
-  doRequestClaimCode,
   resumeFromCookie,
   scheduleReconnect,
 } from "./main-actions-session.js";
@@ -39,6 +37,7 @@ export {
 export {
   doClaimDaily,
   doClaimGoal,
+  doTradeResources,
   doActivateOfficer,
   doRaiseOfficer,
   doUnlockSkill,

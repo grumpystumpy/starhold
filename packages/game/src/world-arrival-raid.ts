@@ -76,6 +76,7 @@ export function resolveRaidArrival(
       attackMult: atkCls.attack,
       defenseSlot: target.coords.slot,
       battlefield: fortressField,
+      seed: `${fleet.id}:${fleet.arrivesAt}`,
     },
   );
   target.ships = combat.defenderAfter;

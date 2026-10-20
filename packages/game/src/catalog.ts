@@ -32,7 +32,7 @@ export const STARSHARDS_HIGHSCORE_TOP3 = 50;
 export const EXPEDITION_STARSHARDS_CHANCE_PCT = 5;
 
 /** Max simultaneous fire exchanges in a raid. */
-export const MAX_COMBAT_ROUNDS = 6;
+export const MAX_COMBAT_ROUNDS = 8;
 
 /** Share of defender stockpile eligible for loot on an attacker win. */
 export const RAID_LOOT_SHARE = 0.5;

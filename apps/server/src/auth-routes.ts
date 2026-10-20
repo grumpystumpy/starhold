@@ -9,7 +9,6 @@ import {
 import {
   authenticateEmailPassword,
   checkAuthRateLimit,
-  claimNewPassword,
   clientIp,
   createAccountWithPassword,
   createSession,
@@ -17,18 +16,11 @@ import {
   getAccountById,
   getSession,
   normalizeEmail,
-  preparePasswordClaim,
-  requestClaimCode,
   requireSessionSecret,
   sessionSecretConfigured,
   setAccountPlayerId,
   type AccountRecord,
 } from "./accounts.js";
-import {
-  CLAIM_MAIL_MESSAGE,
-  CLAIM_NO_MAIL_MESSAGE,
-  claimMailConfigured,
-} from "./claim-code.js";
 import {
   clearSessionCookie,
   readSessionId,
@@ -234,72 +226,6 @@ export function mountAuthRoutes(app: Hono): void {
       return c.json({ error: auth.error }, auth.status);
     }
     return startSession(c, auth.account);
-  });
-
-  app.post("/api/auth/claim-code", async (c) => {
-    const secretErr = requireSessionSecret();
-    if (secretErr) return c.json({ error: secretErr }, 503);
-
-    const body = (await c.req.json().catch(() => ({}))) as { email?: string };
-    const email = normalizeEmail(body.email ?? "");
-    const rate = await checkAuthRateLimit(
-      "claim",
-      email || "invalid",
-      clientIp(c.req.raw.headers),
-    );
-    if (rate.limited) {
-      return c.json(
-        { error: `Too many attempts. Try again in ${rate.retryAfterSec}s.` },
-        429,
-      );
-    }
-    if (!claimMailConfigured()) {
-      return c.json({ ok: true, message: CLAIM_NO_MAIL_MESSAGE });
-    }
-    await requestClaimCode(email);
-    return c.json({ ok: true, message: CLAIM_MAIL_MESSAGE });
-  });
-
-  app.post("/api/auth/claim-password", async (c) => {
-    const secretErr = requireSessionSecret();
-    if (secretErr) return c.json({ error: secretErr }, 503);
-
-    const body = (await c.req.json().catch(() => ({}))) as {
-      email?: string;
-      code?: string;
-      password?: string;
-    };
-    const email = normalizeEmail(body.email ?? "");
-    const rate = await checkAuthRateLimit(
-      "claim",
-      email || "invalid",
-      clientIp(c.req.raw.headers),
-    );
-    if (rate.limited) {
-      return c.json(
-        { error: `Too many attempts. Try again in ${rate.retryAfterSec}s.` },
-        429,
-      );
-    }
-    const claimed = await claimNewPassword(
-      email,
-      body.code ?? "",
-      body.password ?? "",
-    );
-    if (!claimed.ok) {
-      return c.json({ error: claimed.error }, claimed.status);
-    }
-    return startSession(c, claimed.account);
-  });
-
-  app.post("/api/e2e/prepare-password-claim", async (c) => {
-    if (process.env.STARHOLD_E2E !== "1") {
-      return c.json({ error: "Not found" }, 404);
-    }
-    const body = (await c.req.json().catch(() => ({}))) as { email?: string };
-    const prepared = await preparePasswordClaim(body.email ?? "");
-    if (!prepared.ok) return c.json({ error: prepared.error }, 404);
-    return c.json({ ok: true, code: prepared.code });
   });
 
   app.get("/api/auth/me", async (c) => {

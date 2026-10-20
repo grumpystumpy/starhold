@@ -45,6 +45,7 @@ describe("login submit", () => {
       joinDraft: "",
     });
     assert.match(idle, /data-testid="auth-login-btn"/);
+    assert.doesNotMatch(idle, /password-claim-form|claim code|claim-email|claim-password/);
     assert.doesNotMatch(idle, /data-testid="auth-login-btn"[^>]*disabled/);
 
     const busy = joinScreenHtml({

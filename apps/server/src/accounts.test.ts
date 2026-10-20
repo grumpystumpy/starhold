@@ -4,7 +4,6 @@ import {
   AUTH_RATE_MAX,
   authenticateEmailPassword,
   checkAuthRateLimit,
-  claimNewPassword,
   createAccountWithPassword,
   createSession,
   getAccountByEmail,
@@ -13,17 +12,13 @@ import {
   isValidEmail,
   isValidPassword,
   normalizeEmail,
-  preparePasswordClaim,
-  requestClaimCode,
   resetMemoryAccounts,
-  sessionSecret,
   setAccountPlayerId,
   verifyPassword,
 } from "./accounts.js";
 import {
   buildImportClaimCodes,
   formatClaimCodeFile,
-  hashClaimCode,
   IMPORT_CLAIM_CODE_TTL_MS,
 } from "./claim-code.js";
 
@@ -106,89 +101,20 @@ describe("accounts memory store", () => {
     assert.equal(await verifyPassword("wrong-password", hash), false);
   });
 
-  it("sets a PBKDF2 password from a one-time claim code", async () => {
+  it("preserves reset state and gives imported accounts an admin reset message", async () => {
     process.env.STARHOLD_RUNTIME = "workers";
-    process.env.STARHOLD_PASSWORD_KDF = "pbkdf2";
-    const created = await createAccountWithPassword(
-      "legacy@starhold.test",
-      "secretpass",
-    );
+    const created = await createAccountWithPassword("legacy@starhold.test", "secretpass");
     assert.equal(created.ok, true);
     if (!created.ok) return;
+    created.account.passwordHash = "";
+    created.account.needsPasswordReset = true;
 
-    const now = 1_700_000_000_000;
-    const prepared = await preparePasswordClaim("legacy@starhold.test", now);
-    assert.equal(prepared.ok, true);
-    if (!prepared.ok) return;
-    assert.equal(prepared.code.length, 8);
-    assert.notEqual(
-      prepared.code,
-      hashClaimCode(prepared.code, sessionSecret()),
-    );
-
-    await requestClaimCode("legacy@starhold.test", now);
-    const blocked = await authenticateEmailPassword(
-      "legacy@starhold.test",
-      "secretpass",
-    );
-    assert.equal(blocked.ok, false);
-    if (blocked.ok) return;
-    assert.match(blocked.error, /claim code/);
-
-    const wrong = await claimNewPassword(
-      "legacy@starhold.test",
-      "ZZZZZZZZ",
-      "new-password",
-      now,
-    );
-    assert.equal(wrong.ok, false);
-
-    const claimed = await claimNewPassword(
-      "Legacy@Starhold.test",
-      prepared.code.toLowerCase(),
-      "new-password",
-      now + 1_000,
-    );
-    assert.equal(claimed.ok, true);
-    if (!claimed.ok) return;
-    assert.ok(claimed.account.passwordHash.startsWith("pbkdf2$"));
-    assert.equal(claimed.account.needsPasswordReset, false);
-    assert.equal(claimed.account.passwordHashPbkdf2, undefined);
-
-    const again = await claimNewPassword(
-      "legacy@starhold.test",
-      prepared.code,
-      "other-password",
-      now + 2_000,
-    );
-    assert.equal(again.ok, false);
-
-    const login = await authenticateEmailPassword(
-      "legacy@starhold.test",
-      "new-password",
-      now + 3_000,
-    );
-    assert.equal(login.ok, true);
-  });
-
-  it("rejects an expired claim code", async () => {
-    const created = await createAccountWithPassword(
-      "late@starhold.test",
-      "secretpass",
-    );
-    assert.equal(created.ok, true);
-    if (!created.ok) return;
-    const now = 1_700_000_000_000;
-    const prepared = await preparePasswordClaim("late@starhold.test", now);
-    assert.equal(prepared.ok, true);
-    if (!prepared.ok) return;
-    const expired = await claimNewPassword(
-      "late@starhold.test",
-      prepared.code,
-      "new-password",
-      now + 30 * 60 * 1000,
-    );
-    assert.equal(expired.ok, false);
+    const login = await authenticateEmailPassword("legacy@starhold.test", "secretpass");
+    assert.equal(login.ok, false);
+    if (!login.ok) assert.match(login.error, /ask an admin.*reset your password/i);
+    const stored = await getAccountByEmail("legacy@starhold.test");
+    assert.equal(stored?.needsPasswordReset, true);
+    assert.equal(stored?.passwordHash, "");
   });
 
   it("keeps import claim codes out of the stored record", () => {

@@ -2,6 +2,7 @@ import { OFFICERS, officerRenewalCost, officerRenewalDurationMs } from "./catalo
 import { SKILLS } from "./catalog-skills.js";
 import { OFFICER_MAX_LEVEL, SKILL_MAX_LEVEL, STARSHARDS_DAILY_LOGIN } from "./catalog.js";
 import { levelUpCost } from "./formulas-levels.js";
+import { storageFor } from "./formulas-build.js";
 import type { OfficerId, UniverseState } from "./types.js";
 import { advanceUniverse } from "./world-arrival.js";
 import { claimGoal, type GoalActionResult } from "./world-goals.js";
@@ -19,6 +20,11 @@ import {
 export type StarshardActionResult =
   | { ok: true; starshardsGranted?: number }
   | { ok: false; error: string };
+
+export type ResourceTradeDirection = "buy" | "sell";
+
+const STARSHARDS_PER_RESOURCE_TRADE = 1500;
+const RESOURCES_PER_TRADE = { metal: 3000, crystal: 2000, deuterium: 1000 };
 
 export {
   canClaimDailyLogin,
@@ -66,6 +72,77 @@ export function claimPlayerGoal(
   }
   advanceUniverse(universe, now);
   return claimGoal(universe, playerId, goalId, now);
+}
+
+/** Exchange one fixed resource bundle for 1500 Starshards, or vice versa. */
+export function tradeStarshardsForResources(
+  universe: UniverseState,
+  playerId: string,
+  planetId: string | undefined,
+  direction: ResourceTradeDirection,
+  now = Date.now(),
+): StarshardActionResult {
+  if (!universe.players[playerId]) return { ok: false, error: "Unknown player." };
+  if (direction !== "buy" && direction !== "sell") {
+    return { ok: false, error: "Invalid trade direction." };
+  }
+
+  advanceUniverse(universe, now);
+  const player = universe.players[playerId];
+  if (!player) return { ok: false, error: "Unknown player." };
+  const id = planetId || player.activePlanetId || player.homePlanetId;
+  if (!player.planetIds.includes(id)) {
+    return { ok: false, error: "You do not own that planet." };
+  }
+  const planet = universe.planets[id];
+  if (!planet) return { ok: false, error: "Planet missing." };
+
+  if (direction === "buy") {
+    const balance = Math.floor(player.starshards ?? 0);
+    if (balance < STARSHARDS_PER_RESOURCE_TRADE) {
+      return {
+        ok: false,
+        error: `Need ${fmtShards(STARSHARDS_PER_RESOURCE_TRADE)} Starshards (have ${fmtShards(balance)}).`,
+      };
+    }
+    const caps = storageFor(planet);
+    for (const resource of ["metal", "crystal", "deuterium"] as const) {
+      if (
+        planet.resources[resource] + RESOURCES_PER_TRADE[resource] >
+        caps[resource]
+      ) {
+        return {
+          ok: false,
+          error: `${resource} storage is too full for this trade.`,
+        };
+      }
+    }
+    player.starshards = balance - STARSHARDS_PER_RESOURCE_TRADE;
+    planet.resources = {
+      metal: planet.resources.metal + RESOURCES_PER_TRADE.metal,
+      crystal: planet.resources.crystal + RESOURCES_PER_TRADE.crystal,
+      deuterium: planet.resources.deuterium + RESOURCES_PER_TRADE.deuterium,
+    };
+  } else {
+    for (const resource of ["metal", "crystal", "deuterium"] as const) {
+      if (planet.resources[resource] < RESOURCES_PER_TRADE[resource]) {
+        return {
+          ok: false,
+          error: `Need ${fmtShards(RESOURCES_PER_TRADE[resource])} ${resource} for this trade.`,
+        };
+      }
+    }
+    planet.resources = {
+      metal: planet.resources.metal - RESOURCES_PER_TRADE.metal,
+      crystal: planet.resources.crystal - RESOURCES_PER_TRADE.crystal,
+      deuterium: planet.resources.deuterium - RESOURCES_PER_TRADE.deuterium,
+    };
+    player.starshards = Math.floor(player.starshards ?? 0) +
+      STARSHARDS_PER_RESOURCE_TRADE;
+  }
+  universe.players[player.id] = player;
+  universe.planets[planet.id] = planet;
+  return { ok: true };
 }
 
 /** Hire / renew an officer for Starshards. */

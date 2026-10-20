@@ -59,7 +59,7 @@ describe("CHANGE #18 pirate raid fairness", () => {
   it("newbies weigh 0; each successful raid that day −1% of original", () => {
     const universe = createUniverse("Fairness", 8);
     const { player } = joinUniverse(universe, "Target", 410_000_000);
-    const now = 410_000_100;
+    const now = player.createdAt + 48 * 60 * 60 * 1000 + 100;
     assert.equal(pirateRaidPickWeight(universe, player, now), 0);
 
     // Inflate points into fairness band (under 100k, over 2500).
@@ -89,5 +89,66 @@ describe("CHANGE #18 pirate raid fairness", () => {
     recordSuccessfulPirateRaid(p, nextDay);
     assert.equal(p.pirateRaidFairness?.successfulRaids, 1);
     assert.equal(p.pirateRaidFairness?.dayKey, utcDayKey(nextDay));
+  });
+});
+
+describe("pirate raid newcomer protection", () => {
+  const FORTY_EIGHT_HOURS = 48 * 60 * 60 * 1000;
+
+  it("skips a player younger than 48 hours, then targets them", () => {
+    const universe = createUniverse("Pirate newcomer", 8);
+    const { player } = joinUniverse(universe, "Target", 420_000_000);
+    const p = universe.players[player.id]!;
+    const now = p.createdAt + FORTY_EIGHT_HOURS + 1;
+    universe.planets[p.homePlanetId]!.ships.hauler = 5000;
+    assert.equal(pirateRaidPickWeight(universe, p, now - 2), 0);
+    assert.equal(pirateRaidPickWeight(universe, p, now), 1);
+  });
+
+  it("allows an early target who has attacked pirates", () => {
+    const universe = createUniverse("Pirate attacker", 8);
+    const { player } = joinUniverse(universe, "Target", 430_000_000);
+    const p = universe.players[player.id]!;
+    universe.planets[p.homePlanetId]!.ships.hauler = 5000;
+    p.attackedPiratesAt = p.createdAt + 1;
+    assert.equal(pirateRaidPickWeight(universe, p, p.createdAt + 2), 1);
+  });
+
+  it("records a pirate-base attack launch and makes the young player targetable", () => {
+    const universe = createUniverse("Pirate attack launch", 8);
+    const { player, planet } = joinUniverse(universe, "Hunter", 440_000_000);
+    const base = Object.values(universe.pirateBases ?? {})[0]!;
+    const p = universe.players[player.id]!;
+    const launchAt = p.createdAt + 100;
+    universe.planets[planet.id]!.ships.interceptor = 1;
+    universe.planets[planet.id]!.resources.deuterium = 10_000_000;
+
+    const launch = launchFleet(universe, {
+      playerId: player.id,
+      mission: "pirateRaid",
+      ships: { interceptor: 1 },
+      pirateBaseId: base.id,
+      now: launchAt,
+    });
+    assert.equal(launch.ok, true, !launch.ok ? launch.error : "");
+    assert.equal(p.attackedPiratesAt, launchAt);
+
+    universe.planets[p.homePlanetId]!.ships.hauler = 5000;
+    assert.equal(pirateRaidPickWeight(universe, p, launchAt + 1), 1);
+  });
+
+  it("loads an old player save without attackedPiratesAt", () => {
+    const universe = createUniverse("Legacy pirate protection", 8);
+    const { player } = joinUniverse(universe, "Legacy", 450_000_000);
+    const oldSave = JSON.parse(JSON.stringify(universe)) as typeof universe;
+    assert.equal(oldSave.players[player.id]!.attackedPiratesAt, undefined);
+    assert.equal(
+      pirateRaidPickWeight(
+        oldSave,
+        oldSave.players[player.id]!,
+        player.createdAt + 1,
+      ),
+      0,
+    );
   });
 });
