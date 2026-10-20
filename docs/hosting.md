@@ -12,13 +12,12 @@
 
 ## Deploys
 
-- Nothing deploys without Micah's approval, and nothing deploys from a pull request or branch.
-- Today a deploy is run by Coding Bot from a clean checkout of `main` (`npx node@22 wrangler deploy`, with the Sentry auth token loaded so source maps upload), followed by a live smoke check. The previous Worker version is recorded as the rollback target.
-- The GitHub Action [`.github/workflows/cloudflare-workers.yml`](../.github/workflows/cloudflare-workers.yml) can deploy on push to `main`, but only when the repository variable `CLOUDFLARE_DEPLOY_ENABLED` is `true` (unset today). Its secrets live in the protected `production` environment.
+- Production deploys use `npm run deploy:prod` with Node 22. The script applies D1 migrations before deploying the Worker.
+- Only Coding Bot runs production deploys, with Micah's approval. Other agents must not deploy.
 
 ## Legacy: Vercel + Upstash
 
-Vercel (`starhold-two.vercel.app`) with Upstash Redis was the first host. It is no longer the live site; shutting it down is tracked in STA-64. `vercel.json`, `api/`, `npm run build:vercel` and [vercel-deploy.md](./vercel-deploy.md) remain only until that shutdown. Don't build new work on them.
+Vercel (`starhold-two.vercel.app`) with Upstash Redis was the first host and is retired. `vercel.json`, `api/`, `npm run build:vercel` and [vercel-deploy.md](./vercel-deploy.md) are historical/legacy artifacts, not the live site or deploy target. Don't build new work on them.
 
 ## Local / CI
 
