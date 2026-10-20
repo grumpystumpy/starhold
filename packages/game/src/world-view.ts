@@ -453,6 +453,7 @@ export function playerView(
     skillsUnlocked: player.skillsUnlocked ?? [],
     skillLevels: { ...(player.skillLevels ?? {}) },
     officerLevels: { ...(player.officerLevels ?? {}) },
+    officerRenewals: { ...(player.officerRenewals ?? {}) },
     officerCatalog: OFFICER_ORDER.map((id) => OFFICERS[id]),
     skillCatalog: SKILL_ORDER.map((id) => SKILLS[id]),
     dailyLoginAvailable: canClaimDailyLogin(player, now),

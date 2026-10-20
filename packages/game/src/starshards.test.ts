@@ -85,6 +85,40 @@ describe("Thread D Starshards / officers / skills", () => {
     assert.equal(boosts.mineOutput, 1.1);
   });
 
+  it("scales officer hire and renewal cost and duration by renewal count", () => {
+    const universe = createUniverse("Officer Renewals", 8);
+    const a = joinUniverse(universe, "Renewing", 161_500_000);
+    const player = universe.players[a.player.id];
+    const base = OFFICERS.engineer.cost;
+    const baseDuration = 20 * 60 * 60 * 1000;
+    const now = 161_500_100;
+
+    for (const renewals of [0, 1, 2]) {
+      player.starshards = 1000;
+      player.officerRenewals = { engineer: renewals };
+      const expectedCost = Math.floor(base * (1 + 0.5 * renewals));
+      const expectedDuration = baseDuration * (1 + 0.15 * renewals);
+      const result = activateOfficer(universe, a.player.id, "engineer", now + renewals);
+      assert.equal(result.ok, true);
+      assert.equal(player.starshards, 1000 - expectedCost);
+      assert.equal(player.officers?.[0]?.expiresAt, now + renewals + expectedDuration);
+      assert.equal(player.officerRenewals?.engineer, renewals + 1);
+    }
+  });
+
+  it("treats a legacy save without officer renewal counts as zero", () => {
+    const universe = createUniverse("Legacy Officer", 8);
+    const a = joinUniverse(universe, "Legacy", 161_600_000);
+    const player = universe.players[a.player.id];
+    player.starshards = 100;
+    delete player.officerRenewals;
+
+    const view = playerView(universe, a.player.id, 161_600_100);
+    assert.equal(view.officerRenewals.engineer ?? 0, 0);
+    assert.equal(activateOfficer(universe, a.player.id, "engineer", 161_600_100).ok, true);
+    assert.equal(player.officers?.[0]?.expiresAt, 161_600_100 + 20 * 60 * 60 * 1000);
+  });
+
   it("unlocks skills permanently with prerequisites", () => {
     const universe = createUniverse("Skill Drift", 8);
     const a = joinUniverse(universe, "Adept", 162_000_000);
