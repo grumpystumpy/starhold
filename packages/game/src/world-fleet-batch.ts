@@ -17,7 +17,7 @@ import type { FleetMission, FleetShips, UniverseState } from "./types.js";
 import { playerBoosts } from "./world-boosts.js";
 import { emptyShips, ensureUniverseShape } from "./world-bootstrap.js";
 import { launchFleet } from "./world-launch.js";
-import { empireDriftBeaconExpeditionBonus } from "./world-mini.js";
+import { empireDriftBeaconCount } from "./world-mini.js";
 
 export type BatchFleetResult =
   | {
@@ -122,9 +122,10 @@ export function launchMaxExpeditions(
   const activeExpeditions = Object.values(universe.fleets).filter(
     (f) => f.ownerPlayerId === player.id && f.mission === "expedition",
   ).length;
+  const driftBeaconCount = empireDriftBeaconCount(universe, player.id);
   const expeditionCap =
     empireExpeditionCap(player, maxExpeditions) +
-    empireDriftBeaconExpeditionBonus(universe, player.id);
+    driftBeaconCount;
   const freeExpeditionSlots = Math.max(0, expeditionCap - activeExpeditions);
 
   const boosts = playerBoosts(player, now);
@@ -132,7 +133,8 @@ export function launchMaxExpeditions(
   const fleetSlotCap =
     maxFleetSlots(player.research.computerTech) +
     boosts.fleetSlots +
-    cls.fleetSlots;
+    cls.fleetSlots +
+    driftBeaconCount;
   const activeFleets = Object.values(universe.fleets).filter(
     (f) => f.ownerPlayerId === player.id,
   ).length;

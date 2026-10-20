@@ -378,6 +378,8 @@ export interface PlayerState {
    * Missing on old saves — a live hire migrates to level 1.
    */
   officerLevels?: Partial<Record<OfficerId, number>>;
+  /** Number of completed hires for renewal pricing; missing on old saves means 0. */
+  officerRenewals?: Partial<Record<OfficerId, number>>;
   /** Unlocked skill node ids. Kept in sync with skillLevels ≥ 1. */
   skillsUnlocked?: string[];
   /**
@@ -638,6 +640,9 @@ export interface PlayerView {
   highscores: HighscoreEntry[];
   galaxy: GalaxyView;
   fleets: FleetMission[];
+  /** Server-derived slot limits, including active bonuses and owned beacons. */
+  fleetSlotCap: number;
+  expeditionSlotCap: number;
   reports: CombatReport[];
   spyReports: EspionageReport[];
   expeditionReports: ExpeditionReport[];
@@ -654,6 +659,8 @@ export interface PlayerView {
   skillLevels: Record<string, number>;
   /** Officer id → permanent level (1–10). Absent ids are level 0. */
   officerLevels: Partial<Record<OfficerId, number>>;
+  /** Number of hires already completed, used to quote the next hire/renewal. */
+  officerRenewals: Partial<Record<OfficerId, number>>;
   /** Officer catalog for UI. */
   officerCatalog: OfficerDef[];
   /** Skill tree catalog for UI. */
