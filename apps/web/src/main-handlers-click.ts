@@ -36,6 +36,8 @@ import {
   doDeleteFleetPreset,
   doDisbandAlliance,
   doGalaxyNav,
+  doGalaxyJump,
+  doGalaxyGalaxyNav,
   doClaimAnonymous,
   doClaimPassword,
   doRequestClaimCode,
@@ -71,6 +73,7 @@ import {
   doUnlockSkill,
   doUpgrade,
 } from "./main-actions";
+import { parseGalaxyCoords } from "./galaxy-coords";
 import {
   isInboxFilter,
   setConfirmDelete,
@@ -157,6 +160,14 @@ export function bindClickHandlers(): void {
         ev.preventDefault();
         const dir = galaxyNav.getAttribute("data-galaxy-nav");
         if (dir === "prev" || dir === "next") void doGalaxyNav(dir);
+        return;
+      }
+
+      const galaxyGalaxyNav = closestActionEl(target, "[data-galaxy-galaxy-nav]");
+      if (galaxyGalaxyNav) {
+        ev.preventDefault();
+        const dir = galaxyGalaxyNav.getAttribute("data-galaxy-galaxy-nav");
+        if (dir === "prev" || dir === "next") void doGalaxyGalaxyNav(dir);
         return;
       }
 
@@ -616,6 +627,19 @@ export function bindClickHandlers(): void {
   root.addEventListener("submit", (ev) => {
     const form = ev.target;
     if (!(form instanceof HTMLFormElement)) return;
+    if (form.matches("[data-galaxy-jump-form]")) {
+      ev.preventDefault();
+      const currentGalaxy = session.galaxyGalaxy ?? session.view?.galaxy.galaxy ?? 1;
+      const parsed = parseGalaxyCoords(form.querySelector<HTMLInputElement>("#galaxy-jump")?.value ?? "", currentGalaxy);
+      if ("error" in parsed) {
+        setFlash("error", parsed.error);
+        schedulePaint();
+        return;
+      }
+      if (session.view?.galaxy.galaxy === parsed.galaxy && session.view.galaxy.system === parsed.system) return;
+      void doGalaxyJump(parsed.galaxy, parsed.system);
+      return;
+    }
 
     if (form.id === "join-form") {
       ev.preventDefault();

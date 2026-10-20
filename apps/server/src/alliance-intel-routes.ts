@@ -48,7 +48,7 @@ export function mountAllianceIntelRoutes(app: Hono): void {
         return c.json({ error: result.error }, denied(result.error) ? 403 : 400);
       }
       return c.json({ messages: result.messages });
-    });
+    }, { playerIds: [playerId] });
   });
 
   app.post("/api/alliance/chat", async (c) => {
@@ -64,7 +64,7 @@ export function mountAllianceIntelRoutes(app: Hono): void {
         return c.json({ error: result.error }, denied(result.error) ? 403 : 400);
       }
       return c.json(playerView(universe, playerId));
-    });
+    }, { playerIds: [playerId] });
   });
 
   app.get("/api/alliance/intel", async (c) => {
@@ -76,7 +76,7 @@ export function mountAllianceIntelRoutes(app: Hono): void {
         return c.json({ error: result.error }, denied(result.error) ? 403 : 400);
       }
       return c.json({ intel: result.intel });
-    });
+    }, { playerIds: [playerId] });
   });
 
   app.post("/api/alliance/intel/share", async (c) => {
@@ -94,7 +94,7 @@ export function mountAllianceIntelRoutes(app: Hono): void {
         return c.json({ error: result.error }, denied(result.error) ? 403 : 400);
       }
       return c.json(playerView(universe, playerId));
-    });
+    }, { playerIds: [playerId] });
   });
 
   app.delete("/api/alliance/intel/:id", async (c) => {
@@ -107,7 +107,7 @@ export function mountAllianceIntelRoutes(app: Hono): void {
         return c.json({ error: result.error }, denied(result.error) ? 403 : 400);
       }
       return c.json(playerView(universe, playerId));
-    });
+    }, { playerIds: [playerId] });
   });
 
   app.get("/api/alliance/markers", async (c) => {
@@ -119,7 +119,7 @@ export function mountAllianceIntelRoutes(app: Hono): void {
         return c.json({ error: result.error }, denied(result.error) ? 403 : 400);
       }
       return c.json({ markers: result.markers });
-    });
+    }, { playerIds: [playerId] });
   });
 
   app.post("/api/alliance/markers", async (c) => {
@@ -142,7 +142,7 @@ export function mountAllianceIntelRoutes(app: Hono): void {
         return c.json({ error: result.error }, denied(result.error) ? 403 : 400);
       }
       return c.json(playerView(universe, playerId));
-    });
+    }, { playerIds: [playerId] });
   });
 
   app.delete("/api/alliance/markers/:id", async (c) => {
@@ -155,7 +155,7 @@ export function mountAllianceIntelRoutes(app: Hono): void {
         return c.json({ error: result.error }, denied(result.error) ? 403 : 400);
       }
       return c.json(playerView(universe, playerId));
-    });
+    }, { playerIds: [playerId] });
   });
 
   app.post("/api/alliance/plan-strike", async (c) => {
@@ -189,6 +189,6 @@ export function mountAllianceIntelRoutes(app: Hono): void {
         acsPrefill: result.acsPrefill,
         view: playerView(universe, playerId),
       });
-    });
+    }, { playerIds: [playerId] });
   });
 }

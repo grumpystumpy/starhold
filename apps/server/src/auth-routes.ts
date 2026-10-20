@@ -34,7 +34,8 @@ import {
   readSessionId,
   setSessionCookie,
 } from "./cookies.js";
-import { withUniverse, withUniverseRead } from "./store.js";
+import { withUniverse, withUniverseRead, isUniverseBusy } from "./store.js";
+import { reportServerError } from "./request-context.js";
 
 async function sessionAccount(c: Context) {
   const sessionId = readSessionId(c);
@@ -99,7 +100,7 @@ async function startSession(c: Context, account: AccountRecord) {
   let view: ReturnType<typeof playerView> | null = null;
   let linkedPlayerId: string | null = null;
   try {
-    // Login must not take the universe lock. A busy writer used to be
+    // Login must not wait on the universe lock. A busy writer used to be
     // swallowed, which returned ok:true and view:null and left the client
     // on the sign-in screen.
     await withUniverseRead((universe) => {
@@ -114,7 +115,9 @@ async function startSession(c: Context, account: AccountRecord) {
       if (account.playerId && universe.players[account.playerId]) {
         view = playerView(universe, account.playerId);
       }
-    });
+    }, account.playerId
+      ? { playerIds: [account.playerId] }
+      : { catalog: true });
   } catch (err) {
     console.error("[starhold-auth] session view", err);
     const message = err instanceof Error ? err.message : "Universe busy — retry in a moment.";
@@ -123,6 +126,7 @@ async function startSession(c: Context, account: AccountRecord) {
         error: message.startsWith("Universe busy")
           ? message
           : "Universe busy — retry in a moment.",
+        code: "busy",
         retry: true,
         account: publicAccount(account),
         view: null,
@@ -325,13 +329,18 @@ export function mountAuthRoutes(app: Hono): void {
         }
       });
     } catch (err) {
+      const message = err instanceof Error ? err.message : "State failed.";
+      if (isUniverseBusy(err)) {
+        return c.json(
+          { error: message, account: publicAccount(account), view: null, code: "busy" },
+          503,
+        );
+      }
+      console.error("[starhold-api]", err);
+      reportServerError(err);
       return c.json(
-        {
-          error: err instanceof Error ? err.message : "State failed.",
-          account: publicAccount(account),
-          view: null,
-        },
-        503,
+        { error: message, account: publicAccount(account), view: null },
+        500,
       );
     }
     if (playerId && playerId !== account.playerId) {
@@ -455,7 +464,7 @@ export function mountAuthRoutes(app: Hono): void {
         player.accountId = ctx.account.id;
         await setAccountPlayerId(ctx.account.id, player.id);
         return c.json(playerView(universe, player.id));
-      });
+      }, { catalog: true });
     } catch (err) {
       return c.json(
         { error: err instanceof Error ? err.message : "Join failed." },

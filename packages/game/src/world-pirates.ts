@@ -106,7 +106,7 @@ import {
 } from "./world-boosts.js";
 import { noteGoalMetric } from "./world-goals.js";
 import { emptyCargo, planetAtCoords } from "./world-bootstrap.js";
-import { consumeTickBudget, syncPlanetForTick } from "./tick-budget.js";
+import { consumeTickBudget, syncPlanetForTick, tickBudget } from "./tick-budget.js";
 import { pushEventLog } from "./world-event-log.js";
 import {
   pirateRaidPickWeight,
@@ -374,7 +374,7 @@ function rollInRange(seed: string, min: number, max: number): number {
   return min + (hashSeed(seed) % span);
 }
 
-/** nextRaidAt = periodStart + random offset within the hour; after `afterMs`. */
+/** nextRaidAt = periodStart + random offset within the period; after `afterMs`. */
 export function rollNextRaidAt(
   baseId: string,
   afterMs: number,
@@ -772,6 +772,18 @@ function collectPirateSpawnSites(
   seed: string,
   target: number,
 ): Coordinates[] {
+  const occupied = new Set<string>();
+  const taken = new Set<string>();
+  for (const base of Object.values(universe.pirateBases ?? {})) {
+    if (base.destroyedAt != null) continue;
+    occupied.add(`${base.coords.galaxy}:${base.coords.system}`);
+    taken.add(`${base.coords.galaxy}:${base.coords.system}:${base.coords.slot}`);
+  }
+  for (const base of Object.values(universe.alienBases ?? {})) {
+    if (base.destroyedAt != null) continue;
+    occupied.add(`${base.coords.galaxy}:${base.coords.system}`);
+    taken.add(`${base.coords.galaxy}:${base.coords.system}:${base.coords.slot}`);
+  }
   type Ranked = { key: number; galaxy: number; system: number };
   const ranked: Ranked[] = [];
   for (let galaxy = 1; galaxy <= MAP_GALAXIES; galaxy++) {
@@ -787,17 +799,31 @@ function collectPirateSpawnSites(
   const sites: Coordinates[] = [];
   for (const row of ranked) {
     if (sites.length >= target) break;
-    if (systemOccupiedByNpc(universe, row.galaxy, row.system)) continue;
-    const slot = pickEmptySlot(
-      universe,
-      row.galaxy,
-      row.system,
-      `${seed}:pirate-slot:${row.galaxy}:${row.system}`,
-    );
+    if (occupied.has(`${row.galaxy}:${row.system}`)) continue;
+    const slot = pickEmptySlotFrom(universe, row.galaxy, row.system, `${seed}:pirate-slot:${row.galaxy}:${row.system}`, taken);
     if (slot == null) continue;
     sites.push({ galaxy: row.galaxy, system: row.system, slot });
+    taken.add(`${row.galaxy}:${row.system}:${slot}`);
+    occupied.add(`${row.galaxy}:${row.system}`);
   }
   return sites;
+}
+
+function pickEmptySlotFrom(
+  universe: UniverseState,
+  galaxy: number,
+  system: number,
+  seedKey: string,
+  taken: Set<string>,
+): number | null {
+  const start = 1 + (hashSeed(seedKey) % MAP_SLOTS);
+  for (let i = 0; i < MAP_SLOTS; i++) {
+    const slot = ((start - 1 + i) % MAP_SLOTS) + 1;
+    if (taken.has(`${galaxy}:${system}:${slot}`)) continue;
+    if (planetAtCoords(universe, { galaxy, system, slot })) continue;
+    return slot;
+  }
+  return null;
 }
 
 /**
@@ -880,10 +906,17 @@ export function ensurePiratePopulation(
   if (universe.seedCursor && !universe.seedCursor.done) return;
   if (!universe.pirateBases) universe.pirateBases = {};
   if (!universe.alienBases) universe.alienBases = {};
+  // No occupancy data: placing would land on a planet this request did not load.
+  if (universe.skipPirateTopUp) return;
+  // Ranking every system is a few milliseconds. A budgeted page load skips it.
+  // The npc job (skipNpcRaids is false) still tops up under a Workers budget.
+  if (tickBudget() && universe.skipNpcRaids) return;
+  let living = activePirateBases(universe).length;
+  if (living >= PIRATE_TARGET_BASE_COUNT) return;
   for (const base of Object.values(universe.pirateBases)) {
     ensurePirateBaseShape(base, now);
   }
-  let living = activePirateBases(universe).length;
+  living = activePirateBases(universe).length;
   if (living >= PIRATE_TARGET_BASE_COUNT) return;
   const seed = universe.seed ?? universe.id;
   const need = PIRATE_TARGET_BASE_COUNT - living;
@@ -1145,6 +1178,7 @@ function findRespawnSite(
 }
 
 function respawnDestroyedPirates(universe: UniverseState, now: number): void {
+  if (universe.skipPirateTopUp) return;
   const seed = universe.seed ?? universe.id;
   const bases = universe.pirateBases ?? {};
   for (const id of Object.keys(bases)) {
@@ -1152,8 +1186,9 @@ function respawnDestroyedPirates(universe: UniverseState, now: number): void {
     if (base.destroyedAt == null) continue;
     if (now < pirateRespawnAt(base.destroyedAt, base.id)) continue;
     const site = findRespawnSite(universe, `${seed}:respawn:${base.id}:${now}`);
-    delete bases[id];
+    // A wreck stays until its replacement is actually placed.
     if (!site) continue;
+    delete bases[id];
     const next = createPirateBase(
       seed,
       site.galaxy,
@@ -1236,6 +1271,16 @@ export function pickRaidTarget(
 ): NpcRaidTarget | null {
   const roll = hashSeed(`${base.id}:target:${base.lastRaidAt}:${now}`);
   const planets = Object.values(universe.planets).filter((p) => p.kind !== "moon");
+  const vsMult =
+    faction === "pirate"
+      ? PIRATE_VS_PIRATE_RAID_PERIOD_MULT
+      : ALIEN_VS_ALIEN_RAID_PERIOD_MULT;
+  // Most rolls prefer a player. Building the NPC list walks every base, so
+  // only do that when the roll actually wants an NPC or no player is eligible.
+  if (planets.length > 0 && roll % 1000 < Math.floor(1000 / vsMult)) {
+    const planet = pickWeightedPlayerPlanet(universe, planets, roll, now, faction);
+    if (planet) return { kind: "planet", planet };
+  }
   const pirateOthers = activePirateBases(universe).filter(
     (b) => b.id !== base.id && b.coalitionId !== base.coalitionId,
   );
@@ -1246,40 +1291,12 @@ export function pickRaidTarget(
     ...pirateOthers.map((other) => ({ kind: "pirate" as const, other })),
     ...alienOthers.map((other) => ({ kind: "alien" as const, other })),
   ];
-
-  // Slightly less often vs NPC: skip NPC picks with stretch mult.
-  const vsMult =
-    faction === "pirate"
-      ? PIRATE_VS_PIRATE_RAID_PERIOD_MULT
-      : ALIEN_VS_ALIEN_RAID_PERIOD_MULT;
-  const preferPlayer = planets.length > 0;
-  if (preferPlayer && (npcPool.length === 0 || roll % 1000 < Math.floor(1000 / vsMult))) {
-    const planet = pickWeightedPlayerPlanet(universe, planets, roll, now, faction);
-    if (planet) return { kind: "planet", planet };
-    // All player targets filtered (newbie / zero weight) — try NPCs.
-  }
   if (npcPool.length === 0) {
     if (!planets.length) return null;
     const planet = pickWeightedPlayerPlanet(universe, planets, roll, now, faction);
     return planet ? { kind: "planet", planet } : null;
   }
   return npcPool[roll % npcPool.length]!;
-}
-
-function pirateGrowthDue(base: PirateBase, now: number): boolean {
-  return (
-    base.destroyedAt == null &&
-    base.level < PIRATE_MAX_LEVEL &&
-    now - base.lastGrewAt >= PIRATE_LEVEL_GROWTH_INTERVAL_MS
-  );
-}
-
-function alienGrowthDue(base: AlienBase, now: number): boolean {
-  return (
-    base.destroyedAt == null &&
-    base.level < ALIEN_MAX_LEVEL &&
-    now - base.lastGrewAt >= PIRATE_LEVEL_GROWTH_INTERVAL_MS
-  );
 }
 
 function applyNpcRaidOnPlanet(
@@ -1449,7 +1466,7 @@ function fireRaid(
 }
 
 /**
- * CI / local Playwright sets STARHOLD_E2E=1 so ~200 hourly pirate raids
+ * CI / local Playwright sets STARHOLD_E2E=1 so pirate raids
  * do not strip the lone smoke player's metal before the shipyard e2e bank.
  * Schedule still advances so catch-up does not storm when the flag clears.
  */
@@ -1489,24 +1506,33 @@ function catchUpRaidsAlien(universe: UniverseState, base: AlienBase, now: number
 }
 
 /**
- * Lazy AI catch-up (Hobby): one in-memory pass over pirate+alien bases —
- * growth, 3h spawns, hourly nextRaidAt firings, top-up, respawn.
- * No Vercel hourly cron; no per-base KV writes.
+ * Lazy AI catch-up: one in-memory pass over pirate and alien bases.
+ * Pirates raid every 90 minutes. Aliens raid every hour. Page loads set
+ * skipNpcRaids so raids wait for the npc job, but top-up and respawn still run
+ * when occupancy was loaded.
  */
 export function tickPirates(universe: UniverseState, now: number): void {
   if (!universe.pirateBases) universe.pirateBases = {};
   if (!universe.alienBases) universe.alienBases = {};
   ensureAlienDailySeed(universe, now);
+  // Page loads skip raids, but a destroyed base still has to come back and a
+  // short universe still has to fill to 200 when this request loaded occupancy.
+  if (universe.skipNpcRaids) {
+    if (!universe.skipPirateTopUp) {
+      ensurePiratePopulation(universe, now);
+      respawnDestroyedPirates(universe, now);
+    }
+    universe.lastAiSimAt = now;
+    return;
+  }
   ensurePiratePopulation(universe, now);
 
   let paused = false;
   for (const base of Object.values(universe.pirateBases)) {
     ensurePirateBaseShape(base, now);
+    // Level-up budget can run out mid-wave. Still spawn and raid; the next
+    // job applies the missed levels at their own timestamps.
     growPirateBase(universe, base, now);
-    if (pirateGrowthDue(base, now)) {
-      paused = true;
-      break;
-    }
     applyFreeSpawnsPirate(base, now);
     if (catchUpRaidsPirate(universe, base, now)) {
       paused = true;
@@ -1517,7 +1543,6 @@ export function tickPirates(universe: UniverseState, now: number): void {
     for (const base of Object.values(universe.alienBases)) {
       ensureAlienBaseShape(base, universe, now);
       growAlienBase(universe, base, now);
-      if (alienGrowthDue(base, now)) break;
       applyFreeSpawnsAlien(base, now);
       if (catchUpRaidsAlien(universe, base, now)) break;
     }

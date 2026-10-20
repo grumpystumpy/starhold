@@ -1,4 +1,4 @@
-import { MAP_SYSTEMS } from "@starhold/game";
+import { MAP_GALAXIES, MAP_SYSTEMS } from "@starhold/game";
 import {
   ApiError,
   authJoin,
@@ -30,6 +30,7 @@ import {
 } from "./session";
 import { syncSessionUrl } from "./ui/router";
 import { captureGameEvent, identifyCommander } from "./telemetry";
+import { settleMutation } from "./recover-action";
 
 /** Background refresh cadence. Actions apply their own response immediately. */
 export const POLL_INTERVAL_MS = 30_000;
@@ -72,22 +73,36 @@ async function retryResume(): Promise<void> {
       const view = await fetchState(saved);
       session.view = view;
       session.galaxySystem = view.planet.coords.system;
+      session.galaxyGalaxy = null;
       session.joinDraft = view.player.name;
       syncSessionUrl({ replace: true });
       startPolling(saved);
       reconnectAttempt = 0;
+      session.holdJoin = false;
       setFlash("notice", `Resumed ${view.player.name}.`);
       schedulePaint();
       return;
     } catch (err) {
-      if (shouldClearSavedPlayer(httpStatus(err))) {
+      const status = httpStatus(err);
+      if (status === 404) {
         localStorage.removeItem(SESSION_KEY);
         session.view = null;
+        session.holdJoin = false;
+        reconnectAttempt = 0;
+        setFlash("error", "Saved session expired — join again.");
+        schedulePaint();
+        return;
+      }
+      if (shouldClearSavedPlayer(status)) {
+        localStorage.removeItem(SESSION_KEY);
+        session.view = null;
+        session.holdJoin = false;
         reconnectAttempt = 0;
         setFlash("error", "Signed out.");
         schedulePaint();
         return;
       }
+      session.holdJoin = true;
     }
   } else if (outcome === "none") {
     reconnectAttempt = 0;
@@ -250,7 +265,7 @@ export function bumpInFlightRefresh(): void {
 }
 
 function refreshKey(playerId: string): string {
-  const g = session.view?.galaxy.galaxy ?? "";
+  const g = session.galaxyGalaxy ?? session.view?.galaxy.galaxy ?? "";
   const s = session.galaxySystem ?? session.view?.galaxy.system ?? "";
   return `${playerId}:${g}:${s}`;
 }
@@ -276,7 +291,7 @@ async function refreshOnce(
 ): Promise<void> {
   const gen = ++refreshGen;
   try {
-    const g = session.view?.galaxy.galaxy;
+    const g = session.galaxyGalaxy ?? session.view?.galaxy.galaxy;
     const s = session.galaxySystem ?? session.view?.galaxy.system;
     const view = await fetchState(playerId, g, s);
     if (gen !== refreshGen) return;
@@ -320,6 +335,7 @@ export async function doJoin(name: string): Promise<void> {
       ? await authJoin(trimmed)
       : await joinGame(trimmed);
     session.galaxySystem = session.view.planet.coords.system;
+    session.galaxyGalaxy = null;
     session.joinDraft = session.view.player.name;
     localStorage.setItem(SESSION_KEY, session.view.player.id);
     if (session.account) {
@@ -339,6 +355,8 @@ export async function doJoin(name: string): Promise<void> {
     syncSessionUrl({ replace: true });
     startPolling(session.view.player.id);
   } catch (err) {
+    const status = err instanceof ApiError ? err.status : 0;
+    session.holdJoin = status === 0 || status >= 500;
     session.error = null;
     setFlash(
       "error",
@@ -363,7 +381,16 @@ async function applyAuthSuccess(opts: {
     try {
       view = await fetchState(opts.account.playerId);
     } catch (err) {
-      if (!(err instanceof ApiError) || err.status !== 404) {
+      const status = err instanceof ApiError ? err.status : 0;
+      if (status === 404) {
+        view = null;
+      } else if (status === 0 || status >= 500) {
+        session.holdJoin = true;
+        session.view = null;
+        setFlash("notice", "Reconnecting… your commander is still saved");
+        scheduleReconnect();
+        return;
+      } else {
         setFlash(
           "error",
           err instanceof Error
@@ -377,6 +404,7 @@ async function applyAuthSuccess(opts: {
   if (view?.player?.id) {
     session.view = view;
     session.galaxySystem = view.planet.coords.system;
+    session.galaxyGalaxy = null;
     session.joinDraft = view.player.name;
     localStorage.setItem(SESSION_KEY, view.player.id);
     session.claimablePlayerId = null;
@@ -466,10 +494,18 @@ export async function doLogin(
         : "Signed in — enter a commander name or claim your guest save.",
     });
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Log in failed.",
-    );
+    const status = err instanceof ApiError ? err.status : 0;
+    if (status === 0 || status >= 500) {
+      session.holdJoin = true;
+      session.view = null;
+      setFlash("notice", "Reconnecting… your commander is still saved");
+      scheduleReconnect();
+    } else {
+      setFlash(
+        "error",
+        err instanceof Error ? err.message : "Log in failed.",
+      );
+    }
   } finally {
     session.busy = false;
     schedulePaint();
@@ -491,10 +527,18 @@ export async function doRequestClaimCode(email: string): Promise<void> {
     const res = await requestClaimCode(trimmed);
     setFlash("notice", res.message);
   } catch (err) {
+    await settleMutation({
+      err,
+      failureFallback: "Could not send a claim code.",
+      // Neither this response nor /api/auth/me exposes whether a code was issued.
+      applied: () => false,
+      successNotice: () => "Claim code sent.",
+    });
     setFlash(
       "error",
       err instanceof Error ? err.message : "Could not send a claim code.",
     );
+    schedulePaint();
   } finally {
     session.busy = false;
     schedulePaint();
@@ -535,10 +579,22 @@ export async function doClaimPassword(
         : "Password set. Enter a commander name to enter.",
     });
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Could not set the password.",
-    );
+    let refreshedAccount: Awaited<ReturnType<typeof fetchAuthMe>>["account"] = null;
+    try {
+      refreshedAccount = (await fetchAuthMe()).account;
+    } catch {
+      // settleMutation still refreshes the player view and reports failure.
+    }
+    await settleMutation({
+      err,
+      failureFallback: "Could not set the password.",
+      applied: (view) => Boolean(
+        refreshedAccount?.email &&
+        refreshedAccount.email.toLowerCase() === trimmed.toLowerCase() &&
+        refreshedAccount.playerId === view.player.id
+      ),
+      successNotice: (view) => `Password set. Signed in as ${view.player.name}.`,
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -566,6 +622,7 @@ export async function doClaimAnonymous(): Promise<void> {
     session.account = res.account;
     session.view = res.view;
     session.galaxySystem = session.view.planet.coords.system;
+    session.galaxyGalaxy = null;
     session.claimablePlayerId = null;
     localStorage.setItem(SESSION_KEY, session.view.player.id);
     setFlash("notice", `Claimed ${session.view.player.name} to your email.`);
@@ -573,10 +630,22 @@ export async function doClaimAnonymous(): Promise<void> {
     syncSessionUrl({ replace: true });
     startPolling(session.view.player.id);
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Claim failed.",
-    );
+    let refreshedAccount: Awaited<ReturnType<typeof fetchAuthMe>>["account"] = null;
+    try {
+      refreshedAccount = (await fetchAuthMe()).account;
+    } catch {
+      // settleMutation still refreshes the player view and reports failure.
+    }
+    await settleMutation({
+      err,
+      failureFallback: "Claim failed.",
+      applied: (view) => Boolean(
+        refreshedAccount?.email &&
+        refreshedAccount.playerId === view.player.id &&
+        view.player.id === playerId
+      ),
+      successNotice: (view) => `Claimed ${view.player.name} to your email.`,
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -589,12 +658,17 @@ export async function resumeFromCookie(): Promise<
 > {
   try {
     const me = await fetchAuthMe();
-    if (!me.account) return "none";
+    if (!me.account) {
+      session.holdJoin = false;
+      return "none";
+    }
     session.account = me.account;
     if (me.view?.player?.id) {
       session.view = me.view;
       session.galaxySystem = me.view.planet.coords.system;
+      session.galaxyGalaxy = null;
       session.joinDraft = me.view.player.name;
+      session.holdJoin = false;
       localStorage.setItem(SESSION_KEY, me.view.player.id);
       session.claimablePlayerId = null;
       syncSessionUrl({ replace: true });
@@ -607,6 +681,7 @@ export async function resumeFromCookie(): Promise<
     }
     const guest = localStorage.getItem(SESSION_KEY);
     session.claimablePlayerId = guest;
+    session.holdJoin = false;
     if (me.account.email) session.emailDraft = me.account.email;
     return "account";
   } catch (err) {
@@ -614,8 +689,10 @@ export async function resumeFromCookie(): Promise<
       localStorage.removeItem(SESSION_KEY);
       session.account = null;
       session.view = null;
+      session.holdJoin = false;
       return "logout";
     }
+    session.holdJoin = true;
     return "retry";
   }
 }
@@ -656,6 +733,31 @@ export async function doGalaxyNav(dir: "prev" | "next"): Promise<void> {
   }
 }
 
+export async function doGalaxyJump(galaxy: number, system: number): Promise<void> {
+  if (!session.view) return;
+  if (session.view.galaxy.galaxy === galaxy && session.view.galaxy.system === system) return;
+  session.galaxyGalaxy = galaxy;
+  session.galaxySystem = system;
+  session.busy = true;
+  schedulePaint();
+  try {
+    await silentRefresh(session.view.player.id, "Galaxy nav failed.", false);
+  } finally {
+    session.busy = false;
+    schedulePaint();
+    deferBackgroundPoll();
+  }
+}
+
+export async function doGalaxyGalaxyNav(dir: "prev" | "next"): Promise<void> {
+  if (!session.view) return;
+  const current = session.galaxyGalaxy ?? session.view.galaxy.galaxy;
+  const next = dir === "next"
+    ? current >= MAP_GALAXIES ? 1 : current + 1
+    : current <= 1 ? MAP_GALAXIES : current - 1;
+  return doGalaxyJump(next, session.galaxySystem ?? session.view.galaxy.system);
+}
+
 export async function doSelectPlanet(planetId: string): Promise<void> {
   if (!session.view) return;
   if (session.busy) {
@@ -669,13 +771,16 @@ export async function doSelectPlanet(planetId: string): Promise<void> {
   try {
     session.view = await selectPlanet(session.view.player.id, planetId);
     session.galaxySystem = session.view.planet.coords.system;
+    session.galaxyGalaxy = null;
     syncSessionUrl({ replace: true, planetId });
     setFlash("notice", `Switched to ${session.view.planet.name}.`);
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Planet switch failed.",
-    );
+    await settleMutation({
+      err,
+      failureFallback: "Planet switch failed.",
+      applied: (view) => view.planet.id === planetId,
+      successNotice: (view) => `Switched to ${view.planet.name}.`,
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -700,10 +805,12 @@ export async function doRenamePlanet(name: string): Promise<void> {
     );
     setFlash("notice", `Colony renamed to ${session.view.planet.name}.`);
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Rename failed.",
-    );
+    await settleMutation({
+      err,
+      failureFallback: "Rename failed.",
+      applied: (view) => view.planet.name === name,
+      successNotice: (view) => `Colony renamed to ${view.planet.name}.`,
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -736,10 +843,20 @@ export async function doRelocateFortress(
       `Moving Fortress landed at ${c.galaxy}:${c.system}:${c.slot}.`,
     );
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Fortress jump failed.",
-    );
+    const before = session.view.planet.coords;
+    await settleMutation({
+      err,
+      failureFallback: "Fortress jump failed.",
+      applied: (view) =>
+        (view.planet.coords.galaxy !== before.galaxy ||
+          view.planet.coords.system !== before.system) &&
+        view.planet.coords.galaxy === galaxy &&
+        view.planet.coords.system === system,
+      successNotice: (view) => {
+        const c = view.planet.coords;
+        return `Moving Fortress landed at ${c.galaxy}:${c.system}:${c.slot}.`;
+      },
+    });
   } finally {
     session.busy = false;
     schedulePaint();

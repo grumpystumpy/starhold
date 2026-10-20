@@ -65,6 +65,34 @@ import { getDebris } from "./world-tick.js";
 
 export { empirePoints };
 
+export type HighscoreSource = () => HighscoreEntry[] | undefined;
+
+let highscoreSource: HighscoreSource | undefined;
+
+/**
+ * Server installs this so a page load can pass a cached board.
+ * `undefined` means "compute now" (tests, memory mode, Vercel).
+ * An array, including empty, is served as-is.
+ */
+export function bindHighscoreSource(source: HighscoreSource | undefined): void {
+  highscoreSource = source;
+}
+
+function highscoreRoster(rows: HighscoreEntry[]): PublicPlayer[] {
+  return rows.map((row) => ({
+    id: row.playerId,
+    name: row.name,
+    coords: row.coords,
+    pointsHint: row.points,
+    planetId: row.homePlanetId,
+    planetName: row.planetName,
+    allianceTag: row.allianceTag,
+    artId: row.artId,
+    artUrl: row.artUrl,
+    artThumbUrl: row.artThumbUrl,
+  }));
+}
+
 function artFields(
   universe: UniverseState,
   planet: UniverseState["planets"][string] | undefined,
@@ -286,7 +314,8 @@ export function playerView(
   const player = universe.players[playerId];
   if (!player) throw new Error("Unknown player.");
   pruneExpiredOfficers(player, now);
-  const highscores = highscoresBoard(universe);
+  const provided = highscoreSource?.();
+  const highscores = provided ?? highscoresBoard(universe);
   maybeGrantHighscoreStarshards(universe, playerId, highscores);
   const pointsById = new Map(
     highscores.map((row) => [row.playerId, row.points]),
@@ -403,7 +432,14 @@ export function playerView(
         energyOutput: boosts.energyOutput,
       },
     ),
-    roster: publicRoster(universe, pointsById),
+    roster: provided
+      ? [
+          ...highscoreRoster(provided),
+          ...publicRoster(universe, pointsById).filter(
+            (entry) => entry.id === playerId && !provided.some((row) => row.playerId === playerId),
+          ),
+        ]
+      : publicRoster(universe, pointsById),
     highscores,
     galaxy: galaxyViewFor(universe, playerId, g, s, now),
     fleets,

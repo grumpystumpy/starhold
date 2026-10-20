@@ -473,6 +473,11 @@ export interface UniverseSeedCursor {
   rankVersion?: number;
   pirates: number;
   done?: boolean;
+  /**
+   * Systems seeded because a player opened them before the background
+   * cursor arrived. The cursor skips these so they are not created twice.
+   */
+  visited?: Record<string, 1>;
 }
 
 export interface UniverseState {
@@ -518,6 +523,16 @@ export interface UniverseState {
   acsGroups?: Record<string, AcsGroup>;
   /** Sealed monthly snapshots. Absent until the first month roll. */
   seasons?: Record<string, SeasonSnapshot>;
+  /**
+   * Set on a player-scoped request. NPC raids and growth run on the
+   * maintenance pass instead of the page-load tick. Not persisted.
+   */
+  skipNpcRaids?: boolean;
+  /**
+   * The row-save NPC job does not have every empty slot in memory, so it
+   * must not place new bases. Not persisted.
+   */
+  skipPirateTopUp?: boolean;
 }
 
 export interface PirateBasePublic {

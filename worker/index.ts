@@ -4,7 +4,7 @@
  * the tick budget, and the password KDF differ from Vercel.
  */
 import * as Sentry from "@sentry/cloudflare";
-import { bindTickBudget, workersTickBudget } from "@starhold/game";
+import { advanceUniverse, bindTickBudget, npcJobBudget, tickPirates, workersTickBudget } from "@starhold/game";
 import { app } from "../apps/server/src/app.js";
 import { createD1Store, type D1Like } from "../apps/server/src/d1-store.js";
 import {
@@ -12,6 +12,7 @@ import {
   runWithScope,
   setServerErrorReporter,
 } from "../apps/server/src/request-context.js";
+import { withUniverse } from "../apps/server/src/store.js";
 import { withStaticCache } from "../apps/server/src/static-cache.js";
 
 bindTickBudget(() => currentScope()?.budget);
@@ -85,12 +86,41 @@ const worker = {
     return runWithScope(
       {
         kv: store,
+        db: env.DB,
         mode: "d1",
         method: request.method,
         budget: workersTickBudget(),
         cpuMs: 0,
       },
       () => app.fetch(request),
+    );
+  },
+
+  async scheduled(
+    event: { cron?: string },
+    env: WorkerEnv,
+    ctx: { waitUntil(promise: Promise<unknown>): void },
+  ): Promise<void> {
+    if (!env.DB) return;
+    applyEnv(env);
+    const npc = event.cron === "*/10 * * * *";
+    const store = createD1Store(env.DB);
+    ctx.waitUntil(
+      runWithScope(
+        {
+          kv: store,
+          db: env.DB,
+          mode: "d1",
+          method: "POST",
+          budget: npc ? npcJobBudget() : workersTickBudget(),
+          cpuMs: 0,
+        },
+        () =>
+          withUniverse((universe) => {
+            if (npc) tickPirates(universe, Date.now());
+            else advanceUniverse(universe);
+          }, npc ? { npc: true } : { maintenance: true }),
+      ),
     );
   },
 };

@@ -42,6 +42,12 @@ export function continueUniverseSeed(
   while (cursor.at < total && systems < limits.systems && minis < limits.minis) {
     const galaxy = Math.floor(cursor.at / MAP_SYSTEMS) + 1;
     const system = (cursor.at % MAP_SYSTEMS) + 1;
+    const key = `${galaxy}:${system}`;
+    if (cursor.visited?.[key]) {
+      cursor.at += 1;
+      if (cursor.at >= total) finishedScan = true;
+      continue;
+    }
     seedAsteroidsInSystem(universe, galaxy, system);
     minis += seedMinisInSystem(universe, galaxy, system, now);
     cursor.ranks.push({
@@ -97,4 +103,39 @@ export function continueUniverseSeed(
     delete cursor.ranks;
   }
   return false;
+}
+
+/**
+ * Seed one system the moment a player joins there or opens it.
+ * The background cursor skips systems recorded on `seedCursor.visited`.
+ * Returns true when this call created the system.
+ */
+export function ensureSystemVisited(
+  universe: UniverseState,
+  galaxy: number,
+  system: number,
+  now: number,
+): boolean {
+  const cursor = universe.seedCursor;
+  if (!cursor || cursor.done) return false;
+  const g = Math.min(MAP_GALAXIES, Math.max(1, Math.floor(galaxy)));
+  const s = Math.min(MAP_SYSTEMS, Math.max(1, Math.floor(system)));
+  const key = `${g}:${s}`;
+  const index = (g - 1) * MAP_SYSTEMS + (s - 1);
+  if (!cursor.visited) cursor.visited = {};
+  if (cursor.visited[key] || cursor.at > index) {
+    cursor.visited[key] = 1;
+    return false;
+  }
+  const seed = universe.seed ?? universe.id;
+  seedAsteroidsInSystem(universe, g, s);
+  seedMinisInSystem(universe, g, s, now);
+  if (!cursor.ranks) cursor.ranks = [];
+  cursor.ranks.push({
+    g,
+    s,
+    k: pirateRankKey(seed, g, s),
+  });
+  cursor.visited[key] = 1;
+  return true;
 }
