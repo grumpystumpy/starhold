@@ -5,7 +5,6 @@ import {
   SHIPS,
   fuelCostOneWay,
   flightSecondsOneWay,
-  maxExpeditions,
   normalizeFleetShips,
   type MissionType,
   type PlayerView,
@@ -225,7 +224,9 @@ export function fleetComposer(
         </div>`
       : "";
 
-  const expeditionCap = maxExpeditions(view.player.research.astrophysics ?? 0);
+  const expeditionCap = view.expeditionSlotCap;
+  const fleetCap = view.fleetSlotCap;
+  const fleetActive = view.fleets.length;
   const expeditionActive = view.fleets.filter((f) => f.mission === "expedition")
     .length;
   const protectedFromAttack =
@@ -372,6 +373,7 @@ export function fleetComposer(
 
   return `
     <form id="fleet-form" data-testid="fleet-form" class="fleet-form">
+      <p class="hint" data-testid="fleet-slot-counters">Fleets ${fmt(fleetActive)}/${fmt(fleetCap)} · Expeditions ${fmt(expeditionActive)}/${fmt(expeditionCap)}</p>
       <fieldset class="mission-pick">
         <legend>Mission</legend>
         ${missionRadios}
@@ -387,7 +389,7 @@ export function fleetComposer(
       <div class="fleet-ships" data-testid="fleet-orbit-ships">${shipInputs}</div>
       ${needHint}
       ${acsBlock(view, mission, busy, draft)}
-      <p class="hint">Ships shown are in orbit on the selected colony. Example one-way ETA ~${fmtEta(sampleEta)} · fuel ~${fmt(sampleFuel)} deut (1 scout). Fleet slots: ${fmt(1 + (view.player.research.computerTech ?? 0))}${mission === "expedition" ? ` · expeditions ${fmt(expeditionActive)}/${fmt(expeditionCap)}` : ""}.</p>
+      <p class="hint">Ships shown are in orbit on the selected colony. Example one-way ETA ~${fmtEta(sampleEta)} · fuel ~${fmt(sampleFuel)} deut (1 scout).</p>
       <button type="submit" data-testid="launch-fleet" ${launchBlocked || orbitShipIds.length === 0 ? "disabled" : ""}>Launch fleet</button>
       ${
         view.alliance
