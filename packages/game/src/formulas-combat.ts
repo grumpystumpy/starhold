@@ -26,6 +26,7 @@ import type {
   ShipId,
 } from "./types.js";
 import { swarmDroneAttackMult } from "./formulas-round2.js";
+import { hashSeed } from "./formulas-position.js";
 import {
   emptyDefenses,
   emptyFleetShips,
@@ -33,16 +34,17 @@ import {
   normalizeFleetShips,
 } from "./formulas-travel.js";
 
-function unitCombatPower(
+export function unitCombatPower(
   attack: number,
   shield: number,
+  armor: number,
   hull: number,
   research: ResearchLevels | undefined,
 ): number {
   const w = 1 + (research?.weaponsTech ?? 0) * 0.08;
   const s = 1 + (research?.shieldingTech ?? 0) * 0.08;
   const a = 1 + (research?.armourTech ?? 0) * 0.08;
-  return attack * w + 0.5 * shield * s + 0.3 * hull * a;
+  return attack * w + 0.5 * shield * s + 0.3 * armor * a + 0.3 * hull * a;
 }
 
 function unitAtk(
@@ -52,14 +54,16 @@ function unitAtk(
   return attack * (1 + (research?.weaponsTech ?? 0) * 0.08);
 }
 
-function unitHp(
+export function unitHp(
   shield: number,
+  armor: number,
   hull: number,
   research: ResearchLevels | undefined,
 ): number {
   const s = shield * (1 + (research?.shieldingTech ?? 0) * 0.08);
+  const a = armor * (1 + (research?.armourTech ?? 0) * 0.08);
   const h = hull * (1 + (research?.armourTech ?? 0) * 0.08);
-  return Math.max(1, s + h);
+  return Math.max(1, s + a + h);
 }
 
 /**
@@ -74,7 +78,7 @@ export function fleetCombatPower(
     const n = ships[id] ?? 0;
     if (n <= 0) continue;
     const d = SHIPS[id];
-    power += n * unitCombatPower(d.attack, d.shield, d.hull, research);
+    power += n * unitCombatPower(d.attack, d.shield, d.armor, d.hull, research);
   }
   return power;
 }
@@ -88,7 +92,7 @@ export function defenseCombatPower(
     const n = defenses[id] ?? 0;
     if (n <= 0) continue;
     const d = DEFENSES[id];
-    power += n * unitCombatPower(d.attack, d.shield, d.hull, research);
+    power += n * unitCombatPower(d.attack, d.shield, d.armor, d.hull, research);
   }
   return power;
 }
@@ -195,11 +199,18 @@ export interface CombatResolution {
   roundLog: CombatRoundLog[];
 }
 
+type UnitDamageState = {
+  frontShieldDmg: number;
+  frontArmorDmg: number;
+  frontHullDmg: number;
+};
+
 type SidePools = {
   ships: FleetShips;
   defenses: DefenseStock;
-  /** Residual damage toward next kill, keyed by CombatUnitId. */
-  residual: Partial<Record<CombatUnitId, number>>;
+  /** Damage state for front unit per CombatUnitId. */
+  unitDamage?: Partial<Record<CombatUnitId, UnitDamageState>>;
+  residual?: Partial<Record<CombatUnitId, number>>;
 };
 
 function shipCount(ships: FleetShips): number {
@@ -251,19 +262,31 @@ export interface BattlefieldMods {
   armorMult: number;
 }
 
-function targetHp(
+function getUnitStats(
   id: CombatUnitId,
   research: ResearchLevels | undefined,
   battlefield?: BattlefieldMods,
-): number {
+) {
   const sMult = battlefield?.shieldMult ?? 1;
   const aMult = battlefield?.armorMult ?? 1;
+  let shield = 0;
+  let armor = 0;
+  let hull = 0;
   if ((SHIP_ORDER as string[]).includes(id)) {
     const d = SHIPS[id as ShipId];
-    return unitHp(d.shield * sMult, d.hull * aMult, research);
+    shield = d.shield;
+    armor = d.armor;
+    hull = d.hull;
+  } else {
+    const d = DEFENSES[id as DefenseId];
+    shield = d.shield;
+    armor = d.armor;
+    hull = d.hull;
   }
-  const d = DEFENSES[id as DefenseId];
-  return unitHp(d.shield * sMult, d.hull * aMult, research);
+  const maxS = shield * sMult * (1 + (research?.shieldingTech ?? 0) * 0.08);
+  const maxA = armor * aMult * (1 + (research?.armourTech ?? 0) * 0.08);
+  const maxH = hull * aMult * (1 + (research?.armourTech ?? 0) * 0.08);
+  return { maxS, maxA, maxH };
 }
 
 function targetCount(side: SidePools, id: CombatUnitId): number {
@@ -271,6 +294,14 @@ function targetCount(side: SidePools, id: CombatUnitId): number {
     return side.ships[id as ShipId] ?? 0;
   }
   return side.defenses[id as DefenseId] ?? 0;
+}
+
+function setTargetCount(side: SidePools, id: CombatUnitId, count: number): void {
+  if ((SHIP_ORDER as string[]).includes(id)) {
+    side.ships[id as ShipId] = Math.max(0, count);
+  } else {
+    side.defenses[id as DefenseId] = Math.max(0, count);
+  }
 }
 
 function applyDamageToTarget(
@@ -281,21 +312,55 @@ function applyDamageToTarget(
   battlefield?: BattlefieldMods,
 ): void {
   if (damage <= 0) return;
-  const hp = targetHp(id, research, battlefield);
-  const pool = (side.residual[id] ?? 0) + damage;
-  const kills = Math.floor(pool / hp);
-  const rem = pool - kills * hp;
-  side.residual[id] = rem;
-  if (kills <= 0) return;
-  if ((SHIP_ORDER as string[]).includes(id)) {
-    const sid = id as ShipId;
-    side.ships[sid] = Math.max(0, (side.ships[sid] ?? 0) - kills);
-    if (side.ships[sid] === 0) side.residual[id] = 0;
-  } else {
-    const did = id as DefenseId;
-    side.defenses[did] = Math.max(0, (side.defenses[did] ?? 0) - kills);
-    if (side.defenses[did] === 0) side.residual[id] = 0;
+  let count = targetCount(side, id);
+  if (count <= 0) return;
+
+  if (!side.unitDamage) side.unitDamage = {};
+
+  const stats = getUnitStats(id, research, battlefield);
+  const maxS = stats.maxS;
+  const maxA = stats.maxA;
+  const maxH = stats.maxH;
+
+  let unitDmg = side.unitDamage[id] ?? {
+    frontShieldDmg: 0,
+    frontArmorDmg: 0,
+    frontHullDmg: 0,
+  };
+  let remainingDamage = damage;
+
+  while (remainingDamage > 0 && count > 0) {
+    const curS = Math.max(0, maxS - unitDmg.frontShieldDmg);
+    const curA = Math.max(0, maxA - unitDmg.frontArmorDmg);
+    const curH = Math.max(0, maxH - unitDmg.frontHullDmg);
+
+    // Layer 1: Shield
+    const sAbs = Math.min(remainingDamage, curS);
+    unitDmg.frontShieldDmg += sAbs;
+    remainingDamage -= sAbs;
+
+    // Layer 2: Armor
+    if (remainingDamage > 0) {
+      const aAbs = Math.min(remainingDamage, curA);
+      unitDmg.frontArmorDmg += aAbs;
+      remainingDamage -= aAbs;
+    }
+
+    // Layer 3: Hull
+    if (remainingDamage > 0) {
+      const hAbs = Math.min(remainingDamage, curH);
+      unitDmg.frontHullDmg += hAbs;
+      remainingDamage -= hAbs;
+    }
+
+    if (unitDmg.frontHullDmg >= maxH && maxH > 0) {
+      count -= 1;
+      setTargetCount(side, id, count);
+      unitDmg = { frontShieldDmg: 0, frontArmorDmg: 0, frontHullDmg: 0 };
+      if (count <= 0) break;
+    }
   }
+  side.unitDamage[id] = unitDmg;
 }
 
 /**
@@ -339,11 +404,22 @@ function mothershipHullFraction(
   research: ResearchLevels | undefined,
   battlefield?: BattlefieldMods,
 ): number {
-  const count = side.ships.swarmMothership ?? 0;
+  const count = side.ships?.swarmMothership ?? 0;
   if (count <= 0) return 0;
-  const hp = targetHp("swarmMothership", research, battlefield);
-  const residual = side.residual.swarmMothership ?? 0;
-  return Math.max(0, Math.min(1, 1 - residual / hp));
+  const stats = getUnitStats("swarmMothership", research, battlefield);
+  if (stats.maxH <= 0) return 0;
+  if (side.unitDamage?.swarmMothership) {
+    const unitDmg = side.unitDamage.swarmMothership;
+    const curH = Math.max(0, stats.maxH - unitDmg.frontHullDmg);
+    return curH / stats.maxH;
+  }
+  const res = side.residual?.swarmMothership ?? 0;
+  if (res > 0) {
+    const hDmg = Math.max(0, res - stats.maxS - stats.maxA);
+    const curH = Math.max(0, stats.maxH - hDmg);
+    return curH / stats.maxH;
+  }
+  return 1;
 }
 
 /**
@@ -369,7 +445,9 @@ export function applyHarvesterKamikaze(
   const focus = pickFocusTarget(enemy.ships, enemy.defenses);
   if (!focus) {
     own.ships.swarmHarvester = 0;
-    own.residual.swarmHarvester = 0;
+    if (own.unitDamage) {
+      own.unitDamage.swarmHarvester = { frontShieldDmg: 0, frontArmorDmg: 0, frontHullDmg: 0 };
+    }
     return harvesters;
   }
   const dmgPer =
@@ -382,7 +460,9 @@ export function applyHarvesterKamikaze(
     battlefield,
   );
   own.ships.swarmHarvester = 0;
-  own.residual.swarmHarvester = 0;
+  if (own.unitDamage) {
+    own.unitDamage.swarmHarvester = { frontShieldDmg: 0, frontArmorDmg: 0, frontHullDmg: 0 };
+  }
   return harvesters;
 }
 
@@ -460,10 +540,22 @@ export interface CombatMods {
   defenseSlot?: number;
   /** Location battlefield mods (e.g. Moving Fortress) — both sides. */
   battlefield?: BattlefieldMods;
+  /** Seed for deterministic RNG. */
+  seed?: string;
+}
+
+function createRng(seedStr?: string) {
+  let s = hashSeed(seedStr ?? "starhold-combat-default");
+  return function nextFloat(): number {
+    s = (s + 0x6d2b79f5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
 /**
- * Deterministic multi-round raid resolution with rapid-fire multipliers.
+ * Deterministic multi-round raid resolution with 3-layer damage & rapid-fire multipliers.
  */
 export function resolveCombat(
   attacker: FleetShips,
@@ -473,6 +565,8 @@ export function resolveCombat(
   defenderResearch?: ResearchLevels,
   mods?: CombatMods,
 ): CombatResolution {
+  const rng = createRng(mods?.seed);
+  void rng; // Available for stochastic options / seed initialization
   const defensePowerMult = Math.max(0.01, mods?.defensePower ?? 1);
   const attackMult = Math.max(0.01, mods?.attackMult ?? 1);
   const defenseSlot = mods?.defenseSlot;
@@ -480,12 +574,12 @@ export function resolveCombat(
   const atkSide: SidePools = {
     ships: normalizeFleetShips(attacker),
     defenses: emptyDefenses(),
-    residual: {},
+    unitDamage: {},
   };
   const defSide: SidePools = {
     ships: normalizeFleetShips(defender),
     defenses: { ...emptyDefenses(), ...defenses },
-    residual: {},
+    unitDamage: {},
   };
 
   if (shipCount(atkSide.ships) <= 0) {
@@ -516,6 +610,20 @@ export function resolveCombat(
   const roundLog: CombatRoundLog[] = [];
   for (let r = 1; r <= MAX_COMBAT_ROUNDS; r++) {
     rounds = r;
+    // Full shield recharge each round on all surviving units
+    if (atkSide.unitDamage) {
+      for (const key of Object.keys(atkSide.unitDamage) as CombatUnitId[]) {
+        const d = atkSide.unitDamage[key];
+        if (d) d.frontShieldDmg = 0;
+      }
+    }
+    if (defSide.unitDamage) {
+      for (const key of Object.keys(defSide.unitDamage) as CombatUnitId[]) {
+        const d = defSide.unitDamage[key];
+        if (d) d.frontShieldDmg = 0;
+      }
+    }
+
     const atkShipsBefore = cloneFleetShips(atkSide.ships);
     const defShipsBefore = cloneFleetShips(defSide.ships);
     const defDefsBefore = cloneDefenses(defSide.defenses);

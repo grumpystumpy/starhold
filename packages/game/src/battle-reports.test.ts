@@ -15,6 +15,7 @@ import {
   joinUniverse,
   launchFleet,
 } from "./world.js";
+import { graduateNewbieProtection } from "./test-graduate.js";
 import type { CombatReport } from "./types.js";
 
 describe("replayable battle reports", () => {
@@ -51,6 +52,7 @@ describe("replayable battle reports", () => {
     const universe = createUniverse("Battle Replay", 11);
     const a = joinUniverse(universe, "Atk", 140_000_000);
     const b = joinUniverse(universe, "Def", 140_000_001);
+    graduateNewbieProtection(universe, universe.players[b.player.id]!);
     universe.planets[a.planet.id].ships.scout = 4;
     universe.planets[a.planet.id].resources.deuterium = 800;
     universe.planets[b.planet.id].ships.scout = 1;
@@ -78,7 +80,7 @@ describe("replayable battle reports", () => {
     const card = formatCombatShareCard(report, a.player.id);
     assert.match(card, /Starhold Attack report/);
     assert.match(card, /Rounds:/);
-    assert.match(card, report.shareCode!);
+    assert.ok(card.includes(report.shareCode!));
   });
 
   it("mintCombatShareCode avoids collisions", () => {

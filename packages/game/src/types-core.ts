@@ -206,6 +206,7 @@ export interface ShipDef {
   /** Combat / travel (invented — not scraped genre values) */
   attack: number;
   shield: number;
+  armor: number;
   hull: number;
   /** Higher = faster travel */
   speed: number;
@@ -238,6 +239,7 @@ export interface DefenseDef {
   shipyardLevel: number;
   attack: number;
   shield: number;
+  armor: number;
   hull: number;
   /** Soft UI hint: recommend ≤1 of this id per planet (Halo / Crown). */
   uniqueHint?: boolean;
