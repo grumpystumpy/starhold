@@ -238,6 +238,8 @@ const NAV_ALIAS = {
   defense: "defenses",
 };
 
+const SHOP_TAB_PAGES = new Set(["officers", "skills"]);
+
 /** Background polls are 30s, so waits that need tick-on-read call poll() themselves. */
 async function pollUntil(page, label, ready, timeoutMs) {
   const activeClock = createActiveWaitClock();
@@ -253,6 +255,13 @@ async function pollUntil(page, label, ready, timeoutMs) {
 
 async function goNav(page, id) {
   const navId = NAV_ALIAS[id] ?? id;
+  if (SHOP_TAB_PAGES.has(navId)) {
+    // Officers/Skills live as tabs under the Shop page (B5-01).
+    await page.click('[data-testid="nav-shop"]');
+    await page.click(`[data-testid="shop-tab-${navId}"]`);
+    await page.waitForSelector(`[data-testid="page-${navId}"]`, { timeout: 10_000 });
+    return;
+  }
   await page.click(`[data-testid="nav-${navId}"]`);
   await page.waitForSelector(`[data-testid="page-${navId}"]`, {
     timeout: 10_000,
