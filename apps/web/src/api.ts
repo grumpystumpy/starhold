@@ -350,35 +350,6 @@ export async function loginAccount(
   return parse(res);
 }
 
-export async function requestClaimCode(
-  email: string,
-): Promise<{ ok: boolean; message: string }> {
-  const res = await credFetch("/api/auth/claim-code", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
-  });
-  return parse(res);
-}
-
-export async function claimPassword(
-  email: string,
-  code: string,
-  password: string,
-): Promise<{
-  ok: boolean;
-  account: AuthAccount;
-  view: PlayerView | null;
-  error?: string;
-}> {
-  const res = await credFetch("/api/auth/claim-password", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, code, password }),
-  });
-  return parse(res);
-}
-
 export async function claimAnonymousPlayer(
   playerId: string,
 ): Promise<{ ok: boolean; view: PlayerView; account: AuthAccount }> {
@@ -672,6 +643,19 @@ export async function claimDaily(playerId: string): Promise<PlayerView> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ playerId }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function tradeResources(
+  playerId: string,
+  planetId: string,
+  direction: "buy" | "sell",
+): Promise<PlayerView> {
+  const res = await credFetch("/api/shop/trade", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, planetId, direction }),
   });
   return parse<PlayerView>(res);
 }
