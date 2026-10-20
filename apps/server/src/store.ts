@@ -449,9 +449,27 @@ async function runUniverse<T>(
 
 /** Serializes requests in this isolate so two polls cannot tick the same object. */
 let localTail: Promise<void> = Promise.resolve();
+export const LOCAL_LOCK_MAX_WAIT_MS = 2_000;
 
 function withLocalLock<T>(fn: () => Promise<T>): Promise<T> {
-  const run = localTail.then(fn, fn);
+  const previous = localTail;
+  let timedOut = false;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const waitForPrevious = Promise.race([
+    previous,
+    new Promise<void>((resolve) => {
+      timeout = setTimeout(() => {
+        timedOut = true;
+        resolve();
+      }, LOCAL_LOCK_MAX_WAIT_MS);
+    }),
+  ]).finally(() => {
+    if (timeout) clearTimeout(timeout);
+  });
+  const run = waitForPrevious.then(() => {
+    if (timedOut) universeCache = null;
+    return fn();
+  });
   localTail = run.then(
     () => undefined,
     () => undefined,

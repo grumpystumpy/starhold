@@ -38,6 +38,8 @@ export interface ApiFailureContext {
   method: string;
   path: string;
   kind: ApiFailureKind;
+  wasHidden?: boolean;
+  durationMs?: number;
 }
 
 export function classifyApiFailure(
@@ -119,6 +121,8 @@ function pathOnly(input: RequestInfo | URL): string {
 interface RequestMeta {
   method: string;
   path: string;
+  wasHidden?: boolean;
+  durationMs?: number;
 }
 
 const requestMeta = new WeakMap<Response, RequestMeta>();
@@ -139,6 +143,8 @@ function fail(
     method: meta.method,
     path: meta.path,
     kind,
+    wasHidden: meta.wasHidden,
+    durationMs: meta.durationMs,
   });
   throw err;
 }
@@ -229,6 +235,18 @@ const credFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   const path = pathOnly(input);
   const timeoutMs = method === "GET" ? GET_TIMEOUT_MS : POST_TIMEOUT_MS;
 
+  const startTime = Date.now();
+  let wasHidden =
+    typeof document !== "undefined" && document.visibilityState === "hidden";
+  const onVisibilityChange = () => {
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+      wasHidden = true;
+    }
+  };
+  if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+    document.addEventListener("visibilitychange", onVisibilityChange);
+  }
+
   const controller = new AbortController();
   let didTimeout = false;
   const timer = setTimeout(() => {
@@ -250,20 +268,25 @@ const credFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   try {
     res = await fetch(input, { credentials: "include", ...init, signal: controller.signal });
   } catch {
+    const durationMs = Date.now() - startTime;
     if (didTimeout) {
       const message = TIMEOUT_MESSAGE;
       const err = new ApiError(message, 0, "timeout");
-      reportApiFailure(0, message, { method, path, kind: "timeout" });
+      reportApiFailure(0, message, { method, path, kind: "timeout", wasHidden, durationMs });
       throw err;
     }
     const message = "Something went wrong. Retry in a moment.";
     const err = new ApiError(message, 0, "network");
-    reportApiFailure(0, message, { method, path, kind: "network" });
+    reportApiFailure(0, message, { method, path, kind: "network", wasHidden, durationMs });
     throw err;
   } finally {
     clearTimeout(timer);
+    if (typeof document !== "undefined" && typeof document.removeEventListener === "function") {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    }
   }
-  requestMeta.set(res, { method, path });
+  const durationMs = Date.now() - startTime;
+  requestMeta.set(res, { method, path, wasHidden, durationMs });
   if (method !== "GET" && method !== "HEAD" && res.ok) {
     afterPlayerMutation?.();
   }

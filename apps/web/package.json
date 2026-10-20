@@ -8,7 +8,7 @@
     "build": "tsc -p tsconfig.json && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --import tsx --test src/ui/nav.test.ts src/ui/render-messages.test.ts src/ui/render-alliances.test.ts src/ui/format.test.ts src/ui/goals-ui.test.ts src/ui/render-fleets-acs.test.ts src/ui/playtest-fixes.test.ts src/api.test.ts src/auth-resume.test.ts src/telemetry.test.ts src/recover-action.test.ts src/save-fixture.test.ts src/galaxy-coords.test.ts src/ui/shipyard-order.test.ts"
+    "test": "node --import tsx --test src/ui/nav.test.ts src/ui/render-messages.test.ts src/ui/render-alliances.test.ts src/ui/format.test.ts src/ui/goals-ui.test.ts src/ui/render-fleets-acs.test.ts src/ui/playtest-fixes.test.ts src/api.test.ts src/auth-resume.test.ts src/telemetry.test.ts src/recover-action.test.ts src/save-fixture.test.ts src/galaxy-coords.test.ts src/ui/shipyard-order.test.ts src/ui/galaxy-jump.test.ts src/main-actions-social.test.ts src/main-actions-claims.test.ts src/settle-coverage.test.ts"
   },
   "dependencies": {
     "@sentry/browser": "^11.8.0",
