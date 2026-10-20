@@ -11,6 +11,7 @@ import {
   MAP_GALAXIES,
   MAP_SLOTS,
   MAP_SYSTEMS,
+  NEWBIE_PROTECTION_POINTS,
   PIRATE_TARGET_BASE_COUNT,
   playerView,
   queueBuildingUpgrade,
@@ -642,6 +643,84 @@ describe("row save review fixes", () => {
       .bind()
       .first<{ doc: string }>();
     assert.match(board?.doc ?? "", /NewHand/);
+  });
+
+  it("includes a joining commander in their response and the existing roster", async () => {
+    resetMemoryUniverse();
+    const { db, raw } = sqliteD1();
+    const source = fixture();
+    await migrateAll(db, source);
+    const existing = Object.values(source.players).find((player) => player.name === "OldHand")!;
+    // Reproduce a live first join before maintenance has created the board.
+    // The request scopes are separate, matching the Workers fetch lifecycle.
+    raw.prepare("DELETE FROM save_highscores WHERE id = 'board'").run();
+    const store = createD1Store(db);
+    const app = createApp();
+    const request = (method: string, fn: () => Promise<unknown>) =>
+      runWithScope({ kv: store, db, mode: "d1", method, cpuMs: 0 }, fn);
+    const joined = await request("POST", async () => {
+        const response = await app.request("/api/join", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "NewHand" }),
+        });
+        assert.equal(response.status, 200);
+        const joined = (await response.json()) as PlayerView;
+        assert.ok(joined.roster.some(
+          (entry) => entry.id === joined.player.id && entry.planetId === joined.player.homePlanetId,
+        ));
+        return joined;
+    });
+    // Workers create a fresh request scope for every fetch. Re-read the
+    // board from D1 as an existing player would on its next /api/state.
+    const existingResponse = await request("GET", () => app.request(
+      `/api/state?playerId=${encodeURIComponent(existing.id)}`,
+    ));
+    assert.equal(existingResponse.status, 200);
+    const existingView = (await existingResponse.json()) as PlayerView;
+    assert.ok(existingView.roster.some(
+      (entry) => entry.id === joined.player.id && entry.planetId === joined.player.homePlanetId,
+    ));
+  });
+
+  it("an existing roster shows a joiner's current points after the joiner changes", async () => {
+    resetMemoryUniverse();
+    const { db } = sqliteD1();
+    const source = fixture();
+    await migrateAll(db, source);
+    const existing = Object.values(source.players).find((player) => player.name === "OldHand")!;
+    const store = createD1Store(db);
+    const app = createApp();
+    const previousHooks = process.env.ALLOW_E2E_HOOKS;
+    process.env.ALLOW_E2E_HOOKS = "1";
+    const request = (method: string, path: string, body?: unknown) =>
+      runWithScope({ kv: store, db, mode: "d1", method, cpuMs: 0 }, () =>
+        app.request(path, body === undefined ? { method } : {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      );
+    try {
+      const join = await request("POST", "/api/join", { name: "Rival" });
+      assert.equal(join.status, 200);
+      const rival = (await join.json()) as PlayerView;
+      // Same path as the Workers e2e: the rival graduates, then the existing
+      // player reloads and needs the rival as an attackable fleet target.
+      const grad = await request("POST", "/api/e2e/graduate-newbie", { playerId: rival.player.id });
+      assert.equal(grad.status, 200);
+      const { points } = (await grad.json()) as { points: number };
+      assert.ok(points >= NEWBIE_PROTECTION_POINTS);
+      const state = await request("GET", `/api/state?playerId=${encodeURIComponent(existing.id)}`);
+      assert.equal(state.status, 200);
+      const view = (await state.json()) as PlayerView;
+      const entry = view.roster.find((row) => row.id === rival.player.id);
+      assert.equal(entry?.planetId, rival.player.homePlanetId);
+      assert.ok((entry?.pointsHint ?? 0) >= NEWBIE_PROTECTION_POINTS, `stale pointsHint ${entry?.pointsHint}`);
+    } finally {
+      if (previousHooks == null) delete process.env.ALLOW_E2E_HOOKS;
+      else process.env.ALLOW_E2E_HOOKS = previousHooks;
+    }
   });
 
   it("stays inside the D1 query budget", async () => {

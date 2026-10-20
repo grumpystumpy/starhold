@@ -1554,6 +1554,7 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
   const stmts: D1Stmt[] = [];
   let guards = 0;
   const newPlayerIds: string[] = [];
+  const changedPlayerIds: string[] = [];
 
   const nextWorld = stable(worldDoc(universe));
   if (nextWorld !== loaded.fingerprints.get("world")) {
@@ -1582,6 +1583,7 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
     if (previous === next) continue;
     const version = (loaded.playerVersions.get(player.id) ?? 0) + 1;
     playerUpdates.push([timedStringify(playerDoc(player)), version, player.id, version - 1]);
+    changedPlayerIds.push(player.id);
   }
   pushInsert(
     db,
@@ -1626,6 +1628,7 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
       planet.id,
       version - 1,
     ]);
+    if (planet.ownerPlayerId) changedPlayerIds.push(planet.ownerPlayerId);
   }
   pushInsert(
     db,
@@ -1785,17 +1788,32 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
   if (rebuildScores) {
     boardJson = timedStringify(highscoresBoard(universe));
     boardAt = Date.now();
-  } else if (newPlayerIds.length) {
-    const cached = currentScope()?.highscores ?? [];
-    const fresh = highscoresBoard(universe);
-    const mine = fresh.filter((row) => newPlayerIds.includes(row.playerId));
-    if (cached.length) {
-      const kept = cached.filter((row) => !newPlayerIds.includes(row.playerId));
-      boardJson = timedStringify(rerank([...kept, ...mine]));
-      boardAt = Date.now();
-    } else if (mine.length && Object.keys(universe.players).length === newPlayerIds.length) {
-      boardJson = timedStringify(rerank(mine));
-      boardAt = Date.now();
+  } else {
+    // Keep the board in step with every player this save scored correctly:
+    // new joiners plus changed players whose planets were all fully loaded.
+    // Other rows stay as cached; a later maintenance pass rebuilds the board.
+    const scoredIds = new Set(newPlayerIds);
+    for (const id of changedPlayerIds) {
+      const owned = Object.values(universe.planets).filter((p) => p.ownerPlayerId === id);
+      if (owned.length && owned.every((p) => loaded.fullPlanetIds.has(p.id) || newPlayerIds.includes(id))) {
+        scoredIds.add(id);
+      }
+    }
+    if (scoredIds.size) {
+      const cached = currentScope()?.highscores ?? [];
+      const mine = highscoresBoard(universe).filter((row) => scoredIds.has(row.playerId));
+      if (mine.length) {
+        const kept = cached.filter((row) => !scoredIds.has(row.playerId));
+        boardJson = timedStringify(rerank([...kept, ...mine]));
+        // Merged into a cached board: keep its build time (-1) so the TTL rebuild
+        // still happens. A board seeded from a partial working set gets time 0,
+        // so the next maintenance pass treats it as expired and rebuilds it in full.
+        boardAt = cached.length > 0
+          ? -1
+          : Object.keys(universe.players).length === newPlayerIds.length
+            ? Date.now()
+            : 0;
+      }
     }
   }
   if (boardJson) {
@@ -1803,7 +1821,9 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
       bind(
         db,
         `INSERT INTO save_highscores (id, built_at, doc) VALUES ('board', ?, ?)
-         ON CONFLICT(id) DO UPDATE SET built_at = excluded.built_at, doc = excluded.doc`,
+         ON CONFLICT(id) DO UPDATE SET
+           built_at = CASE WHEN excluded.built_at < 0 THEN save_highscores.built_at ELSE excluded.built_at END,
+           doc = excluded.doc`,
         [boardAt, boardJson],
       ),
     );
