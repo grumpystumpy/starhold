@@ -29,6 +29,7 @@ import {
   launchFleet,
   queueBuildingUpgrade,
   resolveMiniPlanetChoice,
+  playerView,
 } from "./world.js";
 import {
   createMiniPlanet,
@@ -38,11 +39,48 @@ import {
   isUnclaimedMini,
   miniKindOf,
   relocateMovingFortress,
+  empireDriftBeaconCount,
   seedUniverseMinis,
   tickMiniDrift,
 } from "./world-mini.js";
 
 describe("mini planets (Micah revision)", () => {
+  it("counts each owned mini with a Drift Beacon for both runtime slot caps", () => {
+    const universe = createUniverse("Beacon Slots", 8);
+    const a = joinUniverse(universe, "Beacon Keeper", 250_000_000);
+    const [firstId, secondId, unownedId] = universe.miniPlanetIds!;
+    const first = universe.planets[firstId!]!;
+    const second = universe.planets[secondId!]!;
+    const unowned = universe.planets[unownedId!]!;
+    first.ownerPlayerId = a.player.id;
+    a.player.planetIds.push(first.id);
+    first.buildings.driftBeacon = 0;
+    second.ownerPlayerId = a.player.id;
+    a.player.planetIds.push(second.id);
+    second.buildings.driftBeacon = 0;
+    unowned.buildings.driftBeacon = 2;
+
+    assert.equal(empireDriftBeaconCount(universe, a.player.id), 0);
+    const zero = playerView(universe, a.player.id, 250_000_001);
+    assert.equal(zero.fleetSlotCap, 1);
+    assert.equal(zero.expeditionSlotCap, 1);
+
+    universe.planets[first.id]!.buildings.driftBeacon = 1;
+    assert.equal(empireDriftBeaconCount(universe, a.player.id), 1);
+    const one = playerView(universe, a.player.id, 250_000_002);
+    assert.equal(one.fleetSlotCap, 2);
+    assert.equal(one.expeditionSlotCap, 2);
+
+    universe.planets[second.id]!.buildings.driftBeacon = 1;
+    assert.equal(empireDriftBeaconCount(universe, a.player.id), 2);
+    const two = playerView(universe, a.player.id, 250_000_003);
+    assert.equal(two.fleetSlotCap, 3);
+    assert.equal(two.expeditionSlotCap, 3);
+    universe.planets[first.id]!.buildings.driftBeacon = 0;
+    universe.planets[second.id]!.buildings.driftBeacon = 0;
+    assert.equal(empireDriftBeaconCount(universe, a.player.id), 0);
+  });
+
   it("seeds minis outside slots 1–16 at universe create", () => {
     const universe = createUniverse("Mini Seed", 8);
     assert.ok((universe.miniPlanetIds?.length ?? 0) > 0);
