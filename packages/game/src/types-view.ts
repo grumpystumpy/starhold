@@ -623,6 +623,9 @@ export interface PlayerView {
   highscores: HighscoreEntry[];
   galaxy: GalaxyView;
   fleets: FleetMission[];
+  /** Server-derived slot limits, including active bonuses and owned beacons. */
+  fleetSlotCap: number;
+  expeditionSlotCap: number;
   reports: CombatReport[];
   spyReports: EspionageReport[];
   expeditionReports: ExpeditionReport[];

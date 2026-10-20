@@ -11,9 +11,12 @@ import {
 } from "./catalog.js";
 import {
   classBonuses,
+  empireExpeditionCap,
   economySnapshot,
   empirePoints,
   levelBonuses,
+  maxExpeditions,
+  maxFleetSlots,
   planetPoints,
   playerProgressView,
 } from "./formulas.js";
@@ -59,7 +62,7 @@ import { stampQueueView } from "./world-queue-manage.js";
 import { inSensorPhalanxRange, ownedPlanetCount } from "./world-moons.js";
 import { goalsView } from "./world-goals.js";
 import { occupationForPlanet } from "./world-occupation.js";
-import { playerKnowsMini } from "./world-mini.js";
+import { empireDriftBeaconExpeditionBonus, playerKnowsMini } from "./world-mini.js";
 import { seasonLeaderboardView } from "./world-seasons.js";
 import { getDebris } from "./world-tick.js";
 
@@ -297,6 +300,14 @@ export function playerView(
   universe.planets[planet.id] = planet;
   universe.players[player.id] = player;
   const boosts = playerBoosts(player, now);
+  const cls = classBonuses(player.playerClass?.classId);
+  const fleetSlotCap =
+    maxFleetSlots(player.research.computerTech ?? 0) +
+    boosts.fleetSlots +
+    cls.fleetSlots;
+  const expeditionSlotCap =
+    empireExpeditionCap(player, maxExpeditions) +
+    empireDriftBeaconExpeditionBonus(universe, player.id);
 
   const fleets = Object.values(universe.fleets)
     .filter((f) => f.ownerPlayerId === playerId)
@@ -407,6 +418,8 @@ export function playerView(
     highscores,
     galaxy: galaxyViewFor(universe, playerId, g, s, now),
     fleets,
+    fleetSlotCap,
+    expeditionSlotCap,
     reports,
     spyReports,
     expeditionReports,
