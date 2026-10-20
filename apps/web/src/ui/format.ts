@@ -6,6 +6,30 @@ export function fmt(n: number): string {
   return Math.floor(n).toLocaleString("en-US");
 }
 
+/** Compact point totals — 999, 1.3K, 1.2M, 3.4B. */
+export function fmtCompact(n: number): string {
+  if (!Number.isFinite(n)) return "—";
+  const sign = n < 0 ? "-" : "";
+  const abs = Math.abs(n);
+  if (abs < 1000) return `${sign}${Math.floor(abs)}`;
+
+  const units = ["", "K", "M", "B", "T"];
+  let unit = 0;
+  let scaled = abs;
+  while (scaled >= 1000 && unit < units.length - 1) {
+    scaled /= 1000;
+    unit += 1;
+  }
+  let rounded = Math.round(scaled * 10) / 10;
+  if (rounded >= 1000 && unit < units.length - 1) {
+    scaled /= 1000;
+    unit += 1;
+    rounded = Math.round(scaled * 10) / 10;
+  }
+  const text = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+  return `${sign}${text}${units[unit]}`;
+}
+
 export function fmtCost(cost: Resources): string {
   const parts: string[] = [];
   if (cost.metal) parts.push(`${fmt(cost.metal)} metal`);

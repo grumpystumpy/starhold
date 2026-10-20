@@ -187,6 +187,10 @@ export async function doSaveFleetPreset(): Promise<void> {
   session.busy = true;
   clearFlash();
   schedulePaint();
+  const beforePresets = session.view.player.fleetPresets ?? [];
+  const beforePreset = selectedId
+    ? beforePresets.find((p) => p.id === selectedId)
+    : undefined;
   try {
     session.view = await saveFleetPresetRequest(session.view.player.id, {
       id: selected?.builtIn || selected ? selectedId : undefined,
@@ -195,10 +199,24 @@ export async function doSaveFleetPreset(): Promise<void> {
     });
     setFlash("notice", `Saved preset “${name}”.`);
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Could not save preset.",
-    );
+    await settleMutation({
+      err,
+      failureFallback: "Could not save preset.",
+      applied: (view) => {
+        const afterPresets = view.player.fleetPresets ?? [];
+        if (!selectedId) {
+          return afterPresets.some(
+            (preset) =>
+              !beforePresets.some((before) => before.id === preset.id) &&
+              preset.name === name &&
+              JSON.stringify(preset.ships) === JSON.stringify(ships),
+          );
+        }
+        const after = afterPresets.find((p) => p.id === selectedId);
+        return JSON.stringify(after) !== JSON.stringify(beforePreset);
+      },
+      successNotice: () => `Saved preset “${name}”.`,
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -233,10 +251,13 @@ export async function doDeleteFleetPreset(): Promise<void> {
     session.view = await deleteFleetPresetRequest(session.view.player.id, id);
     setFlash("notice", `Deleted preset “${preset.name}”.`);
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Could not delete preset.",
-    );
+    await settleMutation({
+      err,
+      failureFallback: "Could not delete preset.",
+      applied: (view) =>
+        !view.player.fleetPresets?.some((item) => item.id === id),
+      successNotice: () => `Deleted preset “${preset.name}”.`,
+    });
   } finally {
     session.busy = false;
     schedulePaint();

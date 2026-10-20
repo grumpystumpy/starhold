@@ -24,6 +24,7 @@ import {
 import { clearFlash, root, schedulePaint, session, setFlash } from "./session";
 import { fmtCoords } from "./ui/format";
 import { navigateTo } from "./ui/router";
+import { settleMutation } from "./recover-action";
 
 /** Fill Joint Strike controls when that fleet UI is on the page. */
 export function wireJointStrikeForm(prefill: AcsPrefill): boolean {
@@ -90,7 +91,12 @@ export async function doCreateAlliance(
   tag: string,
   joinMode: AllianceJoinMode,
 ): Promise<void> {
-  if (!session.view || session.busy) return;
+  if (!session.view) return;
+  if (session.busy) {
+    setFlash("error", "Still applying the last action — try again in a moment.");
+    schedulePaint();
+    return;
+  }
   session.busy = true;
   clearFlash();
   schedulePaint();
@@ -102,10 +108,13 @@ export async function doCreateAlliance(
     });
     setFlash("notice", `Alliance [${session.view.alliance?.tag ?? tag}] created.`);
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Alliance create failed.",
-    );
+    const beforeAllianceId = session.view?.alliance?.id;
+    await settleMutation({
+      err,
+      failureFallback: "Alliance create failed.",
+      applied: (view) => view.alliance != null && view.alliance.id !== beforeAllianceId,
+      successNotice: (view) => `Alliance [${view.alliance?.tag ?? tag}] created.`,
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -113,7 +122,12 @@ export async function doCreateAlliance(
 }
 
 export async function doJoinAlliance(allianceId: string): Promise<void> {
-  if (!session.view || session.busy) return;
+  if (!session.view) return;
+  if (session.busy) {
+    setFlash("error", "Still applying the last action — try again in a moment.");
+    schedulePaint();
+    return;
+  }
   session.busy = true;
   clearFlash();
   schedulePaint();
@@ -123,10 +137,15 @@ export async function doJoinAlliance(allianceId: string): Promise<void> {
     });
     setFlash("notice", `Joined [${session.view.alliance?.tag ?? ""}].`);
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Alliance join failed.",
-    );
+    const beforeAllianceId = session.view?.alliance?.id;
+    await settleMutation({
+      err,
+      failureFallback: "Alliance join failed.",
+      applied: (view) =>
+        view.alliance?.id === allianceId ||
+        (view.alliance?.id != null && view.alliance.id !== beforeAllianceId),
+      successNotice: (view) => `Joined [${view.alliance?.tag ?? ""}].`,
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -134,7 +153,12 @@ export async function doJoinAlliance(allianceId: string): Promise<void> {
 }
 
 export async function doLeaveAlliance(): Promise<void> {
-  if (!session.view || session.busy) return;
+  if (!session.view) return;
+  if (session.busy) {
+    setFlash("error", "Still applying the last action — try again in a moment.");
+    schedulePaint();
+    return;
+  }
   session.busy = true;
   clearFlash();
   schedulePaint();
@@ -142,10 +166,13 @@ export async function doLeaveAlliance(): Promise<void> {
     session.view = await leaveAllianceRequest(session.view.player.id);
     setFlash("notice", "Left alliance.");
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Alliance leave failed.",
-    );
+    const beforeAllianceId = session.view?.alliance?.id;
+    await settleMutation({
+      err,
+      failureFallback: "Alliance leave failed.",
+      applied: (view) => beforeAllianceId != null && view.alliance == null,
+      successNotice: () => "Left alliance.",
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -153,7 +180,12 @@ export async function doLeaveAlliance(): Promise<void> {
 }
 
 export async function doDisbandAlliance(): Promise<void> {
-  if (!session.view || session.busy) return;
+  if (!session.view) return;
+  if (session.busy) {
+    setFlash("error", "Still applying the last action — try again in a moment.");
+    schedulePaint();
+    return;
+  }
   session.busy = true;
   clearFlash();
   schedulePaint();
@@ -161,10 +193,13 @@ export async function doDisbandAlliance(): Promise<void> {
     session.view = await disbandAllianceRequest(session.view.player.id);
     setFlash("notice", "Alliance disbanded.");
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Disband failed.",
-    );
+    const beforeAllianceId = session.view?.alliance?.id;
+    await settleMutation({
+      err,
+      failureFallback: "Disband failed.",
+      applied: (view) => beforeAllianceId != null && view.alliance == null,
+      successNotice: () => "Alliance disbanded.",
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -172,7 +207,12 @@ export async function doDisbandAlliance(): Promise<void> {
 }
 
 export async function doKickAllianceMember(targetPlayerId: string): Promise<void> {
-  if (!session.view || session.busy) return;
+  if (!session.view) return;
+  if (session.busy) {
+    setFlash("error", "Still applying the last action — try again in a moment.");
+    schedulePaint();
+    return;
+  }
   session.busy = true;
   clearFlash();
   schedulePaint();
@@ -183,10 +223,17 @@ export async function doKickAllianceMember(targetPlayerId: string): Promise<void
     );
     setFlash("notice", "Member kicked.");
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Kick failed.",
+    const beforeMember = session.view?.alliance?.members.some(
+      (m) => m.playerId === targetPlayerId,
     );
+    await settleMutation({
+      err,
+      failureFallback: "Kick failed.",
+      applied: (view) =>
+        beforeMember === true &&
+        !view.alliance?.members.some((m) => m.playerId === targetPlayerId),
+      successNotice: () => "Member kicked.",
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -197,7 +244,12 @@ export async function doSetAllianceRole(
   targetPlayerId: string,
   role: AllianceRole,
 ): Promise<void> {
-  if (!session.view || session.busy) return;
+  if (!session.view) return;
+  if (session.busy) {
+    setFlash("error", "Still applying the last action — try again in a moment.");
+    schedulePaint();
+    return;
+  }
   session.busy = true;
   clearFlash();
   schedulePaint();
@@ -209,10 +261,14 @@ export async function doSetAllianceRole(
     );
     setFlash("notice", "Role updated.");
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Role change failed.",
-    );
+    await settleMutation({
+      err,
+      failureFallback: "Role change failed.",
+      applied: (view) =>
+        view.alliance?.members.find((m) => m.playerId === targetPlayerId)
+          ?.role === role,
+      successNotice: () => "Role updated.",
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -222,7 +278,12 @@ export async function doSetAllianceRole(
 export async function doSetAllianceJoinMode(
   joinMode: AllianceJoinMode,
 ): Promise<void> {
-  if (!session.view || session.busy) return;
+  if (!session.view) return;
+  if (session.busy) {
+    setFlash("error", "Still applying the last action — try again in a moment.");
+    schedulePaint();
+    return;
+  }
   session.busy = true;
   clearFlash();
   schedulePaint();
@@ -233,28 +294,12 @@ export async function doSetAllianceJoinMode(
     );
     setFlash("notice", `Join mode: ${joinMode}.`);
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Join mode change failed.",
-    );
-  } finally {
-    session.busy = false;
-    schedulePaint();
-  }
-}
-
-async function runAllianceAction(
-  work: () => Promise<void>,
-  fallback: string,
-): Promise<void> {
-  if (!session.view || session.busy) return;
-  session.busy = true;
-  clearFlash();
-  schedulePaint();
-  try {
-    await work();
-  } catch (err) {
-    setFlash("error", err instanceof Error ? err.message : fallback);
+    await settleMutation({
+      err,
+      failureFallback: "Join mode change failed.",
+      applied: (view) => view.alliance?.joinMode === joinMode,
+      successNotice: () => `Join mode: ${joinMode}.`,
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -262,41 +307,175 @@ async function runAllianceAction(
 }
 
 export async function doPostAllianceChat(body: string): Promise<void> {
-  await runAllianceAction(async () => {
+  if (!session.view) return;
+  if (session.busy) {
+    setFlash("error", "Still applying the last action — try again in a moment.");
+    schedulePaint();
+    return;
+  }
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
     session.view = await postAllianceChatRequest(body);
     setFlash("notice", "Message posted.");
-  }, "Chat post failed.");
+  } catch (err) {
+    const beforeChatIds = new Set(
+      session.view?.alliance?.chat?.map((m) => m.id) ?? [],
+    );
+    await settleMutation({
+      err,
+      failureFallback: "Chat post failed.",
+      applied: (view) =>
+        view.alliance?.chat?.some(
+          (m) => !beforeChatIds.has(m.id) && m.body === body,
+        ) ?? false,
+      successNotice: () => "Message posted.",
+    });
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
 }
 
 export async function doShareAllianceIntel(spyReportId: string): Promise<void> {
-  await runAllianceAction(async () => {
+  if (!session.view) return;
+  if (session.busy) {
+    setFlash("error", "Still applying the last action — try again in a moment.");
+    schedulePaint();
+    return;
+  }
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
     session.view = await shareAllianceIntelRequest(spyReportId);
     setFlash("notice", "Spy report shared with the alliance.");
-  }, "Intel share failed.");
+  } catch (err) {
+    const beforeIntelIds = new Set(
+      session.view?.alliance?.intel?.map((i) => i.id) ?? [],
+    );
+    await settleMutation({
+      err,
+      failureFallback: "Intel share failed.",
+      applied: (view) =>
+        view.alliance?.intel?.some(
+          (i) => !beforeIntelIds.has(i.id) && i.spyReportId === spyReportId,
+        ) ?? false,
+      successNotice: () => "Spy report shared with the alliance.",
+    });
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
 }
 
 export async function doDeleteAllianceIntel(intelId: string): Promise<void> {
-  await runAllianceAction(async () => {
+  if (!session.view) return;
+  if (session.busy) {
+    setFlash("error", "Still applying the last action — try again in a moment.");
+    schedulePaint();
+    return;
+  }
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
     session.view = await deleteAllianceIntelRequest(intelId);
     setFlash("notice", "Intel removed.");
-  }, "Intel remove failed.");
+  } catch (err) {
+    const beforeIntel = session.view?.alliance?.intel?.some(
+      (i) => i.id === intelId,
+    );
+    await settleMutation({
+      err,
+      failureFallback: "Intel remove failed.",
+      applied: (view) =>
+        beforeIntel === true &&
+        !view.alliance?.intel?.some((i) => i.id === intelId),
+      successNotice: () => "Intel removed.",
+    });
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
 }
 
 export async function doUpsertAllianceMarker(
   coords: Coordinates,
   note: string,
 ): Promise<void> {
-  await runAllianceAction(async () => {
+  if (!session.view) return;
+  if (session.busy) {
+    setFlash("error", "Still applying the last action — try again in a moment.");
+    schedulePaint();
+    return;
+  }
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
     session.view = await upsertAllianceMarkerRequest(coords, note);
     setFlash("notice", `Marker set on ${fmtCoords(coords)}.`);
-  }, "Marker failed.");
+  } catch (err) {
+    const beforeMarkerId = session.view?.alliance?.markers?.find(
+      (m) =>
+        m.coords.galaxy === coords.galaxy &&
+        m.coords.system === coords.system &&
+        m.coords.slot === coords.slot,
+    )?.id;
+    await settleMutation({
+      err,
+      failureFallback: "Marker failed.",
+      applied: (view) => {
+        const match = view.alliance?.markers?.find(
+          (m) =>
+            m.coords.galaxy === coords.galaxy &&
+            m.coords.system === coords.system &&
+            m.coords.slot === coords.slot,
+        );
+        return (
+          match != null &&
+          (match.id !== beforeMarkerId || match.note === note)
+        );
+      },
+      successNotice: () => `Marker set on ${fmtCoords(coords)}.`,
+    });
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
 }
 
 export async function doDeleteAllianceMarker(markerId: string): Promise<void> {
-  await runAllianceAction(async () => {
+  if (!session.view) return;
+  if (session.busy) {
+    setFlash("error", "Still applying the last action — try again in a moment.");
+    schedulePaint();
+    return;
+  }
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
     session.view = await deleteAllianceMarkerRequest(markerId);
     setFlash("notice", "Marker removed.");
-  }, "Marker remove failed.");
+  } catch (err) {
+    const beforeMarker = session.view?.alliance?.markers?.some(
+      (m) => m.id === markerId,
+    );
+    await settleMutation({
+      err,
+      failureFallback: "Marker remove failed.",
+      applied: (view) =>
+        beforeMarker === true &&
+        !view.alliance?.markers?.some((m) => m.id === markerId),
+      successNotice: () => "Marker removed.",
+    });
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
 }
 
 export async function doProposeJointStrike(
@@ -304,7 +483,16 @@ export async function doProposeJointStrike(
   note?: string,
   mission?: "raid" | "pirateRaid",
 ): Promise<void> {
-  await runAllianceAction(async () => {
+  if (!session.view) return;
+  if (session.busy) {
+    setFlash("error", "Still applying the last action — try again in a moment.");
+    schedulePaint();
+    return;
+  }
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
     const result = await proposeAllianceStrikeRequest({
       coords,
       note,
@@ -325,7 +513,28 @@ export async function doProposeJointStrike(
       return;
     }
     setFlash("notice", `Proposed Joint Strike on ${label}.`);
-  }, "Joint Strike proposal failed.");
+  } catch (err) {
+    const beforeAcsIds = new Set(
+      (session.view?.openAcsGroups ?? []).map((g) => g.id),
+    );
+    const label = fmtCoords(coords);
+    await settleMutation({
+      err,
+      failureFallback: "Joint Strike proposal failed.",
+      applied: (view) =>
+        view.openAcsGroups.some(
+          (g) =>
+            !beforeAcsIds.has(g.id) &&
+            g.targetCoords.galaxy === coords.galaxy &&
+            g.targetCoords.system === coords.system &&
+            g.targetCoords.slot === coords.slot,
+        ),
+      successNotice: () => `Proposed Joint Strike on ${label}.`,
+    });
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
 }
 
 export function fleetStrikeTarget(): {
@@ -347,7 +556,12 @@ export function fleetStrikeTarget(): {
 }
 
 export async function doInviteAlliance(targetPlayerId: string): Promise<void> {
-  if (!session.view || session.busy) return;
+  if (!session.view) return;
+  if (session.busy) {
+    setFlash("error", "Still applying the last action — try again in a moment.");
+    schedulePaint();
+    return;
+  }
   session.busy = true;
   clearFlash();
   schedulePaint();
@@ -358,10 +572,18 @@ export async function doInviteAlliance(targetPlayerId: string): Promise<void> {
     );
     setFlash("notice", "Invite sent.");
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Invite failed.",
+    const beforeInvites = new Set(
+      session.view?.alliance?.pendingInvites?.map((i) => i.playerId) ?? [],
     );
+    await settleMutation({
+      err,
+      failureFallback: "Invite failed.",
+      applied: (view) =>
+        view.alliance?.pendingInvites?.some(
+          (i) => i.playerId === targetPlayerId && !beforeInvites.has(i.playerId),
+        ) ?? false,
+      successNotice: () => "Invite sent.",
+    });
   } finally {
     session.busy = false;
     schedulePaint();

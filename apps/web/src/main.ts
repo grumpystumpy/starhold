@@ -104,6 +104,7 @@ async function resumePlayer(
   try {
     session.view = await fetchState(playerId);
     session.galaxySystem = session.view.planet.coords.system;
+    session.galaxyGalaxy = null;
     localStorage.setItem(SESSION_KEY, playerId);
     const wantPlanet = planetParam?.trim();
     if (
@@ -113,18 +114,22 @@ async function resumePlayer(
     ) {
       session.view = await selectPlanet(playerId, wantPlanet);
       session.galaxySystem = session.view.planet.coords.system;
+      session.galaxyGalaxy = null;
     }
     syncSessionUrl({ replace: true });
     startPolling(playerId);
     setFlash("notice", `Resumed ${session.view.player.name}.`);
+    session.holdJoin = false;
     return "ok";
   } catch (err) {
     const status = err instanceof ApiError ? err.status : 0;
-    if (shouldClearSavedPlayer(status)) {
+    if (status === 404 || shouldClearSavedPlayer(status)) {
       localStorage.removeItem(SESSION_KEY);
       session.view = null;
+      session.holdJoin = false;
       return "logout";
     }
+    session.holdJoin = true;
     setFlash("notice", "Reconnecting…");
     scheduleReconnect();
     return "retry";

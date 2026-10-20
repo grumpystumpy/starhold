@@ -391,9 +391,12 @@ export function galaxyPanel(
     <section class="panel" data-testid="galaxy-panel">
       <h2>Galaxy</h2>
       <div class="galaxy-nav">
+        <button type="button" data-galaxy-galaxy-nav="prev" data-testid="galaxy-galaxy-prev" ${busy ? "disabled" : ""}>◀ Galaxy</button>
         <button type="button" data-galaxy-nav="prev" data-testid="galaxy-prev" ${busy ? "disabled" : ""}>◀ System</button>
+        <form data-galaxy-jump-form><input id="galaxy-jump" data-testid="galaxy-jump" type="text" inputmode="decimal" enterkeyhint="go" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="Galaxy and system" placeholder="9:143" /></form>
         <span data-testid="galaxy-label">${galaxy.galaxy}:${galaxy.system} / ${MAP_SYSTEMS}</span>
         <button type="button" data-galaxy-nav="next" data-testid="galaxy-next" ${busy ? "disabled" : ""}>System ▶</button>
+        <button type="button" data-galaxy-galaxy-nav="next" data-testid="galaxy-galaxy-next" ${busy ? "disabled" : ""}>Galaxy ▶</button>
       </div>
       <div class="galaxy-actions" data-testid="galaxy-actions">
         <span class="galaxy-action">

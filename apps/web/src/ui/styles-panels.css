@@ -46,6 +46,7 @@
 
 .galaxy-nav {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
@@ -54,6 +55,13 @@
 
 .galaxy-nav button {
   min-width: 6.5rem;
+}
+
+.galaxy-nav #galaxy-jump {
+  width: 6.5rem;
+  min-height: 2.5rem;
+  box-sizing: border-box;
+  font-size: 16px;
 }
 
 .cargo-load {
