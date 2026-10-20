@@ -1,7 +1,15 @@
 import type { OfficerDef, OfficerId } from "./types.js";
 
-/** Wall-clock officer hire duration (v1). */
-export const OFFICER_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+/** Base wall-clock duration for the first officer hire. */
+export const OFFICER_DURATION_MS = 20 * 60 * 60 * 1000;
+
+export function officerRenewalCost(baseCost: number, renewals: number): number {
+  return Math.floor(baseCost * (1 + 0.5 * Math.max(0, Math.floor(renewals))));
+}
+
+export function officerRenewalDurationMs(renewals: number): number {
+  return OFFICER_DURATION_MS * (1 + 0.15 * Math.max(0, Math.floor(renewals)));
+}
 
 export const OFFICER_ORDER: OfficerId[] = [
   "quartermaster",

@@ -18,19 +18,19 @@ Bring **Starhold** (default branch **`main`**) to the friends-multiplayer vision
 
 ## Process (effective now)
 
-See **[process.md](./process.md)** and root **[AGENTS.md](../AGENTS.md)** — branch off `main`, small PR per batch, never push retired `cursor/core-loop-prototype-1093`, Vercel production = `main` → https://starhold-two.vercel.app, Upstash `KV_REST_API_*`, CI required (`api/index.js` stub is committed; `build:vercel` overwrites it with the bundle), one agent playtest per **merged milestone**.
+See **[process.md](./process.md)** and root **[AGENTS.md](../AGENTS.md)** — branch off `main`, small PR per batch, never push retired `cursor/core-loop-prototype-1093`, Cloudflare Workers Free + D1 is production, CI required (`api/index.js` stub is a legacy Vercel artifact; `build:vercel` overwrites it with the bundle), one agent playtest per **merged milestone**.
 
 ## Status
 
-- **Live:** https://starhold-two.vercel.app — `"storage":"kv"` (Vercel Upstash integration `KV_REST_API_*`); multiplayer verified
+- **Live:** https://starhold.stumpysgarage.workers.dev — Cloudflare Workers Free + D1
 - **Tip:** track `main` — contract PR lands schema docs first; then thread A
 - **Systems:** P0/P1 + combat rounds + expeditions + highscores + **moons** (design/code on main) — designs in [design/](./design/)
-- **Hosting:** [vercel-deploy.md](./vercel-deploy.md)
+- **Hosting:** [hosting.md](./hosting.md); [vercel-deploy.md](./vercel-deploy.md) is historical
 - **Next:** Land universe contract on `main` → thread **A** (universe + economy) → B–E in parallel
 
 ## Stack
 
-TypeScript + Vite client, shared `@starhold/game`, Hono API on Vercel serverless + Upstash/KV Redis.
+TypeScript + Vite client, shared `@starhold/game`, Hono API on Cloudflare Workers + D1.
 
 ## Doc index
 
@@ -39,6 +39,7 @@ TypeScript + Vite client, shared `@starhold/game`, Hono API on Vercel serverless
 | [vision.md](./vision.md) | Micah north star |
 | [design/universe-contract.md](./design/universe-contract.md) | Shared schema + balance contract |
 | [process.md](./process.md) | Micah process rules |
-| [vercel-deploy.md](./vercel-deploy.md) | Env vars + redeploy |
+| [hosting.md](./hosting.md) | Current hosting and deploy process |
+| [vercel-deploy.md](./vercel-deploy.md) | Historical Vercel deployment reference |
 | [design/](./design/) | Per-system designs |
 | [project-context.md](./project-context.md) | This file |
