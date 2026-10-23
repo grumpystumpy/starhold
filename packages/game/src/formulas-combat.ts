@@ -606,74 +606,28 @@ export function fireGroupShots(
     rng,
   );
 
-  for (const [targetTypeStr, initialShots] of Object.entries(initialShotsDistribution)) {
+  for (const [targetTypeStr, initialShots] of Object.entries(
+    initialShotsDistribution,
+  )) {
     const targetType = targetTypeStr as CombatUnitId;
     if (!initialShots || initialShots <= 0) continue;
 
-    // Check if targetType still has living units in targetSideLive
-    if (targetCount(targetSideLive, targetType) <= 0) {
-      let remDmg = initialShots * unitEffectiveDamage;
-      while (remDmg > 0) {
-        const nextTarget = pickWeightedTarget(
-          firerId,
-          targetSideSnapshot,
-          targetSideLive,
-          targetResearch,
-          opts?.battlefield,
-          rng,
-        );
-        if (!nextTarget) break;
-
-        const remShots = Math.max(1, Math.round(remDmg / unitEffectiveDamage));
-        const nextRF = rapidFireFactor(firerId, nextTarget);
-        const pRepeat = nextRF > 1 ? (nextRF - 1) / nextRF : 0;
-        const extraShots = sampleNegativeBinomial(remShots, pRepeat, rng);
-        const totalDmg = remDmg + extraShots * unitEffectiveDamage;
-
-        remDmg = applyShotWithIntercept(
-          targetSideLive,
-          nextTarget,
-          totalDmg,
-          targetResearch,
-          opts?.battlefield,
-        );
-      }
-      continue;
-    }
-
-    // Rapid fire extra shots are tied strictly to the target type actually hit!
+    // Rapid fire extra shots are tied strictly to the target type hit
     const rfFactor = rapidFireFactor(firerId, targetType);
     const pRepeat = rfFactor > 1 ? (rfFactor - 1) / rfFactor : 0;
     const extraShots = sampleNegativeBinomial(initialShots, pRepeat, rng);
     const totalShots = initialShots + extraShots;
 
-    let groupDamage = totalShots * unitEffectiveDamage;
-    let currentTarget: CombatUnitId | null = targetType;
+    const groupDamage = totalShots * unitEffectiveDamage;
 
-    while (groupDamage > 0 && currentTarget != null) {
-      const unabsorbedDmg = applyShotWithIntercept(
-        targetSideLive,
-        currentTarget,
-        groupDamage,
-        targetResearch,
-        opts?.battlefield,
-      );
-      if (unabsorbedDmg <= 0) break;
-
-      // Re-target unabsorbed spillover damage to remaining living target types
-      currentTarget = pickWeightedTarget(
-        firerId,
-        targetSideSnapshot,
-        targetSideLive,
-        targetResearch,
-        opts?.battlefield,
-        rng,
-      );
-      if (!currentTarget) break;
-
-      // Spillover is unabsorbed damage from the same shot — no extra rapid fire shots are created
-      groupDamage = unabsorbedDmg;
-    }
+    // Apply damage to targetType stack. Leftover unabsorbed damage stays within targetType and is discarded.
+    applyShotWithIntercept(
+      targetSideLive,
+      targetType,
+      groupDamage,
+      targetResearch,
+      opts?.battlefield,
+    );
   }
 }
 

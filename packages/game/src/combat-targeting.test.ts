@@ -259,32 +259,17 @@ describe("B3-07 / B3-08 Combat: weighted targeting + rapid fire", () => {
     assert.deepEqual(combat.roundLog[0]!.attackerLosses.ships, {});
   });
 
-  it("spillover: single high-damage shot overkill spills across units without creating extra shots", () => {
-    // 1 Voidforge Titan (attack 200,000) vs 20 Swarm Drones (toughness 16 each)
-    const atk = normalizeFleetShips({ voidforgeTitan: 1 });
-    const def = normalizeFleetShips({ swarmDrone: 20 });
+  it("spillover: damage stays inside targeted unit type and leftover is discarded when type is exhausted", () => {
+    // 1 Interceptor (attack 24) vs 1 Swarm Drone (16 HP) + 1 Cruiser (330 HP)
+    // Interceptor has RF 2 vs Swarm Drone, RF 1 vs Cruiser.
+    // 24 damage destroys 1 Swarm Drone (16 HP absorbed). Leftover 8 damage is discarded and does not spill to Cruiser.
+    const atk = normalizeFleetShips({ interceptor: 1 });
+    const def = normalizeFleetShips({ swarmDrone: 1, cruiser: 1 });
 
-    const combat = resolveCombat(atk, def);
+    const combat = resolveCombat(atk, def, undefined, undefined, undefined, { seed: "spill-no-cross-type" });
 
-    assert.equal(combat.outcome, "attacker_win");
-    assert.equal(combat.rounds, 1);
     assert.equal(combat.defenderAfter.swarmDrone, 0);
-    assert.equal(combat.roundLog[0]!.defenderLosses.ships.swarmDrone, 20);
-  });
-
-  it("spillover re-targeting across multiple target types does not create extra rapid fire shots", () => {
-    // 1 Voidforge Titan (attack 200,000) vs 1 Swarm Drone (16 HP) + 1 Scout (32 HP)
-    // 200,000 damage wipes 1 Drone (16 HP), spills to Scout (32 HP) and wipes Scout.
-    // Spillover is part of the same shot and does not trigger extra rapid fire rolls.
-    const atk = normalizeFleetShips({ voidforgeTitan: 1 });
-    const def = normalizeFleetShips({ swarmDrone: 1, scout: 1 });
-
-    const combat = resolveCombat(atk, def);
-
-    assert.equal(combat.outcome, "attacker_win");
-    assert.equal(combat.rounds, 1);
-    assert.equal(combat.defenderAfter.swarmDrone, 0);
-    assert.equal(combat.defenderAfter.scout, 0);
+    assert.equal(combat.defenderAfter.cruiser, 1);
   });
 
   it("rapid fire extra shots: direct assertion of extra shot counts with a fixed seed", () => {
