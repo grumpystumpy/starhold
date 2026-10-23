@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { createActiveWaitClock } from "./active-wait-clock.mjs";
+import fs from "node:fs";
+import path from "node:path";
 /**
  * Local prod Playwright for playtest bugs 1–9.
  * Desktop 1280×800 and phone 390×844.
@@ -60,6 +62,21 @@ async function state(playerId) {
   return body;
 }
 
+async function setupLab(name) {
+  const lab = await join(name);
+  await grant(lab.player.id, { metal: 80_000, crystal: 80_000, deuterium: 40_000 });
+  const labUp = await api("/api/upgrade", {
+    method: "POST",
+    body: JSON.stringify({ playerId: lab.player.id, buildingId: "researchLab" }),
+  });
+  assert(labUp.status === 200, `lab upgrade: ${JSON.stringify(labUp.body)}`);
+  await until("lab level 1", async () => {
+    const view = await state(lab.player.id);
+    return (view.planet.buildings.researchLab ?? 0) >= 1 ? view : null;
+  });
+  return lab;
+}
+
 async function until(label, pred, ms = 60_000) {
   const activeClock = createActiveWaitClock();
   let last;
@@ -76,6 +93,64 @@ async function noOverflow(page, label) {
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 2,
   );
   assert(!overflow, `${label} overflows horizontally`);
+}
+
+async function logResearchWaitFailure(page, tag, error) {
+  let diagnostics;
+  try {
+    diagnostics = await page.evaluate(() => {
+      const isVisible = (element) => {
+        if (!element || element.hidden) return false;
+        const style = getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return style.display !== "none" && style.visibility !== "hidden" &&
+          rect.width > 0 && rect.height > 0;
+      };
+      const button = document.querySelector(
+        '[data-testid="research-btn-shieldingTech"]',
+      );
+      return {
+        shieldingTech: button
+          ? {
+              text: button.textContent,
+              dataLocked: button.getAttribute("data-locked"),
+              disabled: button.getAttribute("disabled"),
+              disabledProperty:
+                button instanceof HTMLButtonElement ? button.disabled : null,
+              title: button.getAttribute("title"),
+            }
+          : "missing",
+        visibleFlashNoticeText: [
+          ...document.querySelectorAll(
+            '[data-testid^="flash-"], [role="status"], [role="alert"]',
+          ),
+        ]
+          .filter(isVisible)
+          .map((element) => element.innerText),
+        activeNavPage: {
+          link: document.querySelector("a[data-nav].active")?.getAttribute("data-nav") ??
+            "missing",
+          dropdown: document.querySelector("[data-nav-select]")?.value ?? "missing",
+        },
+      };
+    });
+  } catch (diagnosticError) {
+    console.error("PLAYTEST_RESEARCH_DIAGNOSTICS_READ_FAIL", diagnosticError);
+  }
+  console.error(
+    "PLAYTEST_RESEARCH_WAIT_DIAGNOSTICS",
+    JSON.stringify({ url: page.url(), ...diagnostics, error: String(error) }, null, 2),
+  );
+  try {
+    const dir = path.resolve("ui-review-out-playtest");
+    fs.mkdirSync(dir, { recursive: true });
+    await page.screenshot({
+      path: path.join(dir, `${tag}-research-wait-failure.png`),
+      fullPage: true,
+    });
+  } catch (screenshotError) {
+    console.error("PLAYTEST_RESEARCH_SCREENSHOT_FAIL", screenshotError);
+  }
 }
 
 async function optionTexts(page) {
@@ -133,14 +208,19 @@ async function runViewport(browser, viewport, ids) {
 
     const researchUrl = `${WEB}/research?playerId=${encodeURIComponent(ids.lab.player.id)}`;
     await page.goto(researchUrl, { waitUntil: "domcontentloaded" });
-    await page.waitForFunction(
-      () =>
-        (
-          document.querySelector('[data-testid="research-btn-shieldingTech"]')
-            ?.textContent ?? ""
-        ).includes("Needs lab 2"),
-      { timeout: 20_000 },
-    );
+    try {
+      await page.waitForFunction(
+        () =>
+          (
+            document.querySelector('[data-testid="research-btn-shieldingTech"]')
+              ?.textContent ?? ""
+          ).includes("Needs lab 2"),
+        { timeout: 20_000 },
+      );
+    } catch (error) {
+      await logResearchWaitFailure(page, tag, error);
+      throw error;
+    }
     const shield = page.locator('[data-testid="research-btn-shieldingTech"]');
     assert(await shield.isDisabled(), `${tag} shielding research enabled`);
     assert(
@@ -212,6 +292,14 @@ async function runViewport(browser, viewport, ids) {
       if (blocked) sawQueueFull = true;
     }
     assert(sawQueueFull, `${tag} research queue never stayed full`);
+    if (viewport.width === 1280) {
+      const researchState = await state(ids.lab.player.id);
+      const queuedResearch = researchState.player.researchQueue.map((item) => ({
+        researchId: item.researchId,
+        secondsRemaining: (item.completesAt - researchState.now) / 1_000,
+      }));
+      console.info("PLAYTEST_RESEARCH_QUEUE", JSON.stringify(queuedResearch));
+    }
     await noOverflow(page, `${tag} research`);
 
     const fleetUrl = `${WEB}/fleet?playerId=${encodeURIComponent(ids.spy.player.id)}`;
@@ -374,17 +462,8 @@ async function main() {
   });
   await grant(solar.player.id, { metal: 0, crystal: 0, deuterium: 0 });
 
-  const lab = await join(`Lab${stamp}`);
-  await grant(lab.player.id, { metal: 80_000, crystal: 80_000, deuterium: 40_000 });
-  const labUp = await api("/api/upgrade", {
-    method: "POST",
-    body: JSON.stringify({ playerId: lab.player.id, buildingId: "researchLab" }),
-  });
-  assert(labUp.status === 200, `lab upgrade: ${JSON.stringify(labUp.body)}`);
-  await until("lab level 1", async () => {
-    const view = await state(lab.player.id);
-    return (view.planet.buildings.researchLab ?? 0) >= 1 ? view : null;
-  });
+  const desktopLab = await setupLab(`LabD${stamp}`);
+  const phoneLab = await setupLab(`LabP${stamp}`);
 
   const victimName = `New${stamp}`;
   const victim = await join(victimName);
@@ -430,18 +509,19 @@ async function main() {
     return (view.seasonLeaderboard?.scores?.economy ?? 0) >= 1 ? view : null;
   });
 
-  const ids = { solar, lab, spy, victim, victimName, econ };
+  const ids = { solar, lab: desktopLab, spy, victim, victimName, econ };
+  const phoneIds = { ...ids, lab: phoneLab };
   const browser = await playwright.chromium.launch({ headless: true });
   try {
     await runViewport(browser, { width: 1280, height: 800 }, ids);
-    await runViewport(browser, { width: 390, height: 844 }, ids);
+    await runViewport(browser, { width: 390, height: 844 }, phoneIds);
     const grad = await api("/api/e2e/graduate-newbie", {
       method: "POST",
       body: JSON.stringify({ playerId: victim.player.id }),
     });
     assert(grad.status === 200, `graduate: ${JSON.stringify(grad.body)}`);
     await expectGraduatedTarget(browser, { width: 1280, height: 800 }, ids);
-    await expectGraduatedTarget(browser, { width: 390, height: 844 }, ids);
+    await expectGraduatedTarget(browser, { width: 390, height: 844 }, phoneIds);
   } finally {
     await browser.close();
   }
