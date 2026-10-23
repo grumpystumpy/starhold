@@ -70,18 +70,7 @@ jobs:
           ALLOW_E2E_HOOKS: "1"
           STARHOLD_UNIVERSE_KEY: full-tier-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
-          npm start > "$RUNNER_TEMP/starhold-full-tier-general.log" 2>&1 &
-          echo $! > "$RUNNER_TEMP/starhold-full-tier-server.pid"
-          for i in $(seq 1 90); do
-            if curl -fsS http://127.0.0.1:3001/api/health >/dev/null; then
-              echo "server up"
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "server failed to become healthy" >&2
-          cat "$RUNNER_TEMP/starhold-full-tier-general.log" || true
-          exit 1
+          bash .github/scripts/full-tier-server.sh start general "$STARHOLD_UNIVERSE_KEY"
 
       - name: Playwright e2e
         if: ${{ success() || failure() }}
@@ -122,32 +111,7 @@ jobs:
           ALLOW_E2E_HOOKS: "1"
           STARHOLD_UNIVERSE_KEY: full-tier-${{ github.run_id }}-${{ github.run_attempt }}-pirates
         run: |
-          if [ -f "$RUNNER_TEMP/starhold-full-tier-server.pid" ]; then
-            pid="$(cat "$RUNNER_TEMP/starhold-full-tier-server.pid")"
-            kill "$pid" 2>/dev/null || true
-            for i in $(seq 1 30); do
-              if ! curl -fsS http://127.0.0.1:3001/api/health >/dev/null; then
-                break
-              fi
-              sleep 1
-            done
-            if curl -fsS http://127.0.0.1:3001/api/health >/dev/null; then
-              echo "previous server did not stop" >&2
-              exit 1
-            fi
-          fi
-          npm start > "$RUNNER_TEMP/starhold-full-tier-pirates.log" 2>&1 &
-          echo $! > "$RUNNER_TEMP/starhold-full-tier-server.pid"
-          for i in $(seq 1 90); do
-            if curl -fsS http://127.0.0.1:3001/api/health >/dev/null; then
-              echo "server up for pirates + aliens gate"
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "server failed to become healthy for pirates + aliens gate" >&2
-          cat "$RUNNER_TEMP/starhold-full-tier-pirates.log" || true
-          exit 1
+          bash .github/scripts/full-tier-server.sh start pirates "$STARHOLD_UNIVERSE_KEY"
 
       - name: Quality gate pirates + aliens
         if: ${{ success() || failure() }}
@@ -167,32 +131,7 @@ jobs:
           ALLOW_E2E_HOOKS: "1"
           STARHOLD_UNIVERSE_KEY: full-tier-${{ github.run_id }}-${{ github.run_attempt }}-alliances
         run: |
-          if [ -f "$RUNNER_TEMP/starhold-full-tier-server.pid" ]; then
-            pid="$(cat "$RUNNER_TEMP/starhold-full-tier-server.pid")"
-            kill "$pid" 2>/dev/null || true
-            for i in $(seq 1 30); do
-              if ! curl -fsS http://127.0.0.1:3001/api/health >/dev/null; then
-                break
-              fi
-              sleep 1
-            done
-            if curl -fsS http://127.0.0.1:3001/api/health >/dev/null; then
-              echo "previous server did not stop" >&2
-              exit 1
-            fi
-          fi
-          npm start > "$RUNNER_TEMP/starhold-full-tier-alliances.log" 2>&1 &
-          echo $! > "$RUNNER_TEMP/starhold-full-tier-server.pid"
-          for i in $(seq 1 90); do
-            if curl -fsS http://127.0.0.1:3001/api/health >/dev/null; then
-              echo "server up for alliances gate"
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "server failed to become healthy for alliances gate" >&2
-          cat "$RUNNER_TEMP/starhold-full-tier-alliances.log" || true
-          exit 1
+          bash .github/scripts/full-tier-server.sh start alliances "$STARHOLD_UNIVERSE_KEY"
 
       - name: Quality gate alliances
         if: ${{ success() || failure() }}
@@ -212,32 +151,7 @@ jobs:
           ALLOW_E2E_HOOKS: "1"
           STARHOLD_UNIVERSE_KEY: full-tier-${{ github.run_id }}-${{ github.run_attempt }}-workers
         run: |
-          if [ -f "$RUNNER_TEMP/starhold-full-tier-server.pid" ]; then
-            pid="$(cat "$RUNNER_TEMP/starhold-full-tier-server.pid")"
-            kill "$pid" 2>/dev/null || true
-            for i in $(seq 1 30); do
-              if ! curl -fsS http://127.0.0.1:3001/api/health >/dev/null; then
-                break
-              fi
-              sleep 1
-            done
-            if curl -fsS http://127.0.0.1:3001/api/health >/dev/null; then
-              echo "previous server did not stop" >&2
-              exit 1
-            fi
-          fi
-          npm start > "$RUNNER_TEMP/starhold-full-tier-workers.log" 2>&1 &
-          echo $! > "$RUNNER_TEMP/starhold-full-tier-server.pid"
-          for i in $(seq 1 90); do
-            if curl -fsS http://127.0.0.1:3001/api/health >/dev/null; then
-              echo "server up for worker e2e smoke"
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "server failed to become healthy for worker e2e smoke" >&2
-          cat "$RUNNER_TEMP/starhold-full-tier-workers.log" || true
-          exit 1
+          bash .github/scripts/full-tier-server.sh start workers "$STARHOLD_UNIVERSE_KEY"
 
       - name: Worker e2e smoke
         if: ${{ success() || failure() }}
@@ -256,32 +170,7 @@ jobs:
           ALLOW_E2E_HOOKS: "1"
           STARHOLD_UNIVERSE_KEY: full-tier-${{ github.run_id }}-${{ github.run_attempt }}-playtest-bugfix
         run: |
-          if [ -f "$RUNNER_TEMP/starhold-full-tier-server.pid" ]; then
-            pid="$(cat "$RUNNER_TEMP/starhold-full-tier-server.pid")"
-            kill "$pid" 2>/dev/null || true
-            for i in $(seq 1 30); do
-              if ! curl -fsS http://127.0.0.1:3001/api/health >/dev/null; then
-                break
-              fi
-              sleep 1
-            done
-            if curl -fsS http://127.0.0.1:3001/api/health >/dev/null; then
-              echo "previous server did not stop" >&2
-              exit 1
-            fi
-          fi
-          npm start > "$RUNNER_TEMP/starhold-full-tier-playtest-bugfix.log" 2>&1 &
-          echo $! > "$RUNNER_TEMP/starhold-full-tier-server.pid"
-          for i in $(seq 1 90); do
-            if curl -fsS http://127.0.0.1:3001/api/health >/dev/null; then
-              echo "server up for playtest bugfix e2e"
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "server failed to become healthy for playtest bugfix e2e" >&2
-          cat "$RUNNER_TEMP/starhold-full-tier-playtest-bugfix.log" || true
-          exit 1
+          bash .github/scripts/full-tier-server.sh start playtest-bugfix "$STARHOLD_UNIVERSE_KEY"
 
       - name: Playtest bugfix e2e
         if: ${{ success() || failure() }}
@@ -300,32 +189,7 @@ jobs:
           ALLOW_E2E_HOOKS: "1"
           STARHOLD_UNIVERSE_KEY: full-tier-${{ github.run_id }}-${{ github.run_attempt }}-alliance-intel
         run: |
-          if [ -f "$RUNNER_TEMP/starhold-full-tier-server.pid" ]; then
-            pid="$(cat "$RUNNER_TEMP/starhold-full-tier-server.pid")"
-            kill "$pid" 2>/dev/null || true
-            for i in $(seq 1 30); do
-              if ! curl -fsS http://127.0.0.1:3001/api/health >/dev/null; then
-                break
-              fi
-              sleep 1
-            done
-            if curl -fsS http://127.0.0.1:3001/api/health >/dev/null; then
-              echo "previous server did not stop" >&2
-              exit 1
-            fi
-          fi
-          npm start > "$RUNNER_TEMP/starhold-full-tier-alliance-intel.log" 2>&1 &
-          echo $! > "$RUNNER_TEMP/starhold-full-tier-server.pid"
-          for i in $(seq 1 90); do
-            if curl -fsS http://127.0.0.1:3001/api/health >/dev/null; then
-              echo "server up for alliance intel quality gate"
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "server failed to become healthy for alliance intel quality gate" >&2
-          cat "$RUNNER_TEMP/starhold-full-tier-alliance-intel.log" || true
-          exit 1
+          bash .github/scripts/full-tier-server.sh start alliance-intel "$STARHOLD_UNIVERSE_KEY"
 
       - name: Alliance intel quality gate
         if: ${{ success() || failure() }}
@@ -350,7 +214,4 @@ jobs:
 
       - name: Stop server
         if: always()
-        run: |
-          if [ -f "$RUNNER_TEMP/starhold-full-tier-server.pid" ]; then
-            kill "$(cat "$RUNNER_TEMP/starhold-full-tier-server.pid")" || true
-          fi
+        run: bash .github/scripts/full-tier-server.sh stop

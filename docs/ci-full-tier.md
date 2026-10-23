@@ -9,7 +9,7 @@ What it does:
 - runs the unit suite, typecheck, and production build
 - installs Playwright Chromium
 - generates and masks a throwaway `SESSION_SECRET` for the run; it does not use repository secrets
-- starts the server on a fresh universe (unique `STARHOLD_UNIVERSE_KEY` per run, on a fresh runner)
+- starts the server in its own process group on a fresh universe (unique `STARHOLD_UNIVERSE_KEY` per run, on a fresh runner)
 - runs the full browser and quality-gate matrix:
   - `npm run e2e`
   - `npm run e2e:layout`
@@ -28,4 +28,4 @@ Manual trigger:
 - select the `Full tier` workflow
 - choose `Run workflow` and pick the branch or a PR ref
 
-The initial server and each isolated run use a unique `STARHOLD_UNIVERSE_KEY` derived from the run ID, attempt, and script. Each server's output is written to its own `$RUNNER_TEMP/starhold-full-tier-*.log` file and uploaded with the artifacts.
+The initial server and each isolated run use a unique `STARHOLD_UNIVERSE_KEY` derived from the run ID, attempt, and script. `.github/scripts/full-tier-server.sh` starts and stops the server process group, falls back to stopping a listener on port 3001 if needed, and waits for the port to be free before starting a new server. Each server's output is written to its own `$RUNNER_TEMP/starhold-full-tier-*.log` file and uploaded with the artifacts.
