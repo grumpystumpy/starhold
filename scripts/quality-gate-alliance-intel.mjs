@@ -236,7 +236,8 @@ async function main() {
   });
   await submitChat(pageA, chatBody);
   try {
-    await pageB.getByText(chatBody).waitFor({ timeout: 15_000 });
+    // Covers at least one full 30s alliance chat poll.
+    await pageB.getByText(chatBody).waitFor({ timeout: 60_000 });
   } catch (error) {
     await logChatWaitFailure(pageB, pageBApiRequestsAfterPost, error);
     throw error;
