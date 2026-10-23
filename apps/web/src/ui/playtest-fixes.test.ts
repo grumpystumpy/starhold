@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 import type { PlayerView } from "@starhold/game";
 import { buildingRow, joinScreenHtml } from "./render-chrome-join";
@@ -39,6 +40,11 @@ function planet(): PlayerView["planet"] {
 }
 
 describe("playtest fixes", () => {
+  it("does not render a manual refresh button in the header", async () => {
+    const shell = await readFile(new URL("./render-shell.ts", import.meta.url), "utf8");
+    assert.doesNotMatch(shell, /refresh-btn|>Refresh</);
+  });
+
   it("disables an unaffordable Solar Array upgrade", () => {
     const html = buildingRow(
       "solarPlant",
@@ -94,7 +100,7 @@ describe("playtest fixes", () => {
     assert.match(vault, /Capacity starts at 30,000/);
   });
 
-  it("shows queue-full and the real lab requirement", () => {
+  it("shows queue-full and research prerequisite details", () => {
     const base = {
       now: 1_700_000_000_000,
       player: player(),
@@ -118,9 +124,14 @@ describe("playtest fixes", () => {
     assert.doesNotMatch(ready, /disabled/);
 
     const needsTwo = researchRow("shieldingTech", base, false);
-    assert.match(needsTwo, />Needs lab 2</);
+    assert.match(needsTwo, />Needs lab 6</);
+    assert.match(needsTwo, /Power Discipline L3\+ \(current L0\)/);
     assert.match(needsTwo, /disabled/);
     assert.doesNotMatch(needsTwo, />Needs lab</);
+
+    const needsPower = researchRow("combustionDrive", base, false);
+    assert.match(needsPower, /Needs Power Discipline level 1 \(have 0\)/);
+    assert.match(needsPower, /Power Discipline L1\+ \(current L0\)/);
 
     base.player.researchQueue = [
       {
@@ -202,6 +213,8 @@ describe("playtest fixes", () => {
       counts: {},
       cargo: {},
       openAcs: false,
+      step: 2,
+      speedPercent: 100,
     });
     assert.match(spy, /Spy Newbie/);
     assert.match(spy, /Spy Veteran/);
@@ -219,6 +232,8 @@ describe("playtest fixes", () => {
       counts: {},
       cargo: {},
       openAcs: false,
+      step: 2,
+      speedPercent: 100,
     });
     assert.match(raid, /Attack Veteran/);
     assert.match(raid, /Attack moon @ 1:1:6/);
@@ -242,6 +257,8 @@ describe("playtest fixes", () => {
         counts: {},
         cargo: {},
         openAcs: false,
+        step: 2,
+        speedPercent: 100,
       },
     );
     assert.match(protectedOnly, /under 2,500 points are protected/);
