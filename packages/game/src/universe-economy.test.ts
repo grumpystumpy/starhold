@@ -16,6 +16,7 @@ import {
   productionPerHour,
   rollPlanetFields,
 } from "./formulas.js";
+import { emptyPlayerClass } from "./formulas-round3.js";
 import {
   advanceUniverse,
   createUniverse,
@@ -90,6 +91,185 @@ describe("planet fields curve", () => {
 });
 
 describe("position production multipliers", () => {
+  it("loads a pre-class save with unchanged fleet slots, energy, and progress", () => {
+    const universe = createUniverse("Pre-class save", 8);
+    const now = 201_600_000;
+    const { player, planet } = joinUniverse(universe, "Legacy player", now);
+    const { planet: targetPlanet } = joinUniverse(
+      universe,
+      "Legacy target",
+      now + 1,
+    );
+    planet.buildings = { solarPlant: 10, metalStorage: 2 };
+    planet.resources = {
+      metal: 12_345,
+      crystal: 6_789,
+      deuterium: 25_000,
+    };
+    planet.ships.hauler = 2;
+    planet.lastTickAt = now;
+    targetPlanet.lastTickAt = now;
+
+    const launch = launchFleet(universe, {
+      playerId: player.id,
+      mission: "deploy",
+      targetPlanetId: targetPlanet.id,
+      ships: { hauler: 1 },
+      now: now + 1,
+    });
+    assert.ok(launch.ok, launch.ok ? undefined : launch.error);
+    if (!launch.ok) return;
+
+    const preClassView = playerView(universe, player.id, now + 1);
+    const expectedFleetSlotCap = preClassView.fleetSlotCap;
+    const expectedEnergyProduced = preClassView.economy.energy.produced;
+    const savedPlanet = structuredClone(universe.planets[planet.id]!);
+    const expectedBuildings = savedPlanet.buildings;
+    const expectedResources = savedPlanet.resources;
+    const expectedPlanetShips = savedPlanet.ships;
+    const expectedFleet = structuredClone(Object.values(universe.fleets)[0]);
+
+    const oldSavedState = JSON.parse(JSON.stringify(universe)) as typeof universe;
+    oldSavedState.schemaVersion = 3;
+    for (const savedPlayer of Object.values(oldSavedState.players)) {
+      delete savedPlayer.playerClass;
+      delete savedPlayer.research.gravityWell;
+    }
+    for (const savedPlanet of Object.values(oldSavedState.planets)) {
+      delete savedPlanet.buildings.mantleLoom;
+      delete savedPlanet.buildings.rigFoundry;
+      delete savedPlanet.buildings.riftSiphon;
+      delete savedPlanet.buildings.echoVault;
+      delete savedPlanet.buildings.anomalyForge;
+      delete savedPlanet.buildings.driftBeacon;
+    }
+    delete oldSavedState.alienBases;
+
+    const migration = migrateOrResetUniverse(oldSavedState);
+    assert.equal(migration.didReset, false);
+    const loaded = migration.universe;
+    assert.deepEqual(loaded.players[player.id]?.playerClass, emptyPlayerClass());
+    const loadedView = playerView(loaded, player.id, now + 1);
+    assert.equal(loadedView.fleetSlotCap, expectedFleetSlotCap);
+    assert.equal(loadedView.economy.energy.produced, expectedEnergyProduced);
+    for (const [building, level] of Object.entries(expectedBuildings)) {
+      assert.equal(loaded.planets[planet.id]?.buildings[building], level);
+    }
+    assert.deepEqual(loaded.planets[planet.id]?.resources, expectedResources);
+    assert.deepEqual(loaded.planets[planet.id]?.ships, expectedPlanetShips);
+    assert.deepEqual(Object.values(loaded.fleets)[0], expectedFleet);
+  });
+
+  it("loads an old save without losing progress and applies class bonuses", () => {
+    const universe = createUniverse("Legacy class bonuses", 8);
+    const now = 201_600_000;
+    const { player: miner, planet: minerPlanet } = joinUniverse(
+      universe,
+      "Miner",
+      now,
+    );
+    const { player: fleeter, planet: fleeterPlanet } = joinUniverse(
+      universe,
+      "Fleeter",
+      now + 1,
+    );
+
+    miner.playerClass = {
+      classId: "miner",
+      chosenAt: now,
+      changeCount: 0,
+      lastChangeAt: null,
+    };
+    fleeter.playerClass = {
+      classId: "fleeter",
+      chosenAt: now + 1,
+      changeCount: 0,
+      lastChangeAt: null,
+    };
+    minerPlanet.buildings = { solarPlant: 10, metalStorage: 2 };
+    minerPlanet.resources = { metal: 12_345, crystal: 6_789, deuterium: 4_321 };
+    minerPlanet.lastTickAt = now;
+    fleeterPlanet.buildings = { solarPlant: 6, shipyard: 4 };
+    fleeterPlanet.resources = {
+      metal: 23_456,
+      crystal: 7_890,
+      deuterium: 50_000,
+    };
+    fleeterPlanet.ships.hauler = 2;
+
+    const launch = launchFleet(universe, {
+      playerId: fleeter.id,
+      mission: "deploy",
+      targetPlanetId: minerPlanet.id,
+      ships: { hauler: 1 },
+      now: now + 2,
+    });
+    assert.ok(launch.ok, launch.ok ? undefined : launch.error);
+    if (!launch.ok) return;
+    universe.planets[minerPlanet.id]!.resources = {
+      metal: 12_345,
+      crystal: 6_789,
+      deuterium: 4_321,
+    };
+    universe.planets[minerPlanet.id]!.lastTickAt = now + 2;
+    universe.planets[fleeterPlanet.id]!.resources = {
+      metal: 23_456,
+      crystal: 7_890,
+      deuterium: 50_000,
+    };
+    universe.planets[fleeterPlanet.id]!.lastTickAt = now + 2;
+
+    // The server loads persisted universe blobs through this additive loader.
+    const oldSavedState = JSON.parse(
+      JSON.stringify(universe),
+    ) as typeof universe;
+    const loaded = migrateOrResetUniverse(oldSavedState).universe;
+
+    assert.equal(loaded.players[miner.id]?.playerClass?.classId, "miner");
+    assert.equal(loaded.players[fleeter.id]?.playerClass?.classId, "fleeter");
+    assert.equal(loaded.planets[minerPlanet.id]?.buildings.solarPlant, 10);
+    assert.equal(loaded.planets[minerPlanet.id]?.buildings.metalStorage, 2);
+    assert.deepEqual(loaded.planets[minerPlanet.id]?.resources, {
+      metal: 12_345,
+      crystal: 6_789,
+      deuterium: 4_321,
+    });
+    assert.equal(loaded.planets[fleeterPlanet.id]?.buildings.solarPlant, 6);
+    assert.equal(loaded.planets[fleeterPlanet.id]?.buildings.shipyard, 4);
+    assert.deepEqual(loaded.planets[fleeterPlanet.id]?.resources, {
+      metal: 23_456,
+      crystal: 7_890,
+      deuterium: 50_000,
+    });
+    assert.equal(loaded.planets[fleeterPlanet.id]?.ships.hauler, 1);
+    assert.equal(Object.keys(loaded.fleets).length, 1);
+    assert.equal(Object.values(loaded.fleets)[0]?.ownerPlayerId, fleeter.id);
+    assert.equal(Object.values(loaded.fleets)[0]?.ships.hauler, 1);
+
+    const minerView = playerView(loaded, miner.id, now + 2);
+    const minerEnergy = minerView.economy.energy.produced;
+    loaded.players[miner.id]!.playerClass!.classId = "explorer";
+    const baselineMinerView = playerView(loaded, miner.id, now + 2);
+    const baselineMinerEnergy = baselineMinerView.economy.energy.produced;
+    assert.ok(baselineMinerEnergy > 0);
+    assert.equal(minerEnergy, Math.floor(baselineMinerEnergy * 1.1));
+    assert.deepEqual(minerView.economy.productionPerHour, {
+      metal: 500,
+      crystal: 250,
+      deuterium: 100,
+    });
+
+    loaded.players[fleeter.id]!.playerClass!.classId = "explorer";
+    const baselineFleetSlots = playerView(
+      loaded,
+      fleeter.id,
+      now + 2,
+    ).fleetSlotCap;
+    loaded.players[fleeter.id]!.playerClass!.classId = "fleeter";
+    const fleeterView = playerView(loaded, fleeter.id, now + 2);
+    assert.equal(fleeterView.fleetSlotCap, baselineFleetSlots + 2);
+  });
+
   it("Power Discipline boosts energy production without boosting mine output", () => {
     const universe = createUniverse("Power Discipline", 8);
     const { planet } = joinUniverse(universe, "Power", 201_500_000);

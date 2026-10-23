@@ -32,6 +32,9 @@ import {
   MINI_FORTRESS_ARMOR_MULT,
   MINI_FORTRESS_ATTACK_MULT,
   MINI_FORTRESS_SHIELD_MULT,
+  RAID_LOOT_SHARE,
+  RAID_LOOT_SHARE_FLEETER,
+  RAID_LOOT_SHARE_OTHER,
 } from "./catalog.js";
 import {
   isMiniPlanet,
@@ -96,7 +99,24 @@ export function resolveRaidArrival(
 
   let loot = emptyCargo();
   if (combat.outcome === "attacker_win") {
-    loot = computeRaidLoot(target.resources, combat.attackerAfter);
+    const lootShare =
+      owner?.playerClass?.classId === "fleeter"
+        ? RAID_LOOT_SHARE_FLEETER
+        : RAID_LOOT_SHARE_OTHER;
+    const lootScale = lootShare / RAID_LOOT_SHARE;
+    const lootResources =
+      lootScale === 1
+        ? target.resources
+        : {
+            metal: Math.floor(Math.floor(target.resources.metal) * lootScale),
+            crystal: Math.floor(
+              Math.floor(target.resources.crystal) * lootScale,
+            ),
+            deuterium: Math.floor(
+              Math.floor(target.resources.deuterium) * lootScale,
+            ),
+          };
+    loot = computeRaidLoot(lootResources, combat.attackerAfter);
     subtractCargo(target, loot);
     const skim = spoilSkimmerDebris(debrisCreated, combat.attackerAfter);
     debrisCreated = skim.remaining;
@@ -162,7 +182,7 @@ export function resolveRaidArrival(
       summary = `${combat.summary} Siege hulls shattered the moon (${kill.chancePct}% chance).`;
     }
   } else {
-    const moon = tryFormMoon(universe, target, debrisCreated, reportId, now);
+    const moon = tryFormMoon(universe, target, debrisCreated, `${fleet.id}:${fleet.arrivesAt}`, now);
     moonFormed = Boolean(moon);
     if (moon) {
       summary = `${combat.summary} A moon coalesced from the debris field.`;
