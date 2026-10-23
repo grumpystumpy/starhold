@@ -2,13 +2,13 @@ import { OFFICERS, officerRenewalCost, officerRenewalDurationMs } from "./catalo
 import { SKILLS } from "./catalog-skills.js";
 import { OFFICER_MAX_LEVEL, SKILL_MAX_LEVEL, STARSHARDS_DAILY_LOGIN } from "./catalog.js";
 import { levelUpCost } from "./formulas-levels.js";
-import { storageFor } from "./formulas-build.js";
 import type { OfficerId, UniverseState } from "./types.js";
 import { advanceUniverse } from "./world-arrival.js";
 import { claimGoal, type GoalActionResult } from "./world-goals.js";
 import {
   canClaimDailyLogin,
   grantStarshards,
+  storageForPlanet,
   pruneExpiredOfficers,
   utcDayKey,
 } from "./world-boosts.js";
@@ -105,7 +105,7 @@ export function tradeStarshardsForResources(
         error: `Need ${fmtShards(STARSHARDS_PER_RESOURCE_TRADE)} Starshards (have ${fmtShards(balance)}).`,
       };
     }
-    const caps = storageFor(planet);
+    const caps = storageForPlanet(universe, planet, now);
     for (const resource of ["metal", "crystal", "deuterium"] as const) {
       if (
         planet.resources[resource] + RESOURCES_PER_TRADE[resource] >

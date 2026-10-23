@@ -1,0 +1,283 @@
+{
+  "universe": {
+    "id": "uni_mvkegv1y",
+    "name": "Old Commander Save",
+    "speed": 8,
+    "fleetSpeed": 8,
+    "createdAt": 1792725487414,
+    "schemaVersion": 4,
+    "seed": "seed_uni_mvkegv1y",
+    "players": {
+      "plyr_loyw3v28_a88k9": {
+        "id": "plyr_loyw3v28_a88k9",
+        "name": "Old Commander",
+        "homePlanetId": "plnt_loyw3v28_ny3d3",
+        "planetIds": [
+          "plnt_loyw3v28_ny3d3"
+        ],
+        "activePlanetId": "plnt_loyw3v28_ny3d3",
+        "research": {
+          "energyTech": 0,
+          "combustionDrive": 0,
+          "weaponsTech": 0,
+          "armourTech": 0,
+          "shieldingTech": 0,
+          "espionageTech": 0,
+          "astrophysics": 0,
+          "computerTech": 0,
+          "queueLogistics": 0,
+          "swarmHold": 0,
+          "gravityWell": 0
+        },
+        "researchQueue": [],
+        "createdAt": 1700000000000,
+        "level": 1,
+        "xp": 0,
+        "xpTotal": 0,
+        "starshards": 0,
+        "officers": [],
+        "skillsUnlocked": [],
+        "highscoreStarshardsClaimed": false,
+        "fleetPresets": [
+          {
+            "id": "expedition",
+            "name": "Expedition",
+            "intent": "expedition",
+            "builtIn": true,
+            "ships": {
+              "scout": 2,
+              "hauler": 1
+            }
+          },
+          {
+            "id": "raid",
+            "name": "Raid",
+            "intent": "raid",
+            "builtIn": true,
+            "ships": {
+              "interceptor": 10,
+              "cruiser": 2
+            }
+          },
+          {
+            "id": "moonDestruction",
+            "name": "Moon Destruction",
+            "intent": "moonDestruction",
+            "builtIn": true,
+            "ships": {
+              "voidforgeTitan": 1
+            }
+          },
+          {
+            "id": "miniPlanetCapture",
+            "name": "Mini Planet Capture",
+            "intent": "miniCapture",
+            "builtIn": true,
+            "ships": {
+              "cruiser": 10,
+              "hauler": 20
+            }
+          },
+          {
+            "id": "miniPlanetDestruction",
+            "name": "Mini Planet Destruction",
+            "intent": "miniDestroy",
+            "builtIn": true,
+            "ships": {
+              "worldEater": 1,
+              "hauler": 20
+            }
+          }
+        ],
+        "playerClass": {
+          "classId": null,
+          "chosenAt": null,
+          "changeCount": 0,
+          "lastChangeAt": null
+        },
+        "discoveredMiniIds": [],
+        "allianceId": null,
+        "eventLog": [],
+        "cosmetics": {
+          "titles": [],
+          "activeTitle": null,
+          "planetSkinIds": [],
+          "activePlanetSkinId": null
+        },
+        "seasonArchive": {},
+        "season": {
+          "seasonId": "2023-11",
+          "combat": 0,
+          "economy": 0,
+          "pirateKills": 0,
+          "economyRemainder": 0,
+          "claimedBoards": []
+        }
+      }
+    },
+    "planets": {
+      "plnt_loyw3v28_ny3d3": {
+        "id": "plnt_loyw3v28_ny3d3",
+        "ownerPlayerId": "plyr_loyw3v28_a88k9",
+        "name": "Old Commander's Colony",
+        "coords": {
+          "galaxy": 1,
+          "system": 1,
+          "slot": 4
+        },
+        "kind": "planet",
+        "parentPlanetId": null,
+        "moonId": null,
+        "fieldsCap": 320,
+        "resources": {
+          "metal": 500,
+          "crystal": 500,
+          "deuterium": 100
+        },
+        "lastTickAt": 1700000000000,
+        "buildings": {
+          "metalMine": 1,
+          "crystalMine": 1,
+          "deutSynth": 0,
+          "solarPlant": 1,
+          "metalStorage": 0,
+          "crystalStorage": 0,
+          "deutTank": 0,
+          "shipyard": 0,
+          "researchLab": 0,
+          "lunarBase": 0,
+          "sensorArray": 0,
+          "jumpGate": 0,
+          "chronoLathe": 0,
+          "mantleLoom": 0,
+          "rigFoundry": 0,
+          "riftSiphon": 0,
+          "echoVault": 0,
+          "anomalyForge": 0,
+          "driftBeacon": 0
+        },
+        "ships": {
+          "scout": 2,
+          "hauler": 3,
+          "interceptor": 4,
+          "cruiser": 5,
+          "bomber": 6,
+          "probe": 7,
+          "recycler": 8,
+          "colonyShip": 9,
+          "helioBuoy": 10,
+          "keelSovereign": 11,
+          "rakeCorsair": 12,
+          "anvilDread": 13,
+          "wardbreaker": 14,
+          "vaultScout": 15,
+          "astrolabeWing": 16,
+          "spoilSkimmer": 17,
+          "lineDrummer": 18,
+          "veinAnchor": 19,
+          "gridStake": 20,
+          "foundationArk": 21,
+          "frontierBeacon": 22,
+          "voidforgeTitan": 23,
+          "worldEater": 24,
+          "swarmDrone": 25,
+          "swarmHarvester": 26,
+          "swarmMothership": 27
+        },
+        "defenses": {
+          "laserBattery": 3,
+          "shieldDome": 4,
+          "needleTurret": 5,
+          "arcLattice": 6,
+          "pulseBastion": 7,
+          "gaussRail": 8,
+          "ionSheath": 9,
+          "plasmaSpire": 10,
+          "flakCurtain": 11,
+          "kineticFence": 12,
+          "emberMortar": 13,
+          "rippleArray": 14,
+          "haloProjector": 15,
+          "crownAegis": 16,
+          "siegeBlockade": 17,
+          "frostLance": 18,
+          "voidWard": 19
+        },
+        "buildQueue": [],
+        "shipQueue": [],
+        "defenseQueue": []
+      }
+    },
+    "fleets": {
+      "fixture-fleet": {
+        "id": "fixture-fleet",
+        "ownerPlayerId": "plyr_loyw3v28_a88k9",
+        "originPlanetId": "plnt_loyw3v28_ny3d3",
+        "targetPlanetId": "plnt_loyw3v28_ny3d3",
+        "targetPlayerId": "plyr_loyw3v28_a88k9",
+        "targetCoords": {
+          "galaxy": 1,
+          "system": 1,
+          "slot": 4
+        },
+        "mission": "deploy",
+        "ships": {
+          "scout": 2,
+          "hauler": 3,
+          "interceptor": 4,
+          "cruiser": 5,
+          "bomber": 6,
+          "probe": 7,
+          "recycler": 8,
+          "colonyShip": 9,
+          "helioBuoy": 10,
+          "keelSovereign": 11,
+          "rakeCorsair": 12,
+          "anvilDread": 13,
+          "wardbreaker": 14,
+          "vaultScout": 15,
+          "astrolabeWing": 16,
+          "spoilSkimmer": 17,
+          "lineDrummer": 18,
+          "veinAnchor": 19,
+          "gridStake": 20,
+          "foundationArk": 21,
+          "frontierBeacon": 22,
+          "voidforgeTitan": 23,
+          "worldEater": 24,
+          "swarmDrone": 25,
+          "swarmHarvester": 26,
+          "swarmMothership": 27
+        },
+        "cargo": {
+          "metal": 0,
+          "crystal": 0,
+          "deuterium": 0
+        },
+        "departedAt": 1700000000000,
+        "arrivesAt": 1700000001000,
+        "phase": "outbound",
+        "reportId": null
+      }
+    },
+    "reports": {},
+    "spyReports": {},
+    "expeditionReports": {},
+    "debris": {},
+    "asteroids": {},
+    "pirateBases": {},
+    "alienBases": {},
+    "occupations": {},
+    "alliances": {},
+    "acsGroups": {},
+    "miniPlanetIds": [],
+    "seedCursor": {
+      "at": 0,
+      "ranks": [],
+      "pirates": 0
+    },
+    "seasons": {}
+  },
+  "playerId": "plyr_loyw3v28_a88k9",
+  "planetId": "plnt_loyw3v28_ny3d3"
+}

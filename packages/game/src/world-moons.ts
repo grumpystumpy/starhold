@@ -1,6 +1,6 @@
 import {
   MOON_CHANCE_CAP,
-  MOON_DEBRIS_MIN,
+  MOON_DEBRIS_PER_PERCENT,
   MOON_FIELDS_BASE,
 } from "./catalog.js";
 import { emptyDefenses } from "./formulas.js";
@@ -24,8 +24,7 @@ export function moonRoll(seed: string): number {
 
 export function moonChancePercent(debris: Resources): number {
   const total = Math.max(0, debris.metal + debris.crystal);
-  if (total < MOON_DEBRIS_MIN) return 0;
-  return Math.min(MOON_CHANCE_CAP, Math.floor(total / 1000));
+  return Math.min(MOON_CHANCE_CAP, Math.floor(total / MOON_DEBRIS_PER_PERCENT));
 }
 
 /**
@@ -71,18 +70,18 @@ export function tryFormMoon(
   universe: UniverseState,
   parent: PlanetState,
   debrisCreated: Resources,
-  reportId: string,
+  battleSeed: string,
   now: number,
 ): PlanetState | null {
   if (parent.kind === "moon") return null;
+  if (parent.coords.slot === 16) return null;
   if (parent.moonId && universe.planets[parent.moonId]) return null;
-  const chance = moonChancePercent(debrisCreated);
-  if (chance <= 0) return null;
-  const roll = moonRoll(reportId);
-  if (roll >= chance) return null;
-
   const owner = universe.players[parent.ownerPlayerId];
   if (!owner) return null;
+  const chance = moonChancePercent(debrisCreated);
+  if (chance <= 0) return null;
+  const roll = moonRoll(battleSeed);
+  if (roll >= chance) return null;
 
   const moonId = `moon_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
   const moon: PlanetState = {

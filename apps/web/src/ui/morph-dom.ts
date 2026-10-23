@@ -56,23 +56,53 @@ function skipAttr(current: Element, name: string): boolean {
   return false;
 }
 
+export function syncChangedInputTypeValue(
+  current: Pick<HTMLInputElement, "type" | "value">,
+  next: Pick<HTMLInputElement, "type" | "value">,
+): void {
+  if (current.type !== next.type && current.value !== next.value) {
+    current.value = next.value;
+  }
+}
+
 function syncAttributes(current: Element, next: Element): void {
+  const inputTypeChanged =
+    current instanceof HTMLInputElement &&
+    next instanceof HTMLInputElement &&
+    current.type !== next.type;
   const nextNames = next.getAttributeNames();
   const nextSet = new Set(nextNames);
   for (const name of current.getAttributeNames()) {
     if (nextSet.has(name)) continue;
     if (name === "open" && current.tagName === "DETAILS") continue;
-    if (skipAttr(current, name)) continue;
+    if (
+      skipAttr(current, name) &&
+      !(inputTypeChanged && name === "value")
+    ) continue;
     current.removeAttribute(name);
   }
   for (const name of nextNames) {
-    if (skipAttr(current, name)) continue;
+    if (
+      skipAttr(current, name) &&
+      !(inputTypeChanged && name === "value")
+    ) continue;
     const value = next.getAttribute(name);
     if (value != null && current.getAttribute(name) !== value) {
       current.setAttribute(name, value);
     }
   }
-  if (keepValue(current) || !isFormControl(current) || !isFormControl(next)) return;
+  if (
+    (keepValue(current) && !inputTypeChanged) ||
+    !isFormControl(current) ||
+    !isFormControl(next)
+  ) return;
+  if (
+    inputTypeChanged &&
+    current instanceof HTMLInputElement &&
+    next instanceof HTMLInputElement
+  ) {
+    syncChangedInputTypeValue(current, next);
+  }
   if (current instanceof HTMLSelectElement && next instanceof HTMLSelectElement) {
     if (current.value !== next.value) current.value = next.value;
     return;

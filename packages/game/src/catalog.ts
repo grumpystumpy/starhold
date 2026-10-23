@@ -35,7 +35,9 @@ export const EXPEDITION_STARSHARDS_CHANCE_PCT = 5;
 export const MAX_COMBAT_ROUNDS = 8;
 
 /** Share of defender stockpile eligible for loot on an attacker win. */
-export const RAID_LOOT_SHARE = 0.5;
+export const RAID_LOOT_SHARE_FLEETER = 0.75;
+export const RAID_LOOT_SHARE_OTHER = 0.5;
+export const RAID_LOOT_SHARE = RAID_LOOT_SHARE_OTHER;
 
 /** Fraction of destroyed ship metal/crystal that becomes debris. */
 export const DEBRIS_FROM_SHIPS = 0.3;
@@ -78,8 +80,8 @@ export const FIELD_CENTER_BY_SLOT: Readonly<Record<number, number>> = {
 export const MOON_FIELDS_BASE = 1;
 export const MOON_FIELDS_PER_LUNAR_BASE = 3;
 
-/** Minimum debris (metal+crystal) before a moon can form. */
-export const MOON_DEBRIS_MIN = 5000;
+/** Debris (metal+crystal) required for each percentage point of moon chance. */
+export const MOON_DEBRIS_PER_PERCENT = 250_000;
 
 /** Cap on moon-formation chance percent. */
 export const MOON_CHANCE_CAP = 20;

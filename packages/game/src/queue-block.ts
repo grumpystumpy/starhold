@@ -7,6 +7,7 @@ import {
   MOON_FIELDS_BASE,
   MOON_FIELDS_PER_LUNAR_BASE,
   RESEARCH,
+  RESEARCH_ORDER,
   RIG_FOUNDRY_SHIPYARD_REQ,
 } from "./catalog.js";
 import {
@@ -144,7 +145,8 @@ export function previewBuildingUpgrade(
 
 /**
  * Why research would be rejected. `lab` is the best Research Lab in the
- * empire (not only the open world). Queue cap is the real cap, not the hard max.
+ * empire (not only the open world). New prerequisites gate level 1 only.
+ * Queue cap is the real cap, not the hard max.
  */
 export function previewResearchUpgrade(
   player: PlayerState,
@@ -174,10 +176,22 @@ export function previewResearchUpgrade(
   if (queue.length >= cap) {
     return fail(`Research queue is full (${queue.length}/${cap}).`);
   }
-  if (lab < def.labLevel) {
-    return fail(
-      `Needs Research Lab level ${def.labLevel} (best lab ${lab}).`,
-    );
+  if (current === 0) {
+    if (lab < def.labLevel) {
+      return fail(
+        `Needs Research Lab level ${def.labLevel} (best lab ${lab}).`,
+      );
+    }
+    for (const requiredId of RESEARCH_ORDER) {
+      const requiredLevel = def.requires?.[requiredId];
+      if (requiredLevel == null) continue;
+      const have = player.research?.[requiredId] ?? 0;
+      if (have < requiredLevel) {
+        return fail(
+          `Needs ${RESEARCH[requiredId].name} level ${requiredLevel} (have ${have}).`,
+        );
+      }
+    }
   }
   if (!canAfford(planet.resources, cost)) {
     return fail("Not enough resources on active planet.");

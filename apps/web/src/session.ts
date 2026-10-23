@@ -70,9 +70,14 @@ export const session = {
 };
 
 let paintImpl: () => void = () => {};
+let beforePaintImpl: () => void = () => {};
 
 export function setPaintImpl(fn: () => void): void {
   paintImpl = fn;
+}
+
+export function setBeforePaintImpl(fn: () => void): void {
+  beforePaintImpl = fn;
 }
 
 export function paintsDeferred(): boolean {
@@ -82,6 +87,7 @@ export function paintsDeferred(): boolean {
 }
 
 export function schedulePaint(): void {
+  beforePaintImpl();
   if (paintsDeferred()) {
     session.paintQueued = true;
     return;
@@ -94,6 +100,7 @@ export function schedulePaint(): void {
 export function flushDeferredPaint(): void {
   if (paintsDeferred() || !session.paintQueued) return;
   session.paintQueued = false;
+  beforePaintImpl();
   paintImpl();
 }
 

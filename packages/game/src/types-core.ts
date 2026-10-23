@@ -254,8 +254,10 @@ export interface ResearchDef {
   baseCost: Resources;
   costGrowth: number;
   baseResearchSeconds: number;
-  /** Lab level required to start level 1 */
+  /** Minimum best-lab level required to start this research. */
   labLevel: number;
+  /** Research levels required before this research can start. */
+  requires?: Partial<Record<ResearchId, number>>;
 }
 
 export interface QueueItemBase {
@@ -455,7 +457,8 @@ export type OfficerId =
   | "navigator"
   | "warden"
   | "engineer"
-  | "spymaster";
+  | "spymaster"
+  | "vaultkeeper";
 
 export type OfficerEffectKind =
   | "mineOutput"
@@ -464,7 +467,8 @@ export type OfficerEffectKind =
   | "fleetSlots"
   | "defensePower"
   | "energyOutput"
-  | "espionageLevel";
+  | "espionageLevel"
+  | "storageCapacity";
 
 export interface OfficerEffect {
   kind: OfficerEffectKind;

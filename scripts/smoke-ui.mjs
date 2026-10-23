@@ -16,6 +16,7 @@ import { createActiveWaitClock } from "./active-wait-clock.mjs";
  */
 import { createRequire } from "node:module";
 import { runPollCadence } from "./poll-cadence-e2e.mjs";
+import { fleetToStep2 } from "./lib/fleet-two-step.mjs";
 
 const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:5173";
 const API = process.env.STARHOLD_API ?? "http://127.0.0.1:3001";
@@ -700,6 +701,7 @@ async function uiSmoke() {
   if (thumb < 1) throw new Error("building thumbnail missing");
   await goNav(page, "fleet");
   await page.waitForSelector('[data-testid="fleet-form"]', { timeout: 15_000 });
+  await fleetToStep2(page, { scout: 1 });
   logs.push("fleet-form-and-art");
 
   await page.click('[data-testid="mission-raid"]');
@@ -719,7 +721,6 @@ async function uiSmoke() {
     '[data-testid="fleet-target"]',
     `planet:${rivalMeta.planetId}`,
   );
-  await page.fill('[data-testid="fleet-count-scout"]', "1");
   await page.click('[data-testid="launch-fleet"]');
   await page.waitForSelector('[data-testid="fleets-live"], [data-testid="flash-ok"]', {
     timeout: 10_000,

@@ -8,6 +8,9 @@ import { createActiveWaitClock } from "./active-wait-clock.mjs";
  * marker on galaxy → propose strike → persist across reload.
  */
 import { createRequire } from "node:module";
+import fs from "node:fs";
+import path from "node:path";
+import { fleetToStep2 } from "./lib/fleet-two-step.mjs";
 
 const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:3001";
 const API = process.env.STARHOLD_API ?? WEB;
@@ -24,6 +27,58 @@ async function waitHealthy(ms = 60_000) {
     await new Promise((r) => setTimeout(r, 400));
   }
   throw new Error("API health timeout");
+}
+
+async function logChatWaitFailure(page, apiRequestCount, error) {
+  let diagnostics;
+  try {
+    diagnostics = await page.evaluate(() => {
+      const isVisible = (element) => {
+        if (!element || element.hidden) return false;
+        const style = getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return style.display !== "none" && style.visibility !== "hidden" &&
+          rect.width > 0 && rect.height > 0;
+      };
+      const chatLog = document.querySelector('[data-testid="alliance-chat-log"]');
+      return {
+        allianceChatMessages: chatLog ? chatLog.innerText : "missing",
+        visibleFlashNoticeText: [
+          ...document.querySelectorAll(
+            '[data-testid^="flash-"], [role="status"], [role="alert"]',
+          ),
+        ]
+          .filter(isVisible)
+          .map((element) => element.innerText),
+        activeNavPage: {
+          link: document.querySelector("a[data-nav].active")?.getAttribute("data-nav") ??
+            "missing",
+          dropdown: document.querySelector("[data-nav-select]")?.value ?? "missing",
+        },
+      };
+    });
+  } catch (diagnosticError) {
+    console.error("QUALITY_GATE_ALLIANCE_CHAT_DIAGNOSTICS_READ_FAIL", diagnosticError);
+  }
+  console.error(
+    "QUALITY_GATE_ALLIANCE_CHAT_WAIT_DIAGNOSTICS",
+    JSON.stringify({
+      url: page.url(),
+      ...diagnostics,
+      pageBApiRequestsAfterPost: apiRequestCount,
+      error: String(error),
+    }, null, 2),
+  );
+  try {
+    const dir = path.resolve("ui-review-out-alliance-intel");
+    fs.mkdirSync(dir, { recursive: true });
+    await page.screenshot({
+      path: path.join(dir, "chat-wait-failure.png"),
+      fullPage: true,
+    });
+  } catch (screenshotError) {
+    console.error("QUALITY_GATE_ALLIANCE_CHAT_SCREENSHOT_FAIL", screenshotError);
+  }
 }
 
 async function submitChat(page, body) {
@@ -165,18 +220,34 @@ async function main() {
   await pageB.getByTestId("alliance-chat-form").waitFor({ timeout: 10_000 });
   logs.push("joined_b");
 
+  let pageBApiRequestsAfterPost = 0;
+  let allianceChatPostStarted = false;
+  pageA.on("request", (request) => {
+    if (
+      request.url().includes("/api/alliance/chat") &&
+      request.method() === "POST"
+    ) {
+      allianceChatPostStarted = true;
+    }
+  });
+  pageB.on("request", (request) => {
+    if (allianceChatPostStarted && request.url().includes("/api/")) {
+      pageBApiRequestsAfterPost += 1;
+    }
+  });
   await submitChat(pageA, chatBody);
-  await pageB.getByText(chatBody).waitFor({ timeout: 15_000 });
+  try {
+    // Covers at least one full 30s alliance chat poll.
+    await pageB.getByText(chatBody).waitFor({ timeout: 60_000 });
+  } catch (error) {
+    await logChatWaitFailure(pageB, pageBApiRequestsAfterPost, error);
+    throw error;
+  }
   logs.push("chat_shared");
 
   await buildProbe(pageA);
-  await pageA.evaluate(() => {
-    const mission = document.querySelector('[data-testid="mission-espionage"]');
-    if (mission instanceof HTMLInputElement) {
-      mission.checked = true;
-      mission.dispatchEvent(new Event("change", { bubbles: true }));
-    }
-  });
+  await fleetToStep2(pageA, { probe: 1 });
+  await pageA.click('[data-testid="mission-espionage"]');
   await pageA.waitForTimeout(300);
   const target = pageA.getByTestId("fleet-target");
   await target.waitFor({ timeout: 10_000 });
@@ -191,15 +262,9 @@ async function main() {
     ),
     pageA.evaluate((planetValue) => {
       const select = document.querySelector('[data-testid="fleet-target"]');
-      const count = document.querySelector('[data-testid="fleet-count-probe"]');
       const form = document.querySelector("#fleet-form");
-      if (
-        select instanceof HTMLSelectElement &&
-        count instanceof HTMLInputElement &&
-        form instanceof HTMLFormElement
-      ) {
+      if (select instanceof HTMLSelectElement && form instanceof HTMLFormElement) {
         select.value = planetValue;
-        count.value = "1";
         form.requestSubmit();
       }
     }, value),
@@ -217,7 +282,8 @@ async function main() {
 
   await pageB.getByTestId("nav-alliances").click();
   const openIntel = pageB.locator('[data-testid^="alliance-intel-open-"]').first();
-  await openIntel.waitFor({ timeout: 15_000 });
+  // Covers at least one full 30s alliance refresh.
+  await openIntel.waitFor({ timeout: 60_000 });
   const intelText = await pageB.getByTestId("alliance-intel").innerText();
   if (!intelText.includes(commanderB)) {
     throw new Error(`ally intel missing target ${commanderB}: ${intelText}`);
@@ -249,7 +315,8 @@ async function main() {
   logs.push("marker_placed");
 
   await pageB.getByTestId("nav-galaxy").click();
-  await pageB.getByTestId("galaxy-marker-1").waitFor({ timeout: 15_000 });
+  // Covers at least one full 30s alliance refresh.
+  await pageB.getByTestId("galaxy-marker-1").waitFor({ timeout: 60_000 });
   logs.push("marker_visible_ally");
 
   await pageA.reload({ waitUntil: "networkidle" });
@@ -259,6 +326,23 @@ async function main() {
   await pageA.getByTestId("galaxy-marker-1").waitFor({ timeout: 15_000 });
   logs.push("persist_reload");
 
+  const playerAId = await pageA.evaluate(() => window.starhold.getState().playerId);
+  if (!playerAId) throw new Error("missing player A before Joint Strike");
+  const grantScout = await fetch(`${API}/api/e2e/grant`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId: playerAId, ships: { scout: 1 } }),
+  });
+  if (!grantScout.ok) throw new Error(`player A scout grant failed ${grantScout.status}`);
+  await pageA.reload({ waitUntil: "networkidle" });
+  await pageA.waitForFunction(
+    () => (window.starhold.getState().ships?.scout ?? 0) >= 1,
+    null,
+    { timeout: 15_000 },
+  );
+  await pageA.getByTestId("nav-galaxy").click();
+  await pageA.getByTestId("galaxy-propose-1").waitFor({ timeout: 10_000 });
+
   await Promise.all([
     pageA.waitForResponse(
       (r) => r.url().includes("/api/alliance/plan-strike") && r.ok(),
@@ -267,15 +351,24 @@ async function main() {
     pageA.getByTestId("galaxy-propose-1").click(),
   ]);
   await pageA.getByText("Joint Strike armed").waitFor({ timeout: 10_000 });
+  const flash = await pageA.getByTestId("flash-ok").innerText();
+  const strikeCoords = flash.match(/(\d+:\d+:\d+)/)?.[1];
+  if (!strikeCoords) {
+    throw new Error(`Joint Strike flash missing target coords: ${flash}`);
+  }
+  await fleetToStep2(pageA, { scout: 1 });
   const openAcs = pageA.getByTestId("fleet-open-acs");
   await openAcs.waitFor({ timeout: 10_000 });
   if (!(await openAcs.isChecked())) {
     throw new Error("Joint Strike deep-link did not arm Open ACS");
   }
-  const flash = await pageA.getByTestId("flash-ok").innerText();
-  const strikeCoords = flash.match(/(\d+:\d+:\d+)/)?.[1];
-  if (!strikeCoords) {
-    throw new Error(`Joint Strike flash missing target coords: ${flash}`);
+  const mission = pageA.locator('input[name="fleet-mission"]:checked');
+  if ((await mission.getAttribute("value")) !== "raid") {
+    throw new Error("Joint Strike prefill did not retain raid mission");
+  }
+  const strikeTarget = await pageA.locator("#fleet-target").inputValue();
+  if (strikeTarget !== `coords:${strikeCoords}`) {
+    throw new Error(`Joint Strike prefill target changed: ${strikeTarget}`);
   }
   await pageA.getByTestId("nav-alliances").click();
   await pageA
@@ -284,6 +377,7 @@ async function main() {
   logs.push("strike_proposed");
 
   await pageA.getByTestId("nav-fleet").click();
+  await fleetToStep2(pageA, { scout: 1 });
   await pageA.getByTestId("propose-joint-strike").waitFor({ timeout: 10_000 });
   logs.push("fleet_propose_visible");
 

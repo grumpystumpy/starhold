@@ -7,6 +7,7 @@ import {
   SHIPS,
 } from "./catalog.js";
 import {
+  createAlliance,
   createUniverse,
   empirePoints,
   isNewbieProtected,
@@ -47,6 +48,150 @@ describe("CHANGE #15 newbie protection", () => {
     if (!result.ok) {
       assert.match(result.error, /newbie protection/i);
     }
+  });
+
+  it("forfeits protection on player attacks, ACS attacks, and occupation fleets", () => {
+    for (const kind of ["attack", "ACS", "occupation"] as const) {
+      const universe = createUniverse(`Forfeit ${kind}`, 8);
+      const now = 500_000_000;
+      const attacker = joinUniverse(universe, "Attacker", now);
+      const defender = joinUniverse(universe, "Defender", now + 1);
+      const player = universe.players[attacker.player.id]!;
+      const origin = universe.planets[attacker.planet.id]!;
+      const target = universe.planets[defender.planet.id]!;
+      origin.ships.interceptor = 1;
+      origin.ships.swarmMothership = kind === "occupation" ? 1 : 0;
+      origin.resources.deuterium = 10_000_000;
+      target.ships.hauler = 10_000;
+      if (kind !== "occupation") {
+        assert.equal(isNewbieProtected(universe, player), true, kind);
+      }
+
+      const alliance = kind === "ACS"
+        ? createAlliance(universe, player.id, "Strike", "stk")
+        : null;
+      const result = launchFleet(universe, {
+        playerId: player.id,
+        mission: "raid",
+        ships: {
+          interceptor: 1,
+          ...(kind === "occupation" ? { swarmMothership: 1 as const } : {}),
+        },
+        targetPlanetId: target.id,
+        openAcs: alliance != null,
+        now: now + 100,
+      });
+
+      assert.equal(result.ok, true, !result.ok ? result.error : "");
+      assert.equal(player.newbieForfeitedAt, now + 100);
+      if (kind !== "occupation") {
+        assert.ok(empirePoints(universe, player) < NEWBIE_PROTECTION_POINTS);
+      }
+      assert.equal(isNewbieProtected(universe, player), false);
+    }
+  });
+
+  it("does not forfeit on spying or attacks against pirates and aliens", () => {
+    const now = 510_000_000;
+    const universe = createUniverse("No forfeits", 8);
+    const { player, planet } = joinUniverse(universe, "Player", now);
+    const targetPlayer = joinUniverse(universe, "Target", now + 1);
+    const origin = universe.planets[planet.id]!;
+    const target = universe.planets[targetPlayer.planet.id]!;
+    origin.ships.probe = 1;
+    origin.ships.interceptor = 2;
+    player.research.computerTech = 3;
+    origin.resources.deuterium = 10_000_000;
+    target.ships.hauler = 10_000;
+
+    const spy = launchFleet(universe, {
+      playerId: player.id,
+      mission: "espionage",
+      ships: { probe: 1 },
+      targetPlanetId: target.id,
+      now: now + 10,
+    });
+    assert.equal(spy.ok, true, !spy.ok ? spy.error : "");
+    assert.equal(player.newbieForfeitedAt, undefined);
+
+    const pirateBase = Object.values(universe.pirateBases ?? {})[0]!;
+    const pirate = launchFleet(universe, {
+      playerId: player.id,
+      mission: "pirateRaid",
+      ships: { interceptor: 1 },
+      pirateBaseId: pirateBase.id,
+      now: now + 20,
+    });
+    assert.equal(pirate.ok, true, !pirate.ok ? pirate.error : "");
+    assert.equal(player.newbieForfeitedAt, undefined);
+
+    const alienBaseId = "alien_test";
+    universe.alienBases![alienBaseId] = {
+      id: alienBaseId,
+      coords: { galaxy: 1, system: 1, slot: 1 },
+      name: "Alien",
+      tier: 1,
+      level: 1,
+      ships: {},
+      defenses: {},
+      resources: { metal: 0, crystal: 0, deuterium: 0 },
+      techs: { weapons: 0, armour: 0, shielding: 0 },
+      lastGrewAt: now,
+      lastRaidAt: now,
+      nextRaidAt: now,
+      lastFreeSpawnAt: now,
+      destroyedAt: null,
+      coalitionId: alienBaseId,
+      splitDone: false,
+      buildupEndsAt: now,
+      foundAt: now,
+      foundByPlayerId: player.id,
+    };
+    const alien = launchFleet(universe, {
+      playerId: player.id,
+      mission: "alienRaid",
+      ships: { interceptor: 1 },
+      alienBaseId,
+      now: now + 30,
+    });
+    assert.equal(alien.ok, true, !alien.ok ? alien.error : "");
+    assert.equal(player.newbieForfeitedAt, undefined);
+  });
+
+  it("keeps the original forfeit time and loads legacy saves without the field", () => {
+    const now = 520_000_000;
+    const universe = createUniverse("Legacy newbie protection", 8);
+    const { player, planet } = joinUniverse(universe, "Legacy", now);
+    const targetPlayer = joinUniverse(universe, "Target", now + 1);
+    const origin = universe.planets[planet.id]!;
+    const target = universe.planets[targetPlayer.planet.id]!;
+    origin.ships.interceptor = 1;
+    origin.resources.deuterium = 10_000_000;
+    target.ships.hauler = 10_000;
+    player.newbieForfeitedAt = now + 5;
+
+    const result = launchFleet(universe, {
+      playerId: player.id,
+      mission: "raid",
+      ships: { interceptor: 1 },
+      targetPlanetId: target.id,
+      now: now + 100,
+    });
+    assert.equal(result.ok, true, !result.ok ? result.error : "");
+    assert.equal(player.newbieForfeitedAt, now + 5);
+    assert.equal(isNewbieProtected(universe, player), false);
+
+    const oldSave = JSON.parse(JSON.stringify(universe)) as typeof universe;
+    delete oldSave.players[player.id]!.newbieForfeitedAt;
+    const oldPlayer = oldSave.players[player.id]!;
+    assert.equal(oldPlayer.newbieForfeitedAt, undefined);
+    assert.equal(isNewbieProtected(oldSave, oldPlayer), true);
+    assert.deepEqual(oldSave.players[player.id]!.planetIds, player.planetIds);
+    assert.deepEqual(
+      oldSave.planets[player.homePlanetId]!.resources,
+      universe.planets[player.homePlanetId]!.resources,
+    );
+    assert.equal(oldSave.fleets[Object.keys(oldSave.fleets)[0]!]!.ownerPlayerId, player.id);
   });
 });
 

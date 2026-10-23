@@ -354,14 +354,15 @@ export function energyFactor(
   return Math.min(1, produced / used);
 }
 
-export function storageFor(planet: PlanetState): Resources {
+export function storageFor(planet: PlanetState, capacityMult = 1): Resources {
   const vault = echoVaultStorageMult(planet);
+  const multiplier = Math.max(0, capacityMult);
   return {
-    metal: Math.floor(storageCap(planet.buildings.metalStorage ?? 0) * vault),
+    metal: Math.floor(storageCap(planet.buildings.metalStorage ?? 0) * vault * multiplier),
     crystal: Math.floor(
-      storageCap(planet.buildings.crystalStorage ?? 0) * vault,
+      storageCap(planet.buildings.crystalStorage ?? 0) * vault * multiplier,
     ),
-    deuterium: Math.floor(storageCap(planet.buildings.deutTank ?? 0) * vault),
+    deuterium: Math.floor(storageCap(planet.buildings.deutTank ?? 0) * vault * multiplier),
   };
 }
 
