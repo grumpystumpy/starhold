@@ -8,6 +8,7 @@ What it does:
 - verifies the web test script still includes `apps/web/src/save-fixture.test.ts`
 - runs the unit suite, typecheck, and production build
 - installs Playwright Chromium
+- generates and masks a throwaway `SESSION_SECRET` for the run; it does not use repository secrets
 - starts the server on a fresh universe (unique `STARHOLD_UNIVERSE_KEY` per run, on a fresh runner)
 - runs the full browser and quality-gate matrix:
   - `npm run e2e`
@@ -18,7 +19,8 @@ What it does:
   - `node scripts/workers-e2e.mjs`
   - `node scripts/playtest-bugfix-e2e.mjs`
   - `node scripts/quality-gate-alliance-intel.mjs`
-- uploads the server log and any UI review output directories as artifacts
+- restarts the server on a new, unique universe before the pirates, alliances, worker smoke, playtest bugfix, and alliance intel scripts so their state is isolated
+- uploads each server log and any UI review output directories as artifacts
 
 Manual trigger:
 
@@ -26,4 +28,4 @@ Manual trigger:
 - select the `Full tier` workflow
 - choose `Run workflow` and pick the branch or a PR ref
 
-The server start step sets a unique `STARHOLD_UNIVERSE_KEY` per run and attempt, so state never carries over between runs. Server output goes to `$RUNNER_TEMP/starhold-full-tier-server.log`, uploaded with the artifacts.
+The initial server and each isolated run use a unique `STARHOLD_UNIVERSE_KEY` derived from the run ID, attempt, and script. Each server's output is written to its own `$RUNNER_TEMP/starhold-full-tier-*.log` file and uploaded with the artifacts.
