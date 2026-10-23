@@ -590,44 +590,40 @@ export function fireGroupShots(
     ? unitAtkDamage * defensePowerMult
     : unitAtkDamage / defensePowerMult;
 
-  const initialWeights = computeTargetWeights(
-    firerId,
-    targetSideSnapshot,
-    targetSideLive,
-    targetResearch,
-    opts?.battlefield,
-  );
-  if (Object.keys(initialWeights).length === 0) return;
-
-  // Distribute initial groupCount shots across candidate target types using target weights
-  const initialShotsDistribution = sampleMultinomialShots(
-    groupCount,
-    initialWeights,
-    rng,
-  );
-
-  for (const [targetTypeStr, initialShots] of Object.entries(
-    initialShotsDistribution,
-  )) {
-    const targetType = targetTypeStr as CombatUnitId;
-    if (!initialShots || initialShots <= 0) continue;
-
-    // Rapid fire extra shots are tied strictly to the target type hit
-    const rfFactor = rapidFireFactor(firerId, targetType);
-    const pRepeat = rfFactor > 1 ? (rfFactor - 1) / rfFactor : 0;
-    const extraShots = sampleNegativeBinomial(initialShots, pRepeat, rng);
-    const totalShots = initialShots + extraShots;
-
-    const groupDamage = totalShots * unitEffectiveDamage;
-
-    // Apply damage to targetType stack. Leftover unabsorbed damage stays within targetType and is discarded.
-    applyShotWithIntercept(
+  for (let i = 0; i < groupCount; i++) {
+    let currentTarget = pickWeightedTarget(
+      firerId,
+      targetSideSnapshot,
       targetSideLive,
-      targetType,
-      groupDamage,
       targetResearch,
       opts?.battlefield,
+      rng,
     );
+
+    while (currentTarget != null) {
+      applyShotWithIntercept(
+        targetSideLive,
+        currentTarget,
+        unitEffectiveDamage,
+        targetResearch,
+        opts?.battlefield,
+      );
+
+      const rfFactor = rapidFireFactor(firerId, currentTarget);
+      if (rfFactor <= 1) break;
+
+      const pRepeat = (rfFactor - 1) / rfFactor;
+      if (rng() >= pRepeat) break;
+
+      currentTarget = pickWeightedTarget(
+        firerId,
+        targetSideSnapshot,
+        targetSideLive,
+        targetResearch,
+        opts?.battlefield,
+        rng,
+      );
+    }
   }
 }
 

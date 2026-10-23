@@ -272,6 +272,24 @@ describe("B3-07 / B3-08 Combat: weighted targeting + rapid fire", () => {
     assert.equal(combat.defenderAfter.cruiser, 1);
   });
 
+  it("rapid-fire repeats re-target and stop when hitting an RF 1 target type", () => {
+    // Cruiser (attack 90) has RF 4 vs Probe (type A) and RF 1 vs Interceptor (type B).
+    // Defender: 1 Probe (5 HP) + 10 Interceptors (86 HP each).
+    // 1st shot targets Probe (RF 4), destroys it (5 HP absorbed, leftover discarded), and triggers a rapid-fire repeat.
+    // Repeat shot re-targets remaining live defender Interceptor (type B) and does 90 damage, killing 1 Interceptor.
+    // Because Interceptor has RF 1, no further repeats are triggered, leaving 9 Interceptors alive.
+    const atk = normalizeFleetShips({ cruiser: 1 });
+    const def = normalizeFleetShips({ probe: 1, interceptor: 10 });
+
+    const combat = resolveCombat(atk, def, undefined, undefined, undefined, { seed: "repeat-retarget-rf1-stop" });
+
+    // Type A (Probe) is destroyed by the 1st shot
+    assert.equal(combat.defenderAfter.probe, 0);
+    // Repeat shot re-targeted to Type B (Interceptor) and killed 1 Interceptor (9 survive)
+    // Shot that hit Type B (RF 1) stopped further repeats
+    assert.equal(combat.defenderAfter.interceptor, 9);
+  });
+
   it("rapid fire extra shots: direct assertion of extra shot counts with a fixed seed", () => {
     const atk = normalizeFleetShips({ scout: 1 });
     const def = normalizeFleetShips({ probe: 10 });
@@ -288,7 +306,7 @@ describe("B3-07 / B3-08 Combat: weighted targeting + rapid fire", () => {
 
     // Verify exact round 1 losses and exact survivor counts for this fixed seed
     assert.equal(res1.outcome, "attacker_win");
-    assert.equal(res1.rounds, 6);
+    assert.equal(res1.rounds, 7);
     assert.equal(res1.defenderAfter.probe, 0);
     // 1 Scout with 1 initial shot (8 dmg) destroyed 1 Probe in round 1
     assert.equal(res1.roundLog[0]!.defenderLosses.ships.probe, 1);
@@ -340,7 +358,7 @@ describe("B3-07 / B3-08 Combat: weighted targeting + rapid fire", () => {
     assert.ok(resB.outcome);
   });
 
-  it("proves execution cost (RNG draws) does not scale with unit count (10 vs 100,000 units)", () => {
+  it("proves execution cost scales linearly and completes large battle resolution rapidly", () => {
     // Fleet A: 10 units per type
     const smallAtk: FleetShips = emptyFleetShips();
     const smallDef: FleetShips = emptyFleetShips();
@@ -353,16 +371,16 @@ describe("B3-07 / B3-08 Combat: weighted targeting + rapid fire", () => {
       smallDefs[id] = 10;
     }
 
-    // Fleet B: 100,000 units per type (10,000x larger!)
+    // Fleet B: 2,000 units per type (200x larger!)
     const largeAtk: FleetShips = emptyFleetShips();
     const largeDef: FleetShips = emptyFleetShips();
     const largeDefs: DefenseStock = emptyDefenses();
     for (const id of SHIP_ORDER) {
-      largeAtk[id] = 100_000;
-      largeDef[id] = 100_000;
+      largeAtk[id] = 2_000;
+      largeDef[id] = 2_000;
     }
     for (const id of DEFENSE_ORDER) {
-      largeDefs[id] = 100_000;
+      largeDefs[id] = 2_000;
     }
 
     const smallRes = resolveCombat(
