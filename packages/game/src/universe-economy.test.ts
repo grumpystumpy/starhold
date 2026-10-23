@@ -95,14 +95,25 @@ describe("position production multipliers", () => {
     const universe = createUniverse("Pre-class save", 8);
     const now = 201_600_000;
     const { player, planet } = joinUniverse(universe, "Legacy player", now);
+    const { planet: targetPlanet } = joinUniverse(
+      universe,
+      "Legacy target",
+      now + 1,
+    );
     planet.buildings = { solarPlant: 10, metalStorage: 2 };
-    planet.resources = { metal: 12_345, crystal: 6_789, deuterium: 4_321 };
+    planet.resources = {
+      metal: 12_345,
+      crystal: 6_789,
+      deuterium: 50_000,
+    };
     planet.ships.hauler = 2;
+    planet.lastTickAt = now;
+    targetPlanet.lastTickAt = now;
 
     const launch = launchFleet(universe, {
       playerId: player.id,
       mission: "deploy",
-      targetPlanetId: planet.id,
+      targetPlanetId: targetPlanet.id,
       ships: { hauler: 1 },
       now: now + 1,
     });
