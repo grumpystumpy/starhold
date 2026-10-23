@@ -1,0 +1,175 @@
+name: Full tier
+
+on:
+  pull_request:
+  workflow_dispatch:
+  push:
+    branches:
+      - "batch/**"
+
+concurrency:
+  group: full-tier-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  full-tier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Print Node version
+        run: node -v
+
+      - name: Verify save-fixture test is in the web test list
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const pkg = JSON.parse(fs.readFileSync('apps/web/package.json', 'utf8'));
+          const script = pkg.scripts?.test ?? '';
+          if (!script.includes('src/save-fixture.test.ts')) {
+            console.error('Missing apps/web/src/save-fixture.test.ts in apps/web/package.json test script.');
+            process.exit(1);
+          }
+          console.log('apps/web/src/save-fixture.test.ts is present in the web test script.');
+          NODE
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Production build
+        run: npm run build
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Start server on a fresh universe (unique STARHOLD_UNIVERSE_KEY per run)
+        env:
+          PORT: "3001"
+          STARHOLD_E2E: "1"
+          ALLOW_E2E_HOOKS: "1"
+          STARHOLD_UNIVERSE_KEY: full-tier-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          npm start > "$RUNNER_TEMP/starhold-full-tier-server.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/starhold-full-tier-server.pid"
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:3001/api/health >/dev/null; then
+              echo "server up"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "server failed to become healthy" >&2
+          cat "$RUNNER_TEMP/starhold-full-tier-server.log" || true
+          exit 1
+
+      - name: Playwright e2e
+        if: ${{ success() || failure() }}
+        env:
+          STARHOLD_WEB: http://127.0.0.1:3001
+          STARHOLD_API: http://127.0.0.1:3001
+          STARHOLD_E2E: "1"
+          ALLOW_E2E_HOOKS: "1"
+        run: npm run e2e
+
+      - name: Playwright layout check
+        if: ${{ success() || failure() }}
+        env:
+          STARHOLD_WEB: http://127.0.0.1:3001
+          STARHOLD_API: http://127.0.0.1:3001
+          STARHOLD_E2E: "1"
+          ALLOW_E2E_HOOKS: "1"
+          UI_REVIEW_OUT: ui-review-out
+          UI_REVIEW_BASELINE_DIR: scripts/ui-review-baselines
+          UI_REVIEW_FAIL_ON: overlap,overflow,forbidden,contrast,screenshot,overlap-img-text,screenshot-diff
+          UI_REVIEW_MAX_DIFF_RATIO: "0.08"
+        run: npm run e2e:layout
+
+      - name: Quality gate e2e
+        if: ${{ success() || failure() }}
+        env:
+          STARHOLD_WEB: http://127.0.0.1:3001
+          STARHOLD_API: http://127.0.0.1:3001
+          STARHOLD_E2E: "1"
+          ALLOW_E2E_HOOKS: "1"
+        run: npm run e2e:gate
+
+      - name: Quality gate pirates + aliens
+        if: ${{ success() || failure() }}
+        env:
+          STARHOLD_WEB: http://127.0.0.1:3001
+          STARHOLD_API: http://127.0.0.1:3001
+          STARHOLD_E2E: "1"
+          ALLOW_E2E_HOOKS: "1"
+          UI_REVIEW_OUT: ui-review-out-pirates-aliens
+        run: npm run e2e:gate:pirates
+
+      - name: Quality gate alliances
+        if: ${{ success() || failure() }}
+        env:
+          STARHOLD_WEB: http://127.0.0.1:3001
+          STARHOLD_API: http://127.0.0.1:3001
+          STARHOLD_E2E: "1"
+          ALLOW_E2E_HOOKS: "1"
+          UI_REVIEW_OUT: ui-review-out-alliances
+        run: npm run e2e:gate:alliances
+
+      - name: Worker e2e smoke
+        if: ${{ success() || failure() }}
+        env:
+          STARHOLD_WEB: http://127.0.0.1:3001
+          STARHOLD_API: http://127.0.0.1:3001
+          STARHOLD_E2E: "1"
+          ALLOW_E2E_HOOKS: "1"
+        run: node scripts/workers-e2e.mjs
+
+      - name: Playtest bugfix e2e
+        if: ${{ success() || failure() }}
+        env:
+          STARHOLD_WEB: http://127.0.0.1:3001
+          STARHOLD_API: http://127.0.0.1:3001
+          STARHOLD_E2E: "1"
+          ALLOW_E2E_HOOKS: "1"
+        run: node scripts/playtest-bugfix-e2e.mjs
+
+      - name: Alliance intel quality gate
+        if: ${{ success() || failure() }}
+        env:
+          STARHOLD_WEB: http://127.0.0.1:3001
+          STARHOLD_API: http://127.0.0.1:3001
+          STARHOLD_E2E: "1"
+          ALLOW_E2E_HOOKS: "1"
+          UI_REVIEW_OUT: ui-review-out-alliance-intel
+        run: node scripts/quality-gate-alliance-intel.mjs
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-tier-artifacts
+          path: |
+            ui-review-out/
+            ui-review-out-*/
+            ${{ runner.temp }}/starhold-full-tier-server.log
+          if-no-files-found: ignore
+
+      - name: Stop server
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/starhold-full-tier-server.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/starhold-full-tier-server.pid")" || true
+          fi
