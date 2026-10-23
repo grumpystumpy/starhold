@@ -939,6 +939,8 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
     planetState.buildings = { metalMine: 30, crystalMine: 30, solarPlant: 30 };
     planetState.ships = { ...emptyFleetShips(), interceptor: 10 };
 
+    universe.planets = { [planetState.id]: planetState };
+
     // 1. Alien base raid via tickPirates (faction === "alien")
     const alienBase = createAlienBase(
       universe,
@@ -950,8 +952,8 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
       10,
     );
     alienBase.buildupEndsAt = now - 1000;
+    alienBase.nextRaidAt = now - 500;
     alienBase.ships = { ...emptyFleetShips(), cruiser: 100 };
-    alienBase.nextRaidAt = now;
     universe.alienBases = { [alienBase.id]: alienBase };
     universe.pirateBases = {};
 
@@ -968,7 +970,15 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
     try {
       tickPirates(universe, now + 1000);
 
-      // 2. Pirate base raid via tickPirates (faction === "pirate")
+      const alienAlert = (universe.players[player.id]?.eventLog ?? []).find(
+        (e) => e.kind === "raidAlert" && e.meta?.pirateBaseId === alienBase.id,
+      );
+      assert.ok(alienAlert, "expected alien raid alert in event log");
+      const actualAlienFleet = JSON.parse(alienAlert.meta?.raidFleet as string);
+      assert.deepEqual(actualAlienFleet, expectedAlienRaid);
+
+      // 2. Reset defender ships and test Pirate base raid via tickPirates (faction === "pirate")
+      planetState.ships = { ...emptyFleetShips(), interceptor: 10 };
       const pirateBase = createPirateBase(
         universe.seed,
         planetState.coords.galaxy,
@@ -1000,6 +1010,8 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
         (e) => e.kind === "raidAlert" && e.meta?.pirateBaseId === pirateBase.id,
       );
       assert.ok(pirateAlert, "expected pirate raid alert in event log");
+      const actualPirateFleet = JSON.parse(pirateAlert.meta?.raidFleet as string);
+      assert.deepEqual(actualPirateFleet, expectedPirateRaid);
     } finally {
       if (prevE2E != null) process.env.STARHOLD_E2E = prevE2E;
     }
@@ -1084,6 +1096,7 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
     original.skipPirateTopUp = true;
     const { player, planet } = joinUniverse(original, "OldCommander", now - 10 * 86_400_000);
     player.createdAt = now - 10 * 86_400_000;
+    (player as any).attackedPiratesAt = now - 1000;
     const body = original.planets[planet.id]!;
 
     body.buildings = { metalMine: 20, crystalMine: 18, solarPlant: 22 };
@@ -1093,6 +1106,7 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
     player.xpTotal = 1250;
     player.starshards = 100;
 
+    original.planets = { [body.id]: body };
     const base = activePirateBases(original)[0]!;
     original.pirateBases = { [base.id]: base };
     base.nextRaidAt = now;

@@ -1464,6 +1464,7 @@ function applyNpcRaidOnPlanet(
       pirateBaseId: base.id,
       outcome: combat.outcome,
       planetId: planet.id,
+      raidFleet: JSON.stringify(raidFleet),
     },
   });
   universe.players[owner.id] = owner;
