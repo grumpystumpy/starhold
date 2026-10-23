@@ -104,7 +104,7 @@ describe("position production multipliers", () => {
     planet.resources = {
       metal: 12_345,
       crystal: 6_789,
-      deuterium: 50_000,
+      deuterium: 25_000,
     };
     planet.ships.hauler = 2;
     planet.lastTickAt = now;
@@ -123,9 +123,10 @@ describe("position production multipliers", () => {
     const preClassView = playerView(universe, player.id, now + 1);
     const expectedFleetSlotCap = preClassView.fleetSlotCap;
     const expectedEnergyProduced = preClassView.economy.energy.produced;
-    const expectedBuildings = { ...planet.buildings };
-    const expectedResources = { ...planet.resources };
-    const expectedPlanetShips = { ...planet.ships };
+    const savedPlanet = structuredClone(universe.planets[planet.id]!);
+    const expectedBuildings = savedPlanet.buildings;
+    const expectedResources = savedPlanet.resources;
+    const expectedPlanetShips = savedPlanet.ships;
     const expectedFleet = structuredClone(Object.values(universe.fleets)[0]);
 
     const oldSavedState = JSON.parse(JSON.stringify(universe)) as typeof universe;
