@@ -12,6 +12,7 @@ import {
   createUniverse,
   joinUniverse,
   launchFleet,
+  migrateOrResetUniverse,
   playerView,
 } from "./world.js";
 
@@ -280,13 +281,19 @@ describe("P2 expeditions", () => {
     assert.equal(r1.starshardsGained, r2.starshardsGained);
   });
 
-  it("loads an old saved state with an expedition in flight and resolves without save reset", () => {
-    const universe = createUniverse("Old Save Exped", 8);
-    const p = joinUniverse(universe, "Veteran", 200_000);
+  it("loads an old saved state with an expedition in flight through normal save loading path and resolves without save reset", () => {
+    const fresh = createUniverse("Old Save Exped", 8);
+    const p = joinUniverse(fresh, "Veteran", 200_000);
+    const planet = fresh.planets[p.planet.id]!;
+    planet.buildings.metalMine = 12;
+    planet.resources = { metal: 10_000, crystal: 5_000, deuterium: 2_000 };
+    planet.ships.scout = 5;
 
-    // Create an old-shaped state with an in-flight expedition fleet
+    // Stamp as existing pre-change saved state (schemaVersion 5)
+    fresh.schemaVersion = 5;
+
     const fleetId = "flt_old_exped_1";
-    universe.fleets[fleetId] = {
+    fresh.fleets[fleetId] = {
       id: fleetId,
       ownerPlayerId: p.player.id,
       mission: "expedition",
@@ -299,14 +306,24 @@ describe("P2 expeditions", () => {
       phase: "outbound",
     };
 
-    advanceUniverse(universe, 200_500);
+    // Load through normal save-loading path (migrateOrResetUniverse)
+    const { universe: loaded, didReset } = migrateOrResetUniverse(fresh);
+    assert.equal(didReset, false);
+    assert.equal(loaded.planets[p.planet.id]!.buildings.metalMine, 12);
 
-    const f = universe.fleets[fleetId];
+    advanceUniverse(loaded, 200_500);
+
+    const f = loaded.fleets[fleetId];
     assert.ok(f);
     assert.equal(f.phase, "returning");
     assert.ok(f.reportId);
-    const rep = universe.expeditionReports[f.reportId!];
+    const rep = loaded.expeditionReports[f.reportId!];
     assert.ok(rep);
     assert.ok(rep.summary);
+
+    // Existing progress (buildings, resources, ships) is kept
+    assert.equal(loaded.planets[p.planet.id]!.buildings.metalMine, 12);
+    assert.equal(loaded.planets[p.planet.id]!.ships.scout, 5);
+    assert.ok(loaded.planets[p.planet.id]!.resources.metal >= 10_000);
   });
 });

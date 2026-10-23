@@ -29,6 +29,9 @@ export const EXPEDITION_RESOURCE_MULT = 15;
 export const EXPEDITION_BASE_RESOURCE_FIND = 0;
 export const EXPEDITION_STARSHARDS_MIN = 5;
 export const EXPEDITION_STARSHARDS_MAX = 25;
+export const EXPEDITION_RESOURCE_ROLL_BASE = 0.55;
+export const EXPEDITION_RESOURCE_ROLL_RANGE = 20;
+export const EXPEDITION_RESOURCE_ROLL_DIVISOR = 40;
 import { noteGoalMetric } from "./world-goals.js";
 import {
   discoverMiniPlanet,
@@ -91,7 +94,9 @@ export function resourceFind(
   }
   const sp = fleetStructurePoints(ships);
   const effectiveSp = Math.min(sp, EXPEDITION_STRUCTURAL_CAP);
-  const rollFactor = 0.55 + (roll % 20) / 40;
+  const rollFactor =
+    EXPEDITION_RESOURCE_ROLL_BASE +
+    (roll % EXPEDITION_RESOURCE_ROLL_RANGE) / EXPEDITION_RESOURCE_ROLL_DIVISOR;
   const rawBudget =
     EXPEDITION_BASE_RESOURCE_FIND +
     effectiveSp * EXPEDITION_RESOURCE_MULT * rollFactor;
