@@ -597,39 +597,24 @@ export function fireGroupShots(
     targetResearch,
     opts?.battlefield,
   );
-  const candidateKeys = Object.keys(initialWeights) as CombatUnitId[];
-  if (candidateKeys.length === 0) return;
+  if (Object.keys(initialWeights).length === 0) return;
 
-  let totalW = 0;
-  for (const t of candidateKeys) totalW += initialWeights[t] ?? 0;
+  // Distribute initial groupCount shots across candidate target types using target weights
+  const initialShotsDistribution = sampleMultinomialShots(
+    groupCount,
+    initialWeights,
+    rng,
+  );
 
-  let Q = 0;
-  if (totalW > 0) {
-    for (const t of candidateKeys) {
-      const p_j = (initialWeights[t] ?? 0) / totalW;
-      const rf_j = rapidFireFactor(firerId, t);
-      if (rf_j > 1) {
-        const q_j = (rf_j - 1) / rf_j;
-        Q += p_j * q_j;
-      }
-    }
-  }
-
-  const extraShots = sampleNegativeBinomial(groupCount, Q, rng);
-  const totalShots = groupCount + extraShots;
-
-  const shotDistribution = sampleMultinomialShots(totalShots, initialWeights, rng);
-
-  for (const [targetTypeStr, shots] of Object.entries(shotDistribution)) {
+  for (const [targetTypeStr, initialShots] of Object.entries(initialShotsDistribution)) {
     const targetType = targetTypeStr as CombatUnitId;
-    if (!shots || shots <= 0) continue;
+    if (!initialShots || initialShots <= 0) continue;
 
-    let groupDamage = shots * unitEffectiveDamage;
-    let currentTarget: CombatUnitId | null = targetType;
-
-    while (groupDamage > 0 && currentTarget != null) {
-      if (targetCount(targetSideLive, currentTarget) <= 0) {
-        currentTarget = pickWeightedTarget(
+    // Check if targetType still has living units in targetSideLive
+    if (targetCount(targetSideLive, targetType) <= 0) {
+      let remDmg = initialShots * unitEffectiveDamage;
+      while (remDmg > 0) {
+        const nextTarget = pickWeightedTarget(
           firerId,
           targetSideSnapshot,
           targetSideLive,
@@ -637,9 +622,35 @@ export function fireGroupShots(
           opts?.battlefield,
           rng,
         );
-        if (!currentTarget) break;
-      }
+        if (!nextTarget) break;
 
+        const remShots = Math.max(1, Math.round(remDmg / unitEffectiveDamage));
+        const nextRF = rapidFireFactor(firerId, nextTarget);
+        const pRepeat = nextRF > 1 ? (nextRF - 1) / nextRF : 0;
+        const extraShots = sampleNegativeBinomial(remShots, pRepeat, rng);
+        const totalDmg = remDmg + extraShots * unitEffectiveDamage;
+
+        remDmg = applyShotWithIntercept(
+          targetSideLive,
+          nextTarget,
+          totalDmg,
+          targetResearch,
+          opts?.battlefield,
+        );
+      }
+      continue;
+    }
+
+    // Rapid fire extra shots are tied strictly to the target type actually hit!
+    const rfFactor = rapidFireFactor(firerId, targetType);
+    const pRepeat = rfFactor > 1 ? (rfFactor - 1) / rfFactor : 0;
+    const extraShots = sampleNegativeBinomial(initialShots, pRepeat, rng);
+    const totalShots = initialShots + extraShots;
+
+    let groupDamage = totalShots * unitEffectiveDamage;
+    let currentTarget: CombatUnitId | null = targetType;
+
+    while (groupDamage > 0 && currentTarget != null) {
       const unabsorbedDmg = applyShotWithIntercept(
         targetSideLive,
         currentTarget,
@@ -649,7 +660,7 @@ export function fireGroupShots(
       );
       if (unabsorbedDmg <= 0) break;
 
-      groupDamage = unabsorbedDmg;
+      // Re-target unabsorbed spillover damage to remaining living target types
       currentTarget = pickWeightedTarget(
         firerId,
         targetSideSnapshot,
@@ -658,6 +669,14 @@ export function fireGroupShots(
         opts?.battlefield,
         rng,
       );
+      if (!currentTarget) break;
+
+      // Spillover onto new target type triggers rapid fire for new target type
+      const spilledShots = Math.max(1, Math.round(unabsorbedDmg / unitEffectiveDamage));
+      const spilledRF = rapidFireFactor(firerId, currentTarget);
+      const spilledPRepeat = spilledRF > 1 ? (spilledRF - 1) / spilledRF : 0;
+      const spilledExtraShots = sampleNegativeBinomial(spilledShots, spilledPRepeat, rng);
+      groupDamage = unabsorbedDmg + spilledExtraShots * unitEffectiveDamage;
     }
   }
 }
