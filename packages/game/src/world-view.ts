@@ -165,6 +165,7 @@ export function galaxyViewFor(
   const s = Math.min(MAP_SYSTEMS, Math.max(1, Math.floor(system)));
   const artCtx = createPlanetArtContext(universe);
   const slots: GalaxySlot[] = [];
+  const empirePointsByPlayer = new Map<string, number>();
   for (let slot = 1; slot <= MAP_SLOTS; slot++) {
     const coords = { galaxy: g, system: s, slot };
     const planet = planetAtCoords(universe, coords);
@@ -173,6 +174,14 @@ export function galaxyViewFor(
     const owner = planet
       ? universe.players[planet.ownerPlayerId]
       : undefined;
+    let ownerPoints: number | undefined;
+    if (owner) {
+      ownerPoints = empirePointsByPlayer.get(owner.id);
+      if (ownerPoints === undefined) {
+        ownerPoints = empirePoints(universe, owner);
+        empirePointsByPlayer.set(owner.id, ownerPoints);
+      }
+    }
     const art = planet
       ? artForBody(universe, planet, artCtx)
       : normalArtAt(coords);
@@ -183,6 +192,7 @@ export function galaxyViewFor(
       playerName: owner?.name ?? null,
       allianceTag: allianceTagForPlayer(universe, owner),
       pointsHint: planet ? Math.floor(planetPoints(planet)) : 0,
+      ...(ownerPoints === undefined ? {} : { empirePoints: ownerPoints }),
       debris: debris
         ? { metal: debris.metal, crystal: debris.crystal }
         : null,

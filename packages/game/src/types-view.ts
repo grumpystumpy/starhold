@@ -574,6 +574,7 @@ export interface GalaxySlot extends PlanetArtFields {
   playerName: string | null;
   allianceTag: string | null;
   pointsHint: number;
+  empirePoints?: number;
   debris: { metal: number; crystal: number } | null;
   isOwn: boolean;
   hasMoon: boolean;
