@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { MAP_SLOTS } from "./catalog.js";
+import { installDeterministicInputs } from "./test-determinism.js";
 import {
   advanceUniverse,
   createUniverse,
@@ -15,6 +16,15 @@ import {
   setActivePlanet,
 } from "./world.js";
 import { graduateNewbieProtection } from "./test-graduate.js";
+
+let restoreInputs: (() => void) | undefined;
+beforeEach(() => {
+  restoreInputs = installDeterministicInputs(0x50415249, 1_700_000_000_000);
+});
+afterEach(() => {
+  restoreInputs?.();
+  restoreInputs = undefined;
+});
 
 describe("P0/P1 parity — fleets & galaxy", () => {
   it("galaxy view lists empty and occupied slots", () => {
