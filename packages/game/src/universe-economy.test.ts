@@ -16,6 +16,7 @@ import {
   productionPerHour,
   rollPlanetFields,
 } from "./formulas.js";
+import { emptyPlayerClass } from "./formulas-round3.js";
 import {
   advanceUniverse,
   createUniverse,
@@ -90,6 +91,63 @@ describe("planet fields curve", () => {
 });
 
 describe("position production multipliers", () => {
+  it("loads a pre-class save with unchanged fleet slots, energy, and progress", () => {
+    const universe = createUniverse("Pre-class save", 8);
+    const now = 201_600_000;
+    const { player, planet } = joinUniverse(universe, "Legacy player", now);
+    planet.buildings = { solarPlant: 10, metalStorage: 2 };
+    planet.resources = { metal: 12_345, crystal: 6_789, deuterium: 4_321 };
+    planet.ships.hauler = 2;
+
+    const launch = launchFleet(universe, {
+      playerId: player.id,
+      mission: "deploy",
+      targetPlanetId: planet.id,
+      ships: { hauler: 1 },
+      now: now + 1,
+    });
+    assert.ok(launch.ok, launch.ok ? undefined : launch.error);
+    if (!launch.ok) return;
+
+    const preClassView = playerView(universe, player.id, now + 1);
+    const expectedFleetSlotCap = preClassView.fleetSlotCap;
+    const expectedEnergyProduced = preClassView.economy.energy.produced;
+    const expectedBuildings = { ...planet.buildings };
+    const expectedResources = { ...planet.resources };
+    const expectedPlanetShips = { ...planet.ships };
+    const expectedFleet = structuredClone(Object.values(universe.fleets)[0]);
+
+    const oldSavedState = JSON.parse(JSON.stringify(universe)) as typeof universe;
+    oldSavedState.schemaVersion = 3;
+    for (const savedPlayer of Object.values(oldSavedState.players)) {
+      delete savedPlayer.playerClass;
+      delete savedPlayer.research.gravityWell;
+    }
+    for (const savedPlanet of Object.values(oldSavedState.planets)) {
+      delete savedPlanet.buildings.mantleLoom;
+      delete savedPlanet.buildings.rigFoundry;
+      delete savedPlanet.buildings.riftSiphon;
+      delete savedPlanet.buildings.echoVault;
+      delete savedPlanet.buildings.anomalyForge;
+      delete savedPlanet.buildings.driftBeacon;
+    }
+    delete oldSavedState.alienBases;
+
+    const migration = migrateOrResetUniverse(oldSavedState);
+    assert.equal(migration.didReset, false);
+    const loaded = migration.universe;
+    assert.deepEqual(loaded.players[player.id]?.playerClass, emptyPlayerClass());
+    const loadedView = playerView(loaded, player.id, now + 1);
+    assert.equal(loadedView.fleetSlotCap, expectedFleetSlotCap);
+    assert.equal(loadedView.economy.energy.produced, expectedEnergyProduced);
+    for (const [building, level] of Object.entries(expectedBuildings)) {
+      assert.equal(loaded.planets[planet.id]?.buildings[building], level);
+    }
+    assert.deepEqual(loaded.planets[planet.id]?.resources, expectedResources);
+    assert.deepEqual(loaded.planets[planet.id]?.ships, expectedPlanetShips);
+    assert.deepEqual(Object.values(loaded.fleets)[0], expectedFleet);
+  });
+
   it("loads an old save without losing progress and applies class bonuses", () => {
     const universe = createUniverse("Legacy class bonuses", 8);
     const now = 201_600_000;
