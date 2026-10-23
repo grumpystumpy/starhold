@@ -363,6 +363,8 @@ export interface PlayerState {
   /** Ordered multi-item empire research queue (Round 2). */
   researchQueue: ResearchQueueItem[];
   createdAt: number;
+  /** First launch of a PvP attack; permanently forfeits newbie protection. */
+  newbieForfeitedAt?: number;
   /** Last launch time when this player attacked a pirate or alien base. */
   attackedPiratesAt?: number;
   /** Player level — starts at 1, no max (Round 2). */
