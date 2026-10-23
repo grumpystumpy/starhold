@@ -1,14 +1,29 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { SHIPS } from "./catalog.js";
+import { DEFENSE_ORDER, DEFENSES, SHIPS, SHIP_ORDER } from "./catalog.js";
 import {
   computeTargetWeights,
   emptyDefenses,
   emptyFleetShips,
   normalizeFleetShips,
+  pickWeightedTarget,
   resolveCombat,
   unitHp,
 } from "./formulas.js";
+import type { DefenseStock, FleetShips } from "./types.js";
+
+function createTestRng(seedStr = "dist-test-seed") {
+  let s = 123456789;
+  for (let i = 0; i < seedStr.length; i++) {
+    s = (s + seedStr.charCodeAt(i) * 31) | 0;
+  }
+  return function nextFloat(): number {
+    s = (s + 0x6d2b79f5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 describe("B3-07 / B3-08 Combat: weighted targeting + rapid fire", () => {
   it("targeting weights: hand-computed weight sqrt(toughness) * count * RF factor", () => {
@@ -18,7 +33,7 @@ describe("B3-07 / B3-08 Combat: weighted targeting + rapid fire", () => {
     };
 
     // Shooter = Cruiser (RF 1 vs interceptor, RF 1 vs scout)
-    const weights = computeTargetWeights("cruiser", defenderSide);
+    const weights = computeTargetWeights("cruiser", defenderSide, defenderSide);
 
     // Interceptor stats: shield 10, armor 16, hull 60 -> toughness 86
     const interceptorToughness = unitHp(
@@ -57,7 +72,7 @@ describe("B3-07 / B3-08 Combat: weighted targeting + rapid fire", () => {
     };
 
     // Cruiser has RF 4 vs probe, RF 1 vs interceptor
-    const weights = computeTargetWeights("cruiser", defenderSide);
+    const weights = computeTargetWeights("cruiser", defenderSide, defenderSide);
 
     const probeToughness = unitHp(
       SHIPS.probe.shield,
@@ -86,6 +101,43 @@ describe("B3-07 / B3-08 Combat: weighted targeting + rapid fire", () => {
     );
   });
 
+  it("pickWeightedTarget distribution matches calculated weights over 10,000 draws", () => {
+    const defenderSide = {
+      ships: normalizeFleetShips({ interceptor: 10, scout: 20 }),
+      defenses: emptyDefenses(),
+    };
+
+    const weights = computeTargetWeights("cruiser", defenderSide);
+    const wInterceptor = weights.interceptor ?? 0;
+    const wScout = weights.scout ?? 0;
+    const totalWeight = wInterceptor + wScout;
+    const expectedInterceptorRatio = wInterceptor / totalWeight; // ~0.4504
+
+    const rng = createTestRng("pick-weighted-dist");
+    const counts: Record<string, number> = { interceptor: 0, scout: 0 };
+    const N = 10_000;
+
+    for (let i = 0; i < N; i++) {
+      const target = pickWeightedTarget(
+        "cruiser",
+        defenderSide,
+        defenderSide,
+        undefined,
+        undefined,
+        rng,
+      );
+      if (target) counts[target] = (counts[target] ?? 0) + 1;
+    }
+
+    const actualInterceptorRatio = (counts.interceptor ?? 0) / N;
+
+    // Verify empirical distribution matches theoretical weights within 3% tolerance
+    assert.ok(
+      Math.abs(actualInterceptorRatio - expectedInterceptorRatio) < 0.03,
+      `Expected interceptor ratio ~${expectedInterceptorRatio.toFixed(3)}, got ${actualInterceptorRatio.toFixed(3)}`,
+    );
+  });
+
   it("drones screen mothership: Swarm Drones get x5 weight when Swarm Mothership is present", () => {
     const withoutMothership = {
       ships: normalizeFleetShips({ swarmDrone: 10, scout: 1 }),
@@ -101,8 +153,8 @@ describe("B3-07 / B3-08 Combat: weighted targeting + rapid fire", () => {
     };
 
     // Shooter = Hauler (RF 1 vs all present)
-    const weightsWithout = computeTargetWeights("hauler", withoutMothership);
-    const weightsWith = computeTargetWeights("hauler", withMothership);
+    const weightsWithout = computeTargetWeights("hauler", withoutMothership, withoutMothership);
+    const weightsWith = computeTargetWeights("hauler", withMothership, withMothership);
 
     const droneWeightWithout = weightsWithout.swarmDrone ?? 0;
     const droneWeightWith = weightsWith.swarmDrone ?? 0;
@@ -143,6 +195,18 @@ describe("B3-07 / B3-08 Combat: weighted targeting + rapid fire", () => {
     assert.equal(combat.outcome, "attacker_win");
     assert.equal(combat.rounds, 1);
     assert.equal(combat.defenderAfter.swarmDrone, 0);
+  });
+
+  it("spillover re-targeting across multiple target types passes rng and spills damage", () => {
+    // 1 Voidforge Titan (attack 200,000) vs 1 Swarm Drone (16 HP) + 1 Scout (32 HP)
+    const atk = normalizeFleetShips({ voidforgeTitan: 1 });
+    const def = normalizeFleetShips({ swarmDrone: 1, scout: 1 });
+
+    const combat = resolveCombat(atk, def);
+
+    assert.equal(combat.outcome, "attacker_win");
+    assert.equal(combat.defenderAfter.swarmDrone, 0);
+    assert.equal(combat.defenderAfter.scout, 0);
   });
 
   it("rapid fire extra shots: fixed seed produces deterministic extra shots and wipes target", () => {
@@ -204,5 +268,43 @@ describe("B3-07 / B3-08 Combat: weighted targeting + rapid fire", () => {
     assert.deepEqual(res1.defenderAfter, res2.defenderAfter);
     assert.deepEqual(res1.defensesAfter, res2.defensesAfter);
     assert.deepEqual(res1.roundLog, res2.roundLog);
+  });
+
+  it("performance: 10,000 of every ship vs 10,000 of every ship + 10,000 of every defense resolves fast", () => {
+    const atkShips: FleetShips = emptyFleetShips();
+    for (const id of SHIP_ORDER) {
+      atkShips[id] = 10_000;
+    }
+
+    const defShips: FleetShips = emptyFleetShips();
+    for (const id of SHIP_ORDER) {
+      defShips[id] = 10_000;
+    }
+
+    const defDefs: DefenseStock = emptyDefenses();
+    for (const id of DEFENSE_ORDER) {
+      defDefs[id] = 10_000;
+    }
+
+    const start = performance.now();
+    const combat = resolveCombat(
+      atkShips,
+      defShips,
+      defDefs,
+      undefined,
+      undefined,
+      { seed: "massive-10k-perf-seed" },
+    );
+    const wallTimeMs = performance.now() - start;
+
+    console.log(
+      `[PERF] 10,000 units per type battle resolved in ${wallTimeMs.toFixed(2)} ms (${combat.rounds} rounds).`,
+    );
+
+    assert.ok(combat.rounds >= 1);
+    assert.ok(
+      wallTimeMs < 1000,
+      `Expected massive combat under 1000 ms, took ${wallTimeMs.toFixed(2)} ms`,
+    );
   });
 });
