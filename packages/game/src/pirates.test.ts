@@ -893,7 +893,7 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
     universe2.skipPirateTopUp = true;
     const { player: playerB, planet: planetB } = joinUniverse(universe2, "Defender", nowB - 10 * 86_400_000);
     playerB.createdAt = nowB - 10 * 86_400_000;
-    (playerB as any).attackedPiratesAt = nowB - 1000;
+    playerB.attackedPiratesAt = nowB - 1000;
     playerB.research = { weaponsTech: 8, shieldingTech: 8, armourTech: 8 };
     const planetState = universe2.planets[planetB.id]!;
     planetState.buildings = { metalMine: 30, crystalMine: 30, solarPlant: 30 };
@@ -934,7 +934,7 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
 
     const { player, planet } = joinUniverse(universe, "TargetPlayer", now - 10 * 86_400_000);
     player.createdAt = now - 10 * 86_400_000;
-    (player as any).attackedPiratesAt = now - 1000;
+    player.attackedPiratesAt = now - 1000;
     const planetState = universe.planets[planet.id]!;
     planetState.buildings = { metalMine: 30, crystalMine: 30, solarPlant: 30 };
     planetState.ships = { ...emptyFleetShips(), interceptor: 10 };
@@ -1096,7 +1096,7 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
     original.skipPirateTopUp = true;
     const { player, planet } = joinUniverse(original, "OldCommander", now - 10 * 86_400_000);
     player.createdAt = now - 10 * 86_400_000;
-    (player as any).attackedPiratesAt = now - 1000;
+    player.attackedPiratesAt = now - 1000;
     const body = original.planets[planet.id]!;
 
     body.buildings = { metalMine: 20, crystalMine: 18, solarPlant: 22 };
