@@ -1,16 +1,130 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { BUILDINGS } from "./catalog.js";
+import { BUILDINGS, RESEARCH } from "./catalog.js";
 import { buildingUpgradeCost, researchUpgradeCost, spend } from "./formulas-build.js";
 import {
   createUniverse,
   joinUniverse,
+  migrateOrResetUniverse,
   previewBuildingUpgrade,
   previewResearchUpgrade,
   queueBuildingUpgrade,
 } from "./world.js";
 
 describe("upgrade and research gates", () => {
+  it("uses the approved research prerequisite table", () => {
+    assert.deepEqual(
+      Object.fromEntries(
+        Object.entries(RESEARCH).map(([id, def]) => [
+          id,
+          { labLevel: def.labLevel, requires: def.requires ?? {} },
+        ]),
+      ),
+      {
+        energyTech: { labLevel: 1, requires: {} },
+        combustionDrive: { labLevel: 1, requires: { energyTech: 1 } },
+        weaponsTech: { labLevel: 4, requires: {} },
+        armourTech: { labLevel: 2, requires: {} },
+        shieldingTech: { labLevel: 6, requires: { energyTech: 3 } },
+        espionageTech: { labLevel: 3, requires: {} },
+        astrophysics: {
+          labLevel: 3,
+          requires: { espionageTech: 4, combustionDrive: 3 },
+        },
+        computerTech: { labLevel: 1, requires: {} },
+        queueLogistics: { labLevel: 4, requires: { computerTech: 2 } },
+        swarmHold: {
+          labLevel: 7,
+          requires: { astrophysics: 4, computerTech: 4 },
+        },
+        gravityWell: {
+          labLevel: 12,
+          requires: { energyTech: 8, shieldingTech: 5 },
+        },
+      },
+    );
+  });
+
+  it("blocks gated research until its lab and technology requirements are met", () => {
+    const universe = createUniverse("Research Prerequisites", 8);
+    const { player, planet } = joinUniverse(
+      universe,
+      "Researcher",
+      1_700_000_000_000,
+    );
+    const body = universe.planets[planet.id]!;
+    const owner = universe.players[player.id]!;
+    body.resources = { metal: 1_000_000, crystal: 1_000_000, deuterium: 1_000_000 };
+    body.buildings.researchLab = 1;
+
+    const missingPower = previewResearchUpgrade(
+      owner,
+      body,
+      "combustionDrive",
+      1,
+      1_700_000_000_000,
+    );
+    assert.equal(missingPower.ok, false);
+    if (missingPower.ok) return;
+    assert.match(missingPower.error, /Needs Power Discipline level 1 \(have 0\)/);
+
+    owner.research.energyTech = 1;
+    assert.equal(
+      previewResearchUpgrade(
+        owner,
+        body,
+        "combustionDrive",
+        1,
+        1_700_000_000_000,
+      ).ok,
+      true,
+    );
+
+    const missingLab = previewResearchUpgrade(
+      owner,
+      body,
+      "weaponsTech",
+      1,
+      1_700_000_000_000,
+    );
+    assert.equal(missingLab.ok, false);
+    if (missingLab.ok) return;
+    assert.match(missingLab.error, /Needs Research Lab level 4 \(best lab 1\)/);
+  });
+
+  it("grandfathers existing levels from new research gates", () => {
+    const universe = createUniverse("Grandfathered Research", 8);
+    const { player, planet } = joinUniverse(
+      universe,
+      "Veteran",
+      1_700_000_000_000,
+    );
+    const body = universe.planets[planet.id]!;
+    const owner = universe.players[player.id]!;
+    body.resources = { metal: 1_000_000, crystal: 1_000_000, deuterium: 1_000_000 };
+    body.buildings.researchLab = 2;
+    owner.research.shieldingTech = 3;
+    const oldSave = JSON.parse(JSON.stringify(universe)) as typeof universe;
+    oldSave.schemaVersion = 4;
+    const loaded = migrateOrResetUniverse(oldSave).universe;
+    const loadedOwner = loaded.players[player.id]!;
+    const loadedBody = loaded.planets[planet.id]!;
+
+    assert.equal(loadedOwner.research.shieldingTech, 3);
+    assert.deepEqual(loadedBody.resources, body.resources);
+    assert.deepEqual(loadedBody.buildings, body.buildings);
+
+    const nextLevel = previewResearchUpgrade(
+      loadedOwner,
+      loadedBody,
+      "shieldingTech",
+      loadedBody.buildings.researchLab ?? 0,
+      1_700_000_000_000,
+    );
+    assert.equal(nextLevel.ok, true);
+    if (nextLevel.ok) assert.equal(nextLevel.targetLevel, 4);
+  });
+
   it("applies the local Research Lab bonus to research cost", () => {
     assert.deepEqual(researchUpgradeCost("energyTech", 0, 0), {
       metal: 0,
@@ -140,7 +254,7 @@ describe("upgrade and research gates", () => {
     );
     assert.equal(higher.ok, false);
     if (higher.ok) return;
-    assert.match(higher.error, /Needs Research Lab level 2 \(best lab 1\)/);
+    assert.match(higher.error, /Needs Research Lab level 6 \(best lab 1\)/);
 
     owner.researchQueue = [
       {

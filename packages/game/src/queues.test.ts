@@ -104,7 +104,7 @@ describe("Round 2 multi-item queues", () => {
       ),
     );
     assert.equal(queued.workSeconds, previewSeconds);
-    assert.equal(previewSeconds, 3);
+    assert.equal(previewSeconds, 5);
     assert.deepEqual(queued.paidCost, { metal: 0, crystal: 78, deuterium: 39 });
   });
 
@@ -306,7 +306,7 @@ describe("Round 2 multi-item queues", () => {
     const stillLocked = queueResearch(universe, player.id, "shieldingTech", afterFirst + 1);
     assert.equal(stillLocked.ok, false);
     if (!stillLocked.ok) {
-      assert.match(stillLocked.error, /Needs Research Lab level 2/);
+      assert.match(stillLocked.error, /Needs Research Lab level 6/);
     }
     universe.players[player.id].research.queueLogistics = 3;
     const aboveLab = queueResearch(universe, player.id, "energyTech", afterFirst + 2);
@@ -321,9 +321,39 @@ describe("Round 2 multi-item queues", () => {
       queueResearch(universe, player.id, "combustionDrive", t0 + 50_000).ok,
     );
     assert.ok(
-      queueResearch(universe, player.id, "weaponsTech", t0 + 50_001).ok,
+      queueResearch(universe, player.id, "computerTech", t0 + 50_001).ok,
     );
     assert.equal(universe.players[player.id].researchQueue.length, 2);
+  });
+
+  it("completes research that was already queued before new gates", () => {
+    const universe = createUniverse("Queued Research Migration", 8);
+    const { player, planet } = joinUniverse(
+      universe,
+      "Legacy Researcher",
+      305_500_000,
+    );
+    const owner = universe.players[player.id]!;
+    const t0 = 305_500_100;
+    owner.researchQueue = [
+      {
+        id: "legacy-shielding",
+        kind: "research",
+        researchId: "shieldingTech",
+        targetLevel: 1,
+        enqueuedAt: t0,
+        completesAt: t0 + 1_000,
+        workSeconds: 1,
+        startedAt: t0,
+        paidCost: { metal: 20, crystal: 60, deuterium: 0 },
+      },
+    ];
+
+    advanceUniverse(universe, t0 + 1_000);
+
+    assert.equal(universe.players[player.id]!.research.shieldingTech, 1);
+    assert.equal(universe.players[player.id]!.researchQueue.length, 0);
+    assert.equal(universe.planets[planet.id]!.buildings.researchLab, 0);
   });
 
   it("migrates v2 single queues into v3 arrays without reset", () => {
