@@ -325,7 +325,8 @@ async function main() {
   logs.push("marker_placed");
 
   await pageB.getByTestId("nav-galaxy").click();
-  await pageB.getByTestId("galaxy-marker-1").waitFor({ timeout: 15_000 });
+  // Covers at least one full 30s alliance refresh.
+  await pageB.getByTestId("galaxy-marker-1").waitFor({ timeout: 60_000 });
   logs.push("marker_visible_ally");
 
   await pageA.reload({ waitUntil: "networkidle" });
