@@ -358,8 +358,8 @@ describe("B3-07 / B3-08 Combat: weighted targeting + rapid fire", () => {
     assert.ok(resB.outcome);
   });
 
-  it("proves execution cost scales linearly and completes large battle resolution rapidly", () => {
-    // Fleet A: 10 units per type
+  it("per-shot loop cost grows with unit count", () => {
+    // Per-shot simulation loop scales with total unit count (2,000 units per type tested)
     const smallAtk: FleetShips = emptyFleetShips();
     const smallDef: FleetShips = emptyFleetShips();
     const smallDefs: DefenseStock = emptyDefenses();
