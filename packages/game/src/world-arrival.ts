@@ -438,7 +438,9 @@ export function advancePlanetNow(
         lb.production *
         boosts.mineOutput *
         classBonuses(owner?.playerClass?.classId).mineOutput,
-      energyOutput: boosts.energyOutput,
+      energyOutput:
+        boosts.energyOutput *
+        classBonuses(owner?.playerClass?.classId).energyOutput,
     },
     owner,
   );

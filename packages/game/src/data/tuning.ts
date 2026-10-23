@@ -1157,6 +1157,7 @@ export const PLAYER_CLASS_BONUSES: Readonly<
     {
       name: string;
       mineOutput: number;
+      energyOutput: number;
       defensePower: number;
       defenseBuildTime: number;
       expeditionYield: number;
@@ -1177,6 +1178,7 @@ export const PLAYER_CLASS_BONUSES: Readonly<
   miner: {
     name: "Miner",
     mineOutput: 1.12,
+    energyOutput: 1.1,
     defensePower: 1.1,
     defenseBuildTime: 0.9,
     expeditionYield: 1,
@@ -1195,6 +1197,7 @@ export const PLAYER_CLASS_BONUSES: Readonly<
   explorer: {
     name: "Explorer",
     mineOutput: 1,
+    energyOutput: 1,
     defensePower: 1,
     defenseBuildTime: 1,
     expeditionYield: 1.2,
@@ -1213,6 +1216,7 @@ export const PLAYER_CLASS_BONUSES: Readonly<
   fleeter: {
     name: "Fleeter",
     mineOutput: 1,
+    energyOutput: 1,
     defensePower: 1,
     defenseBuildTime: 1,
     expeditionYield: 1,
@@ -1222,7 +1226,7 @@ export const PLAYER_CLASS_BONUSES: Readonly<
     attack: 1.08,
     fleetSpeed: 1.1,
     shipBuildTime: 0.9,
-    fleetSlots: 1,
+    fleetSlots: 2,
     colonySlots: 0,
     colonyShipSpeed: 1,
     buildingBuildTime: 1,
@@ -1231,6 +1235,7 @@ export const PLAYER_CLASS_BONUSES: Readonly<
   expansionist: {
     name: "Expansionist",
     mineOutput: 1,
+    energyOutput: 1,
     defensePower: 1,
     defenseBuildTime: 1,
     expeditionYield: 1,

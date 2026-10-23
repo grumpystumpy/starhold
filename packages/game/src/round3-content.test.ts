@@ -315,6 +315,8 @@ describe("Round 3 content + engine (11–19)", () => {
 
   it("class bonus table matches contract sheet", () => {
     assert.equal(PLAYER_CLASS_BONUSES.miner.mineOutput, 1.12);
+    assert.equal(PLAYER_CLASS_BONUSES.miner.energyOutput, 1.1);
+    assert.equal(PLAYER_CLASS_BONUSES.fleeter.fleetSlots, 2);
     assert.equal(PLAYER_CLASS_BONUSES.miner.defensePower, 1.1);
     assert.equal(PLAYER_CLASS_BONUSES.explorer.expeditionYield, 1.2);
     assert.equal(PLAYER_CLASS_BONUSES.fleeter.attack, 1.08);
