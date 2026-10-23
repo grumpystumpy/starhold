@@ -90,6 +90,44 @@ describe("planet fields curve", () => {
 });
 
 describe("position production multipliers", () => {
+  it("Miner boosts planet energy only; old players without a class keep defaults", () => {
+    const universe = createUniverse("Miner energy", 8);
+    const { player, planet } = joinUniverse(universe, "Miner", 201_600_000);
+    const body = universe.planets[planet.id];
+    body.buildings = { solarPlant: 10 };
+    body.lastTickAt = 201_600_000;
+    delete (player as { playerClass?: unknown }).playerClass;
+
+    const oldShapeView = playerView(universe, player.id, 201_600_000);
+    assert.equal(oldShapeView.fleetSlotCap, 1);
+    assert.deepEqual(oldShapeView.economy.productionPerHour, {
+      metal: 500,
+      crystal: 250,
+      deuterium: 100,
+    });
+    const baseEnergy = oldShapeView.economy.energy.produced;
+
+    universe.players[player.id].playerClass = {
+      classId: "miner",
+      chosenAt: 201_600_001,
+      changeCount: 0,
+      lastChangeAt: null,
+    };
+    const minerView = playerView(universe, player.id, 201_600_001);
+    assert.equal(minerView.economy.energy.produced, Math.floor(baseEnergy * 1.1));
+    assert.equal(minerView.economy.productionPerHour.metal, 500);
+    assert.equal(minerView.economy.productionPerHour.crystal, 250);
+    assert.equal(minerView.economy.productionPerHour.deuterium, 100);
+
+    universe.players[player.id].playerClass.classId = "explorer";
+    const explorerView = playerView(universe, player.id, 201_600_002);
+    assert.equal(explorerView.economy.energy.produced, baseEnergy);
+
+    universe.players[player.id].playerClass.classId = "fleeter";
+    const fleeterView = playerView(universe, player.id, 201_600_003);
+    assert.equal(fleeterView.fleetSlotCap, oldShapeView.fleetSlotCap + 2);
+  });
+
   it("Power Discipline boosts energy production without boosting mine output", () => {
     const universe = createUniverse("Power Discipline", 8);
     const { planet } = joinUniverse(universe, "Power", 201_500_000);
