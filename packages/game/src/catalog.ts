@@ -78,8 +78,8 @@ export const FIELD_CENTER_BY_SLOT: Readonly<Record<number, number>> = {
 export const MOON_FIELDS_BASE = 1;
 export const MOON_FIELDS_PER_LUNAR_BASE = 3;
 
-/** Minimum debris (metal+crystal) before a moon can form. */
-export const MOON_DEBRIS_MIN = 5000;
+/** Debris (metal+crystal) required for each percentage point of moon chance. */
+export const MOON_DEBRIS_PER_PERCENT = 250_000;
 
 /** Cap on moon-formation chance percent. */
 export const MOON_CHANCE_CAP = 20;

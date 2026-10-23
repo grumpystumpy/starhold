@@ -162,7 +162,7 @@ export function resolveRaidArrival(
       summary = `${combat.summary} Siege hulls shattered the moon (${kill.chancePct}% chance).`;
     }
   } else {
-    const moon = tryFormMoon(universe, target, debrisCreated, reportId, now);
+    const moon = tryFormMoon(universe, target, debrisCreated, `${fleet.id}:${fleet.arrivesAt}`, now);
     moonFormed = Boolean(moon);
     if (moon) {
       summary = `${combat.summary} A moon coalesced from the debris field.`;
