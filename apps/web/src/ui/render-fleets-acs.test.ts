@@ -67,3 +67,75 @@ describe("fleet slot counters", () => {
     assert.match(withBeacon, /Fleets 2\/6 · Expeditions 1\/3/);
   });
 });
+
+describe("newbie protection launch warning", () => {
+  it("warns protected players before attacking another player, but not spying or raiding pirates", () => {
+    const view = fleetView();
+    view.roster = [
+      {
+        id: "p1",
+        name: "Alpha",
+        planetId: "pl1",
+        pointsHint: 100,
+        coords: { galaxy: 1, system: 1, slot: 8 },
+      },
+      {
+        id: "p2",
+        name: "Rival",
+        planetId: "pl2",
+        pointsHint: 3000,
+        coords: { galaxy: 1, system: 1, slot: 9 },
+      },
+    ] as PlayerView["roster"];
+
+    const raid = fleetComposer(view, false, {
+      targetPlanetId: "pl2",
+      targetCoords: null,
+      asteroidId: null,
+      pirateBaseId: null,
+      alienBaseId: null,
+      mission: "raid",
+      counts: {},
+      cargo: {},
+      openAcs: false,
+    });
+    assert.match(raid, /Launching this attack ends your newbie protection/);
+
+    const spy = fleetComposer(view, false, {
+      targetPlanetId: "pl2",
+      targetCoords: null,
+      asteroidId: null,
+      pirateBaseId: null,
+      alienBaseId: null,
+      mission: "espionage",
+      counts: {},
+      cargo: {},
+      openAcs: false,
+    });
+    assert.doesNotMatch(spy, /ends your newbie protection/);
+
+    view.galaxy = {
+      ...view.galaxy,
+      pirateBase: {
+        id: "pirate1",
+        name: "Pirates",
+        coords: { galaxy: 1, system: 1, slot: 1 },
+        tier: 1,
+        level: 1,
+        threatHint: "low",
+      },
+    } as PlayerView["galaxy"];
+    const pirateRaid = fleetComposer(view, false, {
+      targetPlanetId: null,
+      targetCoords: null,
+      asteroidId: null,
+      pirateBaseId: "pirate1",
+      alienBaseId: null,
+      mission: "pirateRaid",
+      counts: {},
+      cargo: {},
+      openAcs: false,
+    });
+    assert.doesNotMatch(pirateRaid, /ends your newbie protection/);
+  });
+});

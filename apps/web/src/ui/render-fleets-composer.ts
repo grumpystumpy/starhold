@@ -183,6 +183,41 @@ export function fleetComposer(
   if (selected && !options.some((o) => o.includes(`value="${selected}"`))) {
     selected = options[0]?.match(/value="([^"]+)"/)?.[1] ?? "";
   }
+  const selectedPlanetId = selected.startsWith("planet:")
+    ? selected.slice("planet:".length)
+    : null;
+  const selectedCoords = selected.startsWith("coords:")
+    ? selected.slice("coords:".length).split(":").map(Number)
+    : null;
+  const targetIsRealPlayer =
+    mission === "raid" &&
+    (view.roster.some(
+      (r) =>
+        r.id !== view.player.id &&
+        (selectedPlanetId != null
+          ? r.planetId === selectedPlanetId
+          : selectedCoords != null &&
+            r.coords.galaxy === selectedCoords[0] &&
+            r.coords.system === selectedCoords[1] &&
+            r.coords.slot === selectedCoords[2]),
+    ) ||
+      view.galaxy.slots.some(
+        (s) =>
+          s.playerId != null &&
+          s.playerId !== view.player.id &&
+          (selectedPlanetId != null
+            ? s.planetId === selectedPlanetId || s.moonId === selectedPlanetId
+            : selectedCoords != null &&
+              s.coords.galaxy === selectedCoords[0] &&
+              s.coords.system === selectedCoords[1] &&
+              s.coords.slot === selectedCoords[2]),
+      ));
+  const currentPlayer = view.roster.find((r) => r.id === view.player.id);
+  const showNewbieProtectionWarning =
+    targetIsRealPlayer &&
+    currentPlayer != null &&
+    currentPlayer.pointsHint < NEWBIE_PROTECTION_POINTS &&
+    view.player.newbieForfeitedAt == null;
   const optionHtml = options
     .map((html) => markSelectedOption(html, selected))
     .join("");
@@ -388,6 +423,11 @@ export function fleetComposer(
       ${cargoBlock}
       <div class="fleet-ships" data-testid="fleet-orbit-ships">${shipInputs}</div>
       ${needHint}
+      ${
+        showNewbieProtectionWarning
+          ? `<p class="hint" data-testid="fleet-newbie-protection-warning">Launching this attack ends your newbie protection.</p>`
+          : ""
+      }
       ${acsBlock(view, mission, busy, draft)}
       <p class="hint">Ships shown are in orbit on the selected colony. Example one-way ETA ~${fmtEta(sampleEta)} · fuel ~${fmt(sampleFuel)} deut (1 scout).</p>
       <button type="submit" data-testid="launch-fleet" ${launchBlocked || orbitShipIds.length === 0 ? "disabled" : ""}>Launch fleet</button>
