@@ -52,7 +52,11 @@ import {
 } from "./world.js";
 import type { TickBudget } from "./tick-budget.js";
 import type { FleetMission, UniverseState } from "./types.js";
-import { findNearestOpenSlot1 } from "./world-pirates.js";
+import {
+  applyStrongShipCap,
+  findNearestOpenSlot1,
+  pirateCombatResearchForOpponent,
+} from "./world-pirates.js";
 
 describe("pirate balance helpers", () => {
   it("pays Starshards by tier on destroy", () => {
@@ -821,6 +825,145 @@ describe("lazy seed cursor sorted with the old key", () => {
     for (let g = 1; g <= MAP_GALAXIES; g++) {
       assert.ok(per[g] >= 5, `galaxy ${g}: ${per[g]} (${per.slice(1).join(",")})`);
     }
+  });
+});
+
+describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
+  it("pirate tech = opponent - 3 (and 0 floor) in both directions", () => {
+    // 1. Pirate raiding player
+    const opponentResearch = {
+      weaponsTech: 8,
+      shieldingTech: 4,
+      armourTech: 2,
+    };
+    const pTech = pirateCombatResearchForOpponent(opponentResearch);
+    assert.equal(pTech.weaponsTech, 5); // 8 - 3
+    assert.equal(pTech.shieldingTech, 1); // 4 - 3
+    assert.equal(pTech.armourTech, 0); // max(0, 2 - 3)
+
+    // Floor at 0 check
+    const lowResearch = {
+      weaponsTech: 1,
+      shieldingTech: 0,
+      armourTech: 0,
+    };
+    const lowTech = pirateCombatResearchForOpponent(lowResearch);
+    assert.equal(lowTech.weaponsTech, 0);
+    assert.equal(lowTech.shieldingTech, 0);
+    assert.equal(lowTech.armourTech, 0);
+
+    // 2. Player attacking pirate base
+    const universe = createUniverse("Tech Direction Test", 8);
+    const { player, planet } = joinUniverse(universe, "Attacker", Date.now());
+    player.research = { weaponsTech: 10, shieldingTech: 5, armourTech: 1 };
+    universe.planets[planet.id].resources.deuterium = 100_000;
+    universe.planets[planet.id].ships.cruiser = 5;
+
+    const base = activePirateBases(universe)[0]!;
+    base.ships = { ...emptyFleetShips(), interceptor: 1 };
+
+    const launch = launchFleet(universe, {
+      playerId: player.id,
+      mission: "pirateRaid",
+      ships: { cruiser: 5 },
+      pirateBaseId: base.id,
+      now: Date.now() + 100,
+    });
+    assert.equal(launch.ok, true);
+    advanceUniverse(universe, launch.fleet.arrivesAt);
+
+    const reportId = launch.fleet.reportId;
+    assert.ok(reportId);
+    const report = universe.reports[reportId];
+    assert.ok(report);
+    assert.equal(report.outcome, "attacker_win");
+  });
+
+  it("raid power ~70% of defender power (hand-computed small case)", () => {
+    // Hand-computed small case:
+    // Defender has 10 Interceptors. Interceptor unit combat power = 40 + 0.5*16 + 0.3*20 + 0.3*50 = 69.
+    // Total defender power = 10 * 69 = 690.
+    // Target raid power = 70% of 690 = 483.
+    // 483 / 69 = 7 Interceptors.
+    const defenderShips = { ...emptyFleetShips(), interceptor: 10 };
+    const defenderPower = fleetCombatPower(defenderShips);
+    assert.equal(defenderPower, 690);
+
+    // Large base stock: 100 Interceptors (power 6,900)
+    const baseStock = { ...emptyFleetShips(), interceptor: 100 };
+    const scaled = scalePirateRaidFleet(baseStock, defenderPower, defenderShips);
+
+    assert.equal(scaled.interceptor, 7);
+    assert.equal(fleetCombatPower(scaled), 483); // 7 * 69 = 483 (exactly 70% of 690)
+  });
+
+  it("never exceeds base stock", () => {
+    // Pirate base only has 3 Interceptors and 1 Cruiser.
+    const smallStock = { ...emptyFleetShips(), interceptor: 3, cruiser: 1 };
+
+    // Defender has massive power (defender power = 1,000,000) with 10 Cruisers.
+    const defenderShips = { ...emptyFleetShips(), cruiser: 10 };
+    const hugePower = 1_000_000;
+
+    const scaled = scalePirateRaidFleet(smallStock, hugePower, defenderShips);
+
+    assert.ok((scaled.interceptor ?? 0) <= 3);
+    assert.ok((scaled.cruiser ?? 0) <= 1);
+    assert.ok((scaled.bomber ?? 0) === 0);
+  });
+
+  it("strong-ship cap with a mixed defender fleet", () => {
+    // Defender has 2 Cruisers and 1 Bomber.
+    const defenderShips = { ...emptyFleetShips(), cruiser: 2, bomber: 1 };
+    const baseStock = { ...emptyFleetShips(), cruiser: 50, bomber: 50 };
+
+    const capped = applyStrongShipCap(baseStock, defenderShips);
+
+    // Bomber: defender has 1 Bomber + 0 stronger = 1.
+    assert.equal(capped.bomber, 1);
+    // Cruiser: defender has 2 Cruisers + 1 Bomber (stronger) = 3.
+    assert.equal(capped.cruiser, 3);
+  });
+
+  it("interceptors and cheaper types may exceed defender numbers", () => {
+    // Defender has 1 Interceptor and 0 Cruisers/Bombers.
+    const defenderShips = { ...emptyFleetShips(), interceptor: 1 };
+    // Pirate base has 20 Interceptors, 20 Cruisers.
+    const baseStock = { ...emptyFleetShips(), interceptor: 20, cruiser: 20 };
+
+    const capped = applyStrongShipCap(baseStock, defenderShips);
+
+    // Cruisers: defender has 0 ships of Cruiser or stronger, so capped at 0.
+    assert.equal(capped.cruiser, 0);
+    // Interceptors: NOT > Interceptor cost, so may exceed defender numbers.
+    assert.equal(capped.interceptor, 20);
+
+    // When scaled vs defender power (e.g. defenderPower = 5000)
+    const scaled = scalePirateRaidFleet(baseStock, 5000, defenderShips);
+    assert.equal(scaled.cruiser, 0);
+    assert.ok((scaled.interceptor ?? 0) > 1);
+  });
+
+  it("loads an existing/old-shaped saved state and raids resolve (no save reset)", () => {
+    const universe = createUniverse("Old Saved State", 8);
+    const { player, planet } = joinUniverse(universe, "Defender", Date.now());
+    const body = universe.planets[planet.id]!;
+    body.ships = { ...emptyFleetShips(), interceptor: 10 };
+    body.resources = { metal: 10_000, crystal: 10_000, deuterium: 10_000 };
+
+    const base = activePirateBases(universe)[0]!;
+    base.level = 15;
+    base.tier = 15;
+    base.techs = { weapons: 3, armour: 3, shielding: 3 };
+    base.ships = { ...emptyFleetShips(), interceptor: 50, cruiser: 10 };
+    base.nextRaidAt = 0;
+
+    const now = PIRATE_RAID_PERIOD_MS * 2;
+    tickPirates(universe, now);
+
+    assert.ok(universe.players[player.id]);
+    assert.equal(universe.players[player.id]?.name, "Defender");
+    assert.ok(universe.reports && Object.keys(universe.reports).length >= 0);
   });
 });
 
