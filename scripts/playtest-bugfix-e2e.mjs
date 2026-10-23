@@ -62,6 +62,21 @@ async function state(playerId) {
   return body;
 }
 
+async function setupLab(name) {
+  const lab = await join(name);
+  await grant(lab.player.id, { metal: 80_000, crystal: 80_000, deuterium: 40_000 });
+  const labUp = await api("/api/upgrade", {
+    method: "POST",
+    body: JSON.stringify({ playerId: lab.player.id, buildingId: "researchLab" }),
+  });
+  assert(labUp.status === 200, `lab upgrade: ${JSON.stringify(labUp.body)}`);
+  await until("lab level 1", async () => {
+    const view = await state(lab.player.id);
+    return (view.planet.buildings.researchLab ?? 0) >= 1 ? view : null;
+  });
+  return lab;
+}
+
 async function until(label, pred, ms = 60_000) {
   const activeClock = createActiveWaitClock();
   let last;
@@ -277,6 +292,14 @@ async function runViewport(browser, viewport, ids) {
       if (blocked) sawQueueFull = true;
     }
     assert(sawQueueFull, `${tag} research queue never stayed full`);
+    if (viewport.width === 1280) {
+      const researchState = await state(ids.lab.player.id);
+      const queuedResearch = researchState.player.researchQueue.map((item) => ({
+        researchId: item.researchId,
+        secondsRemaining: (item.completesAt - researchState.now) / 1_000,
+      }));
+      console.info("PLAYTEST_RESEARCH_QUEUE", JSON.stringify(queuedResearch));
+    }
     await noOverflow(page, `${tag} research`);
 
     const fleetUrl = `${WEB}/fleet?playerId=${encodeURIComponent(ids.spy.player.id)}`;
@@ -439,17 +462,8 @@ async function main() {
   });
   await grant(solar.player.id, { metal: 0, crystal: 0, deuterium: 0 });
 
-  const lab = await join(`Lab${stamp}`);
-  await grant(lab.player.id, { metal: 80_000, crystal: 80_000, deuterium: 40_000 });
-  const labUp = await api("/api/upgrade", {
-    method: "POST",
-    body: JSON.stringify({ playerId: lab.player.id, buildingId: "researchLab" }),
-  });
-  assert(labUp.status === 200, `lab upgrade: ${JSON.stringify(labUp.body)}`);
-  await until("lab level 1", async () => {
-    const view = await state(lab.player.id);
-    return (view.planet.buildings.researchLab ?? 0) >= 1 ? view : null;
-  });
+  const desktopLab = await setupLab(`LabD${stamp}`);
+  const phoneLab = await setupLab(`LabP${stamp}`);
 
   const victimName = `New${stamp}`;
   const victim = await join(victimName);
@@ -495,18 +509,19 @@ async function main() {
     return (view.seasonLeaderboard?.scores?.economy ?? 0) >= 1 ? view : null;
   });
 
-  const ids = { solar, lab, spy, victim, victimName, econ };
+  const ids = { solar, lab: desktopLab, spy, victim, victimName, econ };
+  const phoneIds = { ...ids, lab: phoneLab };
   const browser = await playwright.chromium.launch({ headless: true });
   try {
     await runViewport(browser, { width: 1280, height: 800 }, ids);
-    await runViewport(browser, { width: 390, height: 844 }, ids);
+    await runViewport(browser, { width: 390, height: 844 }, phoneIds);
     const grad = await api("/api/e2e/graduate-newbie", {
       method: "POST",
       body: JSON.stringify({ playerId: victim.player.id }),
     });
     assert(grad.status === 200, `graduate: ${JSON.stringify(grad.body)}`);
     await expectGraduatedTarget(browser, { width: 1280, height: 800 }, ids);
-    await expectGraduatedTarget(browser, { width: 390, height: 844 }, ids);
+    await expectGraduatedTarget(browser, { width: 390, height: 844 }, phoneIds);
   } finally {
     await browser.close();
   }
