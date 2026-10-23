@@ -94,7 +94,7 @@ describe("playtest fixes", () => {
     assert.match(vault, /Capacity starts at 30,000/);
   });
 
-  it("shows queue-full and the real lab requirement", () => {
+  it("shows queue-full and research prerequisite details", () => {
     const base = {
       now: 1_700_000_000_000,
       player: player(),
@@ -118,9 +118,14 @@ describe("playtest fixes", () => {
     assert.doesNotMatch(ready, /disabled/);
 
     const needsTwo = researchRow("shieldingTech", base, false);
-    assert.match(needsTwo, />Needs lab 2</);
+    assert.match(needsTwo, />Needs lab 6</);
+    assert.match(needsTwo, /Power Discipline L3\+ \(current L0\)/);
     assert.match(needsTwo, /disabled/);
     assert.doesNotMatch(needsTwo, />Needs lab</);
+
+    const needsPower = researchRow("combustionDrive", base, false);
+    assert.match(needsPower, /Needs Power Discipline level 1 \(have 0\)/);
+    assert.match(needsPower, /Power Discipline L1\+ \(current L0\)/);
 
     base.player.researchQueue = [
       {
