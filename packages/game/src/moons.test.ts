@@ -7,6 +7,7 @@ import {
   inSensorPhalanxRange,
   joinUniverse,
   launchFleet,
+  migrateOrResetUniverse,
   moonAtCoords,
   moonChancePercent,
   moonRoll,
@@ -107,9 +108,10 @@ describe("Thread C moons", () => {
     assert.equal(tryFormMoon(universe, npc, debris, seed, 165_000_102), null);
   });
 
-  it("keeps moons from an old-shaped saved universe", () => {
+  it("loads an old save with its moon and progress, then resolves a raid", () => {
     const universe = createUniverse("Old Moon Save", 8);
     const a = joinUniverse(universe, "Legacy Moonkeeper", 166_000_000);
+    const b = joinUniverse(universe, "Legacy Raider", 166_000_001);
     const parent = universe.planets[a.planet.id];
     const moon = tryFormMoon(
       universe,
@@ -119,10 +121,41 @@ describe("Thread C moons", () => {
       166_000_100,
     );
     assert.ok(moon);
-    const oldSave = JSON.parse(JSON.stringify(universe)) as typeof universe;
-    assert.equal(oldSave.planets[moon!.id]?.id, moon!.id);
-    assert.equal(oldSave.planets[parent.id]?.moonId, moon!.id);
-    assert.ok(oldSave.players[a.player.id]?.planetIds.includes(moon!.id));
+    parent.buildings.metalMine = 7;
+    parent.resources = { metal: 12_345, crystal: 6_789, deuterium: 432 };
+    universe.planets[b.planet.id]!.ships.scout = 5;
+    universe.planets[b.planet.id]!.resources.deuterium = 100_000;
+
+    // Schema 4 is the saved shape immediately before the current load path;
+    // it has no v5 pirate/alien fields and already contains the moon.
+    const legacy = structuredClone(universe);
+    legacy.schemaVersion = 4;
+    delete (legacy as Partial<typeof legacy>).alienBases;
+    const oldSave = JSON.parse(JSON.stringify(legacy)) as typeof universe;
+    const loaded = migrateOrResetUniverse(oldSave, { name: "fallback", speed: 8 });
+    assert.equal(loaded.didReset, false);
+    assert.equal(loaded.universe.planets[moon!.id]?.id, moon!.id);
+    assert.equal(loaded.universe.planets[parent.id]?.moonId, moon!.id);
+    assert.ok(loaded.universe.players[a.player.id]?.planetIds.includes(moon!.id));
+    assert.equal(loaded.universe.planets[parent.id]!.buildings.metalMine, 7);
+    assert.deepEqual(loaded.universe.planets[parent.id]!.resources, {
+      metal: 12_345, crystal: 6_789, deuterium: 432,
+    });
+    assert.equal(loaded.universe.planets[b.planet.id]!.ships.scout, 5);
+    graduateNewbieProtection(loaded.universe, loaded.universe.players[a.player.id]!);
+
+    const launched = launchFleet(loaded.universe, {
+      playerId: b.player.id,
+      mission: "raid",
+      targetPlanetId: parent.id,
+      targetCoords: parent.coords,
+      ships: { scout: 1 },
+      now: 166_000_200,
+    });
+    assert.equal(launched.ok, true, launched.ok ? "" : launched.error);
+    if (!launched.ok) return;
+    advanceUniverse(loaded.universe, launched.fleet.arrivesAt);
+    assert.ok(Object.values(loaded.universe.reports).some((report) => report.missionId === launched.fleet.id));
   });
 
   it("blocks mines on moons and allows lunar base + jump gate", () => {
