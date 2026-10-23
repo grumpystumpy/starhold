@@ -442,7 +442,9 @@ export function playerView(
           levelBonuses(player.level ?? 1).production *
           boosts.mineOutput *
           classBonuses(player.playerClass?.classId).mineOutput,
-        energyOutput: boosts.energyOutput,
+        energyOutput:
+          boosts.energyOutput *
+          classBonuses(player.playerClass?.classId).energyOutput,
       },
     ),
     roster: provided

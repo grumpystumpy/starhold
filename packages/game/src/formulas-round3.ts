@@ -81,6 +81,7 @@ export function classBonuses(classId: PlayerClassId | null | undefined) {
     return {
       name: "Unassigned",
       mineOutput: 1,
+      energyOutput: 1,
       defensePower: 1,
       defenseBuildTime: 1,
       expeditionYield: 1,
