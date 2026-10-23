@@ -12,6 +12,8 @@ import type {
   PlayerState,
 } from "./types.js";
 import { officerLevelOf, skillLevelOf } from "./world-progression.js";
+import { storageFor } from "./formulas-build.js";
+import type { PlanetState, UniverseState } from "./types.js";
 
 /** Aggregated officer + skill multipliers / flat adds for the player. */
 export interface PlayerBoosts {
@@ -21,6 +23,7 @@ export interface PlayerBoosts {
   fleetSlots: number;
   defensePower: number;
   energyOutput: number;
+  storageCapacity: number;
   espionageLevel: number;
 }
 
@@ -32,6 +35,7 @@ export function emptyBoosts(): PlayerBoosts {
     fleetSlots: 0,
     defensePower: 1,
     energyOutput: 1,
+    storageCapacity: 1,
     espionageLevel: 0,
   };
 }
@@ -43,6 +47,7 @@ function applyEffect(boosts: PlayerBoosts, effect: OfficerEffect): void {
     case "fleetSpeed":
     case "defensePower":
     case "energyOutput":
+    case "storageCapacity":
       boosts[effect.kind] *= effect.value;
       break;
     case "fleetSlots":
@@ -62,8 +67,26 @@ export function pruneExpiredOfficers(
   now: number,
 ): OfficerState[] {
   const live = (player.officers ?? []).filter((o) => o.expiresAt > now);
-  player.officers = live;
+  if (player.officers !== undefined) player.officers = live;
   return live;
+}
+
+/** Storage caps with the active Vaultkeeper boost for owned planets only. */
+export function storageForPlanet(
+  source: UniverseState | PlayerState | undefined,
+  planet: PlanetState,
+  now: number,
+) {
+  const owner = source && "players" in source
+    ? source.players[planet.ownerPlayerId]
+    : source && "planetIds" in source
+      ? source
+      : undefined;
+  const owned = !!owner?.planetIds.includes(planet.id);
+  return storageFor(
+    planet,
+    owned ? playerBoosts(owner, now).storageCapacity : 1,
+  );
 }
 
 /** Combine active officers + unlocked skills into boosts. */
