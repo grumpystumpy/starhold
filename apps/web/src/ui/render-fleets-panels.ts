@@ -310,8 +310,12 @@ export function galaxyPanel(
         : "";
       const moon = s.hasMoon ? " · Moon" : "";
       const tag = s.allianceTag ? ` [${escapeHtml(s.allianceTag)}]` : "";
+      const points =
+        s.playerId && typeof s.empirePoints === "number"
+          ? ` · ${fmt(s.empirePoints)} pts`
+          : "";
       const who = s.playerName
-        ? `${escapeHtml(s.playerName)}${tag}${s.isOwn ? " (you)" : ""}${s.isMini ? " · Mini" : ""} · ~${fmt(s.pointsHint)} pts${moon}`
+        ? `${escapeHtml(s.playerName)}${tag}${s.isOwn ? " (you)" : ""}${s.isMini ? " · Mini" : ""}${points}${moon}`
         : "Empty";
       const marker = s.allianceMarker;
       const tip = marker

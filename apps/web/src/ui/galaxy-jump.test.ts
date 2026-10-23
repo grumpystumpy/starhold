@@ -11,6 +11,60 @@ const mainSource = readFileSync(
 );
 
 describe("galaxy jump controls", () => {
+  it("renders empire points and debris without planet points", () => {
+    const view = {
+      galaxy: {
+        galaxy: 1,
+        system: 2,
+        slots: [
+          {
+            coords: { galaxy: 1, system: 2, slot: 3 },
+            planetId: "owned",
+            playerId: "player",
+            playerName: "Commander",
+            allianceTag: null,
+            pointsHint: 47,
+            empirePoints: 900,
+            debris: { metal: 1200, crystal: 340 },
+            isOwn: false,
+            hasMoon: false,
+            moonId: null,
+            isMini: false,
+            activity: "planet",
+            artId: "normal-1",
+            artUrl: "/art.webp",
+            artThumbUrl: "/thumb.webp",
+          },
+          {
+            coords: { galaxy: 1, system: 2, slot: 4 },
+            planetId: "unowned",
+            playerId: null,
+            playerName: "Unclaimed",
+            allianceTag: null,
+            pointsHint: 47,
+            debris: null,
+            isOwn: false,
+            hasMoon: false,
+            moonId: null,
+            isMini: false,
+            activity: "planet",
+            artId: "normal-2",
+            artUrl: "/art.webp",
+            artThumbUrl: "/thumb.webp",
+          },
+        ],
+        minis: [],
+        asteroids: [],
+      },
+    } as unknown as PlayerView;
+
+    const html = galaxyPanel(view, false);
+
+    assert.match(html, /900 pts/);
+    assert.match(html, /debris 1,200\/340/);
+    assert.doesNotMatch(html, /47 pts/);
+  });
+
   it("renders a mobile friendly coordinate form and wrapped galaxy controls", () => {
     const view = {
       galaxy: {
