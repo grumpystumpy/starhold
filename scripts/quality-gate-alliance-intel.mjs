@@ -292,7 +292,8 @@ async function main() {
 
   await pageB.getByTestId("nav-alliances").click();
   const openIntel = pageB.locator('[data-testid^="alliance-intel-open-"]').first();
-  await openIntel.waitFor({ timeout: 15_000 });
+  // Covers at least one full 30s alliance refresh.
+  await openIntel.waitFor({ timeout: 60_000 });
   const intelText = await pageB.getByTestId("alliance-intel").innerText();
   if (!intelText.includes(commanderB)) {
     throw new Error(`ally intel missing target ${commanderB}: ${intelText}`);
