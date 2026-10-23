@@ -35,7 +35,9 @@ export const EXPEDITION_STARSHARDS_CHANCE_PCT = 5;
 export const MAX_COMBAT_ROUNDS = 8;
 
 /** Share of defender stockpile eligible for loot on an attacker win. */
-export const RAID_LOOT_SHARE = 0.5;
+export const RAID_LOOT_SHARE_FLEETER = 0.75;
+export const RAID_LOOT_SHARE_OTHER = 0.5;
+export const RAID_LOOT_SHARE = RAID_LOOT_SHARE_OTHER;
 
 /** Fraction of destroyed ship metal/crystal that becomes debris. */
 export const DEBRIS_FROM_SHIPS = 0.3;
