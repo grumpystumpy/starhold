@@ -12,6 +12,50 @@ const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:8787";
 const require = createRequire(import.meta.url);
 const { chromium } = require("playwright");
 
+async function logFleetLaunchFailure(page, error) {
+  let diagnostics;
+  try {
+    diagnostics = await page.evaluate(() => {
+      const form = document.querySelector('[data-testid="fleet-form"]');
+      const target = form?.querySelector("#fleet-target");
+      const state = window.starhold?.getState?.();
+      return {
+        fleetStep: form?.getAttribute("data-fleet-step") ?? "missing",
+        checkedMission: form?.querySelector('input[name="fleet-mission"]:checked')?.value ?? "missing",
+        shipCounts: [...(form?.querySelectorAll("[data-fleet-count]") ?? [])].map((input) => ({
+          type: input.getAttribute("data-fleet-count"),
+          value: input.value,
+          valueAttribute: input.getAttribute("value"),
+        })),
+        fleetTarget: target
+          ? {
+              disabled: target.disabled,
+              options: [...target.options].map((option) => option.textContent?.trim() ?? ""),
+            }
+          : "missing",
+        shipSummary: form?.querySelector('[data-testid="fleet-ship-summary"]')?.innerText ?? "missing",
+        slotCounters: form?.querySelector('[data-testid="fleet-slot-counters"]')?.innerText ?? "missing",
+        hints: [...(form?.querySelectorAll(".hint") ?? [])].map((hint) => hint.innerText),
+        launchDisabled: form?.querySelector('[data-testid="launch-fleet"]')?.disabled ?? "missing",
+        state: state
+          ? {
+              busy: state.busy,
+              expedition: Object.fromEntries(
+                Object.entries(state).filter(([key]) => /expedition|fleet|busy/i.test(key)),
+              ),
+            }
+          : "missing",
+      };
+    });
+  } catch (diagnosticError) {
+    console.error("WORKERS_E2E_FLEET_LAUNCH_DIAGNOSTICS_READ_FAIL", diagnosticError);
+  }
+  console.error(
+    "WORKERS_E2E_FLEET_LAUNCH_DIAGNOSTICS",
+    JSON.stringify({ ...diagnostics, error: String(error) }, null, 2),
+  );
+}
+
 async function waitHealthy() {
   const activeClock = createActiveWaitClock();
   while (activeClock.elapsed() < 30_000) {
@@ -81,7 +125,12 @@ async function runViewport(width, height) {
     await fleetToStep2(page, { scout: 1 });
     const expedition = page.locator('[data-testid="mission-expedition"]');
     if (await expedition.count()) await expedition.first().click();
-    await page.click('[data-testid="launch-fleet"]');
+    try {
+      await page.click('[data-testid="launch-fleet"]');
+    } catch (error) {
+      await logFleetLaunchFailure(page, error);
+      throw error;
+    }
     await page.waitForSelector(
       '[data-testid="fleets-live"], [data-testid="flash-ok"]',
       { timeout: 15_000 },

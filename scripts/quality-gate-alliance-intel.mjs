@@ -326,6 +326,23 @@ async function main() {
   await pageA.getByTestId("galaxy-marker-1").waitFor({ timeout: 15_000 });
   logs.push("persist_reload");
 
+  const playerAId = await pageA.evaluate(() => window.starhold.getState().playerId);
+  if (!playerAId) throw new Error("missing player A before Joint Strike");
+  const grantScout = await fetch(`${API}/api/e2e/grant`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId: playerAId, ships: { scout: 1 } }),
+  });
+  if (!grantScout.ok) throw new Error(`player A scout grant failed ${grantScout.status}`);
+  await pageA.reload({ waitUntil: "networkidle" });
+  await pageA.waitForFunction(
+    () => (window.starhold.getState().ships?.scout ?? 0) >= 1,
+    null,
+    { timeout: 15_000 },
+  );
+  await pageA.getByTestId("nav-galaxy").click();
+  await pageA.getByTestId("galaxy-propose-1").waitFor({ timeout: 10_000 });
+
   await Promise.all([
     pageA.waitForResponse(
       (r) => r.url().includes("/api/alliance/plan-strike") && r.ok(),
@@ -334,15 +351,24 @@ async function main() {
     pageA.getByTestId("galaxy-propose-1").click(),
   ]);
   await pageA.getByText("Joint Strike armed").waitFor({ timeout: 10_000 });
+  const flash = await pageA.getByTestId("flash-ok").innerText();
+  const strikeCoords = flash.match(/(\d+:\d+:\d+)/)?.[1];
+  if (!strikeCoords) {
+    throw new Error(`Joint Strike flash missing target coords: ${flash}`);
+  }
+  await fleetToStep2(pageA, { scout: 1 });
   const openAcs = pageA.getByTestId("fleet-open-acs");
   await openAcs.waitFor({ timeout: 10_000 });
   if (!(await openAcs.isChecked())) {
     throw new Error("Joint Strike deep-link did not arm Open ACS");
   }
-  const flash = await pageA.getByTestId("flash-ok").innerText();
-  const strikeCoords = flash.match(/(\d+:\d+:\d+)/)?.[1];
-  if (!strikeCoords) {
-    throw new Error(`Joint Strike flash missing target coords: ${flash}`);
+  const mission = pageA.locator('input[name="fleet-mission"]:checked');
+  if ((await mission.getAttribute("value")) !== "raid") {
+    throw new Error("Joint Strike prefill did not retain raid mission");
+  }
+  const target = await pageA.locator("#fleet-target").inputValue();
+  if (target !== `coords:${strikeCoords}`) {
+    throw new Error(`Joint Strike prefill target changed: ${target}`);
   }
   await pageA.getByTestId("nav-alliances").click();
   await pageA
