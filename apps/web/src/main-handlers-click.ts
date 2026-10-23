@@ -83,6 +83,12 @@ import {
   toggleBattleReplay,
 } from "./ui/render-fleets-panels";
 import { readFleetForm } from "./main-fleet-form";
+import {
+  fleetDraftAfterBack,
+  fleetDraftAfterNext,
+  rememberFleetDraft,
+  salvageFleetForm,
+} from "./ui/render-fleets-draft";
 import { resolveNavPage } from "./ui/nav";
 import { navigateShopTab, navigateTo } from "./ui/router";
 
@@ -207,6 +213,16 @@ export function bindClickHandlers(): void {
       if (closestActionEl(target, "[data-fleet-preset-delete]")) {
         ev.preventDefault();
         void doDeleteFleetPreset();
+        return;
+      }
+
+      if (closestActionEl(target, "[data-fleet-back]")) {
+        ev.preventDefault();
+        const form = root.querySelector<HTMLFormElement>("#fleet-form");
+        if (form) form.setAttribute("data-fleet-step", "1");
+        const salvaged = salvageFleetForm(root);
+        if (salvaged) rememberFleetDraft(fleetDraftAfterBack(salvaged));
+        schedulePaint();
         return;
       }
 
@@ -630,7 +646,34 @@ export function bindClickHandlers(): void {
       el.type === "radio"
     ) {
       schedulePaint();
+      return;
     }
+    if (
+      (el instanceof HTMLSelectElement || el instanceof HTMLInputElement) &&
+      (el.id === "fleet-target" || el.hasAttribute("data-fleet-speed"))
+    ) {
+      schedulePaint();
+    }
+  });
+
+  root.addEventListener("input", (ev) => {
+    const el = ev.target;
+    if (!(el instanceof HTMLInputElement) || !el.matches("[data-fleet-count]")) {
+      return;
+    }
+    const form = el.closest("form");
+    if (!form || form.id !== "fleet-form") return;
+    const next = form.querySelector<HTMLButtonElement>(
+      "[data-testid='fleet-next']",
+    );
+    if (!next) return;
+    let total = 0;
+    for (const input of form.querySelectorAll<HTMLInputElement>(
+      "[data-fleet-count]",
+    )) {
+      total += Math.max(0, Math.floor(Number(input.value) || 0));
+    }
+    next.disabled = total < 1 || session.busy;
   });
 
   root.addEventListener("submit", (ev) => {
@@ -684,6 +727,25 @@ export function bindClickHandlers(): void {
 
     if (form.id === "fleet-form") {
       ev.preventDefault();
+      const submitter = (ev as SubmitEvent).submitter;
+      const action =
+        submitter instanceof HTMLButtonElement
+          ? submitter.dataset.fleetAction
+          : "";
+      // Step 1 has one submit control (Next). Enter must not launch.
+      if (form.getAttribute("data-fleet-step") !== "2" || action === "next") {
+        const salvaged = salvageFleetForm(root);
+        const next = salvaged ? fleetDraftAfterNext(salvaged) : null;
+        if (!next) {
+          setFlash("error", "Pick at least one ship.");
+          schedulePaint();
+          return;
+        }
+        form.setAttribute("data-fleet-step", "2");
+        rememberFleetDraft(next);
+        schedulePaint();
+        return;
+      }
       const draft = readFleetForm();
       if (!draft) {
         setFlash("error", "Pick a target and ships.");

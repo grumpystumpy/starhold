@@ -84,7 +84,8 @@ function paint(): void {
   );
   ensureDelegatedHandlers();
   if (session.pendingAcsPrefill && session.activePage === "fleet") {
-    if (wireJointStrikeForm(session.pendingAcsPrefill)) {
+    const formUp = Boolean(root.querySelector("#fleet-form"));
+    if (wireJointStrikeForm(session.pendingAcsPrefill) || formUp) {
       session.pendingAcsPrefill = null;
     }
   }

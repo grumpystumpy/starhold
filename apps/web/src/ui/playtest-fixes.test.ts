@@ -202,6 +202,8 @@ describe("playtest fixes", () => {
       counts: {},
       cargo: {},
       openAcs: false,
+      step: 2,
+      speedPercent: 100,
     });
     assert.match(spy, /Spy Newbie/);
     assert.match(spy, /Spy Veteran/);
@@ -219,6 +221,8 @@ describe("playtest fixes", () => {
       counts: {},
       cargo: {},
       openAcs: false,
+      step: 2,
+      speedPercent: 100,
     });
     assert.match(raid, /Attack Veteran/);
     assert.match(raid, /Attack moon @ 1:1:6/);
@@ -242,6 +246,8 @@ describe("playtest fixes", () => {
         counts: {},
         cargo: {},
         openAcs: false,
+        step: 2,
+        speedPercent: 100,
       },
     );
     assert.match(protectedOnly, /under 2,500 points are protected/);

@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { PlayerView } from "@starhold/game";
 import { fleetComposer } from "./render-fleets-composer";
-import { fleetDraftWithAcsPrefill } from "./render-fleets-draft";
+import {
+  fleetDraftWithAcsPrefill,
+  type FleetDraft,
+} from "./render-fleets-draft";
 
 function fleetView(): PlayerView {
   return {
@@ -39,12 +42,26 @@ function fleetView(): PlayerView {
 
 describe("Joint Strike fleet prefill", () => {
   it("arms raid, target coords, and Open ACS before the form exists", () => {
-    const draft = fleetDraftWithAcsPrefill(null, {
+    const base: FleetDraft = {
+      targetPlanetId: null,
+      targetCoords: null,
+      asteroidId: null,
+      pirateBaseId: null,
+      alienBaseId: null,
+      mission: "deploy",
+      counts: { scout: 1 },
+      cargo: {},
+      openAcs: false,
+      step: 1,
+      speedPercent: 100,
+    };
+    const draft = fleetDraftWithAcsPrefill(base, {
       coords: { galaxy: 1, system: 1, slot: 1 },
       mission: "raid",
       note: "",
       openAcs: true,
     });
+    assert.equal(draft.step, 2);
     const html = fleetComposer(fleetView(), false, draft);
     assert.match(html, /data-testid="mission-raid"[^>]*checked/);
     assert.match(html, /value="coords:1:1:1" selected/);
