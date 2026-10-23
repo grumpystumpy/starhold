@@ -377,6 +377,7 @@ async function main() {
   logs.push("strike_proposed");
 
   await pageA.getByTestId("nav-fleet").click();
+  await fleetToStep2(pageA, { scout: 1 });
   await pageA.getByTestId("propose-joint-strike").waitFor({ timeout: 10_000 });
   logs.push("fleet_propose_visible");
 
