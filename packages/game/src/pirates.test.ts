@@ -924,18 +924,29 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
     }
   });
 
-  it("alien raid on a player is sized using factor 1.4 without strong-ship cap", () => {
+  it("alien raid on a player planet uses main's sizing formula (factor 1.4, no cap), while pirate raid uses 0.70 + cap", () => {
+    const universe = createUniverse("Raid Sizing Faction Test", 8);
+    const { player, planet } = joinUniverse(universe, "Target", Date.now() - 10 * 86_400_000);
+    const body = universe.planets[planet.id]!;
+    body.ships = { ...emptyFleetShips(), interceptor: 10 };
+    const defenderPower = fleetCombatPower(body.ships);
+
     const baseStock = { ...emptyFleetShips(), cruiser: 100 };
-    const defenderShips = { ...emptyFleetShips(), interceptor: 10 };
-    const defenderPower = fleetCombatPower(defenderShips);
 
     const alienRaid = scalePirateRaidFleet(baseStock, defenderPower);
-
     assert.equal(PIRATE_RAID_POWER_FACTOR, 1.4);
+    assert.ok((alienRaid.cruiser ?? 0) > 0);
     assert.ok(fleetCombatPower(alienRaid) <= Math.max(PIRATE_RAID_POWER_FLOOR, defenderPower * PIRATE_RAID_POWER_FACTOR));
 
-    const pirateRaid = scalePirateRaidFleet(baseStock, defenderPower, defenderShips, PIRATE_RAID_POWER_FACTOR_PLAYER);
+    const pirateRaid = scalePirateRaidFleet(
+      baseStock,
+      defenderPower,
+      body.ships,
+      PIRATE_RAID_POWER_FACTOR_PLAYER,
+    );
+    assert.equal(PIRATE_RAID_POWER_FACTOR_PLAYER, 0.70);
     assert.equal(pirateRaid.cruiser ?? 0, 0);
+    assert.ok(fleetCombatPower(pirateRaid) <= defenderPower * PIRATE_RAID_POWER_FACTOR_PLAYER);
   });
 
   it("NPC-on-NPC raid produces the same fleet size as before this PR", () => {

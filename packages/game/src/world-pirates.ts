@@ -1406,12 +1406,18 @@ function applyNpcRaidOnPlanet(
   const npcResearch = faction === "pirate"
     ? pirateCombatResearchForOpponent(defenderResearch)
     : pirateCombatResearch(base);
-  const raidFleet = scalePirateRaidFleet(
-    base.ships,
-    planetDefensePower(planet, universe),
-    planet.ships,
-    PIRATE_RAID_POWER_FACTOR_PLAYER,
-  );
+  const raidFleet =
+    faction === "pirate"
+      ? scalePirateRaidFleet(
+          base.ships,
+          planetDefensePower(planet, universe),
+          planet.ships,
+          PIRATE_RAID_POWER_FACTOR_PLAYER,
+        )
+      : scalePirateRaidFleet(
+          base.ships,
+          planetDefensePower(planet, universe),
+        );
   if (fleetShipCount(raidFleet) < 1) return;
   const combat = resolveCombat(
     raidFleet,
