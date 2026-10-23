@@ -256,6 +256,12 @@ function pickFocusTarget(
   return best;
 }
 
+/**
+ * Computes target weights for B3-07.
+ * Every live target type keeps base weight sqrt(toughness) * count * (isSwarmDrone && mothershipPresent ? 5 : 1).
+ * Target types that the firer has rapid fire N against get extra weight (multiplied by N >= 1).
+ * Non-exclusive: all live target types remain eligible with positive weight.
+ */
 export function computeTargetWeights(
   shooterId: CombatUnitId,
   targetSide: SidePools,
@@ -272,27 +278,20 @@ export function computeTargetWeights(
 
   if (present.length === 0) return {};
 
-  let maxRF = 1;
-  for (const id of present) {
-    const rf = rapidFireFactor(shooterId, id);
-    if (rf > maxRF) maxRF = rf;
-  }
-
-  const candidates =
-    maxRF > 1
-      ? present.filter((id) => rapidFireFactor(shooterId, id) === maxRF)
-      : present;
-
   const mothershipPresent = (targetSide.ships.swarmMothership ?? 0) > 0;
   const weights: Partial<Record<CombatUnitId, number>> = {};
 
-  for (const id of candidates) {
+  for (const id of present) {
     const count = targetCount(targetSide, id);
     const stats = getUnitStats(id, targetResearch, battlefield);
     const toughness = unitHp(stats.maxS, stats.maxA, stats.maxH, undefined);
     let w = Math.sqrt(toughness) * count;
     if (id === "swarmDrone" && mothershipPresent) {
       w *= 5;
+    }
+    const rf = rapidFireFactor(shooterId, id);
+    if (rf > 1) {
+      w *= rf;
     }
     weights[id] = w;
   }
@@ -367,6 +366,11 @@ function calculateSingleUnitAttack(
   }
 }
 
+/**
+ * Fires shot(s) for a single firer unit during a simultaneous combat round.
+ * Targets are chosen based on living units in `targetSide` (count > 0).
+ * In an RF burst, each extra shot re-rolls target selection from remaining live units.
+ */
 export function fireUnitShots(
   firerId: CombatUnitId,
   targetSide: SidePools,
@@ -751,13 +755,11 @@ export function resolveCombat(
     const defShipsBefore = cloneFleetShips(defSide.ships);
     const defDefsBefore = cloneDefenses(defSide.defenses);
 
-    // Attacker ships fire
+    // Attacker ships fire against defSide live pool
     for (const id of SHIP_ORDER) {
       const n = atkShipsBefore[id] ?? 0;
       for (let i = 0; i < n; i++) {
-        if (
-          shipCount(defSide.ships) + defenseCount(defSide.defenses) <= 0
-        ) {
+        if (shipCount(defSide.ships) + defenseCount(defSide.defenses) <= 0) {
           break;
         }
         fireUnitShots(
@@ -773,7 +775,7 @@ export function resolveCombat(
       }
     }
 
-    // Defender ships fire
+    // Defender ships (alive at start of round) fire against atkSide live pool
     for (const id of SHIP_ORDER) {
       const n = defShipsBefore[id] ?? 0;
       for (let i = 0; i < n; i++) {
@@ -791,7 +793,7 @@ export function resolveCombat(
       }
     }
 
-    // Defender defenses fire
+    // Defender defenses (alive at start of round) fire against atkSide live pool
     for (const id of DEFENSE_ORDER) {
       const n = defDefsBefore[id] ?? 0;
       for (let i = 0; i < n; i++) {

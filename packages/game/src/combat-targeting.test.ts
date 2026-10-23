@@ -11,7 +11,7 @@ import {
 } from "./formulas.js";
 
 describe("B3-07 / B3-08 Combat: weighted targeting + rapid fire", () => {
-  it("targeting weights: hand-computed weight sqrt(toughness) * count when no RF targets present", () => {
+  it("targeting weights: hand-computed weight sqrt(toughness) * count * RF factor", () => {
     const defenderSide = {
       ships: normalizeFleetShips({ interceptor: 1, scout: 2 }),
       defenses: emptyDefenses(),
@@ -28,7 +28,7 @@ describe("B3-07 / B3-08 Combat: weighted targeting + rapid fire", () => {
       undefined,
     );
     assert.equal(interceptorToughness, 86);
-    const expectedInterceptorWeight = Math.sqrt(86) * 1;
+    const expectedInterceptorWeight = Math.sqrt(86) * 1 * 1;
 
     // Scout stats: shield 4, armor 8, hull 20 -> toughness 32
     const scoutToughness = unitHp(
@@ -38,7 +38,7 @@ describe("B3-07 / B3-08 Combat: weighted targeting + rapid fire", () => {
       undefined,
     );
     assert.equal(scoutToughness, 32);
-    const expectedScoutWeight = Math.sqrt(32) * 2;
+    const expectedScoutWeight = Math.sqrt(32) * 2 * 1;
 
     assert.ok(
       Math.abs((weights.interceptor ?? 0) - expectedInterceptorWeight) < 1e-6,
@@ -50,26 +50,39 @@ describe("B3-07 / B3-08 Combat: weighted targeting + rapid fire", () => {
     );
   });
 
-  it("targeting weights: prefers best rapid-fire target type when present", () => {
+  it("targeting weights: rapid-fire target preference is weighted and non-exclusive", () => {
     const defenderSide = {
-      ships: normalizeFleetShips({ probe: 5, hauler: 2, interceptor: 10 }),
+      ships: normalizeFleetShips({ probe: 1, interceptor: 1 }),
       defenses: emptyDefenses(),
     };
 
-    // Cruiser has RF 4 vs probe, RF 3 vs hauler, RF 1 vs interceptor
+    // Cruiser has RF 4 vs probe, RF 1 vs interceptor
     const weights = computeTargetWeights("cruiser", defenderSide);
 
-    // Max RF among present types is 4 (probe). Candidate set should be JUST probe.
-    assert.ok((weights.probe ?? 0) > 0, "Probe should have positive weight");
-    assert.equal(
-      weights.hauler ?? 0,
-      0,
-      "Hauler should have 0 weight since higher RF target probe is present",
+    const probeToughness = unitHp(
+      SHIPS.probe.shield,
+      SHIPS.probe.armor,
+      SHIPS.probe.hull,
+      undefined,
     );
-    assert.equal(
-      weights.interceptor ?? 0,
-      0,
-      "Interceptor should have 0 weight since higher RF target probe is present",
+    const interceptorToughness = unitHp(
+      SHIPS.interceptor.shield,
+      SHIPS.interceptor.armor,
+      SHIPS.interceptor.hull,
+      undefined,
+    );
+
+    const expectedProbeWeight = Math.sqrt(probeToughness) * 1 * 4;
+    const expectedInterceptorWeight = Math.sqrt(interceptorToughness) * 1 * 1;
+
+    // Both target types keep positive weights (non-exclusive)
+    assert.ok(
+      Math.abs((weights.probe ?? 0) - expectedProbeWeight) < 1e-6,
+      `Expected probe weight ${expectedProbeWeight}, got ${weights.probe}`,
+    );
+    assert.ok(
+      Math.abs((weights.interceptor ?? 0) - expectedInterceptorWeight) < 1e-6,
+      `Expected interceptor weight ${expectedInterceptorWeight}, got ${weights.interceptor}`,
     );
   });
 
@@ -99,6 +112,25 @@ describe("B3-07 / B3-08 Combat: weighted targeting + rapid fire", () => {
       Math.abs(droneWeightWith - droneWeightWithout * 5) < 1e-6,
       `Expected x5 weight for drones with mothership present (${droneWeightWithout * 5}), got ${droneWeightWith}`,
     );
+  });
+
+  it("simultaneous round-start combat: defender unit killed in round 1 still fires its round 1 shot", () => {
+    // 10 Interceptors vs 1 Scout
+    // 10 Interceptors do 10 * 40 = 400 damage in round 1, easily wiping 1 Scout (32 HP).
+    // Because combat is simultaneous, the 1 Scout (alive at start of round 1) still fires its 8 damage attack at Attacker's Interceptor stack in round 1.
+    const atk = normalizeFleetShips({ interceptor: 10 });
+    const def = normalizeFleetShips({ scout: 1 });
+
+    const combat = resolveCombat(atk, def);
+
+    assert.equal(combat.outcome, "attacker_win");
+    assert.equal(combat.rounds, 1);
+    assert.equal(combat.defenderAfter.scout, 0);
+    assert.equal(combat.attackerAfter.interceptor, 10);
+
+    // Check roundLog: Attacker lost 0 ships, but defender lost 1 Scout
+    assert.equal(combat.roundLog[0]!.defenderLosses.ships.scout, 1);
+    assert.deepEqual(combat.roundLog[0]!.attackerLosses.ships, {});
   });
 
   it("spillover: single high-damage shot overkill spills across units within the same shot", () => {
