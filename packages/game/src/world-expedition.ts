@@ -1,9 +1,8 @@
-import { SHIP_ORDER } from "./catalog.js";
+import { SHIPS, SHIP_ORDER } from "./catalog.js";
 import {
   classBonuses,
   emptyFleetShips,
   fleetCargoCapacity,
-  fleetCombatPower,
   grantPlayerXp,
   normalizeFleetShips,
   vaultScoutExpeditionMult,
@@ -21,9 +20,15 @@ import type {
   UniverseState,
 } from "./types.js";
 import {
-  expeditionStarshardsAmount,
   grantStarshards,
 } from "./world-boosts.js";
+
+/** OGame-style expedition find scaling constants. */
+export const EXPEDITION_STRUCTURAL_CAP = 10_000;
+export const EXPEDITION_RESOURCE_MULT = 15;
+export const EXPEDITION_BASE_RESOURCE_FIND = 0;
+export const EXPEDITION_STARSHARDS_MIN = 5;
+export const EXPEDITION_STARSHARDS_MAX = 25;
 import { noteGoalMetric } from "./world-goals.js";
 import {
   discoverMiniPlanet,
@@ -64,7 +69,19 @@ function scaleShipsKeep(ships: FleetShips, keepRatio: number): FleetShips {
   return normalizeFleetShips(out);
 }
 
-function resourceFind(
+/** Total structural (hull) points of a fleet. */
+export function fleetStructurePoints(ships: FleetShips): number {
+  let total = 0;
+  for (const id of SHIP_ORDER) {
+    const count = ships[id] ?? 0;
+    if (count > 0 && SHIPS[id]) {
+      total += count * SHIPS[id].hull;
+    }
+  }
+  return total;
+}
+
+export function resourceFind(
   ships: FleetShips,
   roll: number,
 ): Resources {
@@ -72,11 +89,14 @@ function resourceFind(
   if (cap <= 0) {
     return { metal: 0, crystal: 0, deuterium: 0 };
   }
-  const power = Math.max(1, fleetCombatPower(ships));
-  const budget = Math.min(
-    cap,
-    Math.floor(80 + (cap * 0.35 + power * 0.5) * (0.55 + (roll % 20) / 40)),
-  );
+  const sp = fleetStructurePoints(ships);
+  const effectiveSp = Math.min(sp, EXPEDITION_STRUCTURAL_CAP);
+  const rollFactor = 0.55 + (roll % 20) / 40;
+  const rawBudget =
+    EXPEDITION_BASE_RESOURCE_FIND +
+    effectiveSp * EXPEDITION_RESOURCE_MULT * rollFactor;
+  const budget = Math.min(cap, Math.floor(rawBudget));
+
   const metal = Math.floor(budget * 0.55);
   const crystal = Math.floor(budget * 0.3);
   let deuterium = budget - metal - crystal;
@@ -84,6 +104,18 @@ function resourceFind(
   let total = metal + crystal + deuterium;
   if (total > cap) deuterium = Math.max(0, deuterium - (total - cap));
   return { metal, crystal, deuterium };
+}
+
+export function expeditionStarshardsFind(
+  ships: FleetShips,
+  roll: number,
+): number {
+  const sp = fleetStructurePoints(ships);
+  const effectiveSp = Math.min(sp, EXPEDITION_STRUCTURAL_CAP);
+  const range = EXPEDITION_STARSHARDS_MAX - EXPEDITION_STARSHARDS_MIN + 1;
+  const base = EXPEDITION_STARSHARDS_MIN + (roll % range);
+  const scaled = (base * effectiveSp) / EXPEDITION_STRUCTURAL_CAP;
+  return Math.max(1, Math.floor(scaled));
 }
 
 export function resolveExpeditionArrival(
@@ -143,7 +175,7 @@ export function resolveExpeditionArrival(
       fleet.cargo = { metal: 0, crystal: 0, deuterium: 0 };
       starshardsGained = Math.max(
         1,
-        Math.floor(expeditionStarshardsAmount(roll) * yieldMult),
+        Math.floor(expeditionStarshardsFind(before, roll) * yieldMult),
       );
       const owner = universe.players[fleet.ownerPlayerId];
       if (owner) {

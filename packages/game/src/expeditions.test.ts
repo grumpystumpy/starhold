@@ -4,6 +4,8 @@ import { EXPEDITION_SLOT } from "./catalog.js";
 import {
   expeditionKindFromRoll,
   expeditionRoll,
+  expeditionStarshardsFind,
+  resourceFind,
 } from "./world-expedition.js";
 import {
   advanceUniverse,
@@ -167,5 +169,144 @@ describe("P2 expeditions", () => {
       expeditionRoll("flt_demo", 1_000_000),
       expeditionRoll("flt_demo", 1_000_001),
     );
+  });
+
+  it("scales resource finds linearly with fleet structural (hull) points below cap", () => {
+    // Hauler hull = 60, cargo = 5000.
+    // 10 Haulers -> hull = 600, cargo = 50,000.
+    // 20 Haulers -> hull = 1200 (exactly 2x), cargo = 100,000.
+    // Both fleets are well below structural cap (10,000) and have surplus cargo.
+    const fleet10 = { hauler: 10 };
+    const fleet20 = { hauler: 20 };
+    // Find roll 0 -> kind "resources", rollFactor = 0.55.
+    const roll = 0;
+    const find10 = resourceFind(fleet10, roll);
+    const find20 = resourceFind(fleet20, roll);
+
+    const total10 = find10.metal + find10.crystal + find10.deuterium;
+    const total20 = find20.metal + find20.crystal + find20.deuterium;
+
+    // Hand-computed:
+    // Raw budget 10 = 600 * 15 * 0.55 = 4950.
+    // Raw budget 20 = 1200 * 15 * 0.55 = 9900.
+    assert.equal(total10, 4950);
+    assert.equal(total20, 9900);
+    assert.equal(total20, 2 * total10);
+  });
+
+  it("caps resource finds for huge fleets at EXPEDITION_STRUCTURAL_CAP", () => {
+    // 500 Haulers -> hull = 30,000.
+    // 1000 Haulers -> hull = 60,000.
+    // Both exceed structural cap (10,000).
+    const hugeFleet1 = { hauler: 500 };
+    const hugeFleet2 = { hauler: 1000 };
+    const roll = 0;
+
+    const find1 = resourceFind(hugeFleet1, roll);
+    const find2 = resourceFind(hugeFleet2, roll);
+
+    const total1 = find1.metal + find1.crystal + find1.deuterium;
+    const total2 = find2.metal + find2.crystal + find2.deuterium;
+
+    // Hand-computed cap find: 10,000 * 15 * 0.55 = 82,500.
+    assert.equal(total1, 82500);
+    assert.equal(total2, 82500);
+  });
+
+  it("scales Starshard finds with fleet structural points up to cap", () => {
+    // 100 Haulers -> hull = 6,000.
+    // 200 Haulers -> hull = 12,000 (capped at 10,000).
+    const fleet6k = { hauler: 100 };
+    const fleet12k = { hauler: 200 };
+    const roll = 70; // roll 70 -> starshards find, base = 5 + (70 % 21) = 12.
+
+    const shards6k = expeditionStarshardsFind(fleet6k, roll);
+    const shards12k = expeditionStarshardsFind(fleet12k, roll);
+
+    // Hand-computed:
+    // 6,000 / 10,000 * 12 = 7.2 -> floor(7.2) = 7.
+    // 10,000 / 10,000 * 12 = 12 -> floor(12) = 12.
+    assert.equal(shards6k, 7);
+    assert.equal(shards12k, 12);
+  });
+
+  it("yields identical expedition result for the same fleet and seed", () => {
+    const universe1 = createUniverse("Seed Test 1", 8);
+    const universe2 = createUniverse("Seed Test 2", 8);
+    const a1 = joinUniverse(universe1, "Player", 100_000);
+    const a2 = joinUniverse(universe2, "Player", 100_000);
+
+    universe1.planets[a1.planet.id].ships.hauler = 20;
+    universe1.planets[a1.planet.id].resources.deuterium = 5_000;
+    universe2.planets[a2.planet.id].ships.hauler = 20;
+    universe2.planets[a2.planet.id].resources.deuterium = 5_000;
+
+    const launch1 = launchFleet(universe1, {
+      playerId: a1.player.id,
+      mission: "expedition",
+      targetCoords: { ...a1.planet.coords, slot: EXPEDITION_SLOT },
+      ships: { hauler: 20 },
+      now: 100_100,
+    });
+    const launch2 = launchFleet(universe2, {
+      playerId: a2.player.id,
+      mission: "expedition",
+      targetCoords: { ...a2.planet.coords, slot: EXPEDITION_SLOT },
+      ships: { hauler: 20 },
+      now: 100_100,
+    });
+
+    assert.ok(launch1.ok && launch2.ok);
+    if (!launch1.ok || !launch2.ok) return;
+
+    // Use identical fleet ID and arrival time to test deterministic roll logic
+    const oldId1 = launch1.fleet.id;
+    const oldId2 = launch2.fleet.id;
+    delete universe1.fleets[oldId1];
+    delete universe2.fleets[oldId2];
+    launch1.fleet.id = "flt_seeded_1";
+    launch2.fleet.id = "flt_seeded_1";
+    universe1.fleets["flt_seeded_1"] = launch1.fleet;
+    universe2.fleets["flt_seeded_1"] = launch2.fleet;
+
+    advanceUniverse(universe1, launch1.fleet.arrivesAt);
+    advanceUniverse(universe2, launch2.fleet.arrivesAt);
+
+    const r1 = universe1.expeditionReports[universe1.fleets[launch1.fleet.id]!.reportId!];
+    const r2 = universe2.expeditionReports[universe2.fleets[launch2.fleet.id]!.reportId!];
+
+    assert.equal(r1.kind, r2.kind);
+    assert.deepEqual(r1.cargoGained, r2.cargoGained);
+    assert.equal(r1.starshardsGained, r2.starshardsGained);
+  });
+
+  it("loads an old saved state with an expedition in flight and resolves without save reset", () => {
+    const universe = createUniverse("Old Save Exped", 8);
+    const p = joinUniverse(universe, "Veteran", 200_000);
+
+    // Create an old-shaped state with an in-flight expedition fleet
+    const fleetId = "flt_old_exped_1";
+    universe.fleets[fleetId] = {
+      id: fleetId,
+      ownerPlayerId: p.player.id,
+      mission: "expedition",
+      originPlanetId: p.planet.id,
+      targetCoords: { ...p.planet.coords, slot: EXPEDITION_SLOT },
+      ships: { hauler: 10 },
+      cargo: { metal: 0, crystal: 0, deuterium: 0 },
+      arrivesAt: 200_500,
+      returnsAt: 201_000,
+      phase: "outbound",
+    };
+
+    advanceUniverse(universe, 200_500);
+
+    const f = universe.fleets[fleetId];
+    assert.ok(f);
+    assert.equal(f.phase, "returning");
+    assert.ok(f.reportId);
+    const rep = universe.expeditionReports[f.reportId!];
+    assert.ok(rep);
+    assert.ok(rep.summary);
   });
 });
