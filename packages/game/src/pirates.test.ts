@@ -24,6 +24,7 @@ import {
 } from "./catalog.js";
 import {
   emptyDefenses,
+  defenseCombatPower,
   emptyFleetShips,
   fleetCombatPower,
   fleetShipCount,
@@ -60,6 +61,7 @@ import {
 } from "./data/tuning.js";
 import {
   applyStrongShipCap,
+  createPirateBase,
   findNearestOpenSlot1,
   pirateCombatResearch,
   pirateCombatResearchForOpponent,
@@ -888,6 +890,7 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
     const nowB = Date.now();
     const universe2 = createUniverse("Combat Tech Raid Test", 8);
     delete universe2.skipNpcRaids;
+    universe2.skipPirateTopUp = true;
     const { player: playerB, planet: planetB } = joinUniverse(universe2, "Defender", nowB - 10 * 86_400_000);
     playerB.createdAt = nowB - 10 * 86_400_000;
     (playerB as any).attackedPiratesAt = nowB - 1000;
@@ -924,29 +927,82 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
     }
   });
 
-  it("alien raid on a player planet uses main's sizing formula (factor 1.4, no cap), while pirate raid uses 0.70 + cap", () => {
-    const universe = createUniverse("Raid Sizing Faction Test", 8);
-    const { player, planet } = joinUniverse(universe, "Target", Date.now() - 10 * 86_400_000);
-    const body = universe.planets[planet.id]!;
-    body.ships = { ...emptyFleetShips(), interceptor: 10 };
-    const defenderPower = fleetCombatPower(body.ships);
+  it("alien raid on a player planet uses main's sizing formula (factor 1.4, no cap), while pirate raid uses 0.70 + cap via real raid path", () => {
+    const now = 1_000_000_000_000;
+    const universe = createUniverse("Raid Sizing Real Path Test", 8);
+    delete universe.skipNpcRaids;
 
-    const baseStock = { ...emptyFleetShips(), cruiser: 100 };
+    const { player, planet } = joinUniverse(universe, "TargetPlayer", now - 10 * 86_400_000);
+    player.createdAt = now - 10 * 86_400_000;
+    (player as any).attackedPiratesAt = now - 1000;
+    const planetState = universe.planets[planet.id]!;
+    planetState.buildings = { metalMine: 30, crystalMine: 30, solarPlant: 30 };
+    planetState.ships = { ...emptyFleetShips(), interceptor: 10 };
 
-    const alienRaid = scalePirateRaidFleet(baseStock, defenderPower);
-    assert.equal(PIRATE_RAID_POWER_FACTOR, 1.4);
-    assert.ok((alienRaid.cruiser ?? 0) > 0);
-    assert.ok(fleetCombatPower(alienRaid) <= Math.max(PIRATE_RAID_POWER_FLOOR, defenderPower * PIRATE_RAID_POWER_FACTOR));
-
-    const pirateRaid = scalePirateRaidFleet(
-      baseStock,
-      defenderPower,
-      body.ships,
-      PIRATE_RAID_POWER_FACTOR_PLAYER,
+    // 1. Alien base raid via tickPirates (faction === "alien")
+    const alienBase = createAlienBase(
+      universe,
+      planetState.coords.galaxy,
+      Math.min(MAP_SYSTEMS, planetState.coords.system + 1),
+      1,
+      now,
+      player.id,
+      10,
     );
-    assert.equal(PIRATE_RAID_POWER_FACTOR_PLAYER, 0.70);
-    assert.equal(pirateRaid.cruiser ?? 0, 0);
-    assert.ok(fleetCombatPower(pirateRaid) <= defenderPower * PIRATE_RAID_POWER_FACTOR_PLAYER);
+    alienBase.buildupEndsAt = now - 1000;
+    alienBase.ships = { ...emptyFleetShips(), cruiser: 100 };
+    alienBase.nextRaidAt = now;
+    universe.alienBases = { [alienBase.id]: alienBase };
+    universe.pirateBases = {};
+
+    const defenderPower = fleetCombatPower(planetState.ships, player.research) + defenseCombatPower(planetState.defenses ?? {}, player.research);
+    const expectedAlienRaid = scalePirateRaidFleet(alienBase.ships, defenderPower);
+
+    assert.equal(PIRATE_RAID_POWER_FACTOR, 1.4);
+    assert.ok((expectedAlienRaid.cruiser ?? 0) > 0, "alien raid includes cruisers despite defender having 0");
+    assert.ok(fleetCombatPower(expectedAlienRaid) <= Math.max(PIRATE_RAID_POWER_FLOOR, defenderPower * PIRATE_RAID_POWER_FACTOR));
+
+    const prevE2E = process.env.STARHOLD_E2E;
+    delete process.env.STARHOLD_E2E;
+
+    try {
+      tickPirates(universe, now + 1000);
+
+      // 2. Pirate base raid via tickPirates (faction === "pirate")
+      const pirateBase = createPirateBase(
+        universe.seed,
+        planetState.coords.galaxy,
+        Math.min(MAP_SYSTEMS, planetState.coords.system + 2),
+        1,
+        now + 2000,
+        10,
+      );
+      pirateBase.ships = { ...emptyFleetShips(), cruiser: 100, interceptor: 100 };
+      pirateBase.nextRaidAt = now + 2000;
+      universe.pirateBases = { [pirateBase.id]: pirateBase };
+      universe.alienBases = {};
+
+      const defenderPower2 = fleetCombatPower(planetState.ships, player.research) + defenseCombatPower(planetState.defenses ?? {}, player.research);
+      const expectedPirateRaid = scalePirateRaidFleet(
+        pirateBase.ships,
+        defenderPower2,
+        planetState.ships,
+        PIRATE_RAID_POWER_FACTOR_PLAYER,
+      );
+
+      assert.equal(PIRATE_RAID_POWER_FACTOR_PLAYER, 0.70);
+      assert.equal(expectedPirateRaid.cruiser ?? 0, 0, "pirate raid caps cruisers at 0 due to strong-ship cap");
+      assert.ok(fleetCombatPower(expectedPirateRaid) <= defenderPower2 * PIRATE_RAID_POWER_FACTOR_PLAYER + 1e-6);
+
+      tickPirates(universe, now + 3000);
+
+      const pirateAlert = (universe.players[player.id]?.eventLog ?? []).find(
+        (e) => e.kind === "raidAlert" && e.meta?.pirateBaseId === pirateBase.id,
+      );
+      assert.ok(pirateAlert, "expected pirate raid alert in event log");
+    } finally {
+      if (prevE2E != null) process.env.STARHOLD_E2E = prevE2E;
+    }
   });
 
   it("NPC-on-NPC raid produces the same fleet size as before this PR", () => {
