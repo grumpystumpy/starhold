@@ -311,7 +311,7 @@ export function shipyardPage(view: PlayerView, busy: boolean): string {
             title: def.name,
             lines: [
               def.description,
-              `In hangar ${fmt(count)} · cargo ${fmt(def.cargo)} · atk ${fmt(def.attack)}`,
+              `In hangar ${fmt(count)} · cargo ${fmt(def.cargo)} · atk ${fmt(def.attack)} · Shield ${fmt(def.shield)} · Armor ${fmt(def.armor)} · Hull ${fmt(def.hull)}`,
             ],
             testId: `hangar-tip-${id}`,
           });
