@@ -10,6 +10,7 @@ import {
   type PlayerView,
 } from "@starhold/game";
 import { fmtEta } from "./format";
+import { syncChangedInputTypeValue } from "./morph-dom";
 import { flashHtml } from "./render-chrome-join";
 import { fleetComposer } from "./render-fleets-composer";
 import { readFleetFormIn } from "../main-fleet-form";
@@ -157,6 +158,13 @@ function buttonTag(html: string, testId: string): string {
 }
 
 describe("fleet send two-step", () => {
+  it("keeps a typed ship count when the input changes to hidden", () => {
+    const numberInput = { type: "number", value: "1" };
+    const hiddenInput = { type: "hidden", value: "1" };
+    syncChangedInputTypeValue(numberInput, hiddenInput);
+    assert.equal(numberInput.value, "1");
+  });
+
   it("step 1 renders ship inputs and no coords or mission inputs", () => {
     const empty = fleetComposer(view(), false, draft({ step: 1 }));
     assert.match(empty, /data-testid="fleet-count-scout"/);

@@ -247,13 +247,7 @@ async function main() {
 
   await buildProbe(pageA);
   await fleetToStep2(pageA, { probe: 1 });
-  await pageA.evaluate(() => {
-    const mission = document.querySelector('[data-testid="mission-espionage"]');
-    if (mission instanceof HTMLInputElement) {
-      mission.checked = true;
-      mission.dispatchEvent(new Event("change", { bubbles: true }));
-    }
-  });
+  await pageA.click('[data-testid="mission-espionage"]');
   await pageA.waitForTimeout(300);
   const target = pageA.getByTestId("fleet-target");
   await target.waitFor({ timeout: 10_000 });

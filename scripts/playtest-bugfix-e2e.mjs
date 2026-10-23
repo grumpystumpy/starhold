@@ -215,7 +215,7 @@ async function runViewport(browser, viewport, ids) {
           (
             document.querySelector('[data-testid="research-btn-shieldingTech"]')
               ?.textContent ?? ""
-          ).includes("Needs lab 2"),
+          ).includes("Needs lab 6"),
         { timeout: 20_000 },
       );
     } catch (error) {
@@ -225,7 +225,7 @@ async function runViewport(browser, viewport, ids) {
     const shield = page.locator('[data-testid="research-btn-shieldingTech"]');
     assert(await shield.isDisabled(), `${tag} shielding research enabled`);
     assert(
-      (await shield.innerText()).includes("Needs lab 2"),
+      (await shield.innerText()).includes("Needs lab 6"),
       `${tag} shielding label: ${await shield.innerText()}`,
     );
     let researchPosts = 0;
