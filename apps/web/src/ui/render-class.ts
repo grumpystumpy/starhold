@@ -21,7 +21,7 @@ function classBlurb(id: PlayerClassId): string {
     case "explorer":
       return `Expedition yield ×${b.expeditionYield.toFixed(2)} · research ×${b.researchTime.toFixed(2)} · probe speed ×${b.probeSpeed.toFixed(2)} · +${fmt(b.expeditionSlots)} expedition slot`;
     case "fleeter":
-      return `Attack ×${b.attack.toFixed(2)} · fleet speed ×${b.fleetSpeed.toFixed(2)} · ship build ×${b.shipBuildTime.toFixed(2)} · +${fmt(b.fleetSlots)} fleet slot`;
+      return `Attack ×${b.attack.toFixed(2)} · fleet speed ×${b.fleetSpeed.toFixed(2)} · ship build ×${b.shipBuildTime.toFixed(2)} · +${fmt(b.fleetSlots)} fleet slots`;
     case "expansionist":
       return `+${fmt(b.colonySlots)} colony slots · colonizer speed ×${b.colonyShipSpeed.toFixed(2)} · building ×${b.buildingBuildTime.toFixed(2)} · Fold Bridge CD ×${b.jumpGateCooldown.toFixed(2)}`;
     default: {
