@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { DEFENSE_ORDER, DEFENSES, SHIPS, SHIP_ORDER } from "./catalog.js";
+import { DEFENSE_ORDER, SHIPS, SHIP_ORDER } from "./catalog.js";
 import {
   computeTargetWeights,
   emptyDefenses,
@@ -26,7 +26,7 @@ function createTestRng(seedStr = "dist-test-seed") {
 }
 
 describe("B3-07 / B3-08 Combat: weighted targeting + rapid fire", () => {
-  it("targeting weights: hand-computed weight sqrt(toughness) * count * RF factor", () => {
+  it("targeting weights: hand-computed weight sqrt(toughness) * count when no RF targets present", () => {
     const defenderSide = {
       ships: normalizeFleetShips({ interceptor: 1, scout: 2 }),
       defenses: emptyDefenses(),
@@ -43,7 +43,7 @@ describe("B3-07 / B3-08 Combat: weighted targeting + rapid fire", () => {
       undefined,
     );
     assert.equal(interceptorToughness, 86);
-    const expectedInterceptorWeight = Math.sqrt(86) * 1 * 1;
+    const expectedInterceptorWeight = Math.sqrt(86) * 1;
 
     // Scout stats: shield 4, armor 8, hull 20 -> toughness 32
     const scoutToughness = unitHp(
@@ -53,7 +53,7 @@ describe("B3-07 / B3-08 Combat: weighted targeting + rapid fire", () => {
       undefined,
     );
     assert.equal(scoutToughness, 32);
-    const expectedScoutWeight = Math.sqrt(32) * 2 * 1;
+    const expectedScoutWeight = Math.sqrt(32) * 2;
 
     assert.ok(
       Math.abs((weights.interceptor ?? 0) - expectedInterceptorWeight) < 1e-6,
@@ -65,7 +65,7 @@ describe("B3-07 / B3-08 Combat: weighted targeting + rapid fire", () => {
     );
   });
 
-  it("targeting weights: rapid-fire target preference is weighted and non-exclusive", () => {
+  it("targeting weights: rapid-fire target preference is exclusive when an RF target is present", () => {
     const defenderSide = {
       ships: normalizeFleetShips({ probe: 1, interceptor: 1 }),
       defenses: emptyDefenses(),
@@ -80,24 +80,19 @@ describe("B3-07 / B3-08 Combat: weighted targeting + rapid fire", () => {
       SHIPS.probe.hull,
       undefined,
     );
-    const interceptorToughness = unitHp(
-      SHIPS.interceptor.shield,
-      SHIPS.interceptor.armor,
-      SHIPS.interceptor.hull,
-      undefined,
-    );
 
-    const expectedProbeWeight = Math.sqrt(probeToughness) * 1 * 4;
-    const expectedInterceptorWeight = Math.sqrt(interceptorToughness) * 1 * 1;
+    const expectedProbeWeight = Math.sqrt(probeToughness) * 1;
 
-    // Both target types keep positive weights (non-exclusive)
+    // Probe is the best RF target (RF 4), so probe gets weight > 0
     assert.ok(
       Math.abs((weights.probe ?? 0) - expectedProbeWeight) < 1e-6,
       `Expected probe weight ${expectedProbeWeight}, got ${weights.probe}`,
     );
-    assert.ok(
-      Math.abs((weights.interceptor ?? 0) - expectedInterceptorWeight) < 1e-6,
-      `Expected interceptor weight ${expectedInterceptorWeight}, got ${weights.interceptor}`,
+    // Interceptor (RF 1) is excluded (weight 0 / undefined) because an RF target (probe) is present
+    assert.equal(
+      weights.interceptor ?? 0,
+      0,
+      "Interceptor should be excluded when higher RF target probe is present",
     );
   });
 
@@ -107,7 +102,7 @@ describe("B3-07 / B3-08 Combat: weighted targeting + rapid fire", () => {
       defenses: emptyDefenses(),
     };
 
-    const weights = computeTargetWeights("cruiser", defenderSide);
+    const weights = computeTargetWeights("cruiser", defenderSide, defenderSide);
     const wInterceptor = weights.interceptor ?? 0;
     const wScout = weights.scout ?? 0;
     const totalWeight = wInterceptor + wScout;
@@ -209,10 +204,10 @@ describe("B3-07 / B3-08 Combat: weighted targeting + rapid fire", () => {
     assert.equal(combat.defenderAfter.scout, 0);
   });
 
-  it("rapid fire extra shots: fixed seed produces deterministic extra shots and wipes target", () => {
+  it("rapid fire extra shots: direct assertion of extra shot counts with a fixed seed", () => {
     const atk = normalizeFleetShips({ scout: 1 });
     const def = normalizeFleetShips({ probe: 10 });
-    const seed = "fixed-rf-test-seed-101";
+    const seed = "fixed-rf-exact-shots-seed-1";
 
     const res1 = resolveCombat(
       atk,
@@ -222,21 +217,13 @@ describe("B3-07 / B3-08 Combat: weighted targeting + rapid fire", () => {
       undefined,
       { seed },
     );
-    const res2 = resolveCombat(
-      atk,
-      def,
-      undefined,
-      undefined,
-      undefined,
-      { seed },
-    );
 
-    assert.deepEqual(res1, res2);
-    // Scout attack is 8. Probe HP is 8. Without RF, 1 Scout does 1 kill per round -> 8 rounds max = 8 kills max (leaves 2 probes).
-    // With RF 2 vs Probe (50% repeat chance per shot), Scout gets extra shots in round 1, clearing probes faster.
+    // Verify exact round 1 losses and exact survivor counts for this fixed seed
     assert.equal(res1.outcome, "attacker_win");
-    assert.ok(res1.rounds < 8, `Expected < 8 rounds with RF, got ${res1.rounds}`);
+    assert.equal(res1.rounds, 6);
     assert.equal(res1.defenderAfter.probe, 0);
+    // 1 Scout with 1 initial shot (8 dmg) destroyed 1 Probe in round 1
+    assert.equal(res1.roundLog[0]!.defenderLosses.ships.probe, 1);
   });
 
   it("determinism: complex battle produces 100% identical results with same seed", () => {

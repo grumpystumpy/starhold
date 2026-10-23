@@ -262,6 +262,13 @@ function pickFocusTarget(
  * Target types that the firer has rapid fire N against get extra weight (multiplied by N >= 1).
  * Non-exclusive: all live target types remain eligible with positive weight.
  */
+/**
+ * Computes target weights for B3-07.
+ * Exclusive rapid-fire preference: if shooter has rapid fire (N > 1) against any present target type,
+ * candidate set is strictly the present target types with the maximum rapid fire factor N_max.
+ * Otherwise (when max RF among present types is 1), all present target types are candidates
+ * weighted by sqrt(toughness) * count * (isSwarmDrone && mothershipPresent ? 5 : 1).
+ */
 export function computeTargetWeights(
   shooterId: CombatUnitId,
   targetSideSnapshot: SidePools,
@@ -280,21 +287,28 @@ export function computeTargetWeights(
 
   if (present.length === 0) return {};
 
+  let maxRF = 1;
+  for (const id of present) {
+    const rf = rapidFireFactor(shooterId, id);
+    if (rf > maxRF) maxRF = rf;
+  }
+
+  const candidates =
+    maxRF > 1
+      ? present.filter((id) => rapidFireFactor(shooterId, id) === maxRF)
+      : present;
+
   const mothershipPresent =
     (targetSideSnapshot.ships.swarmMothership ?? 0) > 0;
   const weights: Partial<Record<CombatUnitId, number>> = {};
 
-  for (const id of present) {
+  for (const id of candidates) {
     const count = targetCount(targetSideSnapshot, id);
     const stats = getUnitStats(id, targetResearch, battlefield);
     const toughness = unitHp(stats.maxS, stats.maxA, stats.maxH, undefined);
     let w = Math.sqrt(toughness) * count;
     if (id === "swarmDrone" && mothershipPresent) {
       w *= 5;
-    }
-    const rf = rapidFireFactor(shooterId, id);
-    if (rf > 1) {
-      w *= rf;
     }
     weights[id] = w;
   }
@@ -305,40 +319,17 @@ export function computeTargetWeights(
 export function pickWeightedTarget(
   shooterId: CombatUnitId,
   targetSideSnapshot: SidePools,
-  targetSideLive?: SidePools | ResearchLevels,
-  targetResearch?: ResearchLevels | BattlefieldMods,
-  battlefield?: BattlefieldMods | (() => number),
-  rng?: () => number,
+  targetSideLive: SidePools,
+  targetResearch: ResearchLevels | undefined,
+  battlefield: BattlefieldMods | undefined,
+  rng: () => number,
 ): CombatUnitId | null {
-  let livePool: SidePools;
-  let res: ResearchLevels | undefined;
-  let bField: BattlefieldMods | undefined;
-  let rngFn: (() => number) | undefined;
-
-  if (
-    targetSideLive &&
-    typeof targetSideLive === "object" &&
-    ("ships" in targetSideLive || "defenses" in targetSideLive)
-  ) {
-    livePool = targetSideLive as SidePools;
-    res = targetResearch as ResearchLevels | undefined;
-    bField = battlefield as BattlefieldMods | undefined;
-    rngFn = rng;
-  } else {
-    livePool = targetSideSnapshot;
-    res = targetSideLive as ResearchLevels | undefined;
-    bField = targetResearch as BattlefieldMods | undefined;
-    rngFn = battlefield as (() => number) | undefined;
-  }
-
-  if (!rngFn) return null;
-
   const weights = computeTargetWeights(
     shooterId,
     targetSideSnapshot,
-    livePool,
-    res,
-    bField,
+    targetSideLive,
+    targetResearch,
+    battlefield,
   );
   const candidates = Object.keys(weights) as CombatUnitId[];
   if (candidates.length === 0) return null;
@@ -350,7 +341,7 @@ export function pickWeightedTarget(
   }
   if (totalWeight <= 0) return candidates[0]!;
 
-  let roll = rngFn() * totalWeight;
+  let roll = rng() * totalWeight;
   for (const id of candidates) {
     const w = weights[id] ?? 0;
     roll -= w;
@@ -429,6 +420,79 @@ export function sampleAggregateExtraShots(
   return Math.max(0, sampled);
 }
 
+/**
+ * Samples initial per-shot multinomial target distribution for N shots
+ * across candidate target types using target weights.
+ */
+export function sampleMultinomialShots(
+  N: number,
+  weights: Partial<Record<CombatUnitId, number>>,
+  rng: () => number,
+): Partial<Record<CombatUnitId, number>> {
+  const candidates = Object.keys(weights) as CombatUnitId[];
+  if (candidates.length === 0 || N <= 0) return {};
+  if (candidates.length === 1) {
+    return { [candidates[0]!]: N };
+  }
+
+  let totalWeight = 0;
+  for (const id of candidates) {
+    totalWeight += weights[id] ?? 0;
+  }
+  if (totalWeight <= 0) {
+    return { [candidates[0]!]: N };
+  }
+
+  const result: Partial<Record<CombatUnitId, number>> = {};
+  for (const id of candidates) result[id] = 0;
+
+  if (N < 20) {
+    for (let i = 0; i < N; i++) {
+      let roll = rng() * totalWeight;
+      for (const id of candidates) {
+        const w = weights[id] ?? 0;
+        roll -= w;
+        if (roll <= 0) {
+          result[id] = (result[id] ?? 0) + 1;
+          break;
+        }
+      }
+    }
+    return result;
+  }
+
+  let remainingN = N;
+  let remainingWeight = totalWeight;
+
+  for (let i = 0; i < candidates.length - 1; i++) {
+    const id = candidates[i]!;
+    const w = weights[id] ?? 0;
+    if (w <= 0 || remainingWeight <= 0) {
+      result[id] = 0;
+      continue;
+    }
+    const p = Math.min(1.0, Math.max(0.0, w / remainingWeight));
+    const mu = remainingN * p;
+    const sigma = Math.sqrt(Math.max(0, remainingN * p * (1 - p)));
+
+    const u1 = Math.max(1e-10, rng());
+    const u2 = rng();
+    const z = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+
+    let sampled = Math.round(mu + z * sigma);
+    sampled = Math.max(0, Math.min(remainingN, sampled));
+
+    result[id] = sampled;
+    remainingN -= sampled;
+    remainingWeight -= w;
+  }
+
+  const lastId = candidates[candidates.length - 1]!;
+  result[lastId] = Math.max(0, remainingN);
+
+  return result;
+}
+
 function applyShotWithIntercept(
   side: SidePools,
   target: CombatUnitId,
@@ -452,8 +516,9 @@ function applyShotWithIntercept(
 
 /**
  * Fires aggregated shots for a firing group of unit type `firerId` (count `groupCount`).
- * Aims as a group using weighted targeting, draws rapid fire extra shots in aggregate,
- * and applies damage to target pool with spillover.
+ * Per-shot targeting selects targets proportionally for initial shots,
+ * computes rapid-fire extra shots based on target type actually hit,
+ * and handles damage spillover with re-targeting and new rapid-fire.
  */
 export function fireGroupShots(
   firerId: CombatUnitId,
@@ -488,40 +553,82 @@ export function fireGroupShots(
     ? unitAtkDamage * defensePowerMult
     : unitAtkDamage / defensePowerMult;
 
-  let target = pickWeightedTarget(
+  const initialWeights = computeTargetWeights(
     firerId,
     targetSideSnapshot,
     targetSideLive,
     targetResearch,
     opts?.battlefield,
-    rng,
   );
-  if (!target) return;
+  if (Object.keys(initialWeights).length === 0) return;
 
-  const rfM = rapidFireFactor(firerId, target);
-  const extraShots = sampleAggregateExtraShots(groupCount, rfM, rng);
-  const totalShots = groupCount + extraShots;
-  let remainingGroupDamage = totalShots * unitEffectiveDamage;
+  const shotDistribution = sampleMultinomialShots(groupCount, initialWeights, rng);
 
-  while (remainingGroupDamage > 0 && target != null) {
-    const unabsorbed = applyShotWithIntercept(
-      targetSideLive,
-      target,
-      remainingGroupDamage,
-      targetResearch,
-      opts?.battlefield,
-    );
-    if (unabsorbed <= 0) break;
-    remainingGroupDamage = unabsorbed;
+  for (const [targetTypeStr, initialShots] of Object.entries(shotDistribution)) {
+    const targetType = targetTypeStr as CombatUnitId;
+    if (!initialShots || initialShots <= 0) continue;
 
-    target = pickWeightedTarget(
-      firerId,
-      targetSideSnapshot,
-      targetSideLive,
-      targetResearch,
-      opts?.battlefield,
-      rng,
-    );
+    // Check if targetType still has living units
+    if (targetCount(targetSideLive, targetType) <= 0) {
+      let remDmg = initialShots * unitEffectiveDamage;
+      while (remDmg > 0) {
+        const nextTarget = pickWeightedTarget(
+          firerId,
+          targetSideSnapshot,
+          targetSideLive,
+          targetResearch,
+          opts?.battlefield,
+          rng,
+        );
+        if (!nextTarget) break;
+
+        const remShots = Math.max(1, Math.round(remDmg / unitEffectiveDamage));
+        const nextM = rapidFireFactor(firerId, nextTarget);
+        const extra = sampleAggregateExtraShots(remShots, nextM, rng);
+        const totalDmg = remDmg + extra * unitEffectiveDamage;
+
+        remDmg = applyShotWithIntercept(
+          targetSideLive,
+          nextTarget,
+          totalDmg,
+          targetResearch,
+          opts?.battlefield,
+        );
+      }
+      continue;
+    }
+
+    const rfM = rapidFireFactor(firerId, targetType);
+    const extraShots = sampleAggregateExtraShots(initialShots, rfM, rng);
+    const totalShots = initialShots + extraShots;
+    let groupDamage = totalShots * unitEffectiveDamage;
+
+    let currentTarget: CombatUnitId | null = targetType;
+    while (groupDamage > 0 && currentTarget != null) {
+      const unabsorbedDmg = applyShotWithIntercept(
+        targetSideLive,
+        currentTarget,
+        groupDamage,
+        targetResearch,
+        opts?.battlefield,
+      );
+      if (unabsorbedDmg <= 0) break;
+
+      currentTarget = pickWeightedTarget(
+        firerId,
+        targetSideSnapshot,
+        targetSideLive,
+        targetResearch,
+        opts?.battlefield,
+        rng,
+      );
+      if (!currentTarget) break;
+
+      const spilledShots = Math.max(1, Math.round(unabsorbedDmg / unitEffectiveDamage));
+      const spilledM = rapidFireFactor(firerId, currentTarget);
+      const spilledExtra = sampleAggregateExtraShots(spilledShots, spilledM, rng);
+      groupDamage = unabsorbedDmg + spilledExtra * unitEffectiveDamage;
+    }
   }
 }
 
