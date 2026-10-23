@@ -106,6 +106,7 @@ describe("newbie protection launch warning", () => {
     ] as PlayerView["roster"];
 
     const raid = fleetComposer(view, false, {
+      step: 2,
       targetPlanetId: "pl2",
       targetCoords: null,
       asteroidId: null,
@@ -119,6 +120,7 @@ describe("newbie protection launch warning", () => {
     assert.match(raid, /Launching this attack ends your newbie protection/);
 
     const spy = fleetComposer(view, false, {
+      step: 2,
       targetPlanetId: "pl2",
       targetCoords: null,
       asteroidId: null,
@@ -143,6 +145,7 @@ describe("newbie protection launch warning", () => {
       },
     } as PlayerView["galaxy"];
     const pirateRaid = fleetComposer(view, false, {
+      step: 2,
       targetPlanetId: null,
       targetCoords: null,
       asteroidId: null,
