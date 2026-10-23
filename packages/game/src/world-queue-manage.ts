@@ -1,4 +1,4 @@
-import { clampToStorage, storageFor } from "./formulas.js";
+import { clampToStorage } from "./formulas.js";
 import type {
   PlanetState,
   PlayerState,
@@ -8,6 +8,7 @@ import type {
 } from "./types.js";
 import { advanceUniverse } from "./world-arrival.js";
 import { activePlanet } from "./world-bootstrap.js";
+import { storageForPlanet } from "./world-boosts.js";
 import type { ActionResult } from "./world-queues.js";
 import {
   ensureQueueFrontStarted,
@@ -55,12 +56,14 @@ function setQueueOnPlanet(
 }
 
 function applyRefundToPlanet(
+  universe: UniverseState,
   planet: PlanetState,
   cost: QueueItemBase["paidCost"],
   fraction: number,
+  now: number,
 ): void {
   const refunded = refundResources(planet.resources, cost, fraction);
-  planet.resources = clampToStorage(refunded, storageFor(planet));
+  planet.resources = clampToStorage(refunded, storageForPlanet(universe, planet, now));
 }
 
 /**
@@ -91,7 +94,7 @@ export function cancelQueueItem(
     if (!planet) return { ok: false, error: "Planet missing." };
     const fraction =
       index === 0 && item.startedAt != null && item.startedAt < now ? 0.5 : 1;
-    applyRefundToPlanet(planet, item.paidCost, fraction);
+    applyRefundToPlanet(universe, planet, item.paidCost, fraction, now);
     queue.splice(index, 1);
     ensureQueueFrontStarted(queue, now);
     player.researchQueue = queue;
@@ -113,7 +116,7 @@ export function cancelQueueItem(
   const item = queue[index]!;
   const fraction =
     index === 0 && item.startedAt != null && item.startedAt < now ? 0.5 : 1;
-  applyRefundToPlanet(planet, item.paidCost, fraction);
+  applyRefundToPlanet(universe, planet, item.paidCost, fraction, now);
   queue.splice(index, 1);
   ensureQueueFrontStarted(queue, now);
   setQueueOnPlanet(planet, opts.kind, queue);
