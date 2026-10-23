@@ -27,21 +27,21 @@ describe("P0/P1 parity — lab & research", () => {
     const { player, planet } = joinUniverse(universe, "Scientist", 40_000_000);
     planet.resources = { metal: 50_000, crystal: 50_000, deuterium: 50_000 };
 
-    const lab = queueBuildingUpgrade(
-      universe,
-      player.id,
-      "researchLab",
-      40_000_100,
-    );
-    assert.equal(lab.ok, true);
-    if (!lab.ok) return;
-    advanceUniverse(universe, lab.planet.buildQueue[0]!.completesAt);
+    let now = 40_000_100;
+    for (let level = 0; level < 3; level += 1) {
+      const lab = queueBuildingUpgrade(universe, player.id, "researchLab", now);
+      assert.equal(lab.ok, true);
+      if (!lab.ok) return;
+      const completesAt = lab.planet.buildQueue[0]!.completesAt;
+      advanceUniverse(universe, completesAt);
+      now = completesAt + 1;
+    }
 
     const research = queueResearch(
       universe,
       player.id,
       "espionageTech",
-      40_000_200,
+      now,
     );
     assert.equal(research.ok, true);
     if (!research.ok) return;

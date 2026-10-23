@@ -43,9 +43,9 @@ import type { FleetMission } from "./types.js";
 
 describe("Thread I player levels / XP formulas", () => {
   it("applies the local Research Lab bonus to research time", () => {
-    assert.equal(researchUpgradeSeconds("energyTech", 0, 0), 20);
-    assert.equal(researchUpgradeSeconds("energyTech", 0, 1), 19);
-    assert.equal(researchUpgradeSeconds("energyTech", 0, 10), 14);
+    assert.equal(researchUpgradeSeconds("energyTech", 0, 0), 40);
+    assert.equal(researchUpgradeSeconds("energyTech", 0, 1), 38);
+    assert.equal(researchUpgradeSeconds("energyTech", 0, 10), 29);
   });
 
   it("xpToNext follows floor(100 * L^1.45)", () => {
