@@ -402,8 +402,6 @@ describe("aliens", () => {
     const universe = createUniverse("Alien slots", 8);
     const { planet } = joinUniverse(universe, "Finder", 490_000_000);
     const origin = { galaxy: 1, system: 1, slot: 1 };
-    universe.pirateBases = {};
-    universe.alienBases = {};
     universe.planets = {};
     universe.planets.blocker = { ...planet, id: "blocker", coords: origin };
     // Slot 1 is occupied; slot 2 is the nearest free choice.
@@ -892,10 +890,11 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
     delete universe2.skipNpcRaids;
     const { player: playerB, planet: planetB } = joinUniverse(universe2, "Defender", nowB - 10 * 86_400_000);
     playerB.createdAt = nowB - 10 * 86_400_000;
+    (playerB as any).attackedPiratesAt = nowB - 1000;
     playerB.research = { weaponsTech: 8, shieldingTech: 8, armourTech: 8 };
     const planetState = universe2.planets[planetB.id]!;
-    planetState.buildings = { metalMine: 20, crystalMine: 20, solarPlant: 20 };
-    planetState.ships = { ...emptyFleetShips(), cruiser: 1 };
+    planetState.buildings = { metalMine: 30, crystalMine: 30, solarPlant: 30 };
+    planetState.ships = { ...emptyFleetShips(), cruiser: 10 };
 
     const baseB = activePirateBases(universe2)[0]!;
     universe2.pirateBases = { [baseB.id]: baseB };
@@ -923,6 +922,20 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
     } finally {
       if (prevE2E != null) process.env.STARHOLD_E2E = prevE2E;
     }
+  });
+
+  it("alien raid on a player is sized using factor 1.4 without strong-ship cap", () => {
+    const baseStock = { ...emptyFleetShips(), cruiser: 100 };
+    const defenderShips = { ...emptyFleetShips(), interceptor: 10 };
+    const defenderPower = fleetCombatPower(defenderShips);
+
+    const alienRaid = scalePirateRaidFleet(baseStock, defenderPower);
+
+    assert.equal(PIRATE_RAID_POWER_FACTOR, 1.4);
+    assert.ok(fleetCombatPower(alienRaid) <= Math.max(PIRATE_RAID_POWER_FLOOR, defenderPower * PIRATE_RAID_POWER_FACTOR));
+
+    const pirateRaid = scalePirateRaidFleet(baseStock, defenderPower, defenderShips, PIRATE_RAID_POWER_FACTOR_PLAYER);
+    assert.equal(pirateRaid.cruiser ?? 0, 0);
   });
 
   it("NPC-on-NPC raid produces the same fleet size as before this PR", () => {
