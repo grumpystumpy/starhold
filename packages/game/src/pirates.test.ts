@@ -395,6 +395,8 @@ describe("aliens", () => {
     const universe = createUniverse("Alien slots", 8);
     const { planet } = joinUniverse(universe, "Finder", 490_000_000);
     const origin = { galaxy: 1, system: 1, slot: 1 };
+    universe.pirateBases = {};
+    universe.alienBases = {};
     universe.planets = {};
     universe.planets.blocker = { ...planet, id: "blocker", coords: origin };
     // Slot 1 is occupied; slot 2 is the nearest free choice.
@@ -829,8 +831,7 @@ describe("lazy seed cursor sorted with the old key", () => {
 });
 
 describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
-  it("pirate tech = opponent - 3 (and 0 floor) in both directions", () => {
-    // 1. Pirate raiding player
+  it("pirate tech = opponent - 3 (and 0 floor) helper check", () => {
     const opponentResearch = {
       weaponsTech: 8,
       shieldingTech: 4,
@@ -841,7 +842,6 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
     assert.equal(pTech.shieldingTech, 1); // 4 - 3
     assert.equal(pTech.armourTech, 0); // max(0, 2 - 3)
 
-    // Floor at 0 check
     const lowResearch = {
       weaponsTech: 1,
       shieldingTech: 0,
@@ -851,32 +851,70 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
     assert.equal(lowTech.weaponsTech, 0);
     assert.equal(lowTech.shieldingTech, 0);
     assert.equal(lowTech.armourTech, 0);
+  });
 
-    // 2. Player attacking pirate base
-    const universe = createUniverse("Tech Direction Test", 8);
-    const { player, planet } = joinUniverse(universe, "Attacker", Date.now());
-    player.research = { weaponsTech: 10, shieldingTech: 5, armourTech: 1 };
-    universe.planets[planet.id].resources.deuterium = 100_000;
-    universe.planets[planet.id].ships.cruiser = 5;
+  it("checks tech actually used in combat in both directions", () => {
+    // Direction A: Player attacks pirate base.
+    // Player has tech 8. Pirate base tier 100 (stored tech 25) vs player tech 8 -> pirate defender tech is 5.
+    const universe1 = createUniverse("Combat Tech Attack Test", 8);
+    const { player: playerA, planet: planetA } = joinUniverse(universe1, "Attacker", Date.now());
+    playerA.research = { weaponsTech: 8, shieldingTech: 8, armourTech: 8 };
+    universe1.planets[planetA.id].resources.deuterium = 100_000;
 
-    const base = activePirateBases(universe)[0]!;
-    base.ships = { ...emptyFleetShips(), interceptor: 1 };
+    const baseA = activePirateBases(universe1)[0]!;
+    baseA.level = 100;
+    baseA.tier = 100;
+    baseA.techs = { weapons: 25, shielding: 25, armour: 25 };
+    baseA.ships = { ...emptyFleetShips(), cruiser: 1 };
 
-    const launch = launchFleet(universe, {
-      playerId: player.id,
+    universe1.planets[planetA.id].ships.cruiser = 1;
+    const launchA = launchFleet(universe1, {
+      playerId: playerA.id,
       mission: "pirateRaid",
-      ships: { cruiser: 5 },
-      pirateBaseId: base.id,
+      ships: { cruiser: 1 },
+      pirateBaseId: baseA.id,
       now: Date.now() + 100,
     });
-    assert.equal(launch.ok, true);
-    advanceUniverse(universe, launch.fleet.arrivesAt);
+    assert.equal(launchA.ok, true);
+    advanceUniverse(universe1, launchA.fleet.arrivesAt);
 
-    const reportId = launch.fleet.reportId;
-    assert.ok(reportId);
-    const report = universe.reports[reportId];
-    assert.ok(report);
-    assert.equal(report.outcome, "attacker_win");
+    const reportA = universe1.reports[launchA.fleet.reportId!];
+    assert.ok(reportA);
+    assert.equal(reportA.outcome, "attacker_win");
+
+    // Direction B: Pirate raids player.
+    // Player has tech 8. Pirate base tier 100 (stored tech 25) raids player planet -> pirate attacker tech is 5.
+    const nowB = Date.now();
+    const universe2 = createUniverse("Combat Tech Raid Test", 8);
+    delete universe2.skipNpcRaids;
+    const { player: playerB, planet: planetB } = joinUniverse(universe2, "Defender", nowB - 10 * 86_400_000);
+    playerB.createdAt = nowB - 10 * 86_400_000;
+    playerB.research = { weaponsTech: 8, shieldingTech: 8, armourTech: 8 };
+    const planetState = universe2.planets[planetB.id]!;
+    planetState.buildings = { metalMine: 20, crystalMine: 20, solarPlant: 20 };
+    planetState.ships = { ...emptyFleetShips(), cruiser: 1 };
+
+    const baseB = activePirateBases(universe2)[0]!;
+    universe2.pirateBases = { [baseB.id]: baseB };
+    baseB.level = 100;
+    baseB.tier = 100;
+    baseB.techs = { weapons: 25, shielding: 25, armour: 25 };
+    baseB.ships = { ...emptyFleetShips(), cruiser: 1 };
+    baseB.nextRaidAt = nowB;
+
+    const prevE2E = process.env.STARHOLD_E2E;
+    delete process.env.STARHOLD_E2E;
+    try {
+      tickPirates(universe2, nowB + 1000);
+
+      const event = (universe2.players[playerB.id]?.eventLog ?? []).find(
+        (e) => e.kind === "raidAlert" && e.meta?.pirateBaseId === baseB.id,
+      );
+      assert.ok(event, "expected raidAlert event");
+      assert.equal(event.meta?.outcome, "defender_win");
+    } finally {
+      if (prevE2E != null) process.env.STARHOLD_E2E = prevE2E;
+    }
   });
 
   it("raid power ~70% of defender power (hand-computed small case)", () => {
@@ -944,26 +982,47 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
     assert.ok((scaled.interceptor ?? 0) > 1);
   });
 
-  it("loads an existing/old-shaped saved state and raids resolve (no save reset)", () => {
-    const universe = createUniverse("Old Saved State", 8);
-    const { player, planet } = joinUniverse(universe, "Defender", Date.now());
+  it("loads an existing/old-shaped saved state without save reset, resolves raid and preserves progress", () => {
+    const now = Date.now();
+    const universe = createUniverse("Old Save Test", 8);
+    delete universe.skipNpcRaids;
+    const { player, planet } = joinUniverse(universe, "LegacyCommander", now - 10 * 86_400_000);
+    player.createdAt = now - 10 * 86_400_000;
     const body = universe.planets[planet.id]!;
-    body.ships = { ...emptyFleetShips(), interceptor: 10 };
-    body.resources = { metal: 10_000, crystal: 10_000, deuterium: 10_000 };
+
+    body.buildings = { metalMine: 20, crystalMine: 18, solarPlant: 22 };
+    body.ships = { ...emptyFleetShips(), interceptor: 20, hauler: 5 };
+    body.resources = { metal: 50_000, crystal: 30_000, deuterium: 10_000 };
+    player.xp = 1250;
+    player.xpTotal = 1250;
+    player.starshards = 100;
 
     const base = activePirateBases(universe)[0]!;
-    base.level = 15;
-    base.tier = 15;
-    base.techs = { weapons: 3, armour: 3, shielding: 3 };
-    base.ships = { ...emptyFleetShips(), interceptor: 50, cruiser: 10 };
-    base.nextRaidAt = 0;
+    universe.pirateBases = { [base.id]: base };
+    base.nextRaidAt = now;
 
-    const now = PIRATE_RAID_PERIOD_MS * 2;
-    tickPirates(universe, now);
+    const prevE2E = process.env.STARHOLD_E2E;
+    delete process.env.STARHOLD_E2E;
 
-    assert.ok(universe.players[player.id]);
-    assert.equal(universe.players[player.id]?.name, "Defender");
-    assert.ok(universe.reports && Object.keys(universe.reports).length >= 0);
+    try {
+      tickPirates(universe, now + 1000);
+
+      const eventLog = universe.players[player.id]?.eventLog ?? [];
+      assert.ok(eventLog.length >= 1, "expected at least one event log entry");
+      const raidAlert = eventLog.find((e) => e.kind === "raidAlert");
+      assert.ok(raidAlert, "expected raidAlert in event log");
+
+      assert.equal(universe.players[player.id]?.name, "LegacyCommander");
+      assert.ok((universe.players[player.id]?.xpTotal ?? 0) >= 1200);
+      assert.ok((universe.players[player.id]?.starshards ?? 0) >= 10);
+      assert.equal(body.buildings.metalMine, 20);
+      assert.equal(body.buildings.crystalMine, 18);
+      assert.equal(body.buildings.solarPlant, 22);
+      assert.ok(body.resources.metal > 0);
+      assert.ok(fleetShipCount(body.ships) > 0);
+    } finally {
+      if (prevE2E != null) process.env.STARHOLD_E2E = prevE2E;
+    }
   });
 });
 

@@ -1464,33 +1464,20 @@ function applyNpcRaidOnNpc(
   markBase: (b: PirateBase | AlienBase, n: number) => void,
   markOther: (b: PirateBase | AlienBase, n: number) => void,
 ): void {
-  const isBasePirate = base.id.startsWith("pir:");
-  const isOtherPirate = other.id.startsWith("pir:");
-
-  const otherResearchRaw = pirateCombatResearch(other);
-  const baseResearchRaw = pirateCombatResearch(base);
-
-  const otherCombatResearch = isOtherPirate
-    ? pirateCombatResearchForOpponent(baseResearchRaw)
-    : otherResearchRaw;
-  const baseCombatResearch = isBasePirate
-    ? pirateCombatResearchForOpponent(otherResearchRaw)
-    : baseResearchRaw;
-
   const otherPower =
-    fleetCombatPower(other.ships, otherCombatResearch) +
+    fleetCombatPower(other.ships, pirateCombatResearch(other)) +
     defenseCombatPower(
       other.defenses ?? emptyDefenses(),
-      otherCombatResearch,
+      pirateCombatResearch(other),
     );
-  const raidFleet = scalePirateRaidFleet(base.ships, otherPower, other.ships);
+  const raidFleet = scalePirateRaidFleet(base.ships, otherPower);
   if (fleetShipCount(raidFleet) < 1) return;
   const combat = resolveCombat(
     raidFleet,
     other.ships,
     other.defenses ?? emptyDefenses(),
-    baseCombatResearch,
-    otherCombatResearch,
+    pirateCombatResearch(base),
+    pirateCombatResearch(other),
   );
   other.ships = combat.defenderAfter;
   other.defenses = combat.defensesAfter;
