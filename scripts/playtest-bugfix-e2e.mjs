@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { createActiveWaitClock } from "./active-wait-clock.mjs";
+import fs from "node:fs";
+import path from "node:path";
 /**
  * Local prod Playwright for playtest bugs 1–9.
  * Desktop 1280×800 and phone 390×844.
@@ -78,6 +80,64 @@ async function noOverflow(page, label) {
   assert(!overflow, `${label} overflows horizontally`);
 }
 
+async function logResearchWaitFailure(page, tag, error) {
+  let diagnostics;
+  try {
+    diagnostics = await page.evaluate(() => {
+      const isVisible = (element) => {
+        if (!element || element.hidden) return false;
+        const style = getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return style.display !== "none" && style.visibility !== "hidden" &&
+          rect.width > 0 && rect.height > 0;
+      };
+      const button = document.querySelector(
+        '[data-testid="research-btn-shieldingTech"]',
+      );
+      return {
+        shieldingTech: button
+          ? {
+              text: button.textContent,
+              dataLocked: button.getAttribute("data-locked"),
+              disabled: button.getAttribute("disabled"),
+              disabledProperty:
+                button instanceof HTMLButtonElement ? button.disabled : null,
+              title: button.getAttribute("title"),
+            }
+          : "missing",
+        visibleFlashNoticeText: [
+          ...document.querySelectorAll(
+            '[data-testid^="flash-"], [role="status"], [role="alert"]',
+          ),
+        ]
+          .filter(isVisible)
+          .map((element) => element.innerText),
+        activeNavPage: {
+          link: document.querySelector("a[data-nav].active")?.getAttribute("data-nav") ??
+            "missing",
+          dropdown: document.querySelector("[data-nav-select]")?.value ?? "missing",
+        },
+      };
+    });
+  } catch (diagnosticError) {
+    console.error("PLAYTEST_RESEARCH_DIAGNOSTICS_READ_FAIL", diagnosticError);
+  }
+  console.error(
+    "PLAYTEST_RESEARCH_WAIT_DIAGNOSTICS",
+    JSON.stringify({ url: page.url(), ...diagnostics, error: String(error) }, null, 2),
+  );
+  try {
+    const dir = path.resolve("ui-review-out-playtest");
+    fs.mkdirSync(dir, { recursive: true });
+    await page.screenshot({
+      path: path.join(dir, `${tag}-research-wait-failure.png`),
+      fullPage: true,
+    });
+  } catch (screenshotError) {
+    console.error("PLAYTEST_RESEARCH_SCREENSHOT_FAIL", screenshotError);
+  }
+}
+
 async function optionTexts(page) {
   return page.locator("#fleet-target option").allTextContents();
 }
@@ -133,14 +193,19 @@ async function runViewport(browser, viewport, ids) {
 
     const researchUrl = `${WEB}/research?playerId=${encodeURIComponent(ids.lab.player.id)}`;
     await page.goto(researchUrl, { waitUntil: "domcontentloaded" });
-    await page.waitForFunction(
-      () =>
-        (
-          document.querySelector('[data-testid="research-btn-shieldingTech"]')
-            ?.textContent ?? ""
-        ).includes("Needs lab 2"),
-      { timeout: 20_000 },
-    );
+    try {
+      await page.waitForFunction(
+        () =>
+          (
+            document.querySelector('[data-testid="research-btn-shieldingTech"]')
+              ?.textContent ?? ""
+          ).includes("Needs lab 2"),
+        { timeout: 20_000 },
+      );
+    } catch (error) {
+      await logResearchWaitFailure(page, tag, error);
+      throw error;
+    }
     const shield = page.locator('[data-testid="research-btn-shieldingTech"]');
     assert(await shield.isDisabled(), `${tag} shielding research enabled`);
     assert(
