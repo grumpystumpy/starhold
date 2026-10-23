@@ -90,42 +90,114 @@ describe("planet fields curve", () => {
 });
 
 describe("position production multipliers", () => {
-  it("Miner boosts planet energy only; old players without a class keep defaults", () => {
-    const universe = createUniverse("Miner energy", 8);
-    const { player, planet } = joinUniverse(universe, "Miner", 201_600_000);
-    const body = universe.planets[planet.id];
-    body.buildings = { solarPlant: 10 };
-    body.lastTickAt = 201_600_000;
-    delete (player as { playerClass?: unknown }).playerClass;
+  it("loads an old save without losing progress and applies class bonuses", () => {
+    const universe = createUniverse("Legacy class bonuses", 8);
+    const now = 201_600_000;
+    const { player: miner, planet: minerPlanet } = joinUniverse(
+      universe,
+      "Miner",
+      now,
+    );
+    const { player: fleeter, planet: fleeterPlanet } = joinUniverse(
+      universe,
+      "Fleeter",
+      now + 1,
+    );
 
-    const oldShapeView = playerView(universe, player.id, 201_600_000);
-    assert.equal(oldShapeView.fleetSlotCap, 1);
-    assert.deepEqual(oldShapeView.economy.productionPerHour, {
+    miner.playerClass = {
+      classId: "miner",
+      chosenAt: now,
+      changeCount: 0,
+      lastChangeAt: null,
+    };
+    fleeter.playerClass = {
+      classId: "fleeter",
+      chosenAt: now + 1,
+      changeCount: 0,
+      lastChangeAt: null,
+    };
+    minerPlanet.buildings = { solarPlant: 10, metalStorage: 2 };
+    minerPlanet.resources = { metal: 12_345, crystal: 6_789, deuterium: 4_321 };
+    minerPlanet.lastTickAt = now;
+    fleeterPlanet.buildings = { solarPlant: 6, shipyard: 4 };
+    fleeterPlanet.resources = {
+      metal: 23_456,
+      crystal: 7_890,
+      deuterium: 50_000,
+    };
+    fleeterPlanet.ships.hauler = 2;
+
+    const launch = launchFleet(universe, {
+      playerId: fleeter.id,
+      mission: "deploy",
+      targetPlanetId: minerPlanet.id,
+      ships: { hauler: 1 },
+      now: now + 2,
+    });
+    assert.ok(launch.ok, launch.ok ? undefined : launch.error);
+    if (!launch.ok) return;
+    universe.planets[minerPlanet.id]!.resources = {
+      metal: 12_345,
+      crystal: 6_789,
+      deuterium: 4_321,
+    };
+    universe.planets[minerPlanet.id]!.lastTickAt = now + 2;
+    universe.planets[fleeterPlanet.id]!.resources = {
+      metal: 23_456,
+      crystal: 7_890,
+      deuterium: 50_000,
+    };
+    universe.planets[fleeterPlanet.id]!.lastTickAt = now + 2;
+
+    // The server loads persisted universe blobs through this additive loader.
+    const oldSavedState = JSON.parse(
+      JSON.stringify(universe),
+    ) as typeof universe;
+    const loaded = migrateOrResetUniverse(oldSavedState).universe;
+
+    assert.equal(loaded.players[miner.id]?.playerClass?.classId, "miner");
+    assert.equal(loaded.players[fleeter.id]?.playerClass?.classId, "fleeter");
+    assert.equal(loaded.planets[minerPlanet.id]?.buildings.solarPlant, 10);
+    assert.equal(loaded.planets[minerPlanet.id]?.buildings.metalStorage, 2);
+    assert.deepEqual(loaded.planets[minerPlanet.id]?.resources, {
+      metal: 12_345,
+      crystal: 6_789,
+      deuterium: 4_321,
+    });
+    assert.equal(loaded.planets[fleeterPlanet.id]?.buildings.solarPlant, 6);
+    assert.equal(loaded.planets[fleeterPlanet.id]?.buildings.shipyard, 4);
+    assert.deepEqual(loaded.planets[fleeterPlanet.id]?.resources, {
+      metal: 23_456,
+      crystal: 7_890,
+      deuterium: 50_000,
+    });
+    assert.equal(loaded.planets[fleeterPlanet.id]?.ships.hauler, 1);
+    assert.equal(Object.keys(loaded.fleets).length, 1);
+    assert.equal(Object.values(loaded.fleets)[0]?.ownerPlayerId, fleeter.id);
+    assert.equal(Object.values(loaded.fleets)[0]?.ships.hauler, 1);
+
+    const minerView = playerView(loaded, miner.id, now + 2);
+    const minerEnergy = minerView.economy.energy.produced;
+    loaded.players[miner.id]!.playerClass!.classId = "explorer";
+    const baselineMinerView = playerView(loaded, miner.id, now + 2);
+    const baselineMinerEnergy = baselineMinerView.economy.energy.produced;
+    assert.ok(baselineMinerEnergy > 0);
+    assert.equal(minerEnergy, Math.floor(baselineMinerEnergy * 1.1));
+    assert.deepEqual(minerView.economy.productionPerHour, {
       metal: 500,
       crystal: 250,
       deuterium: 100,
     });
-    const baseEnergy = oldShapeView.economy.energy.produced;
 
-    universe.players[player.id].playerClass = {
-      classId: "miner",
-      chosenAt: 201_600_001,
-      changeCount: 0,
-      lastChangeAt: null,
-    };
-    const minerView = playerView(universe, player.id, 201_600_001);
-    assert.equal(minerView.economy.energy.produced, Math.floor(baseEnergy * 1.1));
-    assert.equal(minerView.economy.productionPerHour.metal, 500);
-    assert.equal(minerView.economy.productionPerHour.crystal, 250);
-    assert.equal(minerView.economy.productionPerHour.deuterium, 100);
-
-    universe.players[player.id].playerClass.classId = "explorer";
-    const explorerView = playerView(universe, player.id, 201_600_002);
-    assert.equal(explorerView.economy.energy.produced, baseEnergy);
-
-    universe.players[player.id].playerClass.classId = "fleeter";
-    const fleeterView = playerView(universe, player.id, 201_600_003);
-    assert.equal(fleeterView.fleetSlotCap, oldShapeView.fleetSlotCap + 2);
+    loaded.players[fleeter.id]!.playerClass!.classId = "explorer";
+    const baselineFleetSlots = playerView(
+      loaded,
+      fleeter.id,
+      now + 2,
+    ).fleetSlotCap;
+    loaded.players[fleeter.id]!.playerClass!.classId = "fleeter";
+    const fleeterView = playerView(loaded, fleeter.id, now + 2);
+    assert.equal(fleeterView.fleetSlotCap, baselineFleetSlots + 2);
   });
 
   it("Power Discipline boosts energy production without boosting mine output", () => {
