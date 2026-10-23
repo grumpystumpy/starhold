@@ -8,6 +8,7 @@ import { createActiveWaitClock } from "./active-wait-clock.mjs";
  * Server needs STARHOLD_E2E=1 and ALLOW_E2E_HOOKS=1.
  */
 import { createRequire } from "node:module";
+import { fleetToStep2 } from "./lib/fleet-two-step.mjs";
 
 const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:3001";
 const API = process.env.STARHOLD_API ?? WEB;
@@ -216,6 +217,7 @@ async function runViewport(browser, viewport, ids) {
 
     const fleetUrl = `${WEB}/fleet?playerId=${encodeURIComponent(ids.spy.player.id)}`;
     await page.goto(fleetUrl, { waitUntil: "domcontentloaded" });
+    await fleetToStep2(page, { probe: 1 });
     await page.waitForSelector('[data-testid="mission-espionage"]');
     await page.click('[data-testid="mission-espionage"]');
     await page.waitForFunction(() =>
@@ -318,6 +320,7 @@ async function expectGraduatedTarget(browser, viewport, ids) {
   try {
     const fleetUrl = `${WEB}/fleet?playerId=${encodeURIComponent(ids.spy.player.id)}`;
     await page.goto(fleetUrl, { waitUntil: "domcontentloaded" });
+    await fleetToStep2(page, { probe: 1 });
     await page.waitForSelector('[data-testid="mission-raid"]');
     await page.click('[data-testid="mission-raid"]');
     await page.waitForFunction(

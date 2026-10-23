@@ -8,6 +8,7 @@ import { createActiveWaitClock } from "./active-wait-clock.mjs";
  * marker on galaxy → propose strike → persist across reload.
  */
 import { createRequire } from "node:module";
+import { fleetToStep2 } from "./lib/fleet-two-step.mjs";
 
 const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:3001";
 const API = process.env.STARHOLD_API ?? WEB;
@@ -170,6 +171,7 @@ async function main() {
   logs.push("chat_shared");
 
   await buildProbe(pageA);
+  await fleetToStep2(pageA, { probe: 1 });
   await pageA.evaluate(() => {
     const mission = document.querySelector('[data-testid="mission-espionage"]');
     if (mission instanceof HTMLInputElement) {
@@ -191,15 +193,9 @@ async function main() {
     ),
     pageA.evaluate((planetValue) => {
       const select = document.querySelector('[data-testid="fleet-target"]');
-      const count = document.querySelector('[data-testid="fleet-count-probe"]');
       const form = document.querySelector("#fleet-form");
-      if (
-        select instanceof HTMLSelectElement &&
-        count instanceof HTMLInputElement &&
-        form instanceof HTMLFormElement
-      ) {
+      if (select instanceof HTMLSelectElement && form instanceof HTMLFormElement) {
         select.value = planetValue;
-        count.value = "1";
         form.requestSubmit();
       }
     }, value),
