@@ -23,6 +23,7 @@ import {
   clearFlash,
   schedulePaint,
   session,
+  setBeforePaintImpl,
   setFlash,
   stripJoinParams,
 } from "./session";
@@ -32,6 +33,8 @@ import { settleMutation } from "./recover-action";
 
 /** Background refresh cadence. Actions apply their own response immediately. */
 export const POLL_INTERVAL_MS = 30_000;
+const QUEUE_COMPLETION_REFRESH_DELAY_MS = 250;
+const MAX_STALE_COMPLETION_MS = 5_000;
 /** No input for this long: stop polling until the player interacts. */
 export const IDLE_PAUSE_MS = 3 * 60 * 1000;
 
@@ -119,6 +122,8 @@ let activityBound = false;
 let lastActivityAt = 0;
 let idleTimer: number | undefined;
 let idlePaused = false;
+let queueCompletionTimer: number | undefined;
+const completedQueueTimes = new Set<string>();
 
 function tabHidden(): boolean {
   return typeof document !== "undefined" && document.visibilityState === "hidden";
@@ -134,6 +139,51 @@ function clearPollTimer(): void {
     session.pollTimer = undefined;
   }
 }
+
+function clearQueueCompletionTimer(): void {
+  if (queueCompletionTimer !== undefined) {
+    window.clearTimeout(queueCompletionTimer);
+    queueCompletionTimer = undefined;
+  }
+}
+
+/** Refresh once after the next build/research/ship queue or own fleet arrival. */
+function scheduleQueueCompletionRefresh(): void {
+  clearQueueCompletionTimer();
+  const view = session.view;
+  if (!view) {
+    completedQueueTimes.clear();
+    return;
+  }
+
+  const now = Date.now();
+  const finishAt = [
+    ...view.planet.buildQueue,
+    ...view.player.researchQueue,
+    ...view.planet.shipQueue,
+  ]
+    .map((item) => item.completesAt)
+    .concat(view.fleets.map((fleet) => fleet.arrivesAt))
+    .filter(
+      (time) =>
+        Number.isFinite(time) &&
+        time >= now - MAX_STALE_COMPLETION_MS &&
+        !completedQueueTimes.has(`${view.player.id}:${time}`),
+    )
+    .sort((a, b) => a - b)[0];
+  if (finishAt === undefined) return;
+
+  const playerId = view.player.id;
+  const completionKey = `${playerId}:${finishAt}`;
+  queueCompletionTimer = window.setTimeout(() => {
+    queueCompletionTimer = undefined;
+    if (session.view?.player.id !== playerId) return;
+    completedQueueTimes.add(completionKey);
+    void silentRefresh(playerId);
+  }, Math.max(0, finishAt - now + QUEUE_COMPLETION_REFRESH_DELAY_MS));
+}
+
+setBeforePaintImpl(scheduleQueueCompletionRefresh);
 
 /** Push the next background poll out. Does not send a request. */
 export function deferBackgroundPoll(): void {
@@ -241,6 +291,7 @@ function ensureVisibilityListener(): void {
 }
 
 export function startPolling(playerId: string): void {
+  if (pollPlayerId !== playerId) completedQueueTimes.clear();
   pollPlayerId = playerId;
   lastActivityAt = Date.now();
   idlePaused = false;
@@ -254,6 +305,8 @@ export function startPolling(playerId: string): void {
 export function stopPolling(): void {
   pollPlayerId = null;
   clearPollTimer();
+  clearQueueCompletionTimer();
+  completedQueueTimes.clear();
   clearIdleTimer();
 }
 
