@@ -19,7 +19,12 @@ export function readFleetForm(): {
   openAcs?: boolean;
   acsGroupId?: string;
 } | null {
-  const form = root.querySelector<HTMLFormElement>("#fleet-form");
+  return readFleetFormIn(root);
+}
+
+/** Same mapping as the one-page form. Speed is not read and not returned. */
+export function readFleetFormIn(scope: ParentNode): ReturnType<typeof readFleetForm> {
+  const form = scope.querySelector<HTMLFormElement>("#fleet-form");
   if (!form) return null;
   const target = form.querySelector<HTMLSelectElement>("#fleet-target");
   const missionEl = form.querySelector<HTMLInputElement>(

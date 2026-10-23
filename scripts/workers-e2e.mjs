@@ -6,6 +6,7 @@ import { createActiveWaitClock } from "./active-wait-clock.mjs";
  *   STARHOLD_WEB=http://127.0.0.1:8787 node scripts/workers-e2e.mjs
  */
 import { createRequire } from "node:module";
+import { fleetToStep2 } from "./lib/fleet-two-step.mjs";
 
 const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:8787";
 const require = createRequire(import.meta.url);
@@ -77,9 +78,9 @@ async function runViewport(width, height) {
     await page.waitForSelector('[data-testid="resources"]', { timeout: 20_000 });
     await page.click('[data-testid="nav-fleet"]');
     await page.waitForSelector('[data-testid="fleet-form"]', { timeout: 15_000 });
+    await fleetToStep2(page, { scout: 1 });
     const expedition = page.locator('[data-testid="mission-expedition"]');
     if (await expedition.count()) await expedition.first().click();
-    await page.fill('[data-testid="fleet-count-scout"]', "1");
     await page.click('[data-testid="launch-fleet"]');
     await page.waitForSelector(
       '[data-testid="fleets-live"], [data-testid="flash-ok"]',
