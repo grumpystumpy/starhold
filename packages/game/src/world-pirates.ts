@@ -47,7 +47,6 @@ import {
   PIRATE_RAID_PERIOD_MS,
   PIRATE_RAID_POWER_FACTOR,
   PIRATE_RAID_POWER_FLOOR,
-  PIRATE_TECH_OFFSET,
   PIRATE_RESPAWN_DELAY_MAX_MS,
   PIRATE_RESPAWN_DELAY_MIN_MS,
   PIRATE_SPLIT_CHILD_COUNT,
@@ -59,6 +58,10 @@ import {
   SHIPS,
   SHIP_ORDER,
 } from "./catalog.js";
+import {
+  PIRATE_RAID_POWER_FACTOR_PLAYER,
+  PIRATE_TECH_OFFSET,
+} from "./data/tuning.js";
 import { mintCombatShareCode } from "./combat-share.js";
 import {
   computeRaidLoot,
@@ -1041,12 +1044,18 @@ export function scalePirateRaidFleet(
   full: FleetShips,
   defenderPower: number,
   defenderShips?: FleetShips,
+  factorOverride?: number,
 ): FleetShips {
-  const eligible = applyStrongShipCap(full, defenderShips);
+  const factor =
+    factorOverride ??
+    (defenderShips ? PIRATE_RAID_POWER_FACTOR_PLAYER : PIRATE_RAID_POWER_FACTOR);
+  const eligible = defenderShips ? applyStrongShipCap(full, defenderShips) : normalizeFleetShips(full);
   const eligiblePower = Math.max(1, fleetCombatPower(eligible));
-  const cap = Math.max(0, defenderPower * PIRATE_RAID_POWER_FACTOR);
-  const factor = Math.min(1, cap / eligiblePower);
-  return scaleShips(eligible, factor);
+  const cap = defenderShips
+    ? Math.max(0, defenderPower * factor)
+    : Math.max(PIRATE_RAID_POWER_FLOOR, defenderPower * factor) || PIRATE_RAID_POWER_FLOOR;
+  const scaleFactor = Math.min(1, cap / eligiblePower);
+  return scaleShips(eligible, scaleFactor);
 }
 
 function applyFreeSpawnsPirate(base: PirateBase, now: number): void {
@@ -1401,6 +1410,7 @@ function applyNpcRaidOnPlanet(
     base.ships,
     planetDefensePower(planet, universe),
     planet.ships,
+    PIRATE_RAID_POWER_FACTOR_PLAYER,
   );
   if (fleetShipCount(raidFleet) < 1) return;
   const combat = resolveCombat(

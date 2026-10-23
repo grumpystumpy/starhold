@@ -1340,7 +1340,8 @@ export const PIRATE_DEFENSE_WIN_STARSHARDS = 10;
  * Soft cap for NPC raid detachment vs small empires:
  * raid power ≤ defenderPower × factor + floor.
  */
-export const PIRATE_RAID_POWER_FACTOR = 0.70;
+export const PIRATE_RAID_POWER_FACTOR = 1.4;
+export const PIRATE_RAID_POWER_FACTOR_PLAYER = 0.70;
 export const PIRATE_RAID_POWER_FLOOR = 40;
 export const PIRATE_TECH_OFFSET = 3;
 

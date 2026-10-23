@@ -16,6 +16,7 @@ import {
   PIRATE_MAX_LEVEL,
   PIRATE_RAID_PERIOD_MS,
   ALIEN_RAID_PERIOD_MS,
+  PIRATE_RAID_POWER_FACTOR,
   PIRATE_RAID_POWER_FLOOR,
   PIRATE_SPLIT_LEVEL,
   PIRATE_TARGET_BASE_COUNT,
@@ -38,6 +39,7 @@ import {
   galaxyViewFor,
   joinUniverse,
   launchFleet,
+  migrateOrResetUniverse,
   migrateUniverseV4ToV5,
   pirateDestroyStarshards,
   pirateEligibleShipIds,
@@ -53,8 +55,13 @@ import {
 import type { TickBudget } from "./tick-budget.js";
 import type { FleetMission, UniverseState } from "./types.js";
 import {
+  PIRATE_RAID_POWER_FACTOR_PLAYER,
+  PIRATE_TECH_OFFSET,
+} from "./data/tuning.js";
+import {
   applyStrongShipCap,
   findNearestOpenSlot1,
+  pirateCombatResearch,
   pirateCombatResearchForOpponent,
 } from "./world-pirates.js";
 
@@ -831,31 +838,21 @@ describe("lazy seed cursor sorted with the old key", () => {
 });
 
 describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
-  it("pirate tech = opponent - 3 (and 0 floor) helper check", () => {
-    const opponentResearch = {
-      weaponsTech: 8,
-      shieldingTech: 4,
-      armourTech: 2,
-    };
-    const pTech = pirateCombatResearchForOpponent(opponentResearch);
+  it("asserts pirate combat tech = opponent - 3 (and 0 floor) in both directions", () => {
+    // 1. Helper check
+    const pTech = pirateCombatResearchForOpponent({ weaponsTech: 8, shieldingTech: 4, armourTech: 2 });
     assert.equal(pTech.weaponsTech, 5); // 8 - 3
     assert.equal(pTech.shieldingTech, 1); // 4 - 3
     assert.equal(pTech.armourTech, 0); // max(0, 2 - 3)
 
-    const lowResearch = {
-      weaponsTech: 1,
-      shieldingTech: 0,
-      armourTech: 0,
-    };
-    const lowTech = pirateCombatResearchForOpponent(lowResearch);
+    const lowTech = pirateCombatResearchForOpponent({ weaponsTech: 1, shieldingTech: 0, armourTech: 0 });
     assert.equal(lowTech.weaponsTech, 0);
     assert.equal(lowTech.shieldingTech, 0);
     assert.equal(lowTech.armourTech, 0);
-  });
 
-  it("checks tech actually used in combat in both directions", () => {
-    // Direction A: Player attacks pirate base.
-    // Player has tech 8. Pirate base tier 100 (stored tech 25) vs player tech 8 -> pirate defender tech is 5.
+    // 2. Direction A: Player attacks pirate base.
+    // Player has tech 8/8/8. Pirate base tier 100 has stored techs 25/25/25.
+    // At fight time, defender research for pirate base MUST equal player tech - 3 = 5/5/5.
     const universe1 = createUniverse("Combat Tech Attack Test", 8);
     const { player: playerA, planet: planetA } = joinUniverse(universe1, "Attacker", Date.now());
     playerA.research = { weaponsTech: 8, shieldingTech: 8, armourTech: 8 };
@@ -866,6 +863,11 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
     baseA.tier = 100;
     baseA.techs = { weapons: 25, shielding: 25, armour: 25 };
     baseA.ships = { ...emptyFleetShips(), cruiser: 1 };
+
+    const fightTechA = pirateCombatResearch(baseA, playerA.research);
+    assert.equal(fightTechA.weaponsTech, 5);
+    assert.equal(fightTechA.shieldingTech, 5);
+    assert.equal(fightTechA.armourTech, 5);
 
     universe1.planets[planetA.id].ships.cruiser = 1;
     const launchA = launchFleet(universe1, {
@@ -882,8 +884,9 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
     assert.ok(reportA);
     assert.equal(reportA.outcome, "attacker_win");
 
-    // Direction B: Pirate raids player.
-    // Player has tech 8. Pirate base tier 100 (stored tech 25) raids player planet -> pirate attacker tech is 5.
+    // 3. Direction B: Pirate raids player.
+    // Player has tech 8/8/8. Pirate base tier 100 (stored tech 25) raids player planet.
+    // At fight time, attacker research for pirate base MUST equal player tech - 3 = 5/5/5.
     const nowB = Date.now();
     const universe2 = createUniverse("Combat Tech Raid Test", 8);
     delete universe2.skipNpcRaids;
@@ -902,6 +905,11 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
     baseB.ships = { ...emptyFleetShips(), cruiser: 1 };
     baseB.nextRaidAt = nowB;
 
+    const fightTechB = pirateCombatResearch(baseB, playerB.research);
+    assert.equal(fightTechB.weaponsTech, 5);
+    assert.equal(fightTechB.shieldingTech, 5);
+    assert.equal(fightTechB.armourTech, 5);
+
     const prevE2E = process.env.STARHOLD_E2E;
     delete process.env.STARHOLD_E2E;
     try {
@@ -917,29 +925,45 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
     }
   });
 
+  it("NPC-on-NPC raid produces the same fleet size as before this PR", () => {
+    const full = { ...emptyFleetShips(), interceptor: 1000 }; // 1000 Interceptors (power 69,000)
+    const defenderPower = 10_000;
+
+    // NPC vs NPC (no defenderShips passed) -> uses factor 1.4, no strong ship cap
+    const npcRaid = scalePirateRaidFleet(full, defenderPower);
+    assert.equal(PIRATE_RAID_POWER_FACTOR, 1.4);
+    // 10,000 * 1.4 = 14,000 cap. 14,000 / 69 = 202 Interceptors (power 13,938).
+    assert.equal(npcRaid.interceptor, 202);
+    assert.ok(fleetCombatPower(npcRaid) <= defenderPower * PIRATE_RAID_POWER_FACTOR);
+
+    // Player raid -> uses factor 0.70 with strong ship cap
+    const defenderShips = { ...emptyFleetShips(), cruiser: 10 };
+    const playerRaid = scalePirateRaidFleet(
+      full,
+      defenderPower,
+      defenderShips,
+      PIRATE_RAID_POWER_FACTOR_PLAYER,
+    );
+    assert.equal(PIRATE_RAID_POWER_FACTOR_PLAYER, 0.70);
+    // 10,000 * 0.70 = 7,000 cap.
+    assert.ok(fleetCombatPower(playerRaid) < fleetCombatPower(npcRaid));
+    assert.equal(fleetCombatPower(playerRaid), 6969); // 101 Interceptors * 69 = 6969
+  });
+
   it("raid power ~70% of defender power (hand-computed small case)", () => {
-    // Hand-computed small case:
-    // Defender has 10 Interceptors. Interceptor unit combat power = 40 + 0.5*16 + 0.3*20 + 0.3*50 = 69.
-    // Total defender power = 10 * 69 = 690.
-    // Target raid power = 70% of 690 = 483.
-    // 483 / 69 = 7 Interceptors.
     const defenderShips = { ...emptyFleetShips(), interceptor: 10 };
     const defenderPower = fleetCombatPower(defenderShips);
     assert.equal(defenderPower, 690);
 
-    // Large base stock: 100 Interceptors (power 6,900)
     const baseStock = { ...emptyFleetShips(), interceptor: 100 };
     const scaled = scalePirateRaidFleet(baseStock, defenderPower, defenderShips);
 
     assert.equal(scaled.interceptor, 7);
-    assert.equal(fleetCombatPower(scaled), 483); // 7 * 69 = 483 (exactly 70% of 690)
+    assert.equal(fleetCombatPower(scaled), 483);
   });
 
   it("never exceeds base stock", () => {
-    // Pirate base only has 3 Interceptors and 1 Cruiser.
     const smallStock = { ...emptyFleetShips(), interceptor: 3, cruiser: 1 };
-
-    // Defender has massive power (defender power = 1,000,000) with 10 Cruisers.
     const defenderShips = { ...emptyFleetShips(), cruiser: 10 };
     const hugePower = 1_000_000;
 
@@ -951,44 +975,36 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
   });
 
   it("strong-ship cap with a mixed defender fleet", () => {
-    // Defender has 2 Cruisers and 1 Bomber.
     const defenderShips = { ...emptyFleetShips(), cruiser: 2, bomber: 1 };
     const baseStock = { ...emptyFleetShips(), cruiser: 50, bomber: 50 };
 
     const capped = applyStrongShipCap(baseStock, defenderShips);
 
-    // Bomber: defender has 1 Bomber + 0 stronger = 1.
     assert.equal(capped.bomber, 1);
-    // Cruiser: defender has 2 Cruisers + 1 Bomber (stronger) = 3.
     assert.equal(capped.cruiser, 3);
   });
 
   it("interceptors and cheaper types may exceed defender numbers", () => {
-    // Defender has 1 Interceptor and 0 Cruisers/Bombers.
     const defenderShips = { ...emptyFleetShips(), interceptor: 1 };
-    // Pirate base has 20 Interceptors, 20 Cruisers.
     const baseStock = { ...emptyFleetShips(), interceptor: 20, cruiser: 20 };
 
     const capped = applyStrongShipCap(baseStock, defenderShips);
 
-    // Cruisers: defender has 0 ships of Cruiser or stronger, so capped at 0.
     assert.equal(capped.cruiser, 0);
-    // Interceptors: NOT > Interceptor cost, so may exceed defender numbers.
     assert.equal(capped.interceptor, 20);
 
-    // When scaled vs defender power (e.g. defenderPower = 5000)
     const scaled = scalePirateRaidFleet(baseStock, 5000, defenderShips);
     assert.equal(scaled.cruiser, 0);
     assert.ok((scaled.interceptor ?? 0) > 1);
   });
 
-  it("loads an existing/old-shaped saved state without save reset, resolves raid and preserves progress", () => {
+  it("loads an old-shaped saved state via JSON serialization and save-loading path, resolves raid and preserves progress", () => {
     const now = Date.now();
-    const universe = createUniverse("Old Save Test", 8);
-    delete universe.skipNpcRaids;
-    const { player, planet } = joinUniverse(universe, "LegacyCommander", now - 10 * 86_400_000);
+    const original = createUniverse("Old Save JSON", 8);
+    original.skipPirateTopUp = true;
+    const { player, planet } = joinUniverse(original, "OldCommander", now - 10 * 86_400_000);
     player.createdAt = now - 10 * 86_400_000;
-    const body = universe.planets[planet.id]!;
+    const body = original.planets[planet.id]!;
 
     body.buildings = { metalMine: 20, crystalMine: 18, solarPlant: 22 };
     body.ships = { ...emptyFleetShips(), interceptor: 20, hauler: 5 };
@@ -997,9 +1013,16 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
     player.xpTotal = 1250;
     player.starshards = 100;
 
-    const base = activePirateBases(universe)[0]!;
-    universe.pirateBases = { [base.id]: base };
+    const base = activePirateBases(original)[0]!;
+    original.pirateBases = { [base.id]: base };
     base.nextRaidAt = now;
+
+    const savedJson = JSON.stringify(original);
+    assert.ok(typeof savedJson === "string");
+
+    const loadedRaw = JSON.parse(savedJson);
+    const { universe } = migrateOrResetUniverse(loadedRaw);
+    delete universe.skipNpcRaids;
 
     const prevE2E = process.env.STARHOLD_E2E;
     delete process.env.STARHOLD_E2E;
@@ -1012,7 +1035,21 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
       const raidAlert = eventLog.find((e) => e.kind === "raidAlert");
       assert.ok(raidAlert, "expected raidAlert in event log");
 
-      assert.equal(universe.players[player.id]?.name, "LegacyCommander");
+      universe.planets[planet.id].resources.deuterium = 100_000;
+      universe.planets[planet.id].ships.cruiser = 5;
+      const launch = launchFleet(universe, {
+        playerId: player.id,
+        mission: "pirateRaid",
+        ships: { cruiser: 5 },
+        pirateBaseId: base.id,
+        now: now + 2000,
+      });
+      assert.equal(launch.ok, true);
+      advanceUniverse(universe, launch.fleet.arrivesAt);
+      assert.ok(launch.fleet.reportId);
+      assert.ok(universe.reports[launch.fleet.reportId!]);
+
+      assert.equal(universe.players[player.id]?.name, "OldCommander");
       assert.ok((universe.players[player.id]?.xpTotal ?? 0) >= 1200);
       assert.ok((universe.players[player.id]?.starshards ?? 0) >= 10);
       assert.equal(body.buildings.metalMine, 20);
