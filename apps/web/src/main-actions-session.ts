@@ -147,6 +147,7 @@ function clearQueueCompletionTimer(): void {
   }
 }
 
+/** Refresh once after the next build/research/ship queue or own fleet arrival. */
 function scheduleQueueCompletionRefresh(): void {
   clearQueueCompletionTimer();
   const view = session.view;
@@ -162,6 +163,7 @@ function scheduleQueueCompletionRefresh(): void {
     ...view.planet.shipQueue,
   ]
     .map((item) => item.completesAt)
+    .concat(view.fleets.map((fleet) => fleet.arrivesAt))
     .filter(
       (time) =>
         Number.isFinite(time) &&
