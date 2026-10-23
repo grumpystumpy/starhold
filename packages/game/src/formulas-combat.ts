@@ -671,12 +671,8 @@ export function fireGroupShots(
       );
       if (!currentTarget) break;
 
-      // Spillover onto new target type triggers rapid fire for new target type
-      const spilledShots = Math.max(1, Math.round(unabsorbedDmg / unitEffectiveDamage));
-      const spilledRF = rapidFireFactor(firerId, currentTarget);
-      const spilledPRepeat = spilledRF > 1 ? (spilledRF - 1) / spilledRF : 0;
-      const spilledExtraShots = sampleNegativeBinomial(spilledShots, spilledPRepeat, rng);
-      groupDamage = unabsorbedDmg + spilledExtraShots * unitEffectiveDamage;
+      // Spillover is unabsorbed damage from the same shot — no extra rapid fire shots are created
+      groupDamage = unabsorbedDmg;
     }
   }
 }

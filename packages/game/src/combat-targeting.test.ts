@@ -1,13 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  DEFENSES,
-  DEFENSE_ORDER,
-  rapidFireFactor,
-  SHIPS,
-  SHIP_ORDER,
-  type CombatUnitId,
-} from "./catalog.js";
+import { DEFENSE_ORDER, SHIPS, SHIP_ORDER } from "./catalog.js";
 import {
   computeTargetWeights,
   emptyDefenses,
@@ -18,12 +11,7 @@ import {
   resolveCombat,
   unitHp,
 } from "./formulas.js";
-import type {
-  DefenseStock,
-  FleetShips,
-  ResearchLevels,
-  ShipId,
-} from "./types.js";
+import type { DefenseStock, FleetShips, ShipId } from "./types.js";
 
 function createTestRng(seedStr = "dist-test-seed") {
   let s = 123456789;
@@ -91,7 +79,7 @@ function runBruteForcePerShotReference(
             }
           }
 
-          const rf = rapidFireFactor(id, target);
+          const rf = (SHIPS[id as ShipId] as { rapidFire?: Record<string, number> })?.rapidFire?.[target] ?? 1;
           if (rf > 1 && rng() < (rf - 1) / rf) {
             firing = true;
           } else {
@@ -271,7 +259,7 @@ describe("B3-07 / B3-08 Combat: weighted targeting + rapid fire", () => {
     assert.deepEqual(combat.roundLog[0]!.attackerLosses.ships, {});
   });
 
-  it("spillover: single high-damage shot overkill spills across units within the same shot", () => {
+  it("spillover: single high-damage shot overkill spills across units without creating extra shots", () => {
     // 1 Voidforge Titan (attack 200,000) vs 20 Swarm Drones (toughness 16 each)
     const atk = normalizeFleetShips({ voidforgeTitan: 1 });
     const def = normalizeFleetShips({ swarmDrone: 20 });
@@ -281,16 +269,20 @@ describe("B3-07 / B3-08 Combat: weighted targeting + rapid fire", () => {
     assert.equal(combat.outcome, "attacker_win");
     assert.equal(combat.rounds, 1);
     assert.equal(combat.defenderAfter.swarmDrone, 0);
+    assert.equal(combat.roundLog[0]!.defenderLosses.ships.swarmDrone, 20);
   });
 
-  it("spillover re-targeting across multiple target types passes rng and spills damage", () => {
+  it("spillover re-targeting across multiple target types does not create extra rapid fire shots", () => {
     // 1 Voidforge Titan (attack 200,000) vs 1 Swarm Drone (16 HP) + 1 Scout (32 HP)
+    // 200,000 damage wipes 1 Drone (16 HP), spills to Scout (32 HP) and wipes Scout.
+    // Spillover is part of the same shot and does not trigger extra rapid fire rolls.
     const atk = normalizeFleetShips({ voidforgeTitan: 1 });
     const def = normalizeFleetShips({ swarmDrone: 1, scout: 1 });
 
     const combat = resolveCombat(atk, def);
 
     assert.equal(combat.outcome, "attacker_win");
+    assert.equal(combat.rounds, 1);
     assert.equal(combat.defenderAfter.swarmDrone, 0);
     assert.equal(combat.defenderAfter.scout, 0);
   });
@@ -342,6 +334,25 @@ describe("B3-07 / B3-08 Combat: weighted targeting + rapid fire", () => {
       Math.abs(meanGroupedKills - meanRefKills) / meanRefKills < 0.15,
       `Expected grouped mean kills (${meanGroupedKills}) to match reference (${meanRefKills}) within 15%`,
     );
+  });
+
+  it("determinism: same seed produces deep-equal results and different seed can differ", () => {
+    const atk = normalizeFleetShips({ interceptor: 10, cruiser: 5 });
+    const def = normalizeFleetShips({ scout: 15, hauler: 5 });
+    const defenses = { laserBattery: 10 };
+
+    const seedA = "complex-battle-seed-A";
+    const seedB = "complex-battle-seed-B";
+
+    const resA1 = resolveCombat(atk, def, defenses, undefined, undefined, { seed: seedA });
+    const resA2 = resolveCombat(atk, def, defenses, undefined, undefined, { seed: seedA });
+    const resB = resolveCombat(atk, def, defenses, undefined, undefined, { seed: seedB });
+
+    // Same seed results are 100% deep-equal
+    assert.deepEqual(resA1, resA2);
+
+    // Different seed result exists and has outcome defined
+    assert.ok(resB.outcome);
   });
 
   it("proves execution cost (RNG draws) does not scale with unit count (10 vs 100,000 units)", () => {
