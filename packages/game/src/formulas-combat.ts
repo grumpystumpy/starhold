@@ -385,114 +385,6 @@ function calculateSingleUnitAttack(
   }
 }
 
-/**
- * Samples aggregate rapid-fire extra shots for a firing group of N units
- * with rapid-fire factor M using seeded PRNG rng.
- */
-export function sampleAggregateExtraShots(
-  N: number,
-  M: number,
-  rng: () => number,
-): number {
-  if (N <= 0 || M <= 1) return 0;
-  const p = (M - 1) / M;
-  if (p <= 0) return 0;
-
-  if (N < 20) {
-    let extra = 0;
-    const logP = Math.log(p);
-    for (let i = 0; i < N; i++) {
-      const u = Math.max(1e-10, rng());
-      const k = Math.floor(Math.log(u) / logP);
-      extra += Math.max(0, k);
-    }
-    return extra;
-  }
-
-  const mu = N * (M - 1);
-  const sigma = Math.sqrt(N * M * (M - 1));
-
-  const u1 = Math.max(1e-10, rng());
-  const u2 = rng();
-  const z = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
-
-  const sampled = Math.round(mu + z * sigma);
-  return Math.max(0, sampled);
-}
-
-/**
- * Samples initial per-shot multinomial target distribution for N shots
- * across candidate target types using target weights.
- */
-export function sampleMultinomialShots(
-  N: number,
-  weights: Partial<Record<CombatUnitId, number>>,
-  rng: () => number,
-): Partial<Record<CombatUnitId, number>> {
-  const candidates = Object.keys(weights) as CombatUnitId[];
-  if (candidates.length === 0 || N <= 0) return {};
-  if (candidates.length === 1) {
-    return { [candidates[0]!]: N };
-  }
-
-  let totalWeight = 0;
-  for (const id of candidates) {
-    totalWeight += weights[id] ?? 0;
-  }
-  if (totalWeight <= 0) {
-    return { [candidates[0]!]: N };
-  }
-
-  const result: Partial<Record<CombatUnitId, number>> = {};
-  for (const id of candidates) result[id] = 0;
-
-  if (N < 20) {
-    for (let i = 0; i < N; i++) {
-      let roll = rng() * totalWeight;
-      for (const id of candidates) {
-        const w = weights[id] ?? 0;
-        roll -= w;
-        if (roll <= 0) {
-          result[id] = (result[id] ?? 0) + 1;
-          break;
-        }
-      }
-    }
-    return result;
-  }
-
-  let remainingN = N;
-  let remainingWeight = totalWeight;
-
-  for (let i = 0; i < candidates.length - 1; i++) {
-    const id = candidates[i]!;
-    const w = weights[id] ?? 0;
-    if (w <= 0 || remainingWeight <= 0) {
-      result[id] = 0;
-      continue;
-    }
-    const p = Math.min(1.0, Math.max(0.0, w / remainingWeight));
-    const mu = remainingN * p;
-    const sigma = Math.sqrt(Math.max(0, remainingN * p * (1 - p)));
-
-    const u1 = Math.max(1e-10, rng());
-    const u2 = rng();
-    const z = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
-
-    let sampled = Math.round(mu + z * sigma);
-    sampled = Math.max(0, Math.min(remainingN, sampled));
-
-    result[id] = sampled;
-    remainingN -= sampled;
-    remainingWeight -= w;
-  }
-
-  const lastId = candidates[candidates.length - 1]!;
-  result[lastId] = Math.max(0, remainingN);
-
-  return result;
-}
-
 function applyShotWithIntercept(
   side: SidePools,
   target: CombatUnitId,
@@ -515,10 +407,101 @@ function applyShotWithIntercept(
 }
 
 /**
- * Fires aggregated shots for a firing group of unit type `firerId` (count `groupCount`).
- * Per-shot targeting selects targets proportionally for initial shots,
- * computes rapid-fire extra shots based on target type actually hit,
- * and handles damage spillover with re-targeting and new rapid-fire.
+ * Executes independent per-shot targeting and rapid-fire sequence for 1 firer unit.
+ * Each shot independently selects a target using weighted targeting against targetSideSnapshot,
+ * applies 1 unit's damage to targetSideLive, and checks rapid fire probability (M-1)/M
+ * against the target type actually hit.
+ */
+export function fireSingleUnitShots(
+  firerId: CombatUnitId,
+  targetSideSnapshot: SidePools,
+  targetSideLive: SidePools,
+  firerResearch: ResearchLevels | undefined,
+  targetResearch: ResearchLevels | undefined,
+  swarmDroneCount: number,
+  isDefenderFirer: boolean,
+  opts:
+    | {
+        defensePowerMult?: number;
+        attackMult?: number;
+        defenseSlot?: number;
+        battlefield?: BattlefieldMods;
+      }
+    | undefined,
+  rng: () => number,
+): void {
+  const unitAtkDamage = calculateSingleUnitAttack(
+    firerId,
+    firerResearch,
+    swarmDroneCount,
+    opts,
+  );
+  if (unitAtkDamage <= 0) return;
+
+  const defensePowerMult = Math.max(0.01, opts?.defensePowerMult ?? 1);
+  const unitEffectiveDamage = isDefenderFirer
+    ? unitAtkDamage * defensePowerMult
+    : unitAtkDamage / defensePowerMult;
+
+  let firing = true;
+  while (firing) {
+    const target = pickWeightedTarget(
+      firerId,
+      targetSideSnapshot,
+      targetSideLive,
+      targetResearch,
+      opts?.battlefield,
+      rng,
+    );
+    if (!target) break;
+
+    let unabsorbedDmg = applyShotWithIntercept(
+      targetSideLive,
+      target,
+      unitEffectiveDamage,
+      targetResearch,
+      opts?.battlefield,
+    );
+
+    // If 1 unit's damage spilled over onto a new target type:
+    let currentTarget: CombatUnitId | null = target;
+    while (unabsorbedDmg > 0 && currentTarget != null) {
+      currentTarget = pickWeightedTarget(
+        firerId,
+        targetSideSnapshot,
+        targetSideLive,
+        targetResearch,
+        opts?.battlefield,
+        rng,
+      );
+      if (!currentTarget) break;
+      unabsorbedDmg = applyShotWithIntercept(
+        targetSideLive,
+        currentTarget,
+        unabsorbedDmg,
+        targetResearch,
+        opts?.battlefield,
+      );
+    }
+
+    // Check rapid fire probability against target type hit
+    const rfM = rapidFireFactor(firerId, target);
+    if (rfM > 1) {
+      const prob = (rfM - 1) / rfM;
+      if (rng() < prob) {
+        firing = true;
+      } else {
+        firing = false;
+      }
+    } else {
+      firing = false;
+    }
+  }
+}
+
+/**
+ * Fires shots for a firing group of unit type `firerId` (count `groupCount`).
+ * Loops over each unit in the group, executing exact per-shot targeting and rapid fire.
  */
 export function fireGroupShots(
   firerId: CombatUnitId,
@@ -540,94 +523,24 @@ export function fireGroupShots(
   rng: () => number,
 ): void {
   if (groupCount <= 0) return;
-  const unitAtkDamage = calculateSingleUnitAttack(
-    firerId,
-    firerResearch,
-    swarmDroneCount,
-    opts,
-  );
-  if (unitAtkDamage <= 0) return;
-
-  const defensePowerMult = Math.max(0.01, opts?.defensePowerMult ?? 1);
-  const unitEffectiveDamage = isDefenderFirer
-    ? unitAtkDamage * defensePowerMult
-    : unitAtkDamage / defensePowerMult;
-
-  const initialWeights = computeTargetWeights(
-    firerId,
-    targetSideSnapshot,
-    targetSideLive,
-    targetResearch,
-    opts?.battlefield,
-  );
-  if (Object.keys(initialWeights).length === 0) return;
-
-  const shotDistribution = sampleMultinomialShots(groupCount, initialWeights, rng);
-
-  for (const [targetTypeStr, initialShots] of Object.entries(shotDistribution)) {
-    const targetType = targetTypeStr as CombatUnitId;
-    if (!initialShots || initialShots <= 0) continue;
-
-    // Check if targetType still has living units
-    if (targetCount(targetSideLive, targetType) <= 0) {
-      let remDmg = initialShots * unitEffectiveDamage;
-      while (remDmg > 0) {
-        const nextTarget = pickWeightedTarget(
-          firerId,
-          targetSideSnapshot,
-          targetSideLive,
-          targetResearch,
-          opts?.battlefield,
-          rng,
-        );
-        if (!nextTarget) break;
-
-        const remShots = Math.max(1, Math.round(remDmg / unitEffectiveDamage));
-        const nextM = rapidFireFactor(firerId, nextTarget);
-        const extra = sampleAggregateExtraShots(remShots, nextM, rng);
-        const totalDmg = remDmg + extra * unitEffectiveDamage;
-
-        remDmg = applyShotWithIntercept(
-          targetSideLive,
-          nextTarget,
-          totalDmg,
-          targetResearch,
-          opts?.battlefield,
-        );
-      }
-      continue;
-    }
-
-    const rfM = rapidFireFactor(firerId, targetType);
-    const extraShots = sampleAggregateExtraShots(initialShots, rfM, rng);
-    const totalShots = initialShots + extraShots;
-    let groupDamage = totalShots * unitEffectiveDamage;
-
-    let currentTarget: CombatUnitId | null = targetType;
-    while (groupDamage > 0 && currentTarget != null) {
-      const unabsorbedDmg = applyShotWithIntercept(
-        targetSideLive,
-        currentTarget,
-        groupDamage,
-        targetResearch,
-        opts?.battlefield,
-      );
-      if (unabsorbedDmg <= 0) break;
-
-      currentTarget = pickWeightedTarget(
+  for (let i = 0; i < groupCount; i++) {
+    if (
+      (SHIP_ORDER as ShipId[]).some((id) => (targetSideLive.ships[id] ?? 0) > 0) ||
+      (DEFENSE_ORDER as DefenseId[]).some((id) => (targetSideLive.defenses[id] ?? 0) > 0)
+    ) {
+      fireSingleUnitShots(
         firerId,
         targetSideSnapshot,
         targetSideLive,
+        firerResearch,
         targetResearch,
-        opts?.battlefield,
+        swarmDroneCount,
+        isDefenderFirer,
+        opts,
         rng,
       );
-      if (!currentTarget) break;
-
-      const spilledShots = Math.max(1, Math.round(unabsorbedDmg / unitEffectiveDamage));
-      const spilledM = rapidFireFactor(firerId, currentTarget);
-      const spilledExtra = sampleAggregateExtraShots(spilledShots, spilledM, rng);
-      groupDamage = unabsorbedDmg + spilledExtra * unitEffectiveDamage;
+    } else {
+      break;
     }
   }
 }
