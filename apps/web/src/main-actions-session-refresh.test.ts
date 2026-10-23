@@ -45,6 +45,7 @@ function view(queues: {
   buildQueue?: { completesAt: number }[];
   researchQueue?: { completesAt: number }[];
   shipQueue?: { completesAt: number }[];
+  fleets?: PlayerView["fleets"];
 } = {}): PlayerView {
   return {
     now,
@@ -63,7 +64,7 @@ function view(queues: {
       defenses: {},
     },
     galaxy: { galaxy: 1, system: 1 },
-    fleets: [],
+    fleets: queues.fleets ?? [],
   } as unknown as PlayerView;
 }
 
@@ -117,6 +118,35 @@ it("fetches once shortly after the earliest queue completion", async () => {
     await advanceBy(1_249);
     assert.equal(fetch.count(), 0);
     await advanceBy(1);
+    assert.equal(fetch.count(), 1);
+  } finally {
+    fetch.restore();
+  }
+});
+
+it("fetches once shortly after an own fleet arrival when queues are empty", async () => {
+  reset();
+  const fetch = mockStateFetch();
+  try {
+    setView(view({ fleets: [{ arrivesAt: now + 1_000 } as PlayerView["fleets"][number]] }));
+    await advanceBy(1_249);
+    assert.equal(fetch.count(), 0);
+    await advanceBy(1);
+    assert.equal(fetch.count(), 1);
+  } finally {
+    fetch.restore();
+  }
+});
+
+it("schedules the earliest queue completion or own fleet arrival", async () => {
+  reset();
+  const fetch = mockStateFetch();
+  try {
+    setView(view({
+      buildQueue: [{ completesAt: now + 2_000 }],
+      fleets: [{ arrivesAt: now + 1_000 } as PlayerView["fleets"][number]],
+    }));
+    await advanceBy(1_250);
     assert.equal(fetch.count(), 1);
   } finally {
     fetch.restore();
