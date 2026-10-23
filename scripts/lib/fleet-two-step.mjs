@@ -6,4 +6,7 @@ export async function fleetToStep2(page, ships) {
   }
   await page.click('[data-testid="fleet-next"]');
   await page.waitForSelector('[data-testid="fleet-form"][data-fleet-step="2"]');
+  await page.waitForSelector(
+    '[data-testid="fleet-form"][data-fleet-step="2"] [data-testid="launch-fleet"]',
+  );
 }

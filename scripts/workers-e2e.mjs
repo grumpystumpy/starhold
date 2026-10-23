@@ -124,7 +124,13 @@ async function runViewport(width, height) {
     await page.waitForSelector('[data-testid="fleet-form"]', { timeout: 15_000 });
     await fleetToStep2(page, { scout: 1 });
     const expedition = page.locator('[data-testid="mission-expedition"]');
-    if (await expedition.count()) await expedition.first().click();
+    await expedition.waitFor({ timeout: 10_000 });
+    await expedition.click();
+    await page.waitForFunction(
+      () => document.querySelector('input[name="fleet-mission"]:checked')?.value === "expedition",
+      null,
+      { timeout: 10_000 },
+    );
     try {
       await page.click('[data-testid="launch-fleet"]');
     } catch (error) {

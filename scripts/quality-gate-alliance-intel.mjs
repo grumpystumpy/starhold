@@ -366,9 +366,9 @@ async function main() {
   if ((await mission.getAttribute("value")) !== "raid") {
     throw new Error("Joint Strike prefill did not retain raid mission");
   }
-  const target = await pageA.locator("#fleet-target").inputValue();
-  if (target !== `coords:${strikeCoords}`) {
-    throw new Error(`Joint Strike prefill target changed: ${target}`);
+  const strikeTarget = await pageA.locator("#fleet-target").inputValue();
+  if (strikeTarget !== `coords:${strikeCoords}`) {
+    throw new Error(`Joint Strike prefill target changed: ${strikeTarget}`);
   }
   await pageA.getByTestId("nav-alliances").click();
   await pageA
