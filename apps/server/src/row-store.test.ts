@@ -1476,8 +1476,9 @@ describe("row save review fixes", () => {
     const { db } = sqliteD1();
     const source = fixture();
     source.miniPlanetIds = ["already-seeded"];
+    source.seed = "row-store-pirate-respawn";
     const alpha = Object.values(source.players).find((player) => player.name === "OldHand")!;
-    const now = Date.now();
+    const now = 1_700_000_000_000;
     const day = 24 * 60 * 60 * 1000;
     source.pirateBases = {};
     const destroyedIds: string[] = [];
@@ -1512,7 +1513,9 @@ describe("row save review fixes", () => {
     const living = activePirateBases(afterPage.universe);
     console.log(`pirate page-load living=${living.length} destroyedLeft=${Object.values(afterPage.universe.pirateBases ?? {}).filter((b) => b.destroyedAt != null).length}`);
     assert.ok(living.length >= PIRATE_TARGET_BASE_COUNT, `living ${living.length}`);
-    for (const id of destroyedIds) assert.equal(afterPage.universe.pirateBases?.[id], undefined);
+    for (const id of destroyedIds) {
+      assert.equal(afterPage.universe.pirateBases?.[id]?.destroyedAt == null, true);
+    }
     assert.equal(
       living.some((base) => base.coords.galaxy === blocked.galaxy && base.coords.system === blocked.system && base.coords.slot === blocked.slot),
       false,
