@@ -17,6 +17,7 @@ import type {
   AlienBase,
   PirateBase,
   PlayerClassState,
+  AllianceClassId,
   ResearchLevels,
   ResearchQueueItem,
   Resources,
@@ -238,6 +239,11 @@ export interface AllianceRecord {
   intel?: AllianceIntelStamp[];
   /** Galaxy markers. Missing on older saves — treat as []. */
   markers?: AllianceGalaxyMarker[];
+  /**
+   * Alliance class (Destroyer's / Builder's / Explorer's).
+   * Missing on older saves — no class, no bonus. Never required.
+   */
+  allianceClass?: AllianceClassId | null;
 }
 
 export interface AllianceMemberView {
@@ -263,6 +269,8 @@ export interface AllianceView {
   chat: AllianceChatMessage[];
   intel: AllianceIntelStamp[];
   markers: AllianceGalaxyMarker[];
+  /** Null when the alliance has not chosen a class. */
+  allianceClass: AllianceClassId | null;
 }
 
 export interface AllianceListEntry {

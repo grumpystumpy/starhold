@@ -93,6 +93,36 @@ export function fieldsCap(planet: PlanetState): number {
   return rolled + mantleLoomFieldsBonus(planet);
 }
 
+/** Read-time field cap. Never written back onto planet.fieldsCap. */
+export interface FieldCapMods {
+  homePlanetId?: string | null;
+  colonyFields?: number;
+  colonyFieldMult?: number;
+}
+
+export function effectiveFieldsCap(
+  planet: PlanetState,
+  mods?: FieldCapMods,
+): number {
+  const base = fieldsCap(planet);
+  if (isMoon(planet)) return base;
+  const home = mods?.homePlanetId;
+  if (!home || planet.id === home) return base;
+  const withClass = base + (mods?.colonyFields ?? 0);
+  const mult = mods?.colonyFieldMult ?? 1;
+  if (mult === 1) return withClass;
+  return Math.floor(withClass * mult);
+}
+
+export function scaleResourceCost(cost: Resources, mult: number): Resources {
+  if (mult === 1) return cost;
+  return {
+    metal: Math.floor(cost.metal * mult),
+    crystal: Math.floor(cost.crystal * mult),
+    deuterium: Math.floor(cost.deuterium * mult),
+  };
+}
+
 /** Cost to go from `currentLevel` → `currentLevel + 1`. */
 export function buildingUpgradeCost(
   buildingId: BuildingId,
@@ -379,8 +409,11 @@ export function fieldsUsed(planet: PlanetState): number {
   return used;
 }
 
-export function fieldsRemaining(planet: PlanetState): number {
-  return Math.max(0, fieldsCap(planet) - fieldsUsed(planet));
+export function fieldsRemaining(
+  planet: PlanetState,
+  mods?: FieldCapMods,
+): number {
+  return Math.max(0, effectiveFieldsCap(planet, mods) - fieldsUsed(planet));
 }
 
 export interface ProductionBoosts {

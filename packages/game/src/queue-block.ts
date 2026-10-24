@@ -17,6 +17,8 @@ import {
   fieldsRemaining,
   fieldsUsed,
   researchUpgradeCost,
+  scaleResourceCost,
+  type FieldCapMods,
 } from "./formulas.js";
 import type {
   BuildingId,
@@ -31,6 +33,11 @@ export type QueuePreview =
   | { ok: true; current: number; targetLevel: number; cost: Resources }
   | { ok: false; error: string; current: number; cost: Resources };
 
+export interface BuildingPreviewMods {
+  costMult?: number;
+  fieldMods?: FieldCapMods;
+}
+
 /**
  * Why a building upgrade would be rejected, or the level it would queue.
  * Shared by the server action and the buildings screen so the button
@@ -41,6 +48,7 @@ export function previewBuildingUpgrade(
   player: PlayerState,
   buildingId: BuildingId,
   now = Date.now(),
+  mods?: BuildingPreviewMods,
 ): QueuePreview {
   const empty: Resources = { metal: 0, crystal: 0, deuterium: 0 };
   const def = BUILDINGS[buildingId];
@@ -59,7 +67,10 @@ export function previewBuildingUpgrade(
   const queue = planet.buildQueue ?? [];
   const pendingSame = queue.filter((q) => q.buildingId === buildingId).length;
   const current = (planet.buildings[buildingId] ?? 0) + pendingSame;
-  const cost = buildingUpgradeCost(buildingId, current);
+  const cost = scaleResourceCost(
+    buildingUpgradeCost(buildingId, current),
+    mods?.costMult ?? 1,
+  );
   const fail = (error: string): QueuePreview => ({
     ok: false,
     error,
@@ -131,7 +142,7 @@ export function previewBuildingUpgrade(
     const pendingFieldUsers = queue.filter(
       (q) => q.buildingId !== "lunarBase",
     ).length;
-    if (fieldsRemaining(planet) < pendingFieldUsers + 1) {
+    if (fieldsRemaining(planet, mods?.fieldMods) < pendingFieldUsers + 1) {
       return fail("No free planet fields remaining.");
     }
   }

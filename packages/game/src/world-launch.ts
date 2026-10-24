@@ -11,7 +11,9 @@ import {
   lineDrummerFleetSpeedMult,
   maxFleetSlots,
   normalizeFleetShips,
+  recyclerHullScale,
   spend,
+  travelBonusMult,
 } from "./formulas.js";
 import type {
   Coordinates,
@@ -237,6 +239,14 @@ export function launchFleet(
         (ships[id] ?? 0) > 0,
     );
   if (onlyColony) fleetSpeedMult *= cls.colonyShipSpeed;
+  const travel = travelBonusMult(
+    universe,
+    player.id,
+    origin.id,
+    targetPlanet?.id ?? null,
+  );
+  fleetSpeedMult *= travel.fleetSpeed;
+  const hullScale = recyclerHullScale(travel.recyclerSpeed);
   const oneWay =
     opts.mission === "jump"
       ? 1
@@ -244,10 +254,12 @@ export function launchFleet(
           origin.coords,
           targetCoords,
           ships,
-          // Stack: base → combustion → level → officers/skills → class → Line Drummer.
+          // Stack: base → combustion → level → officers/skills → class → Line Drummer
+          // → alliance speed / own-world speed.
           (universe.fleetSpeed * fleetSpeedMult) /
             Math.max(0.01, lb.fleetTime),
           player.research.combustionDrive ?? 0,
+          hullScale,
         );
   const fleetId = `flt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
   const fleet: FleetMission = {

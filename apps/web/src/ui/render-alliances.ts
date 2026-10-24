@@ -1,6 +1,9 @@
 import {
+  ALLIANCE_CLASS_BONUSES,
+  ALLIANCE_CLASS_ORDER,
   DEFENSES,
   SHIPS,
+  type AllianceClassId,
   type AllianceGalaxyMarker,
   type AllianceIntelStamp,
   type AllianceJoinMode,
@@ -151,6 +154,60 @@ function roleLabel(role: string): string {
   }
 }
 
+function allianceClassBlurb(id: AllianceClassId | null): string {
+  if (!id) return "No alliance class.";
+  const b = ALLIANCE_CLASS_BONUSES[id];
+  const parts: string[] = [];
+  const mark = (n: number, label: string) => {
+    if (n !== 1) parts.push(`${label} ×${n.toFixed(2)}`);
+  };
+  mark(b.fleetSpeed, "fleet speed");
+  mark(b.shipShield, "ship shields");
+  mark(b.shipWeapon, "ship weapons");
+  mark(b.shipCost, "ship cost");
+  mark(b.shipTime, "ship time");
+  mark(b.loot, "loot");
+  mark(b.buildingCost, "building cost");
+  mark(b.buildingTime, "building time");
+  mark(b.empireMissionSpeed, "in-empire speed");
+  mark(b.defenseStat, "defense hull/armor/shields");
+  mark(b.mineOutput, "mine output");
+  mark(b.expeditionAmount, "expedition amount");
+  mark(b.colonyFieldMult, "colony fields");
+  mark(b.recyclerSpeed, "recycler speed");
+  if (b.expeditionRollShift !== 0) {
+    parts.push(
+      `expedition good +${fmt(b.expeditionRollShift)} / bad −${fmt(b.expeditionRollShift)}`,
+    );
+  }
+  return parts.join(" · ");
+}
+
+function allianceClassSection(
+  alliance: NonNullable<PlayerView["alliance"]>,
+  busy: boolean,
+): string {
+  const current = alliance.allianceClass ?? null;
+  const title = current ? ALLIANCE_CLASS_BONUSES[current].name : "No class";
+  const selector =
+    alliance.myRole === "founder"
+      ? `<label>Alliance class
+          <select data-alliance-class-select data-testid="alliance-class-select" ${busy ? "disabled" : ""}>
+            <option value="" ${current == null ? "selected" : ""}>None</option>
+            ${ALLIANCE_CLASS_ORDER.map((id) => {
+              const def = ALLIANCE_CLASS_BONUSES[id];
+              return `<option value="${escapeAttr(id)}" ${current === id ? "selected" : ""}>${escapeHtml(def.name)}</option>`;
+            }).join("")}
+          </select>
+        </label>`
+      : "";
+  return `<div class="alliance-class" data-testid="alliance-class">
+    <p class="hint" data-testid="alliance-class-label">Class: ${escapeHtml(title)}</p>
+    <p class="hint" data-testid="alliance-class-bonuses">${escapeHtml(allianceClassBlurb(current))}</p>
+    ${selector}
+  </div>`;
+}
+
 function joinModeLabel(mode: AllianceJoinMode): string {
   return mode === "invite" ? "Invite only" : "Open";
 }
@@ -294,6 +351,7 @@ export function alliancesPageHtml(view: PlayerView, busy: boolean): string {
         ${fmt(alliance.memberCount)}/${fmt(alliance.maxMembers)} · you are ${escapeHtml(roleLabel(alliance.myRole))}
       </p>
       ${rosterHtml(view, busy)}
+      ${allianceClassSection(alliance, busy)}
       ${chatSection(view, busy)}
       ${intelSection(view, busy)}
       ${markersSection(view, busy)}

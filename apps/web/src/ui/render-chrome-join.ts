@@ -4,6 +4,7 @@ import {
   previewBuildingUpgrade,
   storageCap,
   type BuildingId,
+  type BuildingPreviewMods,
   type PlayerView,
 } from "@starhold/game";
 import { BUILDING_ART, PLANET_ART } from "./assets";
@@ -242,12 +243,16 @@ export function buildingRow(
   speed: number,
   now: number,
   _busy: boolean,
+  mods?: BuildingPreviewMods & { timeMult?: number },
 ): string {
   const def = BUILDINGS[id];
-  const preview = previewBuildingUpgrade(planet, player, id, now);
+  const preview = previewBuildingUpgrade(planet, player, id, now, mods);
   const level = planet.buildings[id] ?? 0;
   const cost = preview.cost;
-  const secs = Math.ceil(buildingUpgradeSeconds(id, preview.current) / speed);
+  const secs = Math.ceil(
+    (buildingUpgradeSeconds(id, preview.current) * (mods?.timeMult ?? 1)) /
+      speed,
+  );
   // Disable only when the server would reject. Client busy stays clickable
   // so a second tap surfaces "Still applying…" instead of a silent no-op.
   const blocked = preview.ok ? null : preview.error;

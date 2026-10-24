@@ -62,6 +62,7 @@ import {
   doDeleteMessages,
   doMarkEventsRead,
   doSetAllianceJoinMode,
+  doSetAllianceClass,
   doSetAllianceRole,
   doSetSeasonSkin,
   doSetSeasonTitle,
@@ -632,6 +633,18 @@ export function bindClickHandlers(): void {
     ) {
       const mode = el.value === "invite" ? "invite" : "open";
       void doSetAllianceJoinMode(mode);
+      return;
+    }
+    if (
+      el instanceof HTMLSelectElement &&
+      el.matches("[data-alliance-class-select]")
+    ) {
+      const value = el.value;
+      const allianceClass =
+        value === "destroyer" || value === "builder" || value === "explorer"
+          ? value
+          : null;
+      void doSetAllianceClass(allianceClass);
       return;
     }
     if (

@@ -3,9 +3,11 @@ import {
   buildingUpgradeSeconds,
   canAfford,
   classBonuses,
+  allianceBonusesForPlayer,
   defenseCost,
   defenseUnitBuildSeconds,
   levelBonuses,
+  scaleResourceCost,
   shipClassAllowed,
   shipCost,
   shipResearchReqMet,
@@ -96,12 +98,19 @@ export function queueBuildingUpgrade(
     return { ok: false, error: "Construction blocked while planet is occupied." };
   }
 
-  const preview = previewBuildingUpgrade(planet, player, buildingId, now);
-  if (!preview.ok) return { ok: false, error: preview.error };
-  const { current, targetLevel, cost } = preview;
-
   const lb = levelBonuses(player.level ?? 1);
   const cls = classBonuses(player.playerClass?.classId);
+  const ally = allianceBonusesForPlayer(universe, player.id);
+  const preview = previewBuildingUpgrade(planet, player, buildingId, now, {
+    costMult: ally.buildingCost,
+    fieldMods: {
+      homePlanetId: player.homePlanetId,
+      colonyFields: cls.colonyFields,
+      colonyFieldMult: ally.colonyFieldMult,
+    },
+  });
+  if (!preview.ok) return { ok: false, error: preview.error };
+  const { current, targetLevel, cost } = preview;
   // Chrono Lathe does not accelerate itself (avoid recursive free builds).
   const naniteLevel =
     buildingId === "chronoLathe" ? 0 : naniteFactoryLevel(planet);
@@ -112,7 +121,8 @@ export function queueBuildingUpgrade(
   const seconds =
     (buildingUpgradeSeconds(buildingId, current, naniteLevel, rigLevel) *
       lb.buildTime *
-      cls.buildingBuildTime) /
+      cls.buildingBuildTime *
+      ally.buildingTime) /
     universe.speed;
 
   planet.resources = spend(planet.resources, cost);
@@ -186,20 +196,21 @@ export function queueShipBuild(
   const researchOk = shipResearchReqMet(shipId, player.research);
   if (!researchOk.ok) return researchOk;
 
-  const cost = shipCost(shipId, qty);
-  if (!canAfford(planet.resources, cost)) {
-    return { ok: false, error: "Not enough resources." };
-  }
-
   const lb = levelBonuses(player.level ?? 1);
   const cls = classBonuses(player.playerClass?.classId);
+  const ally = allianceBonusesForPlayer(universe, player.id);
   const naniteLevel = naniteFactoryLevel(planet);
   const rigLevel = planet.buildings.rigFoundry ?? 0;
   const anomalyLevel = planet.buildings.anomalyForge ?? 0;
+  const cost = scaleResourceCost(shipCost(shipId, qty), ally.shipCost);
+  if (!canAfford(planet.resources, cost)) {
+    return { ok: false, error: "Not enough resources." };
+  }
   const unitSeconds =
     (shipUnitBuildSeconds(shipId, yard, naniteLevel, rigLevel, anomalyLevel) *
       lb.shipBuild *
-      cls.shipBuildTime) /
+      cls.shipBuildTime *
+      ally.shipTime) /
     universe.speed;
   const seconds = unitSeconds * qty;
 

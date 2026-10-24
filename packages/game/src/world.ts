@@ -35,6 +35,7 @@ export {
   previewBuildingUpgrade,
   previewResearchUpgrade,
 } from "./queue-block.js";
+export type { BuildingPreviewMods } from "./queue-block.js";
 export {
   migrateUniverseV2ToV3,
   migrateUniverseV3ToV4,
@@ -57,6 +58,7 @@ export {
   disbandAlliance,
   inviteToAlliance,
   isAllianceJoinMode,
+  isAllianceClassId,
   isAllianceRole,
   joinAlliance,
   kickFromAlliance,
@@ -64,6 +66,7 @@ export {
   normalizeAllianceName,
   normalizeAllianceTag,
   setAllianceJoinMode,
+  setAllianceClass,
   setAllianceRole,
 } from "./world-alliances.js";
 export {

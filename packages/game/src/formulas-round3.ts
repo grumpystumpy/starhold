@@ -8,6 +8,7 @@ import {
   LINE_DRUMMER_SPEED_PER,
   MANTLE_LOOM_FIELDS_PER_LEVEL,
   PLAYER_CLASS_BONUSES,
+  ALLIANCE_CLASS_BONUSES,
   RIG_FOUNDRY_TIME_FLOOR,
   RIG_FOUNDRY_TIME_PER_LEVEL,
   SHIPS,
@@ -23,6 +24,7 @@ import type {
   FleetShips,
   PlanetState,
   PlayerClassId,
+  AllianceClassId,
   PlayerClassState,
   PlayerState,
   Resources,
@@ -96,9 +98,80 @@ export function classBonuses(classId: PlayerClassId | null | undefined) {
       colonyShipSpeed: 1,
       buildingBuildTime: 1,
       jumpGateCooldown: 1,
+      debrisVsOtherClass: 1,
+      colonyFields: 0,
+      ownWorldFleetSpeed: 1,
     };
   }
   return PLAYER_CLASS_BONUSES[classId];
+}
+
+export function allianceClassBonuses(
+  classId: AllianceClassId | null | undefined,
+) {
+  if (!classId) {
+    return {
+      name: "None",
+      fleetSpeed: 1,
+      shipShield: 1,
+      shipWeapon: 1,
+      shipCost: 1,
+      shipTime: 1,
+      loot: 1,
+      buildingCost: 1,
+      buildingTime: 1,
+      empireMissionSpeed: 1,
+      defenseStat: 1,
+      mineOutput: 1,
+      expeditionAmount: 1,
+      expeditionRollShift: 0,
+      colonyFieldMult: 1,
+      recyclerSpeed: 1,
+    };
+  }
+  return ALLIANCE_CLASS_BONUSES[classId];
+}
+
+/** Alliance bonus for a current member. Left, missing, or unclassed → neutral. */
+export function allianceBonusesForPlayer(
+  universe: UniverseState,
+  playerId: string | null | undefined,
+) {
+  if (!playerId) return allianceClassBonuses(null);
+  const player = universe.players[playerId];
+  const allianceId = player?.allianceId;
+  if (!allianceId) return allianceClassBonuses(null);
+  const alliance = universe.alliances?.[allianceId];
+  if (!alliance?.members?.[playerId]) return allianceClassBonuses(null);
+  return allianceClassBonuses(alliance.allianceClass);
+}
+
+/**
+ * Speed factors that stack after the player-class fleet/probe/colony multipliers.
+ * Does not include class fleetSpeed — return legs still omit that existing bonus.
+ */
+export function travelBonusMult(
+  universe: UniverseState,
+  playerId: string,
+  originPlanetId: string | null | undefined,
+  targetPlanetId: string | null | undefined,
+): { fleetSpeed: number; recyclerSpeed: number } {
+  const ally = allianceBonusesForPlayer(universe, playerId);
+  let fleetSpeed = ally.fleetSpeed;
+  if (originPlanetId && targetPlanetId) {
+    const origin = universe.planets[originPlanetId];
+    const target = universe.planets[targetPlanetId];
+    if (
+      origin &&
+      target &&
+      origin.ownerPlayerId === playerId &&
+      target.ownerPlayerId === playerId
+    ) {
+      const cls = classBonuses(universe.players[playerId]?.playerClass?.classId);
+      fleetSpeed *= cls.ownWorldFleetSpeed * ally.empireMissionSpeed;
+    }
+  }
+  return { fleetSpeed, recyclerSpeed: ally.recyclerSpeed };
 }
 
 /** True when any owned planet hangar has ≥1 of shipId. */
