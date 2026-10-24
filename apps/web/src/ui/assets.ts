@@ -26,6 +26,8 @@ export const BUILDING_ART: Record<BuildingId, string> = {
 export const SHIP_ART: Record<ShipId, string> = {
   scout: "/assets/ships/scout.svg",
   hauler: "/assets/ships/hauler.svg",
+  fastCargo: "/assets/ships/fast-cargo.svg",
+  bulkCargo: "/assets/ships/bulk-cargo.svg",
   interceptor: "/assets/ships/interceptor.svg",
   cruiser: "/assets/ships/cruiser.svg",
   bomber: "/assets/ships/bomber.svg",
