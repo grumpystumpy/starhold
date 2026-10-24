@@ -106,7 +106,7 @@ export function resolveMiniPlanetChoice(
 
 /**
  * Apply moon-kill after an attacker win on a moon.
- * Void Titans and World Eaters both count toward destruction chance.
+ * Only surviving Void Titans count toward destruction chance.
  */
 export function maybeDestroyMoonWithTitans(
   universe: UniverseState,
@@ -114,9 +114,7 @@ export function maybeDestroyMoonWithTitans(
   survivingAttacker: FleetShips,
   reportId: string,
 ): { destroyed: boolean; chancePct: number } {
-  const killers =
-    (survivingAttacker.voidforgeTitan ?? 0) +
-    (survivingAttacker.worldEater ?? 0);
+  const killers = survivingAttacker.voidforgeTitan ?? 0;
   const chancePct = voidforgeMoonKillChancePct(killers, fieldsCap(moon));
   if (chancePct <= 0) return { destroyed: false, chancePct: 0 };
   const roll = moonRoll(`${reportId}:moonkill`);

@@ -151,7 +151,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
     id: "voidforgeTitan",
     name: "Void Titan",
     description:
-      "3rd-largest hull — a bit faster than World Eater; very high attack and armor, low shields, large cargo.",
+      "3rd-largest hull — a bit faster than World Eater; very high attack and armor, low shields, large cargo. Can destroy moons.",
     cost: { metal: 1_500_000, crystal: 1_200_000, deuterium: 400_000 },
     buildSeconds: 90_000,
     shipyardLevel: 11,
@@ -173,7 +173,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
     id: "worldEater",
     name: "World Eater",
     description:
-      "Slowest siege hull — strongest across the board. Destroys mini planets and moons. No cargo; cannot collect debris.",
+      "Slowest siege hull — strongest across the board. Destroys mini planets. No cargo; cannot collect debris.",
     cost: { metal: 8_000_000, crystal: 6_500_000, deuterium: 2_500_000 },
     buildSeconds: 200_000,
     shipyardLevel: 15,
