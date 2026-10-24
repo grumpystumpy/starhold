@@ -62,8 +62,8 @@ Already original (keep): Scout Skiff, Ore Hauler, Interceptor, Aegis Cruiser, Br
 
 | Id | Old display | **New display** |
 |----|-------------|-----------------|
-| `laserBattery` | Laser Battery | **Beam Emplacement** |
-| `shieldDome` | Shield Dome | **Aegis Cupola** |
+| `laserBattery` | Laser Battery | **Light Laser** |
+| `shieldDome` | Shield Dome | **Small Shield Dome** |
 
 ### Research (must rename — OGame-identical labels)
 
@@ -691,8 +691,8 @@ POST /api/fleet/abandon-occupation { playerId, planetId }
 | `voidforgeTitan` | `swarmDrone` | 200 |
 | `voidforgeTitan` | `probe` / Whisper Probe | 250 |
 | `voidforgeTitan` | `scout` | 50 |
-| `voidforgeTitan` | `laserBattery` / Beam Emplacement | 50 |
-| `worldEater` | `laserBattery` | 20 |
+| `voidforgeTitan` | `laserBattery` / Light Laser | 50 |
+| `worldEater` | `shieldDome` / Small Shield Dome | 10 |
 | `worldEater` | `shieldDome` / Aegis Cupola | 10 |
 | `cruiser` | `swarmDrone` | 8 |
 | `interceptor` | `swarmDrone` | 5 |

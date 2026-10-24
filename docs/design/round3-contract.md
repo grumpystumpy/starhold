@@ -36,21 +36,21 @@ Existing `laserBattery` / `shieldDome` stay. These **15** are additive.
 
 | Id | Display | Role | Yard | Cost m/c/d | Build s | Atk | Shield | Hull |
 |----|---------|------|-----:|------------|--------:|----:|-------:|-----:|
-| `needleTurret` | **Needle Turret** | Cheap mass DPS | 1 | 200/0/0 | 8 | 12 | 2 | 25 |
-| `arcLattice` | **Arc Lattice** | Light beam | 2 | 150/50/0 | 10 | 20 | 4 | 35 |
-| `pulseBastion` | **Pulse Bastion** | Mid beam | 4 | 600/200/0 | 25 | 80 | 20 | 100 |
-| `gaussRail` | **Gauss Rail** | Crystal-heavy pierce | 6 | 2000/1500/0 | 50 | 180 | 30 | 180 |
-| `ionSheath` | **Ion Sheath** | Shield-breaker | 6 | 1000/500/200 | 45 | 120 | 80 | 150 |
-| `plasmaSpire` | **Plasma Spire** | Late heavy DPS | 8 | 5000/3000/1000 | 90 | 450 | 60 | 400 |
-| `flakCurtain` | **Flak Curtain** | Anti-fighter RF (see §16.5) | 3 | 400/200/50 | 18 | 30 | 10 | 60 |
-| `kineticFence` | **Kinetic Fence** | Cheap hull wall | 2 | 400/100/0 | 12 | 5 | 5 | 120 |
-| `emberMortar` | **Ember Mortar** | Deut-hungry punch | 5 | 800/400/400 | 35 | 140 | 15 | 90 |
-| `rippleArray` | **Ripple Array** | Mid soak | 4 | 800/600/0 | 30 | 4 | 120 | 150 |
-| `haloProjector` | **Halo Projector** | Small cupola (1/planet soft-cap UI) | 5 | 6000/4000/0 | 120 | 1 | 400 | 200 |
-| `crownAegis` | **Crown Aegis** | Large cupola (1/planet soft-cap UI) | 8 | 50_000/40_000/10_000 | 600 | 1 | 5000 | 2000 |
-| `siegeBlockade` | **Siege Blockade** | Anti-capital soak | 7 | 3000/2000/500 | 70 | 40 | 200 | 500 |
-| `frostLance` | **Frost Lance** | Cold-slot preferential (+10% atk slots 12–15) | 5 | 900/300/300 | 40 | 100 | 25 | 110 |
-| `voidWard` | **Void Ward** | Elite late defense | 10 | 20_000/15_000/5000 | 300 | 600 | 300 | 800 |
+| `needleTurret` | **Rocket Launcher** | Cheap mass DPS | 1 | 200/0/0 | 8 | 12 | 2 | 25 |
+| `arcLattice` | **Laser Lattice** | Light beam | 2 | 150/50/0 | 10 | 20 | 4 | 35 |
+| `pulseBastion` | **Heavy Laser** | Mid beam | 4 | 600/200/0 | 25 | 80 | 20 | 100 |
+| `gaussRail` | **Gauss Cannon** | Crystal-heavy pierce | 6 | 2000/1500/0 | 50 | 180 | 30 | 180 |
+| `ionSheath` | **Ion Cannon** | Shield-breaker | 6 | 1000/500/200 | 45 | 120 | 80 | 150 |
+| `plasmaSpire` | **Plasma Turret** | Late heavy DPS | 8 | 5000/3000/1000 | 90 | 450 | 60 | 400 |
+| `flakCurtain` | **Flak Cannon** | Anti-fighter RF (see §16.5) | 3 | 400/200/50 | 18 | 30 | 10 | 60 |
+| `kineticFence` | **Mass Driver Fence** | Cheap hull wall | 2 | 400/100/0 | 12 | 5 | 5 | 120 |
+| `emberMortar` | **Plasma Mortar** | Deut-hungry punch | 5 | 800/400/400 | 35 | 140 | 15 | 90 |
+| `rippleArray` | **Ion Shield Array** | Mid soak | 4 | 800/600/0 | 30 | 4 | 120 | 150 |
+| `haloProjector` | **Halo Shield Projector** | Small shield dome (1/planet soft-cap UI) | 5 | 6000/4000/0 | 120 | 1 | 400 | 200 |
+| `crownAegis` | **Large Shield Dome** | Large shield dome (1/planet soft-cap UI) | 8 | 50_000/40_000/10_000 | 600 | 1 | 5000 | 2000 |
+| `siegeBlockade` | **Ion Siege Bastion** | Anti-capital soak | 7 | 3000/2000/500 | 70 | 40 | 200 | 500 |
+| `frostLance` | **Cryo Ion Lance** | Cold-slot preferential (+10% atk slots 12–15) | 5 | 900/300/300 | 40 | 100 | 25 | 110 |
+| `voidWard` | **Graviton Ward** | Elite late defense | 10 | 20_000/15_000/5000 | 300 | 600 | 300 | 800 |
 
 ### Data shape
 
@@ -61,7 +61,7 @@ interface DefenseDef {
   /** Soft UI hint: recommend ≤1 of this id per planet (Halo / Crown). */
   uniqueHint?: boolean;
   /** Slot-band attack multiplier when planet.coords.slot in range. */
-  slotAttackBonus?: { slots: number[]; factor: number }; // Frost Lance: {12..15}, 1.10
+  slotAttackBonus?: { slots: number[]; factor: number }; // Cryo Ion Lance: {12..15}, 1.10
 }
 ```
 
@@ -234,14 +234,14 @@ Sit **above** Aegis Cruiser / Breach Bomber; **below** Void Titan.
 | `rakeCorsair` | `cruiser` | 3 |
 | `rakeCorsair` | `swarmDrone` | 8 |
 | `rakeCorsair` | `probe` | 12 |
-| `wardbreaker` | `laserBattery` / Beam Emplacement | 10 |
+| `wardbreaker` | `laserBattery` / Light Laser | 10 |
 | `wardbreaker` | `needleTurret` | 10 |
 | `wardbreaker` | `arcLattice` | 8 |
 | `wardbreaker` | `pulseBastion` | 6 |
 | `wardbreaker` | `gaussRail` | 4 |
 | `wardbreaker` | `ionSheath` | 4 |
 | `wardbreaker` | `plasmaSpire` | 3 |
-| `wardbreaker` | `shieldDome` / Aegis Cupola | 5 |
+| `wardbreaker` | `shieldDome` / Small Shield Dome | 5 |
 | `wardbreaker` | `haloProjector` | 5 |
 | `wardbreaker` | `crownAegis` | 3 |
 | `wardbreaker` | `rippleArray` | 6 |
@@ -485,4 +485,4 @@ Ship queue accepts new ids; launch rejects `helioBuoy`, `veinAnchor`, `gridStake
 **Orbital:** Helio Buoy (temp/4 energy each).  
 **Warships:** Keel Sovereign, Rake Corsair, Anvil Dread, Wardbreaker.  
 **Class ships:** Vault Scout + Astrolabe Wing; Spoil Skimmer + Line Drummer; Vein Anchor + Grid Stake; Foundation Ark + Frontier Beacon.  
-**Defenses (15):** Needle Turret, Arc Lattice, Pulse Bastion, Gauss Rail, Ion Sheath, Plasma Spire, Flak Curtain, Kinetic Fence, Ember Mortar, Ripple Array, Halo Projector, Crown Aegis, Siege Blockade, Frost Lance, Void Ward.
+**Defenses (15):** Rocket Launcher, Laser Lattice, Heavy Laser, Gauss Cannon, Ion Cannon, Plasma Turret, Flak Cannon, Mass Driver Fence, Plasma Mortar, Ion Shield Array, Halo Shield Projector, Large Shield Dome, Ion Siege Bastion, Cryo Ion Lance, Graviton Ward.
