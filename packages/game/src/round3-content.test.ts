@@ -32,6 +32,7 @@ import {
   solarTempFactor,
   spoilSkimmerDebris,
 } from "./index.js";
+import { ensureUniverseShape } from "./world-bootstrap.js";
 
 const R3_DEFENSE_IDS = [
   "needleTurret",
@@ -95,6 +96,25 @@ describe("Round 3 content + engine (11–19)", () => {
     assert.equal(SHIPS.gridStake.stationary, true);
     assert.equal(SHIPS.vaultScout.classExclusive, "explorer");
     assert.equal(SHIPS.foundationArk.classExclusive, "expansionist");
+  });
+
+  it("adds fast and bulk cargo ships and defaults them on old planets", () => {
+    assert.equal(SHIPS.fastCargo.cargo, 10_000);
+    assert.equal(SHIPS.bulkCargo.cargo, 50_000);
+    assert.equal(SHIP_ORDER[SHIP_ORDER.indexOf("hauler") + 1], "fastCargo");
+    assert.equal(SHIP_ORDER[SHIP_ORDER.indexOf("hauler") + 2], "bulkCargo");
+
+    const universe = createUniverse("Cargo old save", 8);
+    const { planet } = joinUniverse(universe, "Cargo", 1_700_000);
+    const oldSave = structuredClone(universe);
+    const oldPlanet = oldSave.planets[planet.id]!;
+    delete oldPlanet.ships.fastCargo;
+    delete oldPlanet.ships.bulkCargo;
+    oldPlanet.ships.hauler = 7;
+    ensureUniverseShape(oldSave);
+    assert.equal(oldPlanet.ships.fastCargo, 0);
+    assert.equal(oldPlanet.ships.bulkCargo, 0);
+    assert.equal(oldPlanet.ships.hauler, 7);
   });
 
   it("Mantle Loom + Rig Foundry + Well Binding in catalogs", () => {

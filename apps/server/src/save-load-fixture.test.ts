@@ -18,7 +18,10 @@ describe("catalog-complete old save fixture", () => {
     const fleet = fixture.universe.fleets["fixture-fleet"];
     assert.ok(planet, "fixture planet exists");
     assert.ok(fleet, "fixture fleet exists");
-    for (const id of SHIP_ORDER) assert.ok(Object.hasOwn(fleet.ships, id), `fixture missing fleet ship ${id}`);
+    for (const id of SHIP_ORDER) {
+      if (id === "fastCargo" || id === "bulkCargo") continue;
+      assert.ok(Object.hasOwn(fleet.ships, id), `fixture missing fleet ship ${id}`);
+    }
     for (const id of DEFENSE_ORDER) assert.ok(Object.hasOwn(planet.defenses, id), `fixture missing defense ${id}`);
 
     const key = `starhold:universe:v${UNIVERSE_SCHEMA_VERSION}`;
@@ -35,12 +38,15 @@ describe("catalog-complete old save fixture", () => {
         () => withUniverseRead((universe) => {
           const loaded = universe.planets[fixture.planetId];
           return {
-            ships: Object.fromEntries(SHIP_ORDER.map((id) => [id, universe.fleets["fixture-fleet"]?.ships[id]])),
+            ships: Object.fromEntries(SHIP_ORDER.map((id) => [id, universe.fleets["fixture-fleet"]?.ships[id] ?? 0])),
             defenses: Object.fromEntries(DEFENSE_ORDER.map((id) => [id, loaded.defenses[id]])),
           };
         }),
       );
-      for (const id of SHIP_ORDER) assert.equal(counts.ships[id], fleet.ships[id], `fleet ship ${id} count preserved`);
+      for (const id of SHIP_ORDER) {
+        const expected = id === "fastCargo" || id === "bulkCargo" ? 0 : fleet.ships[id];
+        assert.equal(counts.ships[id], expected, `fleet ship ${id} count preserved`);
+      }
       for (const id of DEFENSE_ORDER) assert.equal(counts.defenses[id], fixture.universe.planets[fixture.planetId].defenses[id], `defense ${id} count preserved`);
     } finally {
       resetMemoryUniverse();
