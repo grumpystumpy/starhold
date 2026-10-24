@@ -998,7 +998,17 @@ export const RESEARCH: Record<ResearchId, ResearchDef> = {
     labLevel: 12,
     requires: { energyTech: 8, shieldingTech: 5 },
   },
-
+  researchNetwork: {
+    id: "researchNetwork",
+    name: "Research Network",
+    description:
+      "Links the research labs on your (level + 1) highest-lab planets; level 0 uses only the active planet.",
+    baseCost: { metal: 10_000, crystal: 20_000, deuterium: 10_000 },
+    costGrowth: 2.5,
+    baseResearchSeconds: 360,
+    labLevel: 12,
+    requires: { gravityWell: 1, computerTech: 8 },
+  },
 };
 
 /** Mothership base carry capacity (drones + harvesters). */

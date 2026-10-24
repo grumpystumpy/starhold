@@ -65,6 +65,7 @@ export function emptyResearch(): ResearchLevels {
     queueLogistics: 0,
     swarmHold: 0,
     gravityWell: 0,
+    researchNetwork: 0,
   };
 }
 
