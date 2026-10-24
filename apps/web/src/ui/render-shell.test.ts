@@ -9,6 +9,7 @@ describe("newbie bonus header badge", () => {
     const universe = createUniverse("Header", 1);
     const { player } = joinUniverse(universe, "Fresh", now);
     const html = (at: number) => shellHtml(playerView(universe, player.id, at), { error: null, notice: null, busy: false }, "overview", "<div>Main</div>");
+    assert.equal(playerView(universe, player.id, now).newbieBonusEndsAt, now + 96 * 60 * 60 * 1000);
     assert.match(html(now), /data-testid="newbie-bonus-badge"/);
     assert.match(html(now), /96h left/);
     assert.doesNotMatch(html(now + 96 * 60 * 60 * 1000), /data-testid="newbie-bonus-badge"/);

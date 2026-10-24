@@ -66,7 +66,11 @@ import { occupationForPlanet } from "./world-occupation.js";
 import { empireDriftBeaconCount, playerKnowsMini } from "./world-mini.js";
 import { seasonLeaderboardView } from "./world-seasons.js";
 import { getDebris } from "./world-tick.js";
-import { isNewbieBonusActive, newbieBonusRemainingMs, NEWBIE_PRODUCTION_MULT } from "./world-protection.js";
+import {
+  isNewbieBonusActive,
+  NEWBIE_BONUS_DURATION_MS,
+  NEWBIE_PRODUCTION_MULT,
+} from "./world-protection.js";
 
 export { empirePoints };
 
@@ -480,7 +484,9 @@ export function playerView(
     spyReports,
     expeditionReports,
     sensorContacts,
-    newbieBonusRemainingMs: newbieBonusRemainingMs(universe, player, now),
+    newbieBonusEndsAt: isNewbieBonusActive(universe, player, now)
+      ? player.createdAt + NEWBIE_BONUS_DURATION_MS
+      : null,
     hostileInbound,
     starshards: player.starshards ?? 0,
     officers: player.officers ?? [],
