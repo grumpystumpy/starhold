@@ -20,6 +20,7 @@ import {
   tryFormMoon,
 } from "./world.js";
 import { graduateNewbieProtection } from "./test-graduate.js";
+import type { FleetShips } from "./types.js";
 
 describe("Thread C moons", () => {
   it("computes chance and keeps planetAtCoords distinct from moon", () => {
@@ -370,6 +371,47 @@ describe("Thread C moons", () => {
       assert.ok(debris >= 0);
     }
   });
+
+  it("World Eaters win at a moon without a moon-kill chance", () => {
+    const raid = launchDestructionRaid("moon", { worldEater: 1 }, 167_000_000);
+    assert.equal(raid.report.outcome, "attacker_win");
+    assert.equal(raid.universe.planets[raid.targetId]?.kind, "moon");
+    assert.equal(raid.report.moonDestroyed, undefined);
+    assert.equal(raid.report.moonKillChancePct, undefined);
+    assert.doesNotMatch(raid.report.summary, /moon.*chance/i);
+  });
+
+  it("Void Titans can destroy a moon and the report names them", () => {
+    const raid = launchDestructionRaid(
+      "moon",
+      { voidforgeTitan: 1 },
+      168_000_000,
+      true,
+    );
+    assert.equal(raid.report.outcome, "attacker_win");
+    assert.equal(raid.report.moonDestroyed, true);
+    assert.ok((raid.report.moonKillChancePct ?? 0) > 0);
+    assert.ok(
+      raid.report.summary.includes(
+        `Void Titans shattered the moon (${raid.report.moonKillChancePct}% chance).`,
+      ),
+    );
+    assert.equal(raid.universe.planets[raid.targetId], undefined);
+  });
+
+  it("World Eaters and Void Titans cannot destroy a normal planet", () => {
+    const raid = launchDestructionRaid(
+      "planet",
+      { worldEater: 1, voidforgeTitan: 1 },
+      169_000_000,
+    );
+    const planet = raid.universe.planets[raid.targetId];
+    assert.equal(raid.report.outcome, "attacker_win");
+    assert.ok(planet);
+    assert.equal(planet.id, raid.targetId);
+    assert.equal(planet.ownerPlayerId, raid.defenderId);
+    assert.deepEqual(planet.buildings, raid.targetBuildings);
+  });
 });
 
 function findSeedBelow(chance: number): string {
@@ -378,4 +420,85 @@ function findSeedBelow(chance: number): string {
     if (moonRoll(seed) < chance) return seed;
   }
   throw new Error("no seed");
+}
+
+function launchDestructionRaid(
+  targetKind: "moon" | "planet",
+  ships: Partial<FleetShips>,
+  now: number,
+  ensureMoonKill = false,
+) {
+  const universe = createUniverse(`Destruction ${now}`, 8);
+  const attacker = joinUniverse(universe, "Attacker", now);
+  const defender = joinUniverse(universe, "Defender", now + 1);
+  graduateNewbieProtection(universe, universe.players[defender.player.id]!);
+  const origin = universe.planets[attacker.planet.id]!;
+  origin.ships = { ...origin.ships, ...ships };
+  origin.resources.deuterium = 1_000_000;
+
+  let target = defender.planet;
+  if (targetKind === "moon") {
+    const moon = tryFormMoon(
+      universe,
+      defender.planet,
+      { metal: 5_000_000, crystal: 0, deuterium: 0 },
+      findSeedBelow(20),
+      now + 2,
+    );
+    assert.ok(moon);
+    target = moon!;
+  } else {
+    target.buildings.metalMine = 7;
+  }
+  const targetBuildings = structuredClone(target.buildings);
+
+  const launch = launchFleet(universe, {
+    playerId: attacker.player.id,
+    mission: "raid",
+    targetPlanetId: target.id,
+    targetCoords: target.coords,
+    ships,
+    now: now + 3,
+  });
+  assert.equal(launch.ok, true, launch.ok ? "" : launch.error);
+  if (!launch.ok) throw new Error(launch.error);
+
+  const fleet = universe.fleets[launch.fleet.id]!;
+  delete universe.fleets[fleet.id];
+  fleet.id = `flt_destruction_${now}`;
+  universe.fleets[fleet.id] = fleet;
+
+  let fixedRandom = 0.5;
+  if (ensureMoonKill) {
+    let foundKillSeed = false;
+    for (let i = 1; i <= 1000; i++) {
+      const candidate = i / 1001;
+      const reportId =
+        `rpt_${fleet.arrivesAt.toString(36)}_${candidate.toString(36).slice(2, 7)}`;
+      if (moonRoll(`${reportId}:moonkill`) < 99) {
+        fixedRandom = candidate;
+        foundKillSeed = true;
+        break;
+      }
+    }
+    assert.equal(foundKillSeed, true);
+  }
+  const originalRandom = Math.random;
+  Math.random = () => fixedRandom;
+  try {
+    advanceUniverse(universe, fleet.arrivesAt);
+  } finally {
+    Math.random = originalRandom;
+  }
+  const report = Object.values(universe.reports).find(
+    (item) => item.missionId === fleet.id,
+  );
+  assert.ok(report);
+  return {
+    universe,
+    targetId: target.id,
+    defenderId: defender.player.id,
+    targetBuildings,
+    report: report!,
+  };
 }
