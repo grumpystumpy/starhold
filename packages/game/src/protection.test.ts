@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  NEWBIE_BONUS_DURATION_MS,
+  NEWBIE_DEFENSE_MULT,
+  NEWBIE_PRODUCTION_MULT,
   NEWBIE_PROTECTION_POINTS,
   PIRATE_FAIRNESS_PENALTY_PER_RAID,
   PIRATE_FAIRNESS_POINTS_MAX,
@@ -11,12 +14,57 @@ import {
   createUniverse,
   empirePoints,
   isNewbieProtected,
+  isNewbieBonusActive,
   joinUniverse,
+  newbieBonusRemainingMs,
   launchFleet,
   pirateRaidPickWeight,
+  playerView,
   recordSuccessfulPirateRaid,
   utcDayKey,
 } from "./world.js";
+import { resolveCombat } from "./formulas-combat.js";
+
+describe("Newbie bonus", () => {
+  it("boosts fresh player production and defender stats until 96 hours", () => {
+    const now = 300_000_000;
+    const universe = createUniverse("Bonus", 1);
+    const { player, planet } = joinUniverse(universe, "Fresh", now);
+    const owner = universe.players[player.id]!;
+    const body = universe.planets[planet.id]!;
+    body.buildings.metalMine = 1;
+    assert.equal(isNewbieBonusActive(universe, owner, now), true);
+    assert.equal(newbieBonusRemainingMs(universe, owner, now), NEWBIE_BONUS_DURATION_MS);
+    const normal = resolveCombat({ cruiser: 1 }, { cruiser: 1 });
+    const boosted = resolveCombat({ cruiser: 1 }, { cruiser: 1 }, undefined, undefined, undefined, { defenderUnitStatMult: NEWBIE_DEFENSE_MULT });
+    assert.ok(boosted.defenderAfter.cruiser >= normal.defenderAfter.cruiser);
+    const activeRate = playerView(universe, player.id, now).economy.productionPerHour.metal;
+    owner.createdAt = now - NEWBIE_BONUS_DURATION_MS;
+    assert.equal(isNewbieBonusActive(universe, owner, now), false);
+    const inactiveRate = playerView(universe, player.id, now).economy.productionPerHour.metal;
+    assert.ok(Math.abs((activeRate - 500) / (inactiveRate - 500) - NEWBIE_PRODUCTION_MULT) < 1e-6);
+    owner.createdAt = now;
+    owner.newbieForfeitedAt = now + 10;
+    assert.equal(isNewbieBonusActive(universe, owner, now + 20), false);
+    owner.newbieForfeitedAt = null;
+    universe.planets[body.id]!.buildings.metalMine = 100;
+    assert.equal(isNewbieBonusActive(universe, owner, now), false);
+  });
+
+  it("returns zero for an old player with many planets", () => {
+    const now = 400_000_000;
+    const universe = createUniverse("Old Bonus", 1);
+    const { player, planet } = joinUniverse(universe, "Old", now - NEWBIE_BONUS_DURATION_MS - 1);
+    const owner = universe.players[player.id]!;
+    for (let index = 0; index < 1_000; index += 1) {
+      const extra = structuredClone(universe.planets[planet.id]!);
+      extra.id = `extra_${index}`;
+      universe.planets[extra.id] = extra;
+      owner.planetIds.push(extra.id);
+    }
+    assert.equal(newbieBonusRemainingMs(universe, owner, now), 0);
+  });
+});
 
 describe("CHANGE #19 World Eater speed", () => {
   it("cruise speed is half of prior 600", () => {
