@@ -26,6 +26,8 @@ export const BUILDING_ART: Record<BuildingId, string> = {
 export const SHIP_ART: Record<ShipId, string> = {
   scout: "/assets/ships/scout.svg",
   hauler: "/assets/ships/hauler.svg",
+  fastCargo: "/assets/ships/fast-cargo.svg",
+  bulkCargo: "/assets/ships/bulk-cargo.svg",
   interceptor: "/assets/ships/interceptor.svg",
   cruiser: "/assets/ships/cruiser.svg",
   bomber: "/assets/ships/bomber.svg",
@@ -56,6 +58,7 @@ export const DEFENSE_ART: Record<DefenseId, string> = {
   laserBattery: "/assets/defenses/laser-battery.svg",
   shieldDome: "/assets/defenses/shield-dome.svg",
   needleTurret: "/assets/defenses/needle-turret.svg",
+  prismLaser: "/assets/defenses/prism-laser.svg",
   arcLattice: "/assets/defenses/arc-lattice.svg",
   pulseBastion: "/assets/defenses/pulse-bastion.svg",
   gaussRail: "/assets/defenses/gauss-rail.svg",

@@ -877,7 +877,7 @@ describe("failed actions check state", () => {
     assert.equal(posts, 1);
     assert.equal(states, 1);
     assert.equal(session.error, null);
-    assert.match(session.notice ?? "", /Queued 5× Beam Emplacement/);
+    assert.match(session.notice ?? "", /Queued 5× Light Laser/);
   });
 
   it("build-defense gets 503 while older batch finishes: reports not applied if new batch NOT saved, 1 POST made", async () => {
@@ -1018,6 +1018,6 @@ describe("failed actions check state", () => {
     assert.equal(posts, 1);
     assert.equal(states, 1);
     assert.equal(session.error, null);
-    assert.match(session.notice ?? "", /Queued 5× Beam Emplacement/);
+    assert.match(session.notice ?? "", /Queued 5× Light Laser/);
   });
 });
