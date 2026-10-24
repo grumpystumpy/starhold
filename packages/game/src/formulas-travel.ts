@@ -66,6 +66,10 @@ export function emptyResearch(): ResearchLevels {
     queueLogistics: 0,
     swarmHold: 0,
     gravityWell: 0,
+    metallurgistTech: 0,
+    crystalizerTech: 0,
+    deutSynthesisTech: 0,
+    researchNetwork: 0,
   };
 }
 
@@ -157,6 +161,7 @@ export function economySnapshot(
   universeSpeed = 1,
   energyTechLevel = 0,
   boosts?: { mineOutput?: number; energyOutput?: number },
+  research?: Partial<ResearchLevels>,
   fieldMods?: FieldCapMods,
 ): EconomySnapshot {
   const used = fieldsUsed(planet);
@@ -170,6 +175,7 @@ export function economySnapshot(
       universeSpeed,
       energyTechLevel,
       boosts,
+      research,
     ),
     temperatureK: planetTemperatureK(slot),
     energy: {
