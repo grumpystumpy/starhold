@@ -41,6 +41,9 @@ describe("upgrade and research gates", () => {
           labLevel: 12,
           requires: { energyTech: 8, shieldingTech: 5 },
         },
+        metallurgistTech: { labLevel: 1, requires: { energyTech: 1 } },
+        crystalizerTech: { labLevel: 1, requires: { energyTech: 1 } },
+        deutSynthesisTech: { labLevel: 2, requires: { energyTech: 2 } },
       },
     );
   });
