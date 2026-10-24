@@ -123,6 +123,50 @@ export function expeditionStarshardsFind(
   return Math.max(1, Math.floor(scaled));
 }
 
+function shipUnitCost(shipId: ShipId): number {
+  const cost = SHIPS[shipId].cost;
+  return cost.metal + cost.crystal + cost.deuterium;
+}
+
+export function expeditionShipsFind(
+  before: FleetShips,
+  roll: number,
+): { shipId: ShipId; count: number } {
+  const excluded = new Set<ShipId>([
+    "voidforgeTitan",
+    "worldEater",
+    "swarmMothership",
+  ]);
+  let maxSentCost = 0;
+  for (const id of SHIP_ORDER) {
+    if (!excluded.has(id) && (before[id] ?? 0) > 0) {
+      maxSentCost = Math.max(maxSentCost, shipUnitCost(id));
+    }
+  }
+
+  const pool = SHIP_ORDER.filter(
+    (id) =>
+      !excluded.has(id) &&
+      shipUnitCost(id) > 0 &&
+      shipUnitCost(id) <= maxSentCost,
+  );
+  if (pool.length === 0) pool.push("scout");
+
+  const rollIndex = ((roll % pool.length) + pool.length) % pool.length;
+  const shipId = pool[rollIndex]!;
+  const structureLimit = Math.max(
+    SHIPS[shipId].hull,
+    Math.floor(
+      Math.min(fleetStructurePoints(before), EXPEDITION_STRUCTURAL_CAP) * 0.5,
+    ),
+  );
+  const count = Math.max(
+    1,
+    Math.min(1 + (roll % 3), Math.floor(structureLimit / SHIPS[shipId].hull)),
+  );
+  return { shipId, count };
+}
+
 export function resolveExpeditionArrival(
   universe: UniverseState,
   fleet: FleetMission,
@@ -158,16 +202,10 @@ export function resolveExpeditionArrival(
       break;
     }
     case "ships": {
-      if (roll % 2 === 0) {
-        const n = 1 + (roll % 3);
-        fleet.ships.scout = (fleet.ships.scout ?? 0) + n;
-        shipsDelta.scout = n;
-        summary = `Salvage drones joined the fleet (+${n} Scout Skiff).`;
-      } else {
-        fleet.ships.hauler = (fleet.ships.hauler ?? 0) + 1;
-        shipsDelta.hauler = 1;
-        summary = "Derelict freighter claimed (+1 Ore Hauler).";
-      }
+      const found = expeditionShipsFind(before, roll);
+      fleet.ships[found.shipId] = (fleet.ships[found.shipId] ?? 0) + found.count;
+      shipsDelta[found.shipId] = found.count;
+      summary = `Expedition salvage joined the fleet (+${found.count} ${SHIPS[found.shipId].name}).`;
       fleet.ships = normalizeFleetShips(fleet.ships);
       break;
     }
