@@ -81,6 +81,7 @@ describe("Round 3 content + engine (11–19)", () => {
       buildSeconds: 9,
       shipyardLevel: 2,
       attack: 22,
+      weapons: { laser: 1 },
       shield: 6,
       armor: 9,
       hull: 22,
