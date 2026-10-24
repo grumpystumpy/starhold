@@ -80,8 +80,9 @@ export function shipStockPoints(
 ): number {
   let points = 0;
   for (const [id, count] of Object.entries(ships)) {
-    if (!count) continue;
-    const c = SHIPS[id as ShipId].cost;
+    const ship = SHIPS[id as ShipId];
+    if (!count || !ship) continue;
+    const c = ship.cost;
     points += ((c.metal + c.crystal + c.deuterium) * count) / 1000;
   }
   return points;

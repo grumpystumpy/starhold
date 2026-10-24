@@ -12,6 +12,7 @@ import {
 import {
   createAlliance,
   createUniverse,
+  advanceUniverse,
   empirePoints,
   isNewbieProtected,
   isNewbieBonusActive,
@@ -26,6 +27,18 @@ import {
 import { resolveCombat } from "./formulas-combat.js";
 
 describe("Newbie bonus", () => {
+  it("keeps the bonus active and advances with an unknown ship id", () => {
+    const now = 300_000_000;
+    const universe = createUniverse("Unknown ship bonus", 1);
+    const { player, planet } = joinUniverse(universe, "Fresh", now);
+    const owner = universe.players[player.id]!;
+    const body = universe.planets[planet.id]!;
+    (body.ships as Record<string, number>).smallCargo = 3;
+
+    assert.equal(isNewbieBonusActive(universe, owner, now), true);
+    assert.doesNotThrow(() => advanceUniverse(universe, now + 1));
+  });
+
   it("boosts fresh player production and defender stats until 96 hours", () => {
     const now = 300_000_000;
     const universe = createUniverse("Bonus", 1);
