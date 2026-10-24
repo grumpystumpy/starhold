@@ -18,8 +18,10 @@ import {
   canCollectDebris,
   canResolveMiniPlanet,
   chronoLatheTimeFactor,
+  computeRaidLoot,
   emptyDefenses,
   emptyResearch,
+  fleetCargoCapacity,
   normalizeFleetShips,
   redistributeSwarmIntercept,
   resolveCombat,
@@ -87,12 +89,16 @@ describe("Round 2 ship catalog fixtures (Micah amendments)", () => {
       deuterium: 0,
     });
     assert.equal(SHIPS.swarmDrone.buildSeconds, 2);
+    assert.equal(SHIPS.swarmDrone.cargo, 20);
+    assert.equal(SHIPS.swarmDrone.attack, 25);
     assert.deepEqual(SHIPS.swarmHarvester.cost, {
       metal: 100,
       crystal: 75,
       deuterium: 25,
     });
     assert.equal(SHIPS.swarmHarvester.buildSeconds, 5);
+    assert.equal(SHIPS.swarmHarvester.cargo, 500);
+    assert.equal(SHIPS.swarmHarvester.attack, 1);
   });
 
   it("Mothership is 2nd largest with amended cargo/combat", () => {
@@ -199,6 +205,44 @@ describe("Swarm Hold capacity base 2000", () => {
       0,
     );
     assert.equal(over.ok, false);
+  });
+});
+
+describe("Swarm cargo capacity", () => {
+  it("counts drone and harvester cargo for raid loot and transport", () => {
+    const ships = normalizeFleetShips({
+      swarmDrone: 1,
+      swarmHarvester: 1,
+    });
+    assert.equal(fleetCargoCapacity(ships), 520);
+    assert.deepEqual(
+      computeRaidLoot(
+        { metal: 2_000, crystal: 0, deuterium: 0 },
+        ships,
+      ),
+      { metal: 520, crystal: 0, deuterium: 0 },
+    );
+
+    const universe = createUniverse("Swarm Cargo Transport", 8);
+    const a = joinUniverse(universe, "SwarmCargo", 240_000_000);
+    const target = universe.planets[universe.miniPlanetIds![0]!];
+    target.ownerPlayerId = a.player.id;
+    a.player.planetIds.push(target.id);
+    const origin = universe.planets[a.planet.id];
+    origin.ships.swarmDrone = 1;
+    origin.ships.swarmHarvester = 1;
+    origin.resources = { metal: 520, crystal: 0, deuterium: 10_000 };
+
+    const transport = launchFleet(universe, {
+      playerId: a.player.id,
+      mission: "transport",
+      targetPlanetId: target.id,
+      ships: { swarmDrone: 1, swarmHarvester: 1 },
+      cargo: { metal: 520 },
+      now: 240_000_100,
+    });
+    assert.equal(transport.ok, true, transport.ok ? "" : transport.error);
+    if (transport.ok) assert.equal(transport.fleet.cargo.metal, 520);
   });
 });
 
