@@ -41,6 +41,10 @@ describe("upgrade and research gates", () => {
           labLevel: 12,
           requires: { energyTech: 8, shieldingTech: 5 },
         },
+        researchNetwork: {
+          labLevel: 12,
+          requires: { computerTech: 8, gravityWell: 1 },
+        },
       },
     );
   });
