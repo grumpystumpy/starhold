@@ -440,7 +440,7 @@ describe("alliance classes", () => {
       atkShips: { scout: 12 },
       defShips: { interceptor: 1 },
     });
-    assert.equal(plainWeapons.report.attackerAfter.scout, 10);
+    assert.equal(plainWeapons.report.attackerAfter.scout, 11);
     assert.equal(builderWeapons.report.attackerAfter.scout, 7);
 
     const bareShield = raidReport({

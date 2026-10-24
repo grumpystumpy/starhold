@@ -278,6 +278,7 @@ type SidePools = {
   shipShieldMult?: number;
   /** Alliance defense hull/armor/shield multiplier. Defenses only. */
   defenseStatMult?: number;
+  unitStatMult?: number;
 };
 
 function shipCount(ships: FleetShips): number {
@@ -550,8 +551,9 @@ function getUnitStats(
   battlefield?: BattlefieldMods,
   side?: SidePools,
 ) {
-  const sMult = battlefield?.shieldMult ?? 1;
-  const aMult = battlefield?.armorMult ?? 1;
+  const unitStatMult = side?.unitStatMult ?? 1;
+  const sMult = (battlefield?.shieldMult ?? 1) * unitStatMult;
+  const aMult = (battlefield?.armorMult ?? 1) * unitStatMult;
   let shield = 0;
   let armor = 0;
   let hull = 0;
@@ -832,6 +834,7 @@ export interface CombatMods {
   defenderWeaponMult?: number;
   /** Alliance defense hull, armor, and shields. */
   defenderDefenseStatMult?: number;
+  defenderUnitStatMult?: number;
 }
 
 function createRng(seedStr?: string) {
@@ -874,6 +877,7 @@ export function resolveCombat(
     unitDamage: {},
     shipShieldMult: mods?.defenderShieldMult ?? 1,
     defenseStatMult: mods?.defenderDefenseStatMult ?? 1,
+    unitStatMult: mods?.defenderUnitStatMult ?? 1,
   };
 
   if (shipCount(atkSide.ships) <= 0) {
