@@ -3,7 +3,6 @@ import {
   type GoalMetric,
   type GoalTuning,
 } from "./data/tuning.js";
-import { storageFor } from "./formulas.js";
 import type {
   GoalCadence,
   GoalView,
@@ -11,7 +10,7 @@ import type {
   PlayerState,
   UniverseState,
 } from "./types.js";
-import { grantStarshards, utcDayKey } from "./world-boosts.js";
+import { grantStarshards, storageForPlanet, utcDayKey } from "./world-boosts.js";
 import { addCargoToPlanet } from "./world-tick.js";
 
 export type GoalActionResult =
@@ -198,7 +197,7 @@ export function claimGoal(
   const planet = paysResources ? activeBody(universe, player) : null;
   if (paysResources) {
     if (!planet) return { ok: false, error: "Planet missing." };
-    const caps = storageFor(planet);
+    const caps = storageForPlanet(universe, planet, now);
     const room = {
       metal: caps.metal - planet.resources.metal,
       crystal: caps.crystal - planet.resources.crystal,
@@ -220,11 +219,11 @@ export function claimGoal(
     grantStarshards(player, goal.starshards);
   }
   if (paysResources && planet) {
-    addCargoToPlanet(planet, {
+    addCargoToPlanet(universe, planet, {
       metal: goal.metal,
       crystal: goal.crystal,
       deuterium: goal.deuterium,
-    });
+    }, now);
     universe.planets[planet.id] = planet;
   }
 

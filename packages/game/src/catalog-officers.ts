@@ -18,6 +18,7 @@ export const OFFICER_ORDER: OfficerId[] = [
   "warden",
   "engineer",
   "spymaster",
+  "vaultkeeper",
 ];
 
 /** Officer catalog — Starshard costs / effects per universe contract v1. */
@@ -75,5 +76,13 @@ export const OFFICERS: Record<OfficerId, OfficerDef> = {
     cost: 70,
     durationMs: OFFICER_DURATION_MS,
     effects: [{ kind: "espionageLevel", value: 1 }],
+  },
+  vaultkeeper: {
+    id: "vaultkeeper",
+    name: "Vaultkeeper",
+    description: "While on duty, +10% metal, crystal, and deuterium storage capacity.",
+    cost: 50,
+    durationMs: OFFICER_DURATION_MS,
+    effects: [{ kind: "storageCapacity", value: 1.1 }],
   },
 };

@@ -894,8 +894,8 @@ export const RESEARCH: Record<ResearchId, ResearchDef> = {
     name: "Power Discipline",
     description: "+5% energy production per level.",
     baseCost: { metal: 0, crystal: 80, deuterium: 40 },
-    costGrowth: 2,
-    baseResearchSeconds: 20,
+    costGrowth: 2.5,
+    baseResearchSeconds: 40,
     labLevel: 1,
   },
   combustionDrive: {
@@ -903,45 +903,47 @@ export const RESEARCH: Record<ResearchId, ResearchDef> = {
     name: "Pulse Drive",
     description: "+10% fleet cruise speed per level.",
     baseCost: { metal: 40, crystal: 0, deuterium: 60 },
-    costGrowth: 2,
-    baseResearchSeconds: 22,
+    costGrowth: 2.5,
+    baseResearchSeconds: 44,
     labLevel: 1,
+    requires: { energyTech: 1 },
   },
   weaponsTech: {
     id: "weaponsTech",
     name: "Ordnance Doctrine",
     description: "+8% ship/defense attack per level.",
     baseCost: { metal: 80, crystal: 20, deuterium: 0 },
-    costGrowth: 2,
-    baseResearchSeconds: 24,
-    labLevel: 1,
+    costGrowth: 2.5,
+    baseResearchSeconds: 48,
+    labLevel: 4,
   },
   armourTech: {
     id: "armourTech",
     name: "Hull Weave",
     description: "+8% hull integrity per level.",
     baseCost: { metal: 100, crystal: 0, deuterium: 0 },
-    costGrowth: 2,
-    baseResearchSeconds: 24,
-    labLevel: 1,
+    costGrowth: 2.5,
+    baseResearchSeconds: 48,
+    labLevel: 2,
   },
   shieldingTech: {
     id: "shieldingTech",
     name: "Aegis Lattice",
     description: "+8% shields per level.",
     baseCost: { metal: 20, crystal: 60, deuterium: 0 },
-    costGrowth: 2,
-    baseResearchSeconds: 24,
-    labLevel: 2,
+    costGrowth: 2.5,
+    baseResearchSeconds: 48,
+    labLevel: 6,
+    requires: { energyTech: 3 },
   },
   espionageTech: {
     id: "espionageTech",
     name: "Shadow Optics",
     description: "Deeper spy reports vs rival counter-intel.",
     baseCost: { metal: 20, crystal: 100, deuterium: 20 },
-    costGrowth: 2,
-    baseResearchSeconds: 20,
-    labLevel: 1,
+    costGrowth: 2.5,
+    baseResearchSeconds: 40,
+    labLevel: 3,
   },
   astrophysics: {
     id: "astrophysics",
@@ -949,17 +951,18 @@ export const RESEARCH: Record<ResearchId, ResearchDef> = {
     description:
       "Each level allows +1 colony (beyond home) and +1 concurrent expedition.",
     baseCost: { metal: 40, crystal: 80, deuterium: 40 },
-    costGrowth: 1.8,
-    baseResearchSeconds: 30,
-    labLevel: 1,
+    costGrowth: 2.5,
+    baseResearchSeconds: 60,
+    labLevel: 3,
+    requires: { espionageTech: 4, combustionDrive: 3 },
   },
   computerTech: {
     id: "computerTech",
     name: "Fleet OS",
     description: "Each level allows +1 simultaneous fleet mission (base 1).",
     baseCost: { metal: 0, crystal: 40, deuterium: 80 },
-    costGrowth: 2,
-    baseResearchSeconds: 22,
+    costGrowth: 2.5,
+    baseResearchSeconds: 44,
     labLevel: 1,
   },
   queueLogistics: {
@@ -968,9 +971,10 @@ export const RESEARCH: Record<ResearchId, ResearchDef> = {
     description:
       "+1 building/ship/defense queue slot per 2 levels; +1 research slot per 3 levels.",
     baseCost: { metal: 80, crystal: 120, deuterium: 40 },
-    costGrowth: 2,
-    baseResearchSeconds: 28,
-    labLevel: 2,
+    costGrowth: 2.5,
+    baseResearchSeconds: 56,
+    labLevel: 4,
+    requires: { computerTech: 2 },
   },
   swarmHold: {
     id: "swarmHold",
@@ -978,9 +982,10 @@ export const RESEARCH: Record<ResearchId, ResearchDef> = {
     description:
       "+15% of base (2,000) Mothership capacity per level.",
     baseCost: { metal: 200, crystal: 400, deuterium: 200 },
-    costGrowth: 2,
-    baseResearchSeconds: 40,
-    labLevel: 4,
+    costGrowth: 2.5,
+    baseResearchSeconds: 80,
+    labLevel: 7,
+    requires: { astrophysics: 4, computerTech: 4 },
   },
   gravityWell: {
     id: "gravityWell",
@@ -988,9 +993,10 @@ export const RESEARCH: Record<ResearchId, ResearchDef> = {
     description:
       "Gravity doctrine — required for Void Titan, Mothership, and World Eater.",
     baseCost: { metal: 0, crystal: 4000, deuterium: 2000 },
-    costGrowth: 2.0,
-    baseResearchSeconds: 120,
-    labLevel: 6,
+    costGrowth: 2.5,
+    baseResearchSeconds: 240,
+    labLevel: 12,
+    requires: { energyTech: 8, shieldingTech: 5 },
   },
 
 };
@@ -1157,6 +1163,7 @@ export const PLAYER_CLASS_BONUSES: Readonly<
     {
       name: string;
       mineOutput: number;
+      energyOutput: number;
       defensePower: number;
       defenseBuildTime: number;
       expeditionYield: number;
@@ -1177,6 +1184,7 @@ export const PLAYER_CLASS_BONUSES: Readonly<
   miner: {
     name: "Miner",
     mineOutput: 1.12,
+    energyOutput: 1.1,
     defensePower: 1.1,
     defenseBuildTime: 0.9,
     expeditionYield: 1,
@@ -1195,6 +1203,7 @@ export const PLAYER_CLASS_BONUSES: Readonly<
   explorer: {
     name: "Explorer",
     mineOutput: 1,
+    energyOutput: 1,
     defensePower: 1,
     defenseBuildTime: 1,
     expeditionYield: 1.2,
@@ -1213,6 +1222,7 @@ export const PLAYER_CLASS_BONUSES: Readonly<
   fleeter: {
     name: "Fleeter",
     mineOutput: 1,
+    energyOutput: 1,
     defensePower: 1,
     defenseBuildTime: 1,
     expeditionYield: 1,
@@ -1222,7 +1232,7 @@ export const PLAYER_CLASS_BONUSES: Readonly<
     attack: 1.08,
     fleetSpeed: 1.1,
     shipBuildTime: 0.9,
-    fleetSlots: 1,
+    fleetSlots: 2,
     colonySlots: 0,
     colonyShipSpeed: 1,
     buildingBuildTime: 1,
@@ -1231,6 +1241,7 @@ export const PLAYER_CLASS_BONUSES: Readonly<
   expansionist: {
     name: "Expansionist",
     mineOutput: 1,
+    energyOutput: 1,
     defensePower: 1,
     defenseBuildTime: 1,
     expeditionYield: 1,

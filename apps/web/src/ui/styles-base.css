@@ -370,3 +370,41 @@ button.ghost {
   gap: 0.45rem;
   align-items: center;
 }
+
+.fleet-ship input {
+  width: 100%;
+  min-width: 0;
+}
+
+.fleet-step-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.fleet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.fleet-actions button {
+  flex: 1 1 8rem;
+}
+
+.fleet-summary {
+  margin: 0;
+}
+
+.fleet-summary ul {
+  margin: 0.25rem 0;
+  padding-left: 1.1rem;
+}
+
+.fleet-speed select {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+}
