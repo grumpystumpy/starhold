@@ -159,6 +159,8 @@ export const MINI_BUILDING_ORDER: BuildingId[] = [
 export const SHIP_ORDER: ShipId[] = [
   "scout",
   "hauler",
+  "fastCargo",
+  "bulkCargo",
   "interceptor",
   "cruiser",
   "bomber",

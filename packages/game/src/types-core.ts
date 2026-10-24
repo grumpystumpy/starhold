@@ -42,6 +42,8 @@ export interface PlayerClassState {
 export type ShipId =
   | "scout"
   | "hauler"
+  | "fastCargo"
+  | "bulkCargo"
   | "interceptor"
   | "cruiser"
   | "bomber"
