@@ -64,6 +64,17 @@ describe("Newbie bonus", () => {
     assert.equal(isNewbieBonusActive(universe, owner, now), false);
   });
 
+  it("keeps the newbie bonus end timestamp stable between view calls", () => {
+    const now = 350_000_000;
+    const universe = createUniverse("Stable bonus end", 1);
+    const { player } = joinUniverse(universe, "Fresh", now);
+
+    assert.equal(
+      playerView(universe, player.id, now).newbieBonusEndsAt,
+      playerView(universe, player.id, now + 1_000).newbieBonusEndsAt,
+    );
+  });
+
   it("returns zero for an old player with many planets", () => {
     const now = 400_000_000;
     const universe = createUniverse("Old Bonus", 1);
