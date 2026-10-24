@@ -13,9 +13,16 @@ import { fmtEta } from "./format";
 import { syncChangedInputTypeValue } from "./morph-dom";
 import { flashHtml } from "./render-chrome-join";
 import { fleetComposer } from "./render-fleets-composer";
+import { fleetDraftForPage } from "./render-app";
 import { readFleetFormIn } from "../main-fleet-form";
-import { doApplyFleetPreset, doLaunchFleet } from "../main-actions-fleet";
-import { root, session, setPaintImpl } from "../session";
+import {
+  doApplyFleetPreset,
+  doGalaxyFleetAction,
+  doGalaxySpy,
+  doLaunchFleet,
+  GALAXY_SPY_PROBES,
+} from "../main-actions-fleet";
+import { clearFlash, root, session, setPaintImpl } from "../session";
 import {
   blankFleetDraft,
   fleetDraftAfterBack,
@@ -24,6 +31,7 @@ import {
   fleetDraftWithAcsPrefill,
   fleetShipTotal,
   rememberFleetDraft,
+  rememberedFleetDraft,
   salvageFleetForm,
   type FleetDraft,
 } from "./render-fleets-draft";
@@ -538,5 +546,115 @@ describe("fleet send result", () => {
     assert.equal(kept?.counts.scout, 2);
     assert.deepEqual(kept?.targetCoords, { galaxy: 3, system: 3, slot: 3 });
     assert.match(session.notice ?? "", /Loaded preset/);
+  });
+});
+
+describe("galaxy fleet actions", () => {
+  it("launches one espionage fleet with the configured probes at the clicked coordinates", async () => {
+    const originalFetch = globalThis.fetch;
+    const originalView = session.view;
+    let posted = "";
+    session.view = {
+      ...view(),
+      planet: { ...view().planet, ships: { probe: 2 } },
+    };
+    session.busy = false;
+    setPaintImpl(() => {});
+    globalThis.fetch = async (_input, init) => {
+      posted = String(init?.body ?? "");
+      return new Response(JSON.stringify({ fleets: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+
+    try {
+      await doGalaxySpy({ galaxy: 2, system: 9, slot: 4 });
+    } finally {
+      globalThis.fetch = originalFetch;
+      session.view = originalView;
+      session.busy = false;
+      clearFlash();
+      salvageFleetForm(root);
+      rememberFleetDraft(null);
+    }
+
+    const payload = JSON.parse(posted) as {
+      mission: string;
+      ships: { probe: number };
+      targetCoords: { galaxy: number; system: number; slot: number };
+    };
+    assert.equal(GALAXY_SPY_PROBES, 1);
+    assert.equal(payload.mission, "espionage");
+    assert.equal(payload.ships.probe, GALAXY_SPY_PROBES);
+    assert.deepEqual(payload.targetCoords, { galaxy: 2, system: 9, slot: 4 });
+  });
+
+  it("shows an error and sends nothing when the active planet has no probes", async () => {
+    const originalFetch = globalThis.fetch;
+    const originalView = session.view;
+    let requests = 0;
+    session.view = {
+      ...view(),
+      planet: { ...view().planet, ships: {} },
+    };
+    session.busy = false;
+    setPaintImpl(() => {});
+    globalThis.fetch = async () => {
+      requests += 1;
+      return new Response("{}", { status: 200 });
+    };
+
+    try {
+      await doGalaxySpy({ galaxy: 2, system: 9, slot: 4 });
+      assert.equal(session.error, "No Whisper Probes in orbit.");
+      assert.equal(requests, 0);
+    } finally {
+      globalThis.fetch = originalFetch;
+      session.view = originalView;
+      session.busy = false;
+      clearFlash();
+    }
+  });
+
+  it("consumes a galaxy attack prefill once instead of restoring the remembered step-2 draft", () => {
+    const originalPage = session.activePage;
+    const remembered = {
+      ...blankFleetDraft(),
+      step: 2 as const,
+      counts: { scout: 1 },
+    };
+    Object.assign(window, {
+      location: {
+        href: "http://starhold.local/galaxy",
+        pathname: "/galaxy",
+        search: "",
+        hash: "",
+      },
+      history: { pushState() {}, replaceState() {} },
+    });
+    rememberFleetDraft(remembered);
+    session.activePage = "galaxy";
+
+    doGalaxyFleetAction({ galaxy: 3, system: 8, slot: 7 }, "raid");
+    assert.equal(session.activePage, "fleet");
+    const emptyRoot = make({ tag: "div" }) as unknown as HTMLElement;
+    const galaxyDraft = fleetDraftForPage(emptyRoot, "fleet");
+    assert.equal(galaxyDraft?.mission, "raid");
+    assert.deepEqual(galaxyDraft?.targetCoords, {
+      galaxy: 3,
+      system: 8,
+      slot: 7,
+    });
+    assert.equal(galaxyDraft?.step, 1);
+    assert.equal(session.pendingGalaxyFleetDraft, null);
+
+    const nextDraft = fleetDraftForPage(emptyRoot, "fleet");
+    assert.notEqual(nextDraft?.step, 2);
+    assert.equal(rememberedFleetDraft()?.step, 2);
+
+    session.activePage = originalPage;
+    session.pendingGalaxyFleetDraft = null;
+    rememberFleetDraft(null);
   });
 });

@@ -8,6 +8,7 @@ import type {
 } from "@starhold/game";
 import type { AuthAccount } from "./api";
 import type { NavPage } from "./ui/nav";
+import type { FleetDraft } from "./ui/render-fleets-draft";
 
 export const SESSION_KEY = "starhold.playerId";
 /** Keep reject/success flashes readable across background polls. */
@@ -63,6 +64,8 @@ export const session = {
   activePage: "overview" as NavPage,
   /** Fleet deep-link from Propose Joint Strike. Cleared once the form is armed. */
   pendingAcsPrefill: null as AcsPrefill | null,
+  /** One-shot Fleet draft from a galaxy Colonize/Attack action. */
+  pendingGalaxyFleetDraft: null as FleetDraft | null,
   /** Ignore duplicate click after pointerup already dispatched the armed action. */
   suppressClickUntil: 0,
   /** A 5xx or network failure must not offer a new commander. */
