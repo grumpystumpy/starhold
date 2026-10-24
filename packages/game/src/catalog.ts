@@ -189,6 +189,7 @@ export const DEFENSE_ORDER: DefenseId[] = [
   "laserBattery",
   "shieldDome",
   "needleTurret",
+  "prismLaser",
   "arcLattice",
   "pulseBastion",
   "gaussRail",

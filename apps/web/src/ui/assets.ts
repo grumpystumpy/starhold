@@ -56,6 +56,7 @@ export const DEFENSE_ART: Record<DefenseId, string> = {
   laserBattery: "/assets/defenses/laser-battery.svg",
   shieldDome: "/assets/defenses/shield-dome.svg",
   needleTurret: "/assets/defenses/needle-turret.svg",
+  prismLaser: "/assets/defenses/prism-laser.svg",
   arcLattice: "/assets/defenses/arc-lattice.svg",
   pulseBastion: "/assets/defenses/pulse-bastion.svg",
   gaussRail: "/assets/defenses/gauss-rail.svg",

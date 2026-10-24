@@ -71,6 +71,7 @@ export type DefenseId =
   | "laserBattery"
   | "shieldDome"
   | "needleTurret"
+  | "prismLaser"
   | "arcLattice"
   | "pulseBastion"
   | "gaussRail"
