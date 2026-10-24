@@ -464,6 +464,7 @@ export function playerView(
           ally.mineOutput,
         energyOutput: boosts.energyOutput * cls.energyOutput,
       },
+      player.research,
       fieldMods,
       ),
       storage: storageForPlanet(universe, planet, now),

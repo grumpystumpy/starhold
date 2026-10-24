@@ -7,7 +7,11 @@ import {
   spend,
 } from "./formulas.js";
 import type { ResearchId, UniverseState } from "./types.js";
-import { activePlanet, bestLabLevel } from "./world-bootstrap.js";
+import {
+  activePlanet,
+  bestLabLevel,
+  linkedResearchLabLevel,
+} from "./world-bootstrap.js";
 import { advanceUniverse } from "./world-arrival.js";
 import type { ActionResult } from "./world-queues.js";
 import { playerBoosts } from "./world-boosts.js";
@@ -34,6 +38,7 @@ export function queueResearch(
   const planet = activePlanet(universe, player);
   if (!planet) return { ok: false, error: "Planet missing." };
   const localLab = planet.buildings.researchLab ?? 0;
+  const linkedLab = linkedResearchLabLevel(universe, player, planet);
 
   const preview = previewResearchUpgrade(
     player,
@@ -55,7 +60,7 @@ export function queueResearch(
   const seconds = Math.max(
     1,
     Math.ceil(
-      (researchUpgradeSeconds(researchId, current, localLab) *
+      (researchUpgradeSeconds(researchId, current, linkedLab) *
         lb.researchTime *
         cls.researchTime *
         astrolabe *
