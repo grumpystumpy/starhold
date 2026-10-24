@@ -136,6 +136,33 @@ function namedLevels(
   return parts.join(", ");
 }
 
+function resourceNames(
+  resources: { metal?: number; crystal?: number; deuterium?: number } | null | undefined,
+): string {
+  if (!resources) return "";
+  const parts: string[] = [];
+  if ((resources.metal ?? 0) > 0) parts.push(`${fmt(resources.metal ?? 0)} metal`);
+  if ((resources.crystal ?? 0) > 0) parts.push(`${fmt(resources.crystal ?? 0)} crystal`);
+  if ((resources.deuterium ?? 0) > 0) parts.push(`${fmt(resources.deuterium ?? 0)} deuterium`);
+  return parts.join(", ");
+}
+
+function combatMailBody(report: CombatReport): string {
+  const bits = [report.summary];
+  const debris = resourceNames(report.debrisCreated);
+  if (debris) bits.push(`Debris: ${debris}`);
+  const destroyed = namedCounts(DEFENSE_ORDER, DEFENSES, report.defensesDestroyed);
+  if (destroyed) {
+    const rebuilt = namedCounts(DEFENSE_ORDER, DEFENSES, report.defensesRebuilt) || "none";
+    const lost =
+      namedCounts(DEFENSE_ORDER, DEFENSES, report.defensesPermanentlyLost) || "none";
+    bits.push(
+      `Defenses destroyed: ${destroyed}. Rebuilt: ${rebuilt}. Permanently lost: ${lost}.`,
+    );
+  }
+  return bits.join(" ");
+}
+
 function namedCounts(
   order: readonly string[],
   names: { [id: string]: { name: string } | undefined },
@@ -198,7 +225,7 @@ function combatItems(
     id: r.id,
     at: r.at,
     title: `Raid at ${fmtCoords(r.targetCoords)} — ${viewerResult(r, selfId)}`,
-    body: r.summary,
+    body: combatMailBody(r),
     unread: false,
     href: `#msg-combat-${r.id}`,
   }));
@@ -239,12 +266,20 @@ function expeditionItems(
         : "";
     const shards =
       (r.starshardsGained ?? 0) > 0 ? ` · +${fmt(r.starshardsGained!)} ✦` : "";
+    const debris = resourceNames(r.debrisCreated);
+    const debrisAt = debris
+      ? ` Debris: ${debris} at ${fmtCoords({
+          galaxy: r.targetCoords.galaxy,
+          system: r.targetCoords.system,
+          slot: 16,
+        })}`
+      : "";
     return {
       kind: "expedition" as const,
       id: r.id,
       at: r.at,
       title: "Expedition returned",
-      body: `${r.summary} @ ${fmtCoords(r.targetCoords)}${cargo}${shards}`,
+      body: `${r.summary} @ ${fmtCoords(r.targetCoords)}${cargo}${shards}${debrisAt}`,
       unread: false,
     };
   });

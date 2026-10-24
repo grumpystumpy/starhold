@@ -40,7 +40,17 @@ export const RAID_LOOT_SHARE_OTHER = 0.5;
 export const RAID_LOOT_SHARE = RAID_LOOT_SHARE_OTHER;
 
 /** Fraction of destroyed ship metal/crystal that becomes debris. */
-export const DEBRIS_FROM_SHIPS = 0.3;
+export const DEBRIS_FROM_SHIPS = 0.6;
+
+/** Fraction of permanently lost defense metal/crystal that becomes debris. */
+export const DEBRIS_FROM_DEFENSES = 0.05;
+
+/** Defenses restored after a battle. Miner defenders use the higher rate. */
+export const DEFENSE_REBUILD_RATE = 0.7;
+export const DEFENSE_REBUILD_MINER_RATE = 0.9;
+
+/** Expedition pirate ambush: debris left at slot 16. */
+export const EXPEDITION_AMBUSH_DEBRIS_RATE = 0.4;
 
 /** Minimum one-way flight seconds after speed scaling. */
 export const MIN_FLIGHT_SECONDS = 8;

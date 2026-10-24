@@ -3,10 +3,13 @@ import {
   classBonuses,
   computeRaidLoot,
   debrisFromDestroyed,
+  debrisFromDestroyedDefenses,
+  defenseRebuildRate,
   destroyedShipResources,
   effectiveCombatResearch,
   emptyDefenses,
   grantPlayerXp,
+  rebuildDefenses,
   resolveCombat,
   resourcesCostTotal,
   spoilSkimmerDebris,
@@ -83,7 +86,12 @@ export function resolveRaidArrival(
     },
   );
   target.ships = combat.defenderAfter;
-  target.defenses = combat.defensesAfter;
+  const rebuilt = rebuildDefenses(
+    defensesBefore,
+    combat.defensesAfter,
+    defenseRebuildRate(defenderOwner?.playerClass?.classId),
+  );
+  target.defenses = rebuilt.defensesAfter;
 
   const debrisAtk = debrisFromDestroyed(
     destroyedShipResources(fleet.ships, combat.attackerAfter),
@@ -91,9 +99,10 @@ export function resolveRaidArrival(
   const debrisDef = debrisFromDestroyed(
     destroyedShipResources(defenderBefore, combat.defenderAfter),
   );
+  const debrisGuns = debrisFromDestroyedDefenses(rebuilt.defensesPermanentlyLost);
   let debrisCreated: Resources = {
-    metal: debrisAtk.metal + debrisDef.metal,
-    crystal: debrisAtk.crystal + debrisDef.crystal,
+    metal: debrisAtk.metal + debrisDef.metal + debrisGuns.metal,
+    crystal: debrisAtk.crystal + debrisDef.crystal + debrisGuns.crystal,
     deuterium: 0,
   };
 
@@ -230,7 +239,10 @@ export function resolveRaidArrival(
     defenderBefore,
     defenderAfter: combat.defenderAfter,
     defensesBefore,
-    defensesAfter: combat.defensesAfter,
+    defensesAfter: rebuilt.defensesAfter,
+    defensesDestroyed: rebuilt.defensesDestroyed,
+    defensesRebuilt: rebuilt.defensesRebuilt,
+    defensesPermanentlyLost: rebuilt.defensesPermanentlyLost,
     loot,
     debrisCreated,
     outcome: combat.outcome,
