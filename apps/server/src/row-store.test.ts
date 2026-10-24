@@ -4,6 +4,8 @@ import { describe, it } from "node:test";
 import {
   activePirateBases,
   advanceUniverse,
+  applyNpcRaidOnNpc,
+  applyNpcRaidOnPlanet,
   createPirateBase,
   createUniverse,
   joinUniverse,
@@ -17,8 +19,11 @@ import {
   queueBuildingUpgrade,
   queueResearch,
   queueShipBuild,
+  resolvePirateRaidArrival,
   tickPirates,
   UNIVERSE_SCHEMA_VERSION,
+  emptyDefenses,
+  emptyFleetShips,
   type CombatReport,
   type FleetMission,
   type PirateBase,
@@ -556,6 +561,111 @@ describe("row save review fixes", () => {
     assert.equal(aged.universe.debris?.["deb-77"]?.metal, 8);
     assert.equal(aged.universe.debris?.["deb-77"]?.crystal, 2);
     assert.equal(aged.universe.debris?.["deb-new"]?.metal, 5);
+  });
+
+  it("saves battle debris for npc and player fights without blowing the query budget", async () => {
+    const { db: inner } = sqliteD1();
+    const source = fixture();
+    source.asteroids = {
+      ...(source.asteroids ?? {}),
+      "ast-keep": {
+        id: "ast-keep",
+        coords: { galaxy: 3, system: 12, slot: 15 },
+        metal: 9,
+        crystal: 1,
+        deuterium: 0,
+        richness: 2,
+      },
+    };
+    source.debris = {
+      ...(source.debris ?? {}),
+      "deb-keep": { coords: { galaxy: 3, system: 12, slot: 14 }, metal: 15, crystal: 4 },
+    };
+    await migrateAll(inner, source);
+    const db = subrequestD1(inner, 50);
+    const store = createD1Store(db);
+    const alpha = Object.values(source.players).find((player) => player.name === "OldHand")!;
+    db.reset();
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "POST", cpuMs: 0 },
+      () =>
+        withUniverse((universe) => {
+          const now = 1_700_000_100_000;
+          const home = universe.planets[alpha.homePlanetId]!;
+          const planet: PlanetState = {
+            ...home,
+            id: "battle-world",
+            name: "Battle",
+            ownerPlayerId: alpha.id,
+            coords: { galaxy: 3, system: 12, slot: 2 },
+            moonId: null,
+            parentPlanetId: null,
+            ships: emptyFleetShips(),
+            defenses: emptyDefenses(),
+            resources: { metal: 100, crystal: 50, deuterium: 10 },
+          };
+          planet.ships.scout = 2;
+          planet.defenses.laserBattery = 10;
+          universe.planets[planet.id] = planet;
+          const raider = createPirateBase(universe.seed ?? universe.id, 3, 12, 8, now, 0);
+          raider.ships = emptyFleetShips();
+          raider.ships.interceptor = 40;
+          raider.defenses = emptyDefenses();
+          universe.pirateBases![raider.id] = raider;
+          applyNpcRaidOnPlanet(universe, raider, planet, now, "pirate", () => {});
+
+          const pirate = createPirateBase(universe.seed ?? universe.id, 3, 12, 5, now, 0);
+          pirate.ships = emptyFleetShips();
+          pirate.ships.scout = 2;
+          pirate.defenses = emptyDefenses();
+          pirate.defenses.laserBattery = 10;
+          universe.pirateBases![pirate.id] = pirate;
+          const ships = emptyFleetShips();
+          ships.interceptor = 30;
+          resolvePirateRaidArrival(
+            universe,
+            {
+              id: "hit-pirate",
+              ownerPlayerId: alpha.id,
+              originPlanetId: home.id,
+              targetPlanetId: null,
+              targetPlayerId: null,
+              targetPirateBaseId: pirate.id,
+              targetCoords: { ...pirate.coords },
+              mission: "pirateRaid",
+              ships,
+              cargo: { metal: 0, crystal: 0, deuterium: 0 },
+              departedAt: now,
+              arrivesAt: now,
+              phase: "outbound",
+              reportId: null,
+            },
+            now + 1,
+          );
+
+          const left = createPirateBase(universe.seed ?? universe.id, 3, 12, 6, now, 0, "coal-a");
+          const right = createPirateBase(universe.seed ?? universe.id, 3, 12, 7, now, 0, "coal-b");
+          left.ships = emptyFleetShips();
+          left.ships.interceptor = 20;
+          left.defenses = emptyDefenses();
+          right.ships = emptyFleetShips();
+          right.ships.scout = 3;
+          right.defenses = emptyDefenses();
+          right.defenses.laserBattery = 8;
+          universe.pirateBases![left.id] = left;
+          universe.pirateBases![right.id] = right;
+          applyNpcRaidOnNpc(universe, left, right, now + 2, () => {}, () => {});
+        }, { playerIds: [alpha.id] }),
+    );
+    const queries = db.count();
+    assert.ok(queries > 0 && queries <= 20, `normal request used ${queries} queries`);
+    const loaded = await loadWorkingSet(inner, { full: true });
+    assert.equal(loaded.universe.asteroids?.["ast-keep"]?.metal, 9);
+    assert.equal(loaded.universe.debris?.["deb-keep"]?.metal, 15);
+    assert.equal(loaded.universe.debris?.["deb-keep"]?.crystal, 4);
+    assert.ok((loaded.universe.debris?.["3:12:2"]?.metal ?? 0) > 0, "npc raid debris missing");
+    assert.ok((loaded.universe.debris?.["3:12:5"]?.metal ?? 0) > 0, "player raid debris missing");
+    assert.ok((loaded.universe.debris?.["3:12:7"]?.metal ?? 0) > 0, "npc versus npc debris missing");
   });
 
   it("rolls a mid-save conflict back with no partial write and no double apply", async () => {
@@ -1476,8 +1586,9 @@ describe("row save review fixes", () => {
     const { db } = sqliteD1();
     const source = fixture();
     source.miniPlanetIds = ["already-seeded"];
+    source.seed = "row-store-pirate-respawn";
     const alpha = Object.values(source.players).find((player) => player.name === "OldHand")!;
-    const now = Date.now();
+    const now = 1_700_000_000_000;
     const day = 24 * 60 * 60 * 1000;
     source.pirateBases = {};
     const destroyedIds: string[] = [];
@@ -1512,7 +1623,9 @@ describe("row save review fixes", () => {
     const living = activePirateBases(afterPage.universe);
     console.log(`pirate page-load living=${living.length} destroyedLeft=${Object.values(afterPage.universe.pirateBases ?? {}).filter((b) => b.destroyedAt != null).length}`);
     assert.ok(living.length >= PIRATE_TARGET_BASE_COUNT, `living ${living.length}`);
-    for (const id of destroyedIds) assert.equal(afterPage.universe.pirateBases?.[id], undefined);
+    for (const id of destroyedIds) {
+      assert.equal(afterPage.universe.pirateBases?.[id]?.destroyedAt == null, true);
+    }
     assert.equal(
       living.some((base) => base.coords.galaxy === blocked.galaxy && base.coords.system === blocked.system && base.coords.slot === blocked.slot),
       false,
