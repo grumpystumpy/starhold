@@ -58,6 +58,10 @@ import {
   SHIPS,
   SHIP_ORDER,
 } from "./catalog.js";
+import {
+  PIRATE_RAID_POWER_FACTOR_PLAYER,
+  PIRATE_TECH_OFFSET,
+} from "./data/tuning.js";
 import { mintCombatShareCode } from "./combat-share.js";
 import {
   computeRaidLoot,
@@ -157,7 +161,24 @@ export function pirateTechsForLevel(level: number): PirateTechs {
   return { weapons: v, armour: v, shielding: v };
 }
 
-export function pirateCombatResearch(base: PirateBase | AlienBase): ResearchLevels {
+export function pirateCombatResearchForOpponent(
+  opponentResearch?: ResearchLevels,
+): ResearchLevels {
+  const research = emptyResearch();
+  if (!opponentResearch) return research;
+  research.weaponsTech = Math.max(0, (opponentResearch.weaponsTech ?? 0) - PIRATE_TECH_OFFSET);
+  research.armourTech = Math.max(0, (opponentResearch.armourTech ?? 0) - PIRATE_TECH_OFFSET);
+  research.shieldingTech = Math.max(0, (opponentResearch.shieldingTech ?? 0) - PIRATE_TECH_OFFSET);
+  return research;
+}
+
+export function pirateCombatResearch(
+  base: PirateBase | AlienBase,
+  opponentResearch?: ResearchLevels,
+): ResearchLevels {
+  if (opponentResearch && base.id.startsWith("pir:")) {
+    return pirateCombatResearchForOpponent(opponentResearch);
+  }
   const techs = base.techs ?? pirateTechsForLevel(base.level ?? base.tier ?? 0);
   const research = emptyResearch();
   research.weaponsTech = techs.weapons;
@@ -398,7 +419,7 @@ export function rollNextRaidAt(
 function scaleShips(base: FleetShips, factor: number): FleetShips {
   const out = emptyFleetShips();
   for (const id of SHIP_ORDER) {
-    out[id] = Math.max(0, Math.floor((base[id] ?? 0) * factor));
+    out[id] = Math.max(0, Math.floor((base[id] ?? 0) * factor + 1e-9));
   }
   if (fleetShipCount(out) < 1 && fleetShipCount(base) > 0) {
     for (const id of SHIP_ORDER) {
@@ -993,16 +1014,48 @@ export function pirateRespawnAt(destroyedAt: number, baseId: string): number {
   );
 }
 
+export function applyStrongShipCap(
+  baseShips: FleetShips,
+  defenderShips?: FleetShips,
+): FleetShips {
+  if (!defenderShips) return normalizeFleetShips(baseShips);
+
+  const interceptorCost = resourcesCostTotal(SHIPS.interceptor.cost);
+  const out = normalizeFleetShips(baseShips);
+
+  for (const id of SHIP_ORDER) {
+    const cost = resourcesCostTotal(SHIPS[id].cost);
+    if (cost > interceptorCost) {
+      let defenderStrongerCount = 0;
+      for (const otherId of SHIP_ORDER) {
+        const otherCost = resourcesCostTotal(SHIPS[otherId].cost);
+        if (otherCost >= cost) {
+          defenderStrongerCount += defenderShips[otherId] ?? 0;
+        }
+      }
+      out[id] = Math.min(out[id] ?? 0, defenderStrongerCount);
+    }
+  }
+
+  return out;
+}
+
 export function scalePirateRaidFleet(
   full: FleetShips,
   defenderPower: number,
+  defenderShips?: FleetShips,
+  factorOverride?: number,
 ): FleetShips {
-  const fullPower = Math.max(1, fleetCombatPower(full));
-  const cap =
-    Math.max(PIRATE_RAID_POWER_FLOOR, defenderPower * PIRATE_RAID_POWER_FACTOR) ||
-    PIRATE_RAID_POWER_FLOOR;
-  if (fullPower <= cap) return normalizeFleetShips(full);
-  return scaleShips(full, cap / fullPower);
+  const factor =
+    factorOverride ??
+    (defenderShips ? PIRATE_RAID_POWER_FACTOR_PLAYER : PIRATE_RAID_POWER_FACTOR);
+  const eligible = defenderShips ? applyStrongShipCap(full, defenderShips) : normalizeFleetShips(full);
+  const eligiblePower = Math.max(1, fleetCombatPower(eligible));
+  const cap = defenderShips
+    ? Math.max(0, defenderPower * factor)
+    : Math.max(PIRATE_RAID_POWER_FLOOR, defenderPower * factor) || PIRATE_RAID_POWER_FLOOR;
+  const scaleFactor = Math.min(1, cap / eligiblePower);
+  return scaleShips(eligible, scaleFactor);
 }
 
 function applyFreeSpawnsPirate(base: PirateBase, now: number): void {
@@ -1349,18 +1402,29 @@ function applyNpcRaidOnPlanet(
   planet = live;
   const owner = universe.players[planet.ownerPlayerId];
   if (!owner) return;
-  const npcResearch = pirateCombatResearch(base);
-  const raidFleet = scalePirateRaidFleet(
-    base.ships,
-    planetDefensePower(planet, universe),
-  );
+  const defenderResearch = effectiveCombatResearch(owner);
+  const npcResearch = faction === "pirate"
+    ? pirateCombatResearchForOpponent(defenderResearch)
+    : pirateCombatResearch(base);
+  const raidFleet =
+    faction === "pirate"
+      ? scalePirateRaidFleet(
+          base.ships,
+          planetDefensePower(planet, universe),
+          planet.ships,
+          PIRATE_RAID_POWER_FACTOR_PLAYER,
+        )
+      : scalePirateRaidFleet(
+          base.ships,
+          planetDefensePower(planet, universe),
+        );
   if (fleetShipCount(raidFleet) < 1) return;
   const combat = resolveCombat(
     raidFleet,
     planet.ships,
     planet.defenses ?? emptyDefenses(),
     npcResearch,
-    effectiveCombatResearch(owner),
+    defenderResearch,
   );
   planet.ships = combat.defenderAfter;
   planet.defenses = combat.defensesAfter;
@@ -1400,6 +1464,7 @@ function applyNpcRaidOnPlanet(
       pirateBaseId: base.id,
       outcome: combat.outcome,
       planetId: planet.id,
+      raidFleet: JSON.stringify(raidFleet),
     },
   });
   universe.players[owner.id] = owner;
@@ -1668,12 +1733,16 @@ function resolveNpcRaidArrival(
   const defenderBefore = { ...base.ships };
   const defensesBefore = { ...base.defenses };
   const tierAtFight = base.tier;
+  const attackerResearch = effectiveCombatResearch(owner);
+  const defenderResearch = kind === "pirate"
+    ? pirateCombatResearchForOpponent(attackerResearch)
+    : pirateCombatResearch(base);
   const combat = resolveCombat(
     fleet.ships,
     defenderBefore,
     defensesBefore,
-    effectiveCombatResearch(owner),
-    pirateCombatResearch(base),
+    attackerResearch,
+    defenderResearch,
   );
   base.ships = combat.defenderAfter;
   base.defenses = combat.defensesAfter;

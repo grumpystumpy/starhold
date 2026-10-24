@@ -1352,7 +1352,9 @@ export const PIRATE_DEFENSE_WIN_STARSHARDS = 10;
  * raid power ≤ defenderPower × factor + floor.
  */
 export const PIRATE_RAID_POWER_FACTOR = 1.4;
+export const PIRATE_RAID_POWER_FACTOR_PLAYER = 0.70;
 export const PIRATE_RAID_POWER_FLOOR = 40;
+export const PIRATE_TECH_OFFSET = 3;
 
 /** Max catch-up raid firings per base per tick (lazy Hobby path). */
 export const NPC_RAID_CATCHUP_MAX = 24;
