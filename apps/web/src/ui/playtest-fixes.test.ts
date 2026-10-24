@@ -153,6 +153,7 @@ describe("playtest fixes", () => {
 
     base.player.researchQueue = [];
     base.player.research = { energyTech: 2 };
+    base.ownedPlanets = [{ id: "home", researchLab: 2 }] as unknown as PlayerView["ownedPlanets"];
     const metRow = researchRow("metallurgistTech", base, false);
     assert.match(metRow, /Metallurgist/);
     assert.match(metRow, /\+5% metal mine output per level/);
