@@ -2,6 +2,13 @@
 
 export type ResourceId = "metal" | "crystal" | "deuterium";
 
+export type WeaponType =
+  | "projectile"
+  | "laser"
+  | "ion"
+  | "plasma"
+  | "gravitational";
+
 export type BuildingId =
   | "metalMine"
   | "crystalMine"
@@ -205,6 +212,7 @@ export interface ShipDef {
   cargo: number;
   /** Combat / travel (invented — not scraped genre values) */
   attack: number;
+  weapons: Partial<Record<WeaponType, number>>;
   shield: number;
   armor: number;
   hull: number;
@@ -238,6 +246,7 @@ export interface DefenseDef {
   /** Minimum shipyard level */
   shipyardLevel: number;
   attack: number;
+  weapons: Partial<Record<WeaponType, number>>;
   shield: number;
   armor: number;
   hull: number;
