@@ -3,6 +3,7 @@ import {
   MAP_GALAXIES,
   MAP_SLOTS,
   MAP_SYSTEMS,
+  DEFENSE_ORDER,
   SHIP_ORDER,
   STARTING_RESOURCES,
   UNIVERSE_SCHEMA_VERSION,
@@ -221,6 +222,9 @@ export function ensureUniverseShape(universe: UniverseState): void {
     if (planet.parentPlanetId === undefined) planet.parentPlanetId = null;
     if (planet.moonId === undefined) planet.moonId = null;
     if (!planet.defenses) planet.defenses = emptyDefenses();
+    for (const id of DEFENSE_ORDER) {
+      if (planet.defenses[id] === undefined) planet.defenses[id] = 0;
+    }
     if (!Array.isArray(planet.buildQueue)) {
       planet.buildQueue = planet.buildQueue ? [planet.buildQueue as never] : [];
     }

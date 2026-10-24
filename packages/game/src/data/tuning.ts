@@ -527,6 +527,18 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
     armor: 10,
     hull: 25,
   },
+  prismLaser: {
+    id: "prismLaser",
+    name: "Prism Laser",
+    description: "Crystal-focused prism emitter.",
+    cost: { metal: 60, crystal: 200, deuterium: 0 },
+    buildSeconds: 9,
+    shipyardLevel: 2,
+    attack: 22,
+    shield: 6,
+    armor: 9,
+    hull: 22,
+  },
   arcLattice: {
     id: "arcLattice",
     name: "Arc Lattice",
