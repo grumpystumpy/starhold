@@ -291,6 +291,16 @@ describe("mini planets (Micah revision)", () => {
       miniPlanetId: miniId,
     };
 
+    const titanDestroy = resolveMiniPlanetChoice(
+      universe,
+      a.player.id,
+      fleetId,
+      "destroy",
+    );
+    assert.equal(titanDestroy.ok, false);
+    assert.equal(universe.planets[miniId]?.id, miniId);
+    assert.equal(universe.planets[miniId]?.ownerPlayerId, b.player.id);
+
     const cap = resolveMiniPlanetChoice(universe, a.player.id, fleetId, "capture");
     assert.equal(cap.ok, true);
     assert.equal(universe.planets[miniId]!.ownerPlayerId, a.player.id);
@@ -300,6 +310,54 @@ describe("mini planets (Micah revision)", () => {
       universe.miniPlanetIds!.find((id) => id !== miniId) ??
       universe.miniPlanetIds![1];
     assert.ok(mini2Id);
+    const mini3Id =
+      universe.miniPlanetIds!.find((id) => id !== miniId && id !== mini2Id) ??
+      universe.miniPlanetIds![2];
+    assert.ok(mini3Id);
+    const mini3 = universe.planets[mini3Id]!;
+    mini3.ownerPlayerId = b.player.id;
+    if (!universe.players[b.player.id]!.planetIds.includes(mini3Id)) {
+      universe.players[b.player.id]!.planetIds.push(mini3Id);
+    }
+    const mothershipFleetId = "flt_mothership_cap";
+    universe.fleets[mothershipFleetId] = {
+      ...structuredClone(universe.fleets[fleetId]!),
+      id: mothershipFleetId,
+      targetPlanetId: mini3Id,
+      targetCoords: { ...mini3.coords },
+      ships: normalizeFleetShips({ swarmMothership: 1 }),
+      reportId: "rpt_mothership_cap",
+    };
+    const mothershipReport = structuredClone(universe.reports.rpt_cap!);
+    delete mothershipReport.miniResolved;
+    universe.reports.rpt_mothership_cap = {
+      ...mothershipReport,
+      id: "rpt_mothership_cap",
+      missionId: mothershipFleetId,
+      targetCoords: { ...mini3.coords },
+      attackerBefore: normalizeFleetShips({ swarmMothership: 1 }),
+      attackerAfter: normalizeFleetShips({ swarmMothership: 1 }),
+      miniPlanetId: mini3Id,
+      miniResolveAvailable: true,
+    };
+    const mothershipDestroy = resolveMiniPlanetChoice(
+      universe,
+      a.player.id,
+      mothershipFleetId,
+      "destroy",
+    );
+    assert.equal(mothershipDestroy.ok, false);
+    assert.equal(universe.planets[mini3Id]?.id, mini3Id);
+    assert.equal(universe.planets[mini3Id]?.ownerPlayerId, b.player.id);
+    const mothershipCapture = resolveMiniPlanetChoice(
+      universe,
+      a.player.id,
+      mothershipFleetId,
+      "capture",
+    );
+    assert.equal(mothershipCapture.ok, true);
+    assert.equal(universe.planets[mini3Id]?.ownerPlayerId, a.player.id);
+
     const mini2 = universe.planets[mini2Id]!;
     mini2.ownerPlayerId = b.player.id;
     mini2.resources = { metal: 2000, crystal: 1000, deuterium: 5000 };

@@ -176,10 +176,10 @@ export function resolveRaidArrival(
       combat.attackerAfter,
       reportId,
     );
-    moonKillChancePct = kill.chancePct;
+    if (kill.chancePct > 0) moonKillChancePct = kill.chancePct;
     if (kill.destroyed) {
       moonDestroyed = true;
-      summary = `${combat.summary} Siege hulls shattered the moon (${kill.chancePct}% chance).`;
+      summary = `${combat.summary} Void Titans shattered the moon (${kill.chancePct}% chance).`;
     }
   } else {
     const moon = tryFormMoon(universe, target, debrisCreated, `${fleet.id}:${fleet.arrivesAt}`, now);
