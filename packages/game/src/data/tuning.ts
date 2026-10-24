@@ -493,7 +493,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
 export const DEFENSES: Record<DefenseId, DefenseDef> = {
   laserBattery: {
     id: "laserBattery",
-    name: "Beam Emplacement",
+    name: "Light Laser",
     description: "Static guns that fight with the hangar on raids.",
     cost: { metal: 150, crystal: 50, deuterium: 0 },
     buildSeconds: 10,
@@ -505,7 +505,7 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   shieldDome: {
     id: "shieldDome",
-    name: "Aegis Cupola",
+    name: "Small Shield Dome",
     description: "Planetary shield — soaks fire, low attack.",
     cost: { metal: 500, crystal: 300, deuterium: 0 },
     buildSeconds: 25,
@@ -517,8 +517,8 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   needleTurret: {
     id: "needleTurret",
-    name: "Needle Turret",
-    description: "Cheap mass DPS turret.",
+    name: "Rocket Launcher",
+    description: "Cheap metal-only rocket battery. Weak alone, strong in numbers.",
     cost: { metal: 200, crystal: 0, deuterium: 0 },
     buildSeconds: 8,
     shipyardLevel: 1,
@@ -529,7 +529,7 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   arcLattice: {
     id: "arcLattice",
-    name: "Arc Lattice",
+    name: "Laser Lattice",
     description: "Light beam lattice.",
     cost: { metal: 150, crystal: 50, deuterium: 0 },
     buildSeconds: 10,
@@ -541,7 +541,7 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   pulseBastion: {
     id: "pulseBastion",
-    name: "Pulse Bastion",
+    name: "Heavy Laser",
     description: "Mid-weight beam bastion.",
     cost: { metal: 600, crystal: 200, deuterium: 0 },
     buildSeconds: 25,
@@ -553,7 +553,7 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   gaussRail: {
     id: "gaussRail",
-    name: "Gauss Rail",
+    name: "Gauss Cannon",
     description: "Crystal-heavy pierce rail.",
     cost: { metal: 2000, crystal: 1500, deuterium: 0 },
     buildSeconds: 50,
@@ -565,7 +565,7 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   ionSheath: {
     id: "ionSheath",
-    name: "Ion Sheath",
+    name: "Ion Cannon",
     description: "Shield-breaker ion wall.",
     cost: { metal: 1000, crystal: 500, deuterium: 200 },
     buildSeconds: 45,
@@ -577,7 +577,7 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   plasmaSpire: {
     id: "plasmaSpire",
-    name: "Plasma Spire",
+    name: "Plasma Turret",
     description: "Late heavy DPS spire.",
     cost: { metal: 5000, crystal: 3000, deuterium: 1000 },
     buildSeconds: 90,
@@ -589,7 +589,7 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   flakCurtain: {
     id: "flakCurtain",
-    name: "Flak Curtain",
+    name: "Flak Cannon",
     description: "Anti-fighter flak with rapid fire vs light hulls.",
     cost: { metal: 400, crystal: 200, deuterium: 50 },
     buildSeconds: 18,
@@ -601,7 +601,7 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   kineticFence: {
     id: "kineticFence",
-    name: "Kinetic Fence",
+    name: "Mass Driver Fence",
     description: "Cheap hull wall.",
     cost: { metal: 400, crystal: 100, deuterium: 0 },
     buildSeconds: 12,
@@ -613,7 +613,7 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   emberMortar: {
     id: "emberMortar",
-    name: "Ember Mortar",
+    name: "Plasma Mortar",
     description: "Deut-hungry punch mortar.",
     cost: { metal: 800, crystal: 400, deuterium: 400 },
     buildSeconds: 35,
@@ -625,7 +625,7 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   rippleArray: {
     id: "rippleArray",
-    name: "Ripple Array",
+    name: "Ion Shield Array",
     description: "Mid soak shield array.",
     cost: { metal: 800, crystal: 600, deuterium: 0 },
     buildSeconds: 30,
@@ -637,8 +637,8 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   haloProjector: {
     id: "haloProjector",
-    name: "Halo Projector",
-    description: "Small cupola — soft-cap 1 per planet.",
+    name: "Halo Shield Projector",
+    description: "Small shield dome — soft-cap 1 per planet.",
     cost: { metal: 6000, crystal: 4000, deuterium: 0 },
     buildSeconds: 120,
     shipyardLevel: 5,
@@ -650,8 +650,8 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   crownAegis: {
     id: "crownAegis",
-    name: "Crown Aegis",
-    description: "Large cupola — soft-cap 1 per planet.",
+    name: "Large Shield Dome",
+    description: "Large shield dome — soft-cap 1 per planet.",
     cost: { metal: 50_000, crystal: 40_000, deuterium: 10_000 },
     buildSeconds: 600,
     shipyardLevel: 8,
@@ -663,7 +663,7 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   siegeBlockade: {
     id: "siegeBlockade",
-    name: "Siege Blockade",
+    name: "Ion Siege Bastion",
     description: "Anti-capital soak wall.",
     cost: { metal: 3000, crystal: 2000, deuterium: 500 },
     buildSeconds: 70,
@@ -675,7 +675,7 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   frostLance: {
     id: "frostLance",
-    name: "Frost Lance",
+    name: "Cryo Ion Lance",
     description: "Cold-slot preferential (+10% attack on slots 12–15).",
     cost: { metal: 900, crystal: 300, deuterium: 300 },
     buildSeconds: 40,
@@ -688,7 +688,7 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   voidWard: {
     id: "voidWard",
-    name: "Void Ward",
+    name: "Graviton Ward",
     description: "Elite late defense.",
     cost: { metal: 20_000, crystal: 15_000, deuterium: 5000 },
     buildSeconds: 300,
