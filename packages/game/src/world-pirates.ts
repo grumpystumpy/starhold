@@ -109,6 +109,8 @@ import { emptyCargo, planetAtCoords } from "./world-bootstrap.js";
 import { consumeTickBudget, syncPlanetForTick, tickBudget } from "./tick-budget.js";
 import { pushEventLog } from "./world-event-log.js";
 import {
+  isNewbieBonusActive,
+  NEWBIE_DEFENSE_MULT,
   pirateRaidPickWeight,
   recordSuccessfulPirateRaid,
 } from "./world-protection.js";
@@ -1361,6 +1363,7 @@ function applyNpcRaidOnPlanet(
     planet.defenses ?? emptyDefenses(),
     npcResearch,
     effectiveCombatResearch(owner),
+    { defenderUnitStatMult: isNewbieBonusActive(universe, owner, now) ? NEWBIE_DEFENSE_MULT : 1 },
   );
   planet.ships = combat.defenderAfter;
   planet.defenses = combat.defensesAfter;

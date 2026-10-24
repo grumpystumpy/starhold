@@ -616,6 +616,7 @@ export interface GalaxyView {
 
 export interface PlayerView {
   now: number;
+  newbieBonusEndsAt?: number | null;
   universe: {
     id: string;
     name: string;

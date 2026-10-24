@@ -45,6 +45,7 @@ import { maybeDestroyMoonWithTitans } from "./world-round2.js";
 import { pushEventLog } from "./world-event-log.js";
 import { awardSeasonPvpWin, isSeasonPvpMission } from "./world-seasons.js";
 import { addDebris, subtractCargo } from "./world-tick.js";
+import { isNewbieBonusActive, NEWBIE_DEFENSE_MULT } from "./world-protection.js";
 
 /** Resolve outbound raid at target; mutates fleet cargo/ships/reportId. */
 export function resolveRaidArrival(
@@ -80,6 +81,7 @@ export function resolveRaidArrival(
       defenseSlot: target.coords.slot,
       battlefield: fortressField,
       seed: `${fleet.id}:${fleet.arrivesAt}`,
+      defenderUnitStatMult: isNewbieBonusActive(universe, defenderOwner, now) ? NEWBIE_DEFENSE_MULT : 1,
     },
   );
   target.ships = combat.defenderAfter;

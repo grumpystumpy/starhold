@@ -66,6 +66,11 @@ import { occupationForPlanet } from "./world-occupation.js";
 import { empireDriftBeaconCount, playerKnowsMini } from "./world-mini.js";
 import { seasonLeaderboardView } from "./world-seasons.js";
 import { getDebris } from "./world-tick.js";
+import {
+  isNewbieBonusActive,
+  NEWBIE_BONUS_DURATION_MS,
+  NEWBIE_PRODUCTION_MULT,
+} from "./world-protection.js";
 
 export { empirePoints };
 
@@ -453,7 +458,8 @@ export function playerView(
         mineOutput:
           levelBonuses(player.level ?? 1).production *
           boosts.mineOutput *
-          classBonuses(player.playerClass?.classId).mineOutput,
+          classBonuses(player.playerClass?.classId).mineOutput *
+          (isNewbieBonusActive(universe, player, now) ? NEWBIE_PRODUCTION_MULT : 1),
         energyOutput:
           boosts.energyOutput *
           classBonuses(player.playerClass?.classId).energyOutput,
@@ -478,6 +484,9 @@ export function playerView(
     spyReports,
     expeditionReports,
     sensorContacts,
+    newbieBonusEndsAt: isNewbieBonusActive(universe, player, now)
+      ? player.createdAt + NEWBIE_BONUS_DURATION_MS
+      : null,
     hostileInbound,
     starshards: player.starshards ?? 0,
     officers: player.officers ?? [],

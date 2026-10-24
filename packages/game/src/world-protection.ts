@@ -10,6 +10,34 @@ import { utcDayKey } from "./world-boosts.js";
 /** Pirates ignore a new player until 48 hours after creation. */
 export const PIRATE_NEW_PLAYER_PROTECTION_MS = 48 * 60 * 60 * 1000;
 
+export const NEWBIE_BONUS_DURATION_MS = 96 * 60 * 60 * 1000;
+export const NEWBIE_PRODUCTION_MULT = 1.5;
+export const NEWBIE_DEFENSE_MULT = 2.0;
+
+export function newbieBonusRemainingMs(
+  universe: UniverseState,
+  player: PlayerState | undefined,
+  now: number,
+): number {
+  if (
+    !player || typeof player.createdAt !== "number" || player.createdAt <= 0 ||
+    now < player.createdAt || now - player.createdAt >= NEWBIE_BONUS_DURATION_MS
+  ) return 0;
+  if (player.newbieForfeitedAt != null) return 0;
+  if (isNewbieProtected(universe, player)) {
+    return Math.max(0, player.createdAt + NEWBIE_BONUS_DURATION_MS - now);
+  }
+  return 0;
+}
+
+export function isNewbieBonusActive(
+  universe: UniverseState,
+  player: PlayerState | undefined,
+  now: number,
+): boolean {
+  return newbieBonusRemainingMs(universe, player, now) > 0;
+}
+
 /** True while below the points threshold and before the player forfeits protection. */
 export function isNewbieProtected(
   universe: UniverseState,

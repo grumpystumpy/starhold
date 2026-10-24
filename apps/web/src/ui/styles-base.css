@@ -191,6 +191,18 @@ button.ghost {
   align-items: center;
 }
 
+.topbar-newbie-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent, #c9a227) 20%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent, #c9a227) 50%, transparent);
+  color: var(--accent, #c9a227);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
 .topbar-progress {
   display: flex;
   align-items: center;

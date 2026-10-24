@@ -118,8 +118,13 @@ export {
 } from "./world-view.js";
 export { ensureSystemVisited } from "./world-seed.js";
 export {
+  NEWBIE_BONUS_DURATION_MS,
+  NEWBIE_DEFENSE_MULT,
+  NEWBIE_PRODUCTION_MULT,
   graduateNewbieProtection,
+  isNewbieBonusActive,
   isNewbieProtected,
+  newbieBonusRemainingMs,
   pirateRaidPickWeight,
   recordSuccessfulPirateRaid,
 } from "./world-protection.js";
