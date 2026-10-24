@@ -1,6 +1,9 @@
 import {
+  DEBRIS_FROM_DEFENSES,
   DEBRIS_FROM_SHIPS,
   DEFENSE_ORDER,
+  DEFENSE_REBUILD_MINER_RATE,
+  DEFENSE_REBUILD_RATE,
   DEFENSES,
   MAX_COMBAT_ROUNDS,
   RAID_LOOT_SHARE,
@@ -120,6 +123,66 @@ export function debrisFromDestroyed(destroyed: Resources): Resources {
     metal: Math.floor(destroyed.metal * DEBRIS_FROM_SHIPS),
     crystal: Math.floor(destroyed.crystal * DEBRIS_FROM_SHIPS),
     deuterium: 0,
+  };
+}
+
+/** 5% of metal/crystal on defenses that stay destroyed after rebuild. */
+export function debrisFromDestroyedDefenses(
+  permanentlyLost: Partial<Record<DefenseId, number>>,
+): Resources {
+  let metal = 0;
+  let crystal = 0;
+  for (const id of DEFENSE_ORDER) {
+    const n = permanentlyLost[id] ?? 0;
+    if (n <= 0) continue;
+    const cost = DEFENSES[id].cost;
+    metal += cost.metal * n;
+    crystal += cost.crystal * n;
+  }
+  return {
+    metal: Math.floor(metal * DEBRIS_FROM_DEFENSES),
+    crystal: Math.floor(crystal * DEBRIS_FROM_DEFENSES),
+    deuterium: 0,
+  };
+}
+
+export function defenseRebuildRate(classId: string | null | undefined): number {
+  return classId === "miner" ? DEFENSE_REBUILD_MINER_RATE : DEFENSE_REBUILD_RATE;
+}
+
+export interface DefenseRebuild {
+  defensesAfter: DefenseStock;
+  defensesDestroyed: Partial<Record<DefenseId, number>>;
+  defensesRebuilt: Partial<Record<DefenseId, number>>;
+  defensesPermanentlyLost: Partial<Record<DefenseId, number>>;
+}
+
+/** Restore a fraction of defenses destroyed in combat. Does not change the shot loop. */
+export function rebuildDefenses(
+  before: DefenseStock,
+  afterCombat: DefenseStock,
+  rate: number,
+): DefenseRebuild {
+  const defensesAfter = emptyDefenses();
+  const defensesDestroyed: Partial<Record<DefenseId, number>> = {};
+  const defensesRebuilt: Partial<Record<DefenseId, number>> = {};
+  const defensesPermanentlyLost: Partial<Record<DefenseId, number>> = {};
+  for (const id of DEFENSE_ORDER) {
+    const had = before[id] ?? 0;
+    const left = afterCombat[id] ?? 0;
+    const lost = Math.max(0, had - left);
+    const rebuilt = Math.round(lost * rate);
+    const permanentlyLost = Math.max(0, lost - rebuilt);
+    defensesAfter[id] = left + rebuilt;
+    if (lost > 0) defensesDestroyed[id] = lost;
+    if (rebuilt > 0) defensesRebuilt[id] = rebuilt;
+    if (permanentlyLost > 0) defensesPermanentlyLost[id] = permanentlyLost;
+  }
+  return {
+    defensesAfter,
+    defensesDestroyed,
+    defensesRebuilt,
+    defensesPermanentlyLost,
   };
 }
 

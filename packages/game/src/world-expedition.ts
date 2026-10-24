@@ -1,6 +1,7 @@
-import { SHIPS, SHIP_ORDER } from "./catalog.js";
+import { EXPEDITION_AMBUSH_DEBRIS_RATE, EXPEDITION_SLOT, SHIPS, SHIP_ORDER } from "./catalog.js";
 import {
   classBonuses,
+  destroyedShipResources,
   emptyFleetShips,
   fleetCargoCapacity,
   grantPlayerXp,
@@ -33,6 +34,7 @@ export const EXPEDITION_RESOURCE_ROLL_BASE = 0.55;
 export const EXPEDITION_RESOURCE_ROLL_RANGE = 20;
 export const EXPEDITION_RESOURCE_ROLL_DIVISOR = 40;
 import { noteGoalMetric } from "./world-goals.js";
+import { addDebris } from "./world-tick.js";
 import {
   discoverMiniPlanet,
   empireRelicExpeditionFindMult,
@@ -135,6 +137,7 @@ export function resolveExpeditionArrival(
   let cargoGained: Resources = { metal: 0, crystal: 0, deuterium: 0 };
   const shipsDelta: Partial<FleetShips> = {};
   let starshardsGained = 0;
+  let debrisCreated: Resources | undefined;
   let miniPlanetId: string | undefined;
   let miniCoords: Coordinates | undefined;
   let summary: string;
@@ -197,6 +200,17 @@ export function resolveExpeditionArrival(
         if (delta !== 0) shipsDelta[id as ShipId] = delta;
       }
       fleet.ships = after;
+      const lost = destroyedShipResources(before, after);
+      debrisCreated = {
+        metal: Math.floor(lost.metal * EXPEDITION_AMBUSH_DEBRIS_RATE),
+        crystal: Math.floor(lost.crystal * EXPEDITION_AMBUSH_DEBRIS_RATE),
+        deuterium: 0,
+      };
+      addDebris(universe, {
+        galaxy: fleet.targetCoords.galaxy,
+        system: fleet.targetCoords.system,
+        slot: EXPEDITION_SLOT,
+      }, debrisCreated);
       const crumb = Math.min(40, fleetCargoCapacity(after));
       cargoGained = {
         metal: Math.floor(crumb * 0.5),
@@ -266,6 +280,7 @@ export function resolveExpeditionArrival(
     kind,
     cargoGained,
     shipsDelta,
+    debrisCreated,
     starshardsGained: starshardsGained || undefined,
     miniPlanetId,
     miniCoords,
