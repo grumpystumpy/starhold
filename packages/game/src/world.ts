@@ -172,6 +172,8 @@ export {
   activePirateBases,
   alienBaseAtCoords,
   alienBaseId,
+  applyNpcRaidOnNpc,
+  applyNpcRaidOnPlanet,
   createAlienBase,
   createPirateBase,
   ensurePiratePopulation,
