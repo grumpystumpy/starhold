@@ -26,6 +26,7 @@ import type {
   DefenseId,
   PlanetState,
   ResearchId,
+  ResearchLevels,
   Resources,
   ShipId,
 } from "./types.js";
@@ -393,6 +394,7 @@ export function productionPerHour(
   universeSpeed = 1,
   energyTechLevel = 0,
   boosts?: ProductionBoosts,
+  research?: Partial<ResearchLevels>,
 ): Resources {
   const energyMult =
     (boosts?.energyOutput ?? 1) *
@@ -414,25 +416,33 @@ export function productionPerHour(
   const baseIncome = isMoon(planet) || !planet.ownerPlayerId
     ? { metal: 0, crystal: 0, deuterium: 0 }
     : BASE_INCOME_PER_HOUR;
+
+  const metTechMult = 1 + (research?.metallurgistTech ?? 0) * 0.05;
+  const cryTechMult = 1 + (research?.crystalizerTech ?? 0) * 0.05;
+  const deutTechMult = 1 + (research?.deutSynthesisTech ?? 0) * 0.05;
+
   return {
     metal:
       mineOutputPerHour("metal", planet.buildings.metalMine ?? 0) *
       factor *
       incomeScale *
-      pos.metal +
+      pos.metal *
+      metTechMult +
       baseIncome.metal,
     crystal:
       mineOutputPerHour("crystal", planet.buildings.crystalMine ?? 0) *
       factor *
       incomeScale *
-      pos.crystal +
+      pos.crystal *
+      cryTechMult +
       baseIncome.crystal,
     deuterium:
       mineOutputPerHour("deuterium", planet.buildings.deutSynth ?? 0) *
       factor *
       incomeScale *
       pos.deuterium *
-      ironwaterDeut +
+      ironwaterDeut *
+      deutTechMult +
       baseIncome.deuterium,
   };
 }

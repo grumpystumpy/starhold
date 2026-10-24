@@ -458,6 +458,7 @@ export function playerView(
           boosts.energyOutput *
           classBonuses(player.playerClass?.classId).energyOutput,
       },
+      player.research,
       ),
       storage: storageForPlanet(universe, planet, now),
     },

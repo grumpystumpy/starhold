@@ -188,6 +188,9 @@ export function ensureUniverseShape(universe: UniverseState): void {
     if (player.research.queueLogistics == null) player.research.queueLogistics = 0;
     if (player.research.swarmHold == null) player.research.swarmHold = 0;
     if (player.research.gravityWell == null) player.research.gravityWell = 0;
+    if (player.research.metallurgistTech == null) player.research.metallurgistTech = 0;
+    if (player.research.crystalizerTech == null) player.research.crystalizerTech = 0;
+    if (player.research.deutSynthesisTech == null) player.research.deutSynthesisTech = 0;
     if (!player.playerClass) player.playerClass = emptyPlayerClass();
     if (!Array.isArray(player.researchQueue)) {
       player.researchQueue = player.researchQueue

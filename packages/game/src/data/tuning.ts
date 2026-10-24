@@ -998,6 +998,36 @@ export const RESEARCH: Record<ResearchId, ResearchDef> = {
     labLevel: 12,
     requires: { energyTech: 8, shieldingTech: 5 },
   },
+  metallurgistTech: {
+    id: "metallurgistTech",
+    name: "Metallurgist",
+    description: "+5% metal mine output per level.",
+    baseCost: { metal: 60, crystal: 30, deuterium: 0 },
+    costGrowth: 2.5,
+    baseResearchSeconds: 40,
+    labLevel: 1,
+    requires: { energyTech: 1 },
+  },
+  crystalizerTech: {
+    id: "crystalizerTech",
+    name: "Crystalizer",
+    description: "+5% crystal mine output per level.",
+    baseCost: { metal: 40, crystal: 80, deuterium: 20 },
+    costGrowth: 2.5,
+    baseResearchSeconds: 40,
+    labLevel: 1,
+    requires: { energyTech: 1 },
+  },
+  deutSynthesisTech: {
+    id: "deutSynthesisTech",
+    name: "Deut Synthesis",
+    description: "+5% deuterium synthesizer output per level.",
+    baseCost: { metal: 60, crystal: 60, deuterium: 40 },
+    costGrowth: 2.5,
+    baseResearchSeconds: 40,
+    labLevel: 2,
+    requires: { energyTech: 2 },
+  },
 
 };
 

@@ -150,6 +150,24 @@ describe("playtest fixes", () => {
     assert.match(full, />Queue full</);
     assert.match(full, /disabled/);
     assert.doesNotMatch(full, /Needs lab/);
+
+    base.player.researchQueue = [];
+    base.player.research = { energyTech: 2 };
+    base.ownedPlanets = [{ id: "home", researchLab: 2 }] as unknown as PlayerView["ownedPlanets"];
+    const metRow = researchRow("metallurgistTech", base, false);
+    assert.match(metRow, /Metallurgist/);
+    assert.match(metRow, /\+5% metal mine output per level/);
+    assert.match(metRow, />Research</);
+
+    const cryRow = researchRow("crystalizerTech", base, false);
+    assert.match(cryRow, /Crystalizer/);
+    assert.match(cryRow, /\+5% crystal mine output per level/);
+    assert.match(cryRow, />Research</);
+
+    const deutRow = researchRow("deutSynthesisTech", base, false);
+    assert.match(deutRow, /Deut Synthesis/);
+    assert.match(deutRow, /\+5% deuterium synthesizer output per level/);
+    assert.match(deutRow, />Research</);
   });
 
   it("labels spy targets and hides protected attack targets", () => {
