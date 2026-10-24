@@ -14,6 +14,7 @@ import {
   type UniverseState,
 } from "@starhold/game";
 import { continueUniverseSeed } from "../../../packages/game/src/world-seed.ts";
+import { installDeterministicInputs } from "../../../packages/game/src/test-determinism.ts";
 import { createD1Store, type D1Like } from "./d1-store.js";
 import { runWithScope } from "./request-context.js";
 import { loadWorkingSet, migrateAll, migrationDone } from "./row-store.js";
@@ -161,7 +162,9 @@ describe("real local D1", () => {
 
   it("respawns destroyed pirates through a page load", async () => {
     const { db, dispose } = await openD1();
+    let restoreInputs: (() => void) | undefined;
     try {
+      restoreInputs = installDeterministicInputs(0x50495241, 1_700_000_000_000);
       resetMemoryUniverse();
       const now = Date.now();
       const day = 24 * 60 * 60 * 1000;
@@ -202,12 +205,19 @@ describe("real local D1", () => {
       const living = activePirateBases(loaded.universe);
       console.log(`d1 pirate page-load living=${living.length}`);
       assert.ok(living.length >= PIRATE_TARGET_BASE_COUNT, `living ${living.length}`);
-      for (const id of destroyedIds) assert.equal(loaded.universe.pirateBases?.[id], undefined);
+      for (const id of destroyedIds) {
+        const base = loaded.universe.pirateBases?.[id];
+        assert.ok(
+          base === undefined || (base.destroyedAt === null && (base.lastFreeSpawnAt ?? 0) >= now),
+          `destroyed pirate ${id} was not removed or freshly respawned`,
+        );
+      }
       assert.equal(
         living.some((base) => base.coords.galaxy === blocked.galaxy && base.coords.system === blocked.system && base.coords.slot === blocked.slot),
         false,
       );
     } finally {
+      restoreInputs?.();
       resetMemoryUniverse();
       await dispose();
     }

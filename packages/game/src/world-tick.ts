@@ -5,7 +5,6 @@ import {
   emptyDefenses,
   grantPlayerXp,
   productionPerHour,
-  storageFor,
   xpForResearch,
 } from "./formulas.js";
 import {
@@ -27,6 +26,7 @@ import type {
 import { formatEventCount, pushEventLog } from "./world-event-log.js";
 import { ensureQueueFrontStarted } from "./world-queue-normalize.js";
 import { addSeasonEconomySpend } from "./world-seasons.js";
+import { storageForPlanet } from "./world-boosts.js";
 
 const MIN_UNIT_SECONDS = 1e-9;
 
@@ -193,7 +193,7 @@ export function advancePlanet(
       boosts,
     );
     const hours = elapsedMs / 3_600_000;
-    const caps = storageFor(state);
+    const caps = storageForPlanet(owner, state, now);
     state.resources = clampToStorage(
       {
         metal: state.resources.metal + rates.metal * hours,
@@ -297,8 +297,13 @@ export function addShipsToPlanet(planet: PlanetState, ships: FleetShips): void {
   }
 }
 
-export function addCargoToPlanet(planet: PlanetState, cargo: Resources): void {
-  const caps = storageFor(planet);
+export function addCargoToPlanet(
+  universe: UniverseState,
+  planet: PlanetState,
+  cargo: Resources,
+  now: number,
+): void {
+  const caps = storageForPlanet(universe, planet, now);
   planet.resources = clampToStorage(
     {
       metal: planet.resources.metal + cargo.metal,

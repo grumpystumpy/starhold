@@ -22,6 +22,12 @@ import {
 } from "./session";
 import { captureGameEvent } from "./telemetry";
 import { settleMutation } from "./recover-action";
+import {
+  fleetDraftAfterPreset,
+  rememberFleetDraft,
+  rememberedFleetDraft,
+  resetFleetComposer,
+} from "./ui/render-fleets-draft";
 
 function intentMission(intent: FleetPresetIntent): MissionType {
   switch (intent) {
@@ -93,6 +99,7 @@ export async function doLaunchFleet(opts: {
   try {
     session.view = await launchFleetMission(session.view.player.id, opts);
     setFlash("notice", fleetNotice(session.view, opts.mission));
+    resetFleetComposer();
   } catch (err) {
     const before = new Set((session.view?.fleets ?? []).map((fleet) => fleet.id));
     await settleMutation({
@@ -101,6 +108,7 @@ export async function doLaunchFleet(opts: {
       applied: (view) => view.fleets.some((fleet) => !before.has(fleet.id)),
       successNotice: (view) => fleetNotice(view, opts.mission),
     });
+    if (!session.error) resetFleetComposer();
   } finally {
     session.busy = false;
     schedulePaint();
@@ -143,6 +151,18 @@ export function doApplyFleetPreset(): void {
 
   const nameInput = root.querySelector<HTMLInputElement>("#fleet-preset-name");
   if (nameInput && !preset.builtIn) nameInput.value = preset.name;
+
+  const counts: Partial<FleetShips> = {};
+  for (const id of SHIP_ORDER) {
+    const input = form.querySelector<HTMLInputElement>(
+      `[data-fleet-count="${id}"]`,
+    );
+    if (!input) continue;
+    counts[id] = Math.max(0, Math.floor(Number(input.value) || 0));
+  }
+  const next = fleetDraftAfterPreset(rememberedFleetDraft(), mission, counts);
+  rememberFleetDraft(next);
+  form.setAttribute("data-fleet-step", String(next.step));
 
   setFlash("notice", `Loaded preset “${preset.name}”.`);
   schedulePaint();

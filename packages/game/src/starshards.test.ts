@@ -10,6 +10,8 @@ import {
 } from "./catalog.js";
 import { expeditionKindFromRoll } from "./world-expedition.js";
 import { storageFor } from "./formulas-build.js";
+import { playerBoosts, storageForPlanet } from "./world-boosts.js";
+import { addCargoToPlanet, advancePlanet } from "./world-tick.js";
 import {
   activateOfficer,
   claimDailyLogin,
@@ -26,6 +28,61 @@ import {
 } from "./world.js";
 
 describe("Thread D Starshards / officers / skills", () => {
+  it("keeps old-save storage unchanged and boosts all caps while Vaultkeeper is active", () => {
+    const universe = createUniverse("Legacy Storage", 8);
+    const joined = joinUniverse(universe, "Legacy", 159_900_000);
+    const player = universe.players[joined.player.id]!;
+    const planet = universe.planets[joined.planet.id]!;
+    planet.buildings.metalStorage = 2;
+    planet.buildings.crystalStorage = 3;
+    planet.buildings.deutTank = 4;
+    planet.resources = { metal: 123, crystal: 456, deuterium: 789 };
+    delete player.officers;
+
+    const legacyCaps = storageFor(planet, playerBoosts(player, 159_900_000).storageCapacity);
+    assert.deepEqual(legacyCaps, storageFor(planet));
+    assert.deepEqual(planet.resources, { metal: 123, crystal: 456, deuterium: 789 });
+
+    player.officers = [{ officerId: "vaultkeeper", activatedAt: 159_900_000, expiresAt: 160_000_000 }];
+    const boostedCaps = storageFor(planet, playerBoosts(player, 159_900_001).storageCapacity);
+    const baseCaps = storageFor(planet);
+    assert.deepEqual(boostedCaps, {
+      metal: Math.floor(baseCaps.metal * 1.1),
+      crystal: Math.floor(baseCaps.crystal * 1.1),
+      deuterium: Math.floor(baseCaps.deuterium * 1.1),
+    });
+    assert.equal(playerBoosts(player, 160_000_000).storageCapacity, 1);
+  });
+
+  it("uses owned Vaultkeeper caps for production and delivery, never NPC caps", () => {
+    const universe = createUniverse("Vaultkeeper Caps", 8);
+    const joined = joinUniverse(universe, "Vault", 159_900_000);
+    const player = universe.players[joined.player.id]!;
+    const planet = universe.planets[joined.planet.id]!;
+    planet.buildings = { metalStorage: 2, crystalStorage: 2, deutTank: 2 };
+    player.officers = [{ officerId: "vaultkeeper", activatedAt: 159_900_000, expiresAt: 200_000_000 }];
+
+    const base = storageFor(planet);
+    const boosted = storageForPlanet(universe, planet, 159_900_001);
+    assert.ok(boosted.metal > 0);
+    planet.resources = { ...boosted };
+    planet.lastTickAt = 159_900_001;
+    const produced = advancePlanet(planet, universe.speed, 159_900_001 + 3_600_000, 0, undefined, player);
+    assert.deepEqual(produced.resources, boosted);
+    const unboostedTick = advancePlanet(planet, universe.speed, 159_900_001 + 3_600_000, 0);
+    assert.deepEqual(unboostedTick.resources, base);
+
+    planet.resources = { metal: base.metal, crystal: base.crystal, deuterium: base.deuterium };
+    addCargoToPlanet(universe, planet, { metal: 100_000, crystal: 100_000, deuterium: 100_000 }, 159_900_002);
+    assert.deepEqual(planet.resources, boosted);
+
+    const npc = structuredClone(planet);
+    npc.id = "npc-planet";
+    npc.ownerPlayerId = "pirate-npc";
+    assert.deepEqual(storageForPlanet(universe, npc, 159_900_002), storageFor(npc));
+    assert.deepEqual(storageForPlanet(universe, planet, 200_000_000), storageFor(planet));
+  });
+
   it("trades 1500 Starshards for the fixed resource bundle and back", () => {
     const universe = createUniverse("Shard Exchange", 8);
     const a = joinUniverse(universe, "Trader", 159_900_000);
@@ -306,7 +363,7 @@ describe("Thread D Starshards / officers / skills", () => {
     const a = joinUniverse(universe, "Viewer", 164_000_000);
     const view = playerView(universe, a.player.id, 164_000_000);
     assert.equal(view.starshards, 0);
-    assert.equal(view.officerCatalog.length, 6);
+    assert.equal(view.officerCatalog.length, 7);
     assert.equal(view.skillCatalog.length, 13);
     assert.equal(view.dailyLoginAvailable, true);
     assert.deepEqual(view.officers, []);

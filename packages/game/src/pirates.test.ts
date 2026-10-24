@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { afterEach, beforeEach, describe, it } from "node:test";
+import { performance } from "node:perf_hooks";
 import { continueUniverseSeed } from "./world-seed.js";
+import { installDeterministicInputs } from "./test-determinism.js";
 import {
   ALIEN_BUILDUP_MS,
   ALIEN_INITIAL_BASE_COUNT,
@@ -53,6 +55,15 @@ import {
 import type { TickBudget } from "./tick-budget.js";
 import type { FleetMission, UniverseState } from "./types.js";
 import { findNearestOpenSlot1 } from "./world-pirates.js";
+
+let restoreInputs: (() => void) | undefined;
+beforeEach(() => {
+  restoreInputs = installDeterministicInputs(0x50495241, 1_700_000_000_000);
+});
+afterEach(() => {
+  restoreInputs?.();
+  restoreInputs = undefined;
+});
 
 describe("pirate balance helpers", () => {
   it("pays Starshards by tier on destroy", () => {
@@ -527,14 +538,14 @@ describe("lazy tick perf smoke", () => {
   it("catch-up ticks 200 bases across multi-hour window under budget", () => {
     const universe = createUniverse("Perf", 8);
     assert.ok(activePirateBases(universe).length >= 150);
-    const t0 = Date.now();
+    const t0 = performance.now();
     // Jump ~6 hours so growth + free spawn + several raid windows catch up.
     const now =
       (universe.lastAiSimAt ?? Date.now()) +
       PIRATE_LEVEL_GROWTH_INTERVAL_MS +
       PIRATE_RAID_PERIOD_MS * 3;
     tickPirates(universe, now);
-    const elapsed = Date.now() - t0;
+    const elapsed = performance.now() - t0;
     assert.ok(elapsed < 15_000, `tick took ${elapsed}ms`);
     assert.equal(universe.lastAiSimAt, now);
   });

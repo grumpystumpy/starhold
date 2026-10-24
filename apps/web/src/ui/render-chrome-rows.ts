@@ -1,6 +1,7 @@
 import {
   DEFENSES,
   RESEARCH,
+  RESEARCH_ORDER,
   SHIPS,
   canAfford,
   defenseCost,
@@ -165,6 +166,14 @@ export function researchRow(
   );
   const blocked = preview.ok ? null : preview.error;
   const label = researchButtonLabel(blocked);
+  const requiredResearch = RESEARCH_ORDER.flatMap((requiredId) => {
+    const requiredLevel = def.requires?.[requiredId];
+    return requiredLevel == null
+      ? []
+      : [
+          `${RESEARCH[requiredId].name} L${fmt(requiredLevel)}+ (current L${fmt(view.player.research?.[requiredId] ?? 0)})`,
+        ];
+  });
   const tip = costTooltip({
     action: `Research ${def.name} → L${fmt(preview.current + 1)}`,
     cost,
@@ -172,6 +181,7 @@ export function researchRow(
     detail: def.description,
     requires: [
       `Research Lab L${fmt(def.labLevel)}+`,
+      ...requiredResearch,
       `Best lab L${fmt(lab)}`,
       `Current L${fmt(level)}`,
     ],

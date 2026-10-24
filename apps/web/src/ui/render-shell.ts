@@ -207,9 +207,6 @@ export function shellHtml(
             <span class="xp-text">${fmt(progress.xp)} / ${fmt(progress.xpToNext)}</span>
           </div>
         </div>
-        <div class="topbar-actions">
-          <button type="button" class="ghost" id="refresh-btn" data-testid="refresh-btn" ${state.busy ? "disabled" : ""}>Refresh</button>
-        </div>
       </header>
       <div data-flash-slot>${flashHtml(state.error, state.notice)}</div>
       <button type="button" class="idle-pause" data-testid="idle-pause"${session.idlePaused ? "" : " hidden"}>Paused, tap to resume</button>

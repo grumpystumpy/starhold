@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { PlayerView } from "@starhold/game";
 import { fleetComposer } from "./render-fleets-composer";
-import { fleetDraftWithAcsPrefill } from "./render-fleets-draft";
+import {
+  fleetDraftWithAcsPrefill,
+  type FleetDraft,
+} from "./render-fleets-draft";
 
 function fleetView(): PlayerView {
   return {
@@ -39,12 +42,26 @@ function fleetView(): PlayerView {
 
 describe("Joint Strike fleet prefill", () => {
   it("arms raid, target coords, and Open ACS before the form exists", () => {
-    const draft = fleetDraftWithAcsPrefill(null, {
+    const base: FleetDraft = {
+      targetPlanetId: null,
+      targetCoords: null,
+      asteroidId: null,
+      pirateBaseId: null,
+      alienBaseId: null,
+      mission: "deploy",
+      counts: { scout: 1 },
+      cargo: {},
+      openAcs: false,
+      step: 1,
+      speedPercent: 100,
+    };
+    const draft = fleetDraftWithAcsPrefill(base, {
       coords: { galaxy: 1, system: 1, slot: 1 },
       mission: "raid",
       note: "",
       openAcs: true,
     });
+    assert.equal(draft.step, 2);
     const html = fleetComposer(fleetView(), false, draft);
     assert.match(html, /data-testid="mission-raid"[^>]*checked/);
     assert.match(html, /value="coords:1:1:1" selected/);
@@ -65,5 +82,80 @@ describe("fleet slot counters", () => {
     view.expeditionSlotCap = 3;
     const withBeacon = fleetComposer(view, false, null);
     assert.match(withBeacon, /Fleets 2\/6 · Expeditions 1\/3/);
+  });
+});
+
+describe("newbie protection launch warning", () => {
+  it("warns protected players before attacking another player, but not spying or raiding pirates", () => {
+    const view = fleetView();
+    view.roster = [
+      {
+        id: "p1",
+        name: "Alpha",
+        planetId: "pl1",
+        pointsHint: 100,
+        coords: { galaxy: 1, system: 1, slot: 8 },
+      },
+      {
+        id: "p2",
+        name: "Rival",
+        planetId: "pl2",
+        pointsHint: 3000,
+        coords: { galaxy: 1, system: 1, slot: 9 },
+      },
+    ] as PlayerView["roster"];
+
+    const raid = fleetComposer(view, false, {
+      step: 2,
+      targetPlanetId: "pl2",
+      targetCoords: null,
+      asteroidId: null,
+      pirateBaseId: null,
+      alienBaseId: null,
+      mission: "raid",
+      counts: {},
+      cargo: {},
+      openAcs: false,
+    });
+    assert.match(raid, /Launching this attack ends your newbie protection/);
+
+    const spy = fleetComposer(view, false, {
+      step: 2,
+      targetPlanetId: "pl2",
+      targetCoords: null,
+      asteroidId: null,
+      pirateBaseId: null,
+      alienBaseId: null,
+      mission: "espionage",
+      counts: {},
+      cargo: {},
+      openAcs: false,
+    });
+    assert.doesNotMatch(spy, /ends your newbie protection/);
+
+    view.galaxy = {
+      ...view.galaxy,
+      pirateBase: {
+        id: "pirate1",
+        name: "Pirates",
+        coords: { galaxy: 1, system: 1, slot: 1 },
+        tier: 1,
+        level: 1,
+        threatHint: "low",
+      },
+    } as PlayerView["galaxy"];
+    const pirateRaid = fleetComposer(view, false, {
+      step: 2,
+      targetPlanetId: null,
+      targetCoords: null,
+      asteroidId: null,
+      pirateBaseId: "pirate1",
+      alienBaseId: null,
+      mission: "pirateRaid",
+      counts: {},
+      cargo: {},
+      openAcs: false,
+    });
+    assert.doesNotMatch(pirateRaid, /ends your newbie protection/);
   });
 });
