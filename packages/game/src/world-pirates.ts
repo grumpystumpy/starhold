@@ -559,12 +559,36 @@ export function alienBaseAtCoords(
   );
 }
 
-function slotBlocked(universe: UniverseState, coords: Coordinates): boolean {
+export function slotBlocked(universe: UniverseState, coords: Coordinates): boolean {
   return Boolean(
     planetAtCoords(universe, coords) ||
       pirateBaseAtCoords(universe, coords) ||
       alienBaseAtCoords(universe, coords),
   );
+}
+
+/**
+ * Find a free slot in a galaxy (slots 1..15 only, never slot 16, never occupied, never on a mini planet).
+ * Iterates through systems 1..MAP_SYSTEMS in the given galaxy.
+ */
+export function findFreeSlotInGalaxy(
+  universe: UniverseState,
+  galaxy: number,
+  seedKey: string,
+): Coordinates | null {
+  const freeSlots: Coordinates[] = [];
+  for (let system = 1; system <= MAP_SYSTEMS; system++) {
+    for (let slot = 1; slot <= 15; slot++) {
+      const coords = { galaxy, system, slot };
+      if (!slotBlocked(universe, coords)) {
+        freeSlots.push(coords);
+      }
+    }
+  }
+
+  if (freeSlots.length === 0) return null;
+  const idx = hashSeed(seedKey) % freeSlots.length;
+  return freeSlots[idx]!;
 }
 
 function systemOccupiedByNpc(
