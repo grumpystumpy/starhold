@@ -192,6 +192,7 @@ export function shellHtml(
             <div class="coords" data-testid="planet-coords">${escapeHtml(planet.name)}${planet.flags?.mini ? " · Mini" : planet.kind === "moon" ? " · Moon" : ""} · ${fmtCoords(planet.coords)} · ${escapeHtml(universe.name)} @ ${universe.speed}×${Number(PRODUCTION_MULT) > 1 ? ` · income ×${PRODUCTION_MULT} (test)` : ""}</div>
           </div>
         </div>
+        ${view.newbieBonusRemainingMs && view.newbieBonusRemainingMs > 0 ? `<div class="topbar-newbie-badge" data-testid="newbie-bonus-badge">Newbie bonus: +50% prod · +100% def (${Math.ceil(view.newbieBonusRemainingMs / (60 * 60 * 1000))}h left)</div>` : ""}
         <div class="topbar-progress" data-testid="player-level" title="Lifetime XP ${fmt(progress.xpTotal)}">
           <span class="level-label">Lv ${fmt(progress.level)} ${infoTooltip({
             title: `Commander level ${fmt(progress.level)}`,
