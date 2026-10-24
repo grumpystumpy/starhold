@@ -7,6 +7,7 @@ import {
   defenseCost,
   previewResearchUpgrade,
   researchUpgradeSeconds,
+  scaleResourceCost,
   type DefenseId,
   type PlayerView,
   type ResearchId,
@@ -24,12 +25,14 @@ export function shipRow(
   id: ShipId,
   planet: PlayerView["planet"],
   _busy: boolean,
+  costMult = 1,
 ): string {
   const def = SHIPS[id];
   const count = planet.ships?.[id] ?? 0;
   const yard = planet.buildings.shipyard ?? 0;
+  const cost = scaleResourceCost(def.cost, costMult);
   const locked = yard < def.shipyardLevel;
-  const affordable = canAfford(planet.resources, def.cost);
+  const affordable = canAfford(planet.resources, cost);
   const queueFull = (planet.shipQueue?.length ?? 0) >= 8;
   let label = "Build";
   if (locked) label = "Locked";
@@ -45,7 +48,7 @@ export function shipRow(
         : null;
   const tip = costTooltip({
     action: `Build ${def.name}`,
-    cost: def.cost,
+    cost,
     detail: def.description,
     requires: [
       `Shipyard L${fmt(def.shipyardLevel)}+`,
@@ -61,7 +64,7 @@ export function shipRow(
       <div>
         <h3>${escapeHtml(def.name)} <span class="meta">Owned ${fmt(count)}</span> ${tip.html}</h3>
         <p>${escapeHtml(def.description)}</p>
-        <div class="meta">${fmtCost(def.cost)} each · yard L${fmt(def.shipyardLevel)}+ · cargo ${fmt(def.cargo)} · atk ${fmt(def.attack)}${
+        <div class="meta">${fmtCost(cost)} each · yard L${fmt(def.shipyardLevel)}+ · cargo ${fmt(def.cargo)} · atk ${fmt(def.attack)}${
           locked ? ` · ${escapeHtml(lockMsg)}` : ""
         }</div>
       </div>

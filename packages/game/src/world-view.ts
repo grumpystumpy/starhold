@@ -11,6 +11,7 @@ import {
 } from "./catalog.js";
 import {
   classBonuses,
+  allianceBonusesForPlayer,
   empireExpeditionCap,
   economySnapshot,
   empirePoints,
@@ -341,6 +342,12 @@ export function playerView(
   universe.players[player.id] = player;
   const boosts = playerBoosts(player, now);
   const cls = classBonuses(player.playerClass?.classId);
+  const ally = allianceBonusesForPlayer(universe, player.id);
+  const fieldMods = {
+    homePlanetId: player.homePlanetId,
+    colonyFields: cls.colonyFields,
+    colonyFieldMult: ally.colonyFieldMult,
+  };
   const driftBeaconCount = empireDriftBeaconCount(universe, player.id);
   const fleetSlotCap =
     maxFleetSlots(player.research.computerTech ?? 0) +
@@ -453,11 +460,11 @@ export function playerView(
         mineOutput:
           levelBonuses(player.level ?? 1).production *
           boosts.mineOutput *
-          classBonuses(player.playerClass?.classId).mineOutput,
-        energyOutput:
-          boosts.energyOutput *
-          classBonuses(player.playerClass?.classId).energyOutput,
+          cls.mineOutput *
+          ally.mineOutput,
+        energyOutput: boosts.energyOutput * cls.energyOutput,
       },
+      fieldMods,
       ),
       storage: storageForPlanet(universe, planet, now),
     },

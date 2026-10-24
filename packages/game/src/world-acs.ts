@@ -12,6 +12,8 @@ import {
   flightSecondsOneWay,
   levelBonuses,
   normalizeFleetShips,
+  recyclerHullScale,
+  travelBonusMult,
 } from "./formulas.js";
 import type {
   AcsGroup,
@@ -454,8 +456,21 @@ export function resolveAcsGroup(
       universe.fleetSpeed *
       Math.max(0.01, boosts.fleetSpeed) /
       Math.max(0.01, lb.fleetTime);
+    const returnBonus = travelBonusMult(
+      universe,
+      f.ownerPlayerId,
+      f.originPlanetId,
+      f.targetPlanetId,
+    );
     const returnSecs = origin
-      ? flightSecondsOneWay(f.targetCoords, origin.coords, f.ships, speed, drive)
+      ? flightSecondsOneWay(
+          f.targetCoords,
+          origin.coords,
+          f.ships,
+          speed * returnBonus.fleetSpeed,
+          drive,
+          recyclerHullScale(returnBonus.recyclerSpeed),
+        )
       : 1;
     f.phase = "returning";
     f.arrivesAt = now + returnSecs * 1000;

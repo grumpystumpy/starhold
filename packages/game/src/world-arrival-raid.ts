@@ -1,6 +1,7 @@
 import { mintCombatShareCode } from "./combat-share.js";
 import {
   classBonuses,
+  allianceBonusesForPlayer,
   computeRaidLoot,
   debrisFromDestroyed,
   destroyedShipResources,
@@ -59,6 +60,8 @@ export function resolveRaidArrival(
   const defensesBefore = { ...(target.defenses ?? emptyDefenses()) };
   const atkCls = classBonuses(owner?.playerClass?.classId);
   const defCls = classBonuses(defenderOwner?.playerClass?.classId);
+  const atkAlly = allianceBonusesForPlayer(universe, fleet.ownerPlayerId);
+  const defAlly = allianceBonusesForPlayer(universe, target.ownerPlayerId);
   const defensePower =
     playerBoosts(defenderOwner, now).defensePower * defCls.defensePower;
   const fortressField = isMovingFortress(target)
@@ -80,6 +83,11 @@ export function resolveRaidArrival(
       defenseSlot: target.coords.slot,
       battlefield: fortressField,
       seed: `${fleet.id}:${fleet.arrivesAt}`,
+      attackerShieldMult: atkAlly.shipShield,
+      defenderShieldMult: defAlly.shipShield,
+      attackerWeaponMult: atkAlly.shipWeapon,
+      defenderWeaponMult: defAlly.shipWeapon,
+      defenderDefenseStatMult: defAlly.defenseStat,
     },
   );
   target.ships = combat.defenderAfter;
@@ -96,6 +104,21 @@ export function resolveRaidArrival(
     crystal: debrisAtk.crystal + debrisDef.crystal,
     deuterium: 0,
   };
+  const atkClassId = owner?.playerClass?.classId ?? null;
+  const defClassId = defenderOwner?.playerClass?.classId ?? null;
+  if (atkClassId && defClassId && atkClassId !== defClassId) {
+    const debrisMult = Math.max(
+      atkCls.debrisVsOtherClass,
+      defCls.debrisVsOtherClass,
+    );
+    if (debrisMult > 1) {
+      debrisCreated = {
+        metal: Math.floor(debrisCreated.metal * debrisMult),
+        crystal: Math.floor(debrisCreated.crystal * debrisMult),
+        deuterium: 0,
+      };
+    }
+  }
 
   let loot = emptyCargo();
   if (combat.outcome === "attacker_win") {
@@ -117,6 +140,13 @@ export function resolveRaidArrival(
             ),
           };
     loot = computeRaidLoot(lootResources, combat.attackerAfter);
+    if (atkAlly.loot !== 1) {
+      loot = {
+        metal: Math.floor(loot.metal * atkAlly.loot),
+        crystal: Math.floor(loot.crystal * atkAlly.loot),
+        deuterium: Math.floor(loot.deuterium * atkAlly.loot),
+      };
+    }
     subtractCargo(target, loot);
     const skim = spoilSkimmerDebris(debrisCreated, combat.attackerAfter);
     debrisCreated = skim.remaining;

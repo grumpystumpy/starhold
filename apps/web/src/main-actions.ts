@@ -56,6 +56,7 @@ export {
   doPostAllianceChat,
   doProposeJointStrike,
   doSetAllianceJoinMode,
+  doSetAllianceClass,
   doSetAllianceRole,
   doShareAllianceIntel,
   doUpsertAllianceMarker,

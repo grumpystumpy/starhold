@@ -31,6 +31,9 @@ export type PlayerClassId =
   | "fleeter"
   | "expansionist";
 
+/** Alliance-wide class. Missing on old saves means no alliance bonus. */
+export type AllianceClassId = "destroyer" | "builder" | "explorer";
+
 export interface PlayerClassState {
   classId: PlayerClassId | null;
   chosenAt: number | null;

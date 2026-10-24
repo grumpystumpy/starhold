@@ -5,6 +5,7 @@ import type {
   DefenseId,
   GoalCadence,
   PlayerClassId,
+  AllianceClassId,
   ResearchDef,
   ResearchId,
   ShipDef,
@@ -1178,6 +1179,12 @@ export const PLAYER_CLASS_BONUSES: Readonly<
       colonyShipSpeed: number;
       buildingBuildTime: number;
       jumpGateCooldown: number;
+      /** Debris multiplier when this class fights a different player class. */
+      debrisVsOtherClass: number;
+      /** Extra max fields on colonies (not the homeworld). Read-time only. */
+      colonyFields: number;
+      /** Fleet speed when origin and target are both this player's worlds. */
+      ownWorldFleetSpeed: number;
     }
   >
 > = {
@@ -1199,6 +1206,9 @@ export const PLAYER_CLASS_BONUSES: Readonly<
     colonyShipSpeed: 1,
     buildingBuildTime: 1,
     jumpGateCooldown: 1,
+    debrisVsOtherClass: 1,
+    colonyFields: 0,
+    ownWorldFleetSpeed: 1,
   },
   explorer: {
     name: "Explorer",
@@ -1209,7 +1219,7 @@ export const PLAYER_CLASS_BONUSES: Readonly<
     expeditionYield: 1.2,
     researchTime: 0.9,
     probeSpeed: 1.25,
-    expeditionSlots: 1,
+    expeditionSlots: 2,
     attack: 1,
     fleetSpeed: 1,
     shipBuildTime: 1,
@@ -1218,6 +1228,9 @@ export const PLAYER_CLASS_BONUSES: Readonly<
     colonyShipSpeed: 1,
     buildingBuildTime: 1,
     jumpGateCooldown: 1,
+    debrisVsOtherClass: 1.1,
+    colonyFields: 0,
+    ownWorldFleetSpeed: 1,
   },
   fleeter: {
     name: "Fleeter",
@@ -1237,6 +1250,9 @@ export const PLAYER_CLASS_BONUSES: Readonly<
     colonyShipSpeed: 1,
     buildingBuildTime: 1,
     jumpGateCooldown: 1,
+    debrisVsOtherClass: 1,
+    colonyFields: 0,
+    ownWorldFleetSpeed: 1,
   },
   expansionist: {
     name: "Expansionist",
@@ -1256,6 +1272,96 @@ export const PLAYER_CLASS_BONUSES: Readonly<
     colonyShipSpeed: 1.15,
     buildingBuildTime: 0.95,
     jumpGateCooldown: 0.85,
+    debrisVsOtherClass: 1,
+    colonyFields: 50,
+    ownWorldFleetSpeed: 1.2,
+  },
+};
+
+export const ALLIANCE_CLASS_ORDER: readonly AllianceClassId[] = [
+  "destroyer",
+  "builder",
+  "explorer",
+] as const;
+
+export const ALLIANCE_CLASS_BONUSES: Readonly<
+  Record<
+    AllianceClassId,
+    {
+      name: string;
+      fleetSpeed: number;
+      shipShield: number;
+      shipWeapon: number;
+      shipCost: number;
+      shipTime: number;
+      loot: number;
+      buildingCost: number;
+      buildingTime: number;
+      empireMissionSpeed: number;
+      /** Hull, armor, and shields of defenses (not ships). */
+      defenseStat: number;
+      mineOutput: number;
+      expeditionAmount: number;
+      /** Shift the expedition roll toward good outcomes (and away from bad). */
+      expeditionRollShift: number;
+      colonyFieldMult: number;
+      recyclerSpeed: number;
+    }
+  >
+> = {
+  destroyer: {
+    name: "Destroyer's",
+    fleetSpeed: 1.05,
+    shipShield: 1.05,
+    shipWeapon: 1,
+    shipCost: 0.95,
+    shipTime: 0.95,
+    loot: 1.1,
+    buildingCost: 1,
+    buildingTime: 1,
+    empireMissionSpeed: 1,
+    defenseStat: 1,
+    mineOutput: 1,
+    expeditionAmount: 1,
+    expeditionRollShift: 0,
+    colonyFieldMult: 1,
+    recyclerSpeed: 1,
+  },
+  builder: {
+    name: "Builder's",
+    fleetSpeed: 1,
+    shipShield: 0.95,
+    shipWeapon: 0.95,
+    shipCost: 1,
+    shipTime: 1,
+    loot: 1,
+    buildingCost: 0.9,
+    buildingTime: 0.9,
+    empireMissionSpeed: 1.45,
+    defenseStat: 1.05,
+    mineOutput: 1.05,
+    expeditionAmount: 1,
+    expeditionRollShift: 0,
+    colonyFieldMult: 1,
+    recyclerSpeed: 1,
+  },
+  explorer: {
+    name: "Explorer's",
+    fleetSpeed: 1,
+    shipShield: 1,
+    shipWeapon: 1,
+    shipCost: 1,
+    shipTime: 1,
+    loot: 1,
+    buildingCost: 1,
+    buildingTime: 1,
+    empireMissionSpeed: 1,
+    defenseStat: 1,
+    mineOutput: 1,
+    expeditionAmount: 1.05,
+    expeditionRollShift: 5,
+    colonyFieldMult: 1.05,
+    recyclerSpeed: 1.1,
   },
 };
 

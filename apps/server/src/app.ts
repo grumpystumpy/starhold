@@ -10,6 +10,7 @@ import {
   type MissionType,
   type OfficerId,
   type PlayerClassId,
+  type AllianceClassId,
   type QueueKind,
   type ResearchId,
   type Resources,
@@ -37,6 +38,7 @@ import {
   graduateNewbieProtection,
   inviteToAlliance,
   isAllianceJoinMode,
+  isAllianceClassId,
   isAllianceRole,
   isPlayerClassId,
   joinAlliance,
@@ -64,6 +66,7 @@ import {
   saveFleetPreset,
   setActivePlanet,
   setAllianceJoinMode,
+  setAllianceClass,
   setAllianceRole,
   setSeasonSkin,
   setSeasonTitle,
@@ -1002,6 +1005,27 @@ export function createApp(): Hono {
         body.playerId!,
         body.joinMode as AllianceJoinMode,
       );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    }, { playerIds: [body.playerId] });
+  });
+
+  app.post("/api/alliance/set-class", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      allianceClass?: string | null;
+    };
+    if (!body.playerId || body.allianceClass === undefined) {
+      return c.json({ error: "playerId and allianceClass required." }, 400);
+    }
+    const raw = body.allianceClass;
+    if (raw !== null && raw !== "" && !isAllianceClassId(raw)) {
+      return c.json({ error: "Unknown alliance class." }, 400);
+    }
+    const classId: AllianceClassId | null =
+      raw === null || raw === "" ? null : raw;
+    return withUniverse((universe) => {
+      const result = setAllianceClass(universe, body.playerId!, classId);
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
     }, { playerIds: [body.playerId] });

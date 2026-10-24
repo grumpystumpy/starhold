@@ -1,6 +1,7 @@
 import { SHIPS, SHIP_ORDER } from "./catalog.js";
 import {
   classBonuses,
+  allianceBonusesForPlayer,
   emptyFleetShips,
   fleetCargoCapacity,
   grantPlayerXp,
@@ -61,6 +62,17 @@ export function expeditionKindFromRoll(roll: number): ExpeditionKind {
   if (roll < 70) return "miniPlanet";
   if (roll < 75) return "starshards";
   return "pirates";
+}
+
+/** Alliance Explorer's shifts the table toward good outcomes and away from pirates. */
+export function expeditionKindForShift(
+  roll: number,
+  shift: number,
+): ExpeditionKind {
+  const s = Math.max(0, Math.floor(shift));
+  if (s <= 0) return expeditionKindFromRoll(roll);
+  if (roll < s) return "resources";
+  return expeditionKindFromRoll(roll - s);
 }
 
 function scaleShipsKeep(ships: FleetShips, keepRatio: number): FleetShips {
@@ -130,7 +142,9 @@ export function resolveExpeditionArrival(
 ): void {
   if (!universe.expeditionReports) universe.expeditionReports = {};
   const roll = expeditionRoll(fleet.id, fleet.arrivesAt);
-  const kind = expeditionKindFromRoll(roll);
+  const ownerForYield = universe.players[fleet.ownerPlayerId];
+  const ally = allianceBonusesForPlayer(universe, fleet.ownerPlayerId);
+  const kind = expeditionKindForShift(roll, ally.expeditionRollShift);
   const before = normalizeFleetShips(fleet.ships);
   let cargoGained: Resources = { metal: 0, crystal: 0, deuterium: 0 };
   const shipsDelta: Partial<FleetShips> = {};
@@ -139,19 +153,19 @@ export function resolveExpeditionArrival(
   let miniCoords: Coordinates | undefined;
   let summary: string;
 
-  const ownerForYield = universe.players[fleet.ownerPlayerId];
   const yieldMult =
     classBonuses(ownerForYield?.playerClass?.classId).expeditionYield *
     vaultScoutExpeditionMult(before) *
     empireRelicExpeditionFindMult(universe, fleet.ownerPlayerId);
+  const amountMult = yieldMult * ally.expeditionAmount;
 
   switch (kind) {
     case "resources": {
       cargoGained = resourceFind(before, roll);
       cargoGained = {
-        metal: Math.floor(cargoGained.metal * yieldMult),
-        crystal: Math.floor(cargoGained.crystal * yieldMult),
-        deuterium: Math.floor(cargoGained.deuterium * yieldMult),
+        metal: Math.floor(cargoGained.metal * amountMult),
+        crystal: Math.floor(cargoGained.crystal * amountMult),
+        deuterium: Math.floor(cargoGained.deuterium * amountMult),
       };
       fleet.cargo = { ...cargoGained };
       summary = `Anomaly yield: ${cargoGained.metal}m / ${cargoGained.crystal}c / ${cargoGained.deuterium}d.`;
@@ -159,14 +173,18 @@ export function resolveExpeditionArrival(
     }
     case "ships": {
       if (roll % 2 === 0) {
-        const n = 1 + (roll % 3);
+        const n = Math.max(
+          1,
+          Math.floor((1 + (roll % 3)) * ally.expeditionAmount),
+        );
         fleet.ships.scout = (fleet.ships.scout ?? 0) + n;
         shipsDelta.scout = n;
         summary = `Salvage drones joined the fleet (+${n} Scout Skiff).`;
       } else {
-        fleet.ships.hauler = (fleet.ships.hauler ?? 0) + 1;
-        shipsDelta.hauler = 1;
-        summary = "Derelict freighter claimed (+1 Ore Hauler).";
+        const n = Math.max(1, Math.floor(1 * ally.expeditionAmount));
+        fleet.ships.hauler = (fleet.ships.hauler ?? 0) + n;
+        shipsDelta.hauler = n;
+        summary = `Derelict freighter claimed (+${n} Ore Hauler).`;
       }
       fleet.ships = normalizeFleetShips(fleet.ships);
       break;
@@ -180,7 +198,7 @@ export function resolveExpeditionArrival(
       fleet.cargo = { metal: 0, crystal: 0, deuterium: 0 };
       starshardsGained = Math.max(
         1,
-        Math.floor(expeditionStarshardsFind(before, roll) * yieldMult),
+        Math.floor(expeditionStarshardsFind(before, roll) * amountMult),
       );
       const owner = universe.players[fleet.ownerPlayerId];
       if (owner) {
