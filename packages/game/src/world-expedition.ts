@@ -1,7 +1,8 @@
-import { SHIPS, SHIP_ORDER } from "./catalog.js";
+import { EXPEDITION_AMBUSH_DEBRIS_RATE, EXPEDITION_SLOT, SHIPS, SHIP_ORDER } from "./catalog.js";
 import {
   classBonuses,
   allianceBonusesForPlayer,
+  destroyedShipResources,
   emptyFleetShips,
   fleetCargoCapacity,
   grantPlayerXp,
@@ -10,6 +11,7 @@ import {
   xpForExpedition,
   xpForMiniPlanetDiscovery,
 } from "./formulas.js";
+import { hashSeed } from "./formulas-position.js";
 import type {
   Coordinates,
   ExpeditionKind,
@@ -33,13 +35,35 @@ export const EXPEDITION_STARSHARDS_MAX = 25;
 export const EXPEDITION_RESOURCE_ROLL_BASE = 0.55;
 export const EXPEDITION_RESOURCE_ROLL_RANGE = 20;
 export const EXPEDITION_RESOURCE_ROLL_DIVISOR = 40;
+
+export const EXPEDITION_BLACK_HOLE_CHANCE = 0.003;
+export const EXPEDITION_BLACK_HOLE_ROLL_SPACE = 1_000_000;
+
+export const EXPEDITION_RESOURCES_ROLL_MAX = 40;
+export const EXPEDITION_SHIPS_ROLL_MAX = 55;
+export const EXPEDITION_NOTHING_ROLL_MAX = 68;
+export const EXPEDITION_MINI_PLANET_ROLL_MAX = 70;
+export const EXPEDITION_STARSHARDS_ROLL_MAX = 75;
+export const EXPEDITION_NEW_PIRATE_BASE_ROLL_COUNT = 2;
+export const EXPEDITION_NEW_PIRATE_BASE_ROLL_MAX = 77;
+export const EXPEDITION_NEW_ALIEN_BASE_ROLL_COUNT = 2;
+export const EXPEDITION_NEW_ALIEN_BASE_ROLL_MAX = 79;
+export const EXPEDITION_PIRATES_ROLL_MAX = 100;
+export const EXPEDITION_NPC_BASE_TIER = 0;
+
 import { noteGoalMetric } from "./world-goals.js";
+import { addDebris } from "./world-tick.js";
 import {
   discoverMiniPlanet,
   empireRelicExpeditionFindMult,
   pickOrSeedMiniForDiscovery,
 } from "./world-mini.js";
-import { tryAlienExpeditionFind } from "./world-pirates.js";
+import {
+  createAlienBase,
+  createPirateBase,
+  findFreeSlotInGalaxy,
+  tryAlienExpeditionFind,
+} from "./world-pirates.js";
 
 /** Deterministic 0..99 roll from fleet id + arrival time. */
 export function expeditionRoll(fleetId: string, at: number): number {
@@ -50,17 +74,27 @@ export function expeditionRoll(fleetId: string, at: number): number {
   return h % 100;
 }
 
+/** Check deterministic black hole roll before table lookup. */
+export function expeditionBlackHoleRoll(fleetId: string, at: number): boolean {
+  const threshold = Math.floor(EXPEDITION_BLACK_HOLE_CHANCE * EXPEDITION_BLACK_HOLE_ROLL_SPACE);
+  const h = hashSeed(`blackHole:${fleetId}:${at}`);
+  return (h % EXPEDITION_BLACK_HOLE_ROLL_SPACE) < threshold;
+}
+
 /**
- * Expedition outcome table (v1 + mini):
+ * Expedition outcome table (v1 + mini + new NPC bases):
  * 0–39 resources, 40–54 ships, 55–67 nothing, 68–69 miniPlanet (2%),
- * 70–74 starshards (5%), 75–99 pirates.
+ * 70–74 starshards (5%), 75–76 newPirateBase (2%), 77–78 newAlienBase (2%),
+ * 79–99 pirates (21%).
  */
 export function expeditionKindFromRoll(roll: number): ExpeditionKind {
-  if (roll < 40) return "resources";
-  if (roll < 55) return "ships";
-  if (roll < 68) return "nothing";
-  if (roll < 70) return "miniPlanet";
-  if (roll < 75) return "starshards";
+  if (roll < EXPEDITION_RESOURCES_ROLL_MAX) return "resources";
+  if (roll < EXPEDITION_SHIPS_ROLL_MAX) return "ships";
+  if (roll < EXPEDITION_NOTHING_ROLL_MAX) return "nothing";
+  if (roll < EXPEDITION_MINI_PLANET_ROLL_MAX) return "miniPlanet";
+  if (roll < EXPEDITION_STARSHARDS_ROLL_MAX) return "starshards";
+  if (roll < EXPEDITION_NEW_PIRATE_BASE_ROLL_MAX) return "newPirateBase";
+  if (roll < EXPEDITION_NEW_ALIEN_BASE_ROLL_MAX) return "newAlienBase";
   return "pirates";
 }
 
@@ -135,23 +169,74 @@ export function expeditionStarshardsFind(
   return Math.max(1, Math.floor(scaled));
 }
 
+function shipUnitCost(shipId: ShipId): number {
+  const cost = SHIPS[shipId].cost;
+  return cost.metal + cost.crystal + cost.deuterium;
+}
+
+export function expeditionShipsFind(
+  before: FleetShips,
+  roll: number,
+): { shipId: ShipId; count: number } {
+  const excluded = new Set<ShipId>([
+    "voidforgeTitan",
+    "worldEater",
+    "swarmMothership",
+  ]);
+  let maxSentCost = 0;
+  for (const id of SHIP_ORDER) {
+    if (!excluded.has(id) && (before[id] ?? 0) > 0) {
+      maxSentCost = Math.max(maxSentCost, shipUnitCost(id));
+    }
+  }
+
+  const pool = SHIP_ORDER.filter(
+    (id) =>
+      !excluded.has(id) &&
+      shipUnitCost(id) > 0 &&
+      shipUnitCost(id) <= maxSentCost,
+  );
+  if (pool.length === 0) pool.push("scout");
+
+  const rollIndex = ((roll % pool.length) + pool.length) % pool.length;
+  const shipId = pool[rollIndex]!;
+  const structureLimit = Math.max(
+    SHIPS[shipId].hull,
+    Math.floor(
+      Math.min(fleetStructurePoints(before), EXPEDITION_STRUCTURAL_CAP) * 0.5,
+    ),
+  );
+  const count = Math.max(
+    1,
+    Math.min(1 + (roll % 3), Math.floor(structureLimit / SHIPS[shipId].hull)),
+  );
+  return { shipId, count };
+}
+
 export function resolveExpeditionArrival(
   universe: UniverseState,
   fleet: FleetMission,
   now: number,
 ): void {
   if (!universe.expeditionReports) universe.expeditionReports = {};
+  const isBlackHole = expeditionBlackHoleRoll(fleet.id, fleet.arrivesAt);
   const roll = expeditionRoll(fleet.id, fleet.arrivesAt);
   const ownerForYield = universe.players[fleet.ownerPlayerId];
   const ally = allianceBonusesForPlayer(universe, fleet.ownerPlayerId);
-  const kind = expeditionKindForShift(roll, ally.expeditionRollShift);
+  const kind = isBlackHole
+    ? "blackHole"
+    : expeditionKindForShift(roll, ally.expeditionRollShift);
   const before = normalizeFleetShips(fleet.ships);
   let cargoGained: Resources = { metal: 0, crystal: 0, deuterium: 0 };
   const shipsDelta: Partial<FleetShips> = {};
   let starshardsGained = 0;
+  let debrisCreated: Resources | undefined;
   let miniPlanetId: string | undefined;
   let miniCoords: Coordinates | undefined;
-  let summary: string;
+  let newPirateBaseId: string | undefined;
+  let newAlienBaseId: string | undefined;
+  let newBaseCoords: Coordinates | undefined;
+  let summary = "";
 
   const yieldMult =
     classBonuses(ownerForYield?.playerClass?.classId).expeditionYield *
@@ -159,7 +244,46 @@ export function resolveExpeditionArrival(
     empireRelicExpeditionFindMult(universe, fleet.ownerPlayerId);
   const amountMult = yieldMult * ally.expeditionAmount;
 
+  const applyPirateAmbush = () => {
+    const after = scaleShipsKeep(before, 0.7);
+    for (const id of SHIP_ORDER) {
+      const delta = (after[id] ?? 0) - (before[id] ?? 0);
+      if (delta !== 0) shipsDelta[id as ShipId] = delta;
+    }
+    fleet.ships = after;
+    const lost = destroyedShipResources(before, after);
+    debrisCreated = {
+      metal: Math.floor(lost.metal * EXPEDITION_AMBUSH_DEBRIS_RATE),
+      crystal: Math.floor(lost.crystal * EXPEDITION_AMBUSH_DEBRIS_RATE),
+      deuterium: 0,
+    };
+    addDebris(universe, {
+      galaxy: fleet.targetCoords.galaxy,
+      system: fleet.targetCoords.system,
+      slot: EXPEDITION_SLOT,
+    }, debrisCreated);
+    const crumb = Math.min(40, fleetCargoCapacity(after));
+    cargoGained = {
+      metal: Math.floor(crumb * 0.5),
+      crystal: Math.floor(crumb * 0.3),
+      deuterium: Math.max(0, crumb - Math.floor(crumb * 0.5) - Math.floor(crumb * 0.3)),
+    };
+    fleet.cargo = { ...cargoGained };
+    summary = `Pirate ambush — ~30% hulls lost. Scrap salvage ${cargoGained.metal}m/${cargoGained.crystal}c/${cargoGained.deuterium}d.`;
+  };
+
   switch (kind) {
+    case "blackHole": {
+      fleet.ships = emptyFleetShips();
+      fleet.cargo = { metal: 0, crystal: 0, deuterium: 0 };
+      for (const id of SHIP_ORDER) {
+        if ((before[id] ?? 0) > 0) {
+          shipsDelta[id as ShipId] = -(before[id] ?? 0);
+        }
+      }
+      summary = "Fleet lost in a black hole — all ships and cargo destroyed.";
+      break;
+    }
     case "resources": {
       cargoGained = resourceFind(before, roll);
       cargoGained = {
@@ -172,20 +296,11 @@ export function resolveExpeditionArrival(
       break;
     }
     case "ships": {
-      if (roll % 2 === 0) {
-        const n = Math.max(
-          1,
-          Math.floor((1 + (roll % 3)) * ally.expeditionAmount),
-        );
-        fleet.ships.scout = (fleet.ships.scout ?? 0) + n;
-        shipsDelta.scout = n;
-        summary = `Salvage drones joined the fleet (+${n} Scout Skiff).`;
-      } else {
-        const n = Math.max(1, Math.floor(1 * ally.expeditionAmount));
-        fleet.ships.hauler = (fleet.ships.hauler ?? 0) + n;
-        shipsDelta.hauler = n;
-        summary = `Derelict freighter claimed (+${n} Ore Hauler).`;
-      }
+      const found = expeditionShipsFind(before, roll);
+      const n = Math.max(1, Math.floor(found.count * ally.expeditionAmount));
+      fleet.ships[found.shipId] = (fleet.ships[found.shipId] ?? 0) + n;
+      shipsDelta[found.shipId] = n;
+      summary = `Expedition salvage joined the fleet (+${n} ${SHIPS[found.shipId].name}).`;
       fleet.ships = normalizeFleetShips(fleet.ships);
       break;
     }
@@ -209,20 +324,60 @@ export function resolveExpeditionArrival(
       break;
     }
     case "pirates": {
-      const after = scaleShipsKeep(before, 0.7);
-      for (const id of SHIP_ORDER) {
-        const delta = (after[id] ?? 0) - (before[id] ?? 0);
-        if (delta !== 0) shipsDelta[id as ShipId] = delta;
+      applyPirateAmbush();
+      break;
+    }
+    case "newPirateBase": {
+      fleet.cargo = { metal: 0, crystal: 0, deuterium: 0 };
+      if (!universe.pirateBases) universe.pirateBases = {};
+      const site = findFreeSlotInGalaxy(
+        universe,
+        fleet.targetCoords.galaxy,
+        `${fleet.id}:new-pirate-base:${now}`,
+      );
+      if (site) {
+        const base = createPirateBase(
+          universe.seed ?? universe.id,
+          site.galaxy,
+          site.system,
+          site.slot,
+          now,
+          EXPEDITION_NPC_BASE_TIER,
+        );
+        universe.pirateBases[base.id] = base;
+        newPirateBaseId = base.id;
+        newBaseCoords = { ...base.coords };
+        summary = `New pirate base ${base.name} spawned at ${site.galaxy}:${site.system}:${site.slot}.`;
+      } else {
+        applyPirateAmbush();
       }
-      fleet.ships = after;
-      const crumb = Math.min(40, fleetCargoCapacity(after));
-      cargoGained = {
-        metal: Math.floor(crumb * 0.5),
-        crystal: Math.floor(crumb * 0.3),
-        deuterium: Math.max(0, crumb - Math.floor(crumb * 0.5) - Math.floor(crumb * 0.3)),
-      };
-      fleet.cargo = { ...cargoGained };
-      summary = `Pirate ambush — ~30% hulls lost. Scrap salvage ${cargoGained.metal}m/${cargoGained.crystal}c/${cargoGained.deuterium}d.`;
+      break;
+    }
+    case "newAlienBase": {
+      fleet.cargo = { metal: 0, crystal: 0, deuterium: 0 };
+      if (!universe.alienBases) universe.alienBases = {};
+      const site = findFreeSlotInGalaxy(
+        universe,
+        fleet.targetCoords.galaxy,
+        `${fleet.id}:new-alien-base:${now}`,
+      );
+      if (site) {
+        const base = createAlienBase(
+          universe,
+          site.galaxy,
+          site.system,
+          site.slot,
+          now,
+          fleet.ownerPlayerId,
+          EXPEDITION_NPC_BASE_TIER,
+        );
+        universe.alienBases[base.id] = base;
+        newAlienBaseId = base.id;
+        newBaseCoords = { ...base.coords };
+        summary = `New alien base ${base.name} spawned at ${site.galaxy}:${site.system}:${site.slot}.`;
+      } else {
+        applyPirateAmbush();
+      }
       break;
     }
     case "miniPlanet": {
@@ -262,7 +417,7 @@ export function resolveExpeditionArrival(
   const owner = universe.players[fleet.ownerPlayerId];
   if (owner) {
     // Non-empty expedition outcomes grant XP (contract v1).
-    if (kind !== "nothing") {
+    if (kind !== "nothing" && kind !== "blackHole") {
       grantPlayerXp(owner, xpForExpedition());
       if (kind === "miniPlanet" && miniPlanetId) {
         grantPlayerXp(owner, xpForMiniPlanetDiscovery());
@@ -284,9 +439,13 @@ export function resolveExpeditionArrival(
     kind,
     cargoGained,
     shipsDelta,
+    debrisCreated,
     starshardsGained: starshardsGained || undefined,
     miniPlanetId,
     miniCoords,
+    newPirateBaseId,
+    newAlienBaseId,
+    newBaseCoords,
     summary,
   };
   universe.expeditionReports[reportId] = report;

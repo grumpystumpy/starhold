@@ -3,6 +3,7 @@ import {
   MAP_GALAXIES,
   MAP_SLOTS,
   MAP_SYSTEMS,
+  DEFENSE_ORDER,
   SHIP_ORDER,
   STARTING_RESOURCES,
   UNIVERSE_SCHEMA_VERSION,
@@ -188,6 +189,12 @@ export function ensureUniverseShape(universe: UniverseState): void {
     if (player.research.queueLogistics == null) player.research.queueLogistics = 0;
     if (player.research.swarmHold == null) player.research.swarmHold = 0;
     if (player.research.gravityWell == null) player.research.gravityWell = 0;
+    if (player.research.metallurgistTech == null) player.research.metallurgistTech = 0;
+    if (player.research.crystalizerTech == null) player.research.crystalizerTech = 0;
+    if (player.research.deutSynthesisTech == null) player.research.deutSynthesisTech = 0;
+    if (player.research.researchNetwork == null) {
+      player.research.researchNetwork = 0;
+    }
     if (!player.playerClass) player.playerClass = emptyPlayerClass();
     if (!Array.isArray(player.researchQueue)) {
       player.researchQueue = player.researchQueue
@@ -221,6 +228,9 @@ export function ensureUniverseShape(universe: UniverseState): void {
     if (planet.parentPlanetId === undefined) planet.parentPlanetId = null;
     if (planet.moonId === undefined) planet.moonId = null;
     if (!planet.defenses) planet.defenses = emptyDefenses();
+    for (const id of DEFENSE_ORDER) {
+      if (planet.defenses[id] === undefined) planet.defenses[id] = 0;
+    }
     if (!Array.isArray(planet.buildQueue)) {
       planet.buildQueue = planet.buildQueue ? [planet.buildQueue as never] : [];
     }
@@ -365,4 +375,24 @@ export function bestLabLevel(universe: UniverseState, player: PlayerState): numb
     if (p) best = Math.max(best, p.buildings.researchLab ?? 0);
   }
   return best;
+}
+
+export function linkedResearchLabLevel(
+  universe: UniverseState,
+  player: PlayerState,
+  planet: PlanetState,
+): number {
+  const networkLevel = player.research?.researchNetwork ?? 0;
+  if (networkLevel < 1) return planet.buildings.researchLab ?? 0;
+
+  return (player.planetIds ?? [])
+    .map((id) => universe.planets[id])
+    .filter(
+      (candidate): candidate is PlanetState =>
+        candidate !== undefined && candidate.kind !== "moon",
+    )
+    .map((candidate) => candidate.buildings.researchLab ?? 0)
+    .sort((a, b) => b - a)
+    .slice(0, networkLevel + 1)
+    .reduce((total, level) => total + level, 0);
 }
