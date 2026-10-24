@@ -133,6 +133,23 @@ export function bestResearchLab(view: PlayerView): number {
   return best;
 }
 
+export function linkedResearchLab(view: PlayerView): number {
+  const networkLevel = view.player.research?.researchNetwork ?? 0;
+  const localLab = view.planet.buildings.researchLab ?? 0;
+  if (networkLevel < 1) return localLab;
+
+  const labs = view.ownedPlanets
+    .filter((owned) => !owned.isMoon)
+    .map((owned) => owned.researchLab);
+  if (!view.ownedPlanets.some((owned) => owned.id === view.planet.id)) {
+    labs.push(localLab);
+  }
+  return labs
+    .sort((a, b) => b - a)
+    .slice(0, networkLevel + 1)
+    .reduce((total, level) => total + level, 0);
+}
+
 function researchButtonLabel(error: string | null): string {
   if (!error) return "Research";
   if (error.includes("queue is full")) return "Queue full";
@@ -151,6 +168,7 @@ export function researchRow(
   const level = view.player.research?.[id] ?? 0;
   const lab = bestResearchLab(view);
   const localLab = view.planet.buildings.researchLab ?? 0;
+  const linkedLab = linkedResearchLab(view);
   const preview = previewResearchUpgrade(
     view.player,
     view.planet,
@@ -161,7 +179,7 @@ export function researchRow(
   );
   const cost = preview.cost;
   const secs = Math.ceil(
-    researchUpgradeSeconds(id, preview.current, localLab) /
+    researchUpgradeSeconds(id, preview.current, linkedLab) /
       view.universe.speed,
   );
   const blocked = preview.ok ? null : preview.error;

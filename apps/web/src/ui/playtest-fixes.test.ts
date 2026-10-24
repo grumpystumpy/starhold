@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
-import type { PlayerView } from "@starhold/game";
+import { researchUpgradeSeconds, type PlayerView } from "@starhold/game";
+import { fmtEta } from "./format";
 import { buildingRow, joinScreenHtml } from "./render-chrome-join";
 import { researchRow } from "./render-chrome-rows";
 import { fleetComposer } from "./render-fleets-composer";
@@ -150,6 +151,37 @@ describe("playtest fixes", () => {
     assert.match(full, />Queue full</);
     assert.match(full, /disabled/);
     assert.doesNotMatch(full, /Needs lab/);
+  });
+
+  it("previews research time using linked labs only when Research Network is active", () => {
+    const view = {
+      now: 1_700_000_000_000,
+      player: {
+        ...player(),
+        research: { energyTech: 0, researchNetwork: 1 },
+      },
+      planet: {
+        ...planet(),
+        id: "active",
+        buildings: { researchLab: 3 },
+        resources: { metal: 50_000, crystal: 50_000, deuterium: 50_000 },
+      },
+      ownedPlanets: [
+        { id: "high", isMoon: false, researchLab: 10 },
+        { id: "middle", isMoon: false, researchLab: 8 },
+        { id: "active", isMoon: false, researchLab: 3 },
+      ],
+      universe: { speed: 1 },
+    } as unknown as PlayerView;
+
+    const linkedTime = researchUpgradeSeconds("energyTech", 0, 18);
+    const linkedRow = researchRow("energyTech", view, false);
+    assert.match(linkedRow, new RegExp(`· ${fmtEta(linkedTime)}`));
+
+    view.player.research.researchNetwork = 0;
+    const localTime = researchUpgradeSeconds("energyTech", 0, 3);
+    const localRow = researchRow("energyTech", view, false);
+    assert.match(localRow, new RegExp(`· ${fmtEta(localTime)}`));
   });
 
   it("labels spy targets and hides protected attack targets", () => {
