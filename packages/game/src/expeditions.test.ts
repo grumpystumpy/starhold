@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { EXPEDITION_SLOT } from "./catalog.js";
+import { EXPEDITION_SLOT, SHIPS, SHIP_ORDER } from "./catalog.js";
 import {
   expeditionKindFromRoll,
   expeditionRoll,
+  expeditionShipsFind,
   expeditionStarshardsFind,
   resourceFind,
+  resolveExpeditionArrival,
 } from "./world-expedition.js";
 import {
   advanceUniverse,
@@ -231,6 +233,92 @@ describe("P2 expeditions", () => {
     assert.equal(shards12k, 12);
   });
 
+  it("limits scout-only ship finds to ships costing no more than a Scout Skiff", () => {
+    const maxCost =
+      SHIPS.scout.cost.metal +
+      SHIPS.scout.cost.crystal +
+      SHIPS.scout.cost.deuterium;
+    const allowed = SHIP_ORDER.filter((id) => {
+      const cost = SHIPS[id].cost;
+      return (
+        id !== "voidforgeTitan" &&
+        id !== "worldEater" &&
+        id !== "swarmMothership" &&
+        cost.metal + cost.crystal + cost.deuterium > 0 &&
+        cost.metal + cost.crystal + cost.deuterium <= maxCost
+      );
+    });
+    for (let roll = 0; roll < 100; roll++) {
+      assert.ok(allowed.includes(expeditionShipsFind({ scout: 5 }, roll).shipId));
+    }
+  });
+
+  it("finds ships up to the largest sent class deterministically", () => {
+    const fleet = { cruiser: 2, scout: 2 };
+    const pool = SHIP_ORDER.filter((id) => {
+      const cost = SHIPS[id].cost;
+      return (
+        id !== "voidforgeTitan" &&
+        id !== "worldEater" &&
+        id !== "swarmMothership" &&
+        cost.metal + cost.crystal + cost.deuterium > 0 &&
+        cost.metal + cost.crystal + cost.deuterium <=
+          SHIPS.cruiser.cost.metal +
+            SHIPS.cruiser.cost.crystal +
+            SHIPS.cruiser.cost.deuterium
+      );
+    });
+    const roll = pool.indexOf("cruiser");
+    assert.ok(roll >= 0);
+    const found = expeditionShipsFind(fleet, roll);
+    assert.deepEqual(found, expeditionShipsFind(fleet, roll));
+    assert.equal(found.shipId, "cruiser");
+    const foundStructure = found.count * SHIPS[found.shipId].hull;
+    const fleetStructure =
+      fleet.cruiser * SHIPS.cruiser.hull + fleet.scout * SHIPS.scout.hull;
+    assert.ok(
+      foundStructure <=
+        Math.max(SHIPS[found.shipId].hull, Math.floor(fleetStructure * 0.5)),
+    );
+  });
+
+  it("never finds forbidden capital ships, including on expedition arrival", () => {
+    const fleetShips = { worldEater: 1, voidforgeTitan: 1, keelSovereign: 1 };
+    for (let roll = 0; roll < 100; roll++) {
+      const found = expeditionShipsFind(fleetShips, roll);
+      assert.notEqual(found.shipId, "voidforgeTitan");
+      assert.notEqual(found.shipId, "worldEater");
+      assert.notEqual(found.shipId, "swarmMothership");
+    }
+
+    const universe = createUniverse("Forbidden Ship Finds", 8);
+    const { player, planet } = joinUniverse(universe, "Voyager", 150_000_000);
+    for (let roll = 40; roll < 55; roll++) {
+      const fleet = {
+        id: "",
+        ownerPlayerId: player.id,
+        originPlanetId: planet.id,
+        targetPlanetId: null,
+        targetPlayerId: null,
+        targetCoords: { ...planet.coords, slot: EXPEDITION_SLOT },
+        mission: "expedition" as const,
+        ships: { ...fleetShips },
+        cargo: { metal: 0, crystal: 0, deuterium: 0 },
+        departedAt: 0,
+        arrivesAt: roll,
+        phase: "outbound" as const,
+        reportId: null,
+      };
+      resolveExpeditionArrival(universe, fleet, 150_000_100 + roll);
+      const report = universe.expeditionReports[fleet.reportId!];
+      assert.ok(report);
+      assert.equal(report.kind, "ships");
+      assert.equal(report.shipsDelta.voidforgeTitan, undefined);
+      assert.equal(report.shipsDelta.worldEater, undefined);
+      assert.equal(report.shipsDelta.swarmMothership, undefined);
+    }
+  });
+
   it("yields identical expedition result for the same fleet and seed", () => {
     const universe1 = createUniverse("Seed Test 1", 8);
     const universe2 = createUniverse("Seed Test 2", 8);
@@ -305,11 +393,24 @@ describe("P2 expeditions", () => {
       returnsAt: 201_000,
       phase: "outbound",
     };
+    const legacyReport = {
+      id: "xpd_legacy",
+      at: 199_000,
+      missionId: "flt_legacy",
+      playerId: p.player.id,
+      targetCoords: { ...p.planet.coords, slot: EXPEDITION_SLOT },
+      kind: "ships" as const,
+      cargoGained: { metal: 0, crystal: 0, deuterium: 0 },
+      shipsDelta: { scout: 2 },
+      summary: "Salvage drones joined the fleet (+2 Scout Skiff).",
+    };
+    fresh.expeditionReports[legacyReport.id] = legacyReport;
 
     // Load through normal save-loading path (migrateOrResetUniverse)
     const { universe: loaded, didReset } = migrateOrResetUniverse(fresh);
     assert.equal(didReset, false);
     assert.equal(loaded.planets[p.planet.id]!.buildings.metalMine, 12);
+    assert.deepEqual(loaded.expeditionReports[legacyReport.id], legacyReport);
 
     advanceUniverse(loaded, 200_500);
 
