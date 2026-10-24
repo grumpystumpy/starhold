@@ -25,6 +25,7 @@ import { installDeterministicInputs } from "./test-determinism.js";
 import { graduateNewbieProtection } from "./test-graduate.js";
 import { emptyBuildings, emptyCargo, emptyShips } from "./world-bootstrap.js";
 import {
+  expeditionBlackHoleRoll,
   expeditionKindForShift,
   expeditionRoll,
   resolveExpeditionArrival,
@@ -204,14 +205,24 @@ function raidReport(opts: {
       live.resources = { ...opts.resources };
       live.lastTickAt = now + 20;
     }
-    const launch = launchFleet(
-      universe,
-      a.player.id,
-      b.planet.id,
-      "raid",
-      opts.atkShips,
-      now + 20,
-    );
+    const launch = (() => {
+      const restoreLaunchInputs = installDeterministicInputs(
+        RAID_REPORT_SEED,
+        4_000_000,
+      );
+      try {
+        return launchFleet(
+          universe,
+          a.player.id,
+          b.planet.id,
+          "raid",
+          opts.atkShips,
+          now + 20,
+        );
+      } finally {
+        restoreLaunchInputs();
+      }
+    })();
     assert.equal(launch.ok, true, launch.ok ? "" : launch.error);
     if (!launch.ok) throw new Error("launch failed");
     const liveTarget = universe.planets[b.planet.id]!;
@@ -533,8 +544,9 @@ describe("alliance classes", () => {
     for (let i = 0; i < 5000; i++) {
       const id = `flt_bonus_${i}`;
       const roll = expeditionRoll(id, at);
+      if (expeditionBlackHoleRoll(id, at)) continue;
       if (!resourceRoll && roll < 40) resourceRoll = { id, at };
-      if (!pirateRoll && roll === 75) pirateRoll = { id, at };
+      if (!pirateRoll && roll === 78) pirateRoll = { id, at };
       if (resourceRoll && pirateRoll) break;
     }
     assert.ok(resourceRoll && pirateRoll);
@@ -578,7 +590,7 @@ describe("alliance classes", () => {
     const shifted = runExpedition(pirateRoll!, true);
     assert.equal(plainBad.kind, "pirates");
     assert.notEqual(shifted.kind, "pirates");
-    assert.equal(expeditionKindForShift(75, 5), shifted.kind);
+    assert.equal(expeditionKindForShift(78, 5), shifted.kind);
 
     const yard = createUniverse("yards", 1);
     const builder = joinUniverse(yard, "Builder", 9_000_000);
