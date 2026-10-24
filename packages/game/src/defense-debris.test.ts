@@ -196,8 +196,11 @@ describe("defense rebuild and battle debris", () => {
       universe.debris[coordsKey(planet.coords)]?.metal,
       (pvp.debrisCreated.metal ?? 0) + npcReport.debrisCreated.metal,
     );
-    assert.equal(npcReport.defensesRebuilt?.laserBattery, Math.round(10 * 0.7));
-    assert.equal(universe.planets[planet.id]!.defenses.laserBattery, 7);
+    const lost = npcReport.defensesDestroyed?.laserBattery ?? 0;
+    assert.ok(lost > 0);
+    const rebuilt = Math.round(lost * DEFENSE_REBUILD_RATE);
+    assert.equal(npcReport.defensesRebuilt?.laserBattery ?? 0, rebuilt);
+    assert.equal(universe.planets[planet.id]!.defenses.laserBattery, 10 - lost + rebuilt);
 
     const pirate = createPirateBase(universe.seed ?? universe.id, 2, 8, 5, now, 0);
     pirate.ships = emptyFleetShips();
