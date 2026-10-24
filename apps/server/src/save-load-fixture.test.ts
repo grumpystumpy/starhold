@@ -19,7 +19,13 @@ describe("catalog-complete old save fixture", () => {
     assert.ok(planet, "fixture planet exists");
     assert.ok(fleet, "fixture fleet exists");
     for (const id of SHIP_ORDER) assert.ok(Object.hasOwn(fleet.ships, id), `fixture missing fleet ship ${id}`);
-    for (const id of DEFENSE_ORDER) assert.ok(Object.hasOwn(planet.defenses, id), `fixture missing defense ${id}`);
+    for (const id of DEFENSE_ORDER) {
+      if (id === "prismLaser") {
+        assert.ok(!Object.hasOwn(planet.defenses, id), "raw fixture unexpectedly has prismLaser");
+      } else {
+        assert.ok(Object.hasOwn(planet.defenses, id), `fixture missing defense ${id}`);
+      }
+    }
 
     const key = `starhold:universe:v${UNIVERSE_SCHEMA_VERSION}`;
     const values = new Map<string, unknown>([[key, fixture.universe], [`${key}:ver`, "fixture-v1"]]);
@@ -41,7 +47,10 @@ describe("catalog-complete old save fixture", () => {
         }),
       );
       for (const id of SHIP_ORDER) assert.equal(counts.ships[id], fleet.ships[id], `fleet ship ${id} count preserved`);
-      for (const id of DEFENSE_ORDER) assert.equal(counts.defenses[id], fixture.universe.planets[fixture.planetId].defenses[id], `defense ${id} count preserved`);
+      for (const id of DEFENSE_ORDER) {
+        if (id === "prismLaser") assert.equal(counts.defenses[id], 0, "missing prismLaser defaults to zero");
+        else assert.equal(counts.defenses[id], fixture.universe.planets[fixture.planetId].defenses[id], `defense ${id} count preserved`);
+      }
     } finally {
       resetMemoryUniverse();
     }
