@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
-import type { PlayerView } from "@starhold/game";
+import { researchUpgradeSeconds, type PlayerView } from "@starhold/game";
+import { fmtEta } from "./format";
 import { buildingRow, joinScreenHtml } from "./render-chrome-join";
 import { researchRow } from "./render-chrome-rows";
 import { fleetComposer } from "./render-fleets-composer";
@@ -150,6 +151,55 @@ describe("playtest fixes", () => {
     assert.match(full, />Queue full</);
     assert.match(full, /disabled/);
     assert.doesNotMatch(full, /Needs lab/);
+
+    base.player.researchQueue = [];
+    base.player.research = { energyTech: 2 };
+    base.ownedPlanets = [{ id: "home", researchLab: 2 }] as unknown as PlayerView["ownedPlanets"];
+    const metRow = researchRow("metallurgistTech", base, false);
+    assert.match(metRow, /Metallurgist/);
+    assert.match(metRow, /\+5% metal mine output per level/);
+    assert.match(metRow, />Research</);
+
+    const cryRow = researchRow("crystalizerTech", base, false);
+    assert.match(cryRow, /Crystalizer/);
+    assert.match(cryRow, /\+5% crystal mine output per level/);
+    assert.match(cryRow, />Research</);
+
+    const deutRow = researchRow("deutSynthesisTech", base, false);
+    assert.match(deutRow, /Deut Synthesis/);
+    assert.match(deutRow, /\+5% deuterium synthesizer output per level/);
+    assert.match(deutRow, />Research</);
+  });
+
+  it("previews research time using linked labs only when Research Network is active", () => {
+    const view = {
+      now: 1_700_000_000_000,
+      player: {
+        ...player(),
+        research: { energyTech: 0, researchNetwork: 1 },
+      },
+      planet: {
+        ...planet(),
+        id: "active",
+        buildings: { researchLab: 3 },
+        resources: { metal: 50_000, crystal: 50_000, deuterium: 50_000 },
+      },
+      ownedPlanets: [
+        { id: "high", isMoon: false, researchLab: 10 },
+        { id: "middle", isMoon: false, researchLab: 8 },
+        { id: "active", isMoon: false, researchLab: 3 },
+      ],
+      universe: { speed: 1 },
+    } as unknown as PlayerView;
+
+    const linkedTime = researchUpgradeSeconds("energyTech", 0, 18);
+    const linkedRow = researchRow("energyTech", view, false);
+    assert.match(linkedRow, new RegExp(`· ${fmtEta(linkedTime)}`));
+
+    view.player.research.researchNetwork = 0;
+    const localTime = researchUpgradeSeconds("energyTech", 0, 3);
+    const localRow = researchRow("energyTech", view, false);
+    assert.match(localRow, new RegExp(`· ${fmtEta(localTime)}`));
   });
 
   it("labels spy targets and hides protected attack targets", () => {
