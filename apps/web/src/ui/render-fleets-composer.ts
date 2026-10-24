@@ -244,7 +244,7 @@ export function fleetComposer(
             title: def.name,
             lines: [
               def.description,
-              `Cargo ${fmt(def.cargo)} · atk ${fmt(def.attack)} · in orbit ${fmt(have)}`,
+              `Cargo ${fmt(def.cargo)} · atk ${fmt(def.attack)} · Shield ${fmt(def.shield)} · Armor ${fmt(def.armor)} · Hull ${fmt(def.hull)} · in orbit ${fmt(have)}`,
             ],
             testId: `fleet-ship-tip-${id}`,
           });

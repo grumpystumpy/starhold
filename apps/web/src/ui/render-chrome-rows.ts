@@ -49,7 +49,7 @@ export function shipRow(
     detail: def.description,
     requires: [
       `Shipyard L${fmt(def.shipyardLevel)}+`,
-      `Cargo ${fmt(def.cargo)} · atk ${fmt(def.attack)}`,
+      `Cargo ${fmt(def.cargo)} · atk ${fmt(def.attack)} · Shield ${fmt(def.shield)} · Armor ${fmt(def.armor)} · Hull ${fmt(def.hull)}`,
     ],
     blocked,
   });
@@ -61,7 +61,7 @@ export function shipRow(
       <div>
         <h3>${escapeHtml(def.name)} <span class="meta">Owned ${fmt(count)}</span> ${tip.html}</h3>
         <p>${escapeHtml(def.description)}</p>
-        <div class="meta">${fmtCost(def.cost)} each · yard L${fmt(def.shipyardLevel)}+ · cargo ${fmt(def.cargo)} · atk ${fmt(def.attack)}${
+        <div class="meta">${fmtCost(def.cost)} each · yard L${fmt(def.shipyardLevel)}+ · cargo ${fmt(def.cargo)} · atk ${fmt(def.attack)} · Shield ${fmt(def.shield)} · Armor ${fmt(def.armor)} · Hull ${fmt(def.hull)}${
           locked ? ` · ${escapeHtml(lockMsg)}` : ""
         }</div>
       </div>
@@ -102,7 +102,7 @@ export function defenseRow(
     detail: def.description,
     requires: [
       `Shipyard L${fmt(def.shipyardLevel)}+`,
-      `Attack ${fmt(def.attack)}`,
+      `Attack ${fmt(def.attack)} · Shield ${fmt(def.shield)} · Armor ${fmt(def.armor)} · Hull ${fmt(def.hull)}`,
     ],
     blocked,
   });
@@ -112,7 +112,7 @@ export function defenseRow(
       <div>
         <h3>${escapeHtml(def.name)} <span class="meta">Owned ${fmt(have)}</span> ${tip.html}</h3>
         <p>${escapeHtml(def.description)}</p>
-        <div class="meta">${fmtCost(cost)} each · yard L${fmt(def.shipyardLevel)}+ · atk ${fmt(def.attack)}</div>
+        <div class="meta">${fmtCost(cost)} each · yard L${fmt(def.shipyardLevel)}+ · atk ${fmt(def.attack)} · Shield ${fmt(def.shield)} · Armor ${fmt(def.armor)} · Hull ${fmt(def.hull)}</div>
       </div>
       <div class="actions">
         <input type="number" min="1" max="999999" value="1" data-defense-count="${id}" data-testid="defense-count-${id}" ${locked ? "disabled" : ""} style="min-width:4rem;width:4.5rem" />
