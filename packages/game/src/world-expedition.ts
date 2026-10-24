@@ -36,7 +36,7 @@ export const EXPEDITION_RESOURCE_ROLL_BASE = 0.55;
 export const EXPEDITION_RESOURCE_ROLL_RANGE = 20;
 export const EXPEDITION_RESOURCE_ROLL_DIVISOR = 40;
 
-export const EXPEDITION_BLACK_HOLE_CHANCE = 0.003;
+export const EXPEDITION_BLACK_HOLE_CHANCE = 0.002;
 export const EXPEDITION_BLACK_HOLE_ROLL_SPACE = 1_000_000;
 
 export const EXPEDITION_RESOURCES_ROLL_MAX = 40;
@@ -44,10 +44,13 @@ export const EXPEDITION_SHIPS_ROLL_MAX = 55;
 export const EXPEDITION_NOTHING_ROLL_MAX = 68;
 export const EXPEDITION_MINI_PLANET_ROLL_MAX = 70;
 export const EXPEDITION_STARSHARDS_ROLL_MAX = 75;
+export const EXPEDITION_NEW_PIRATE_BASE_CHANCE = 0.02;
 export const EXPEDITION_NEW_PIRATE_BASE_ROLL_COUNT = 2;
 export const EXPEDITION_NEW_PIRATE_BASE_ROLL_MAX = 77;
-export const EXPEDITION_NEW_ALIEN_BASE_ROLL_COUNT = 2;
-export const EXPEDITION_NEW_ALIEN_BASE_ROLL_MAX = 79;
+export const EXPEDITION_NEW_ALIEN_BASE_CHANCE = 0.007;
+export const EXPEDITION_NEW_ALIEN_BASE_ROLL_COUNT = 0.7;
+export const EXPEDITION_NEW_ALIEN_BASE_ROLL_MAX = 77.7;
+export const EXPEDITION_PIRATES_CHANCE = 0.223;
 export const EXPEDITION_PIRATES_ROLL_MAX = 100;
 export const EXPEDITION_NPC_BASE_TIER = 0;
 
@@ -71,7 +74,11 @@ export function expeditionRoll(fleetId: string, at: number): number {
   for (let i = 0; i < fleetId.length; i++) {
     h = (Math.imul(h, 31) + fleetId.charCodeAt(i)) >>> 0;
   }
-  return h % 100;
+  const base = h % 100;
+  if (base === EXPEDITION_NEW_PIRATE_BASE_ROLL_MAX) {
+    return base + (hashSeed(`alienBase:${fleetId}:${at}`) % 10) / 10;
+  }
+  return base;
 }
 
 /** Check deterministic black hole roll before table lookup. */
@@ -84,8 +91,8 @@ export function expeditionBlackHoleRoll(fleetId: string, at: number): boolean {
 /**
  * Expedition outcome table (v1 + mini + new NPC bases):
  * 0–39 resources, 40–54 ships, 55–67 nothing, 68–69 miniPlanet (2%),
- * 70–74 starshards (5%), 75–76 newPirateBase (2%), 77–78 newAlienBase (2%),
- * 79–99 pirates (21%).
+ * 70–74 starshards (5%), 75–76 newPirateBase (2%), 77–77.6 newAlienBase (0.7%),
+ * and 77.7–99 pirates (22.3%).
  */
 export function expeditionKindFromRoll(roll: number): ExpeditionKind {
   if (roll < EXPEDITION_RESOURCES_ROLL_MAX) return "resources";
@@ -134,6 +141,7 @@ export function resourceFind(
   ships: FleetShips,
   roll: number,
 ): Resources {
+  const intRoll = Math.floor(roll);
   const cap = fleetCargoCapacity(ships);
   if (cap <= 0) {
     return { metal: 0, crystal: 0, deuterium: 0 };
@@ -142,7 +150,7 @@ export function resourceFind(
   const effectiveSp = Math.min(sp, EXPEDITION_STRUCTURAL_CAP);
   const rollFactor =
     EXPEDITION_RESOURCE_ROLL_BASE +
-    (roll % EXPEDITION_RESOURCE_ROLL_RANGE) / EXPEDITION_RESOURCE_ROLL_DIVISOR;
+    (intRoll % EXPEDITION_RESOURCE_ROLL_RANGE) / EXPEDITION_RESOURCE_ROLL_DIVISOR;
   const rawBudget =
     EXPEDITION_BASE_RESOURCE_FIND +
     effectiveSp * EXPEDITION_RESOURCE_MULT * rollFactor;
@@ -161,10 +169,11 @@ export function expeditionStarshardsFind(
   ships: FleetShips,
   roll: number,
 ): number {
+  const intRoll = Math.floor(roll);
   const sp = fleetStructurePoints(ships);
   const effectiveSp = Math.min(sp, EXPEDITION_STRUCTURAL_CAP);
   const range = EXPEDITION_STARSHARDS_MAX - EXPEDITION_STARSHARDS_MIN + 1;
-  const base = EXPEDITION_STARSHARDS_MIN + (roll % range);
+  const base = EXPEDITION_STARSHARDS_MIN + (intRoll % range);
   const scaled = (base * effectiveSp) / EXPEDITION_STRUCTURAL_CAP;
   return Math.max(1, Math.floor(scaled));
 }
@@ -178,6 +187,7 @@ export function expeditionShipsFind(
   before: FleetShips,
   roll: number,
 ): { shipId: ShipId; count: number } {
+  const intRoll = Math.floor(roll);
   const excluded = new Set<ShipId>([
     "voidforgeTitan",
     "worldEater",
@@ -198,7 +208,7 @@ export function expeditionShipsFind(
   );
   if (pool.length === 0) pool.push("scout");
 
-  const rollIndex = ((roll % pool.length) + pool.length) % pool.length;
+  const rollIndex = ((intRoll % pool.length) + pool.length) % pool.length;
   const shipId = pool[rollIndex]!;
   const structureLimit = Math.max(
     SHIPS[shipId].hull,
@@ -208,7 +218,7 @@ export function expeditionShipsFind(
   );
   const count = Math.max(
     1,
-    Math.min(1 + (roll % 3), Math.floor(structureLimit / SHIPS[shipId].hull)),
+    Math.min(1 + (intRoll % 3), Math.floor(structureLimit / SHIPS[shipId].hull)),
   );
   return { shipId, count };
 }
