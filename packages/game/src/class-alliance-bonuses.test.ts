@@ -494,8 +494,8 @@ describe("alliance classes", () => {
       atkShips: { scout: 2 },
       defDefenses: { laserBattery: 1 },
     });
-    assert.equal(bareDefense.report.defensesAfter.laserBattery ?? 0, 0);
-    assert.equal(builderDefense.report.defensesAfter.laserBattery, 1);
+    assert.equal(bareDefense.report.defensesDestroyed?.laserBattery ?? 0, 1);
+    assert.equal(builderDefense.report.defensesDestroyed?.laserBattery ?? 0, 0);
 
     const plainShield = raidReport({
       atkClass: null,
