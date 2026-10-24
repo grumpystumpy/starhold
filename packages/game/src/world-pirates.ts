@@ -119,6 +119,8 @@ import { consumeTickBudget, syncPlanetForTick, tickBudget } from "./tick-budget.
 import { pushEventLog } from "./world-event-log.js";
 import { tryFormMoon } from "./world-moons.js";
 import {
+  isNewbieBonusActive,
+  NEWBIE_DEFENSE_MULT,
   pirateRaidPickWeight,
   recordSuccessfulPirateRaid,
 } from "./world-protection.js";
@@ -1474,6 +1476,11 @@ export function applyNpcRaidOnPlanet(
     defensesBefore,
     npcResearch,
     defenderResearch,
+    {
+      defenderUnitStatMult: isNewbieBonusActive(universe, owner, now)
+        ? NEWBIE_DEFENSE_MULT
+        : 1,
+    },
   );
   const rebuilt = rebuildDefenses(
     defensesBefore,
