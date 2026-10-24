@@ -23,6 +23,7 @@ import {
   xpToNext,
 } from "./formulas.js";
 import {
+  expeditionBlackHoleRoll,
   expeditionKindFromRoll,
   expeditionRoll,
   resolveExpeditionArrival,
@@ -198,11 +199,13 @@ describe("Thread I XP grants live", () => {
     let resourcesAt = fleet.arrivesAt;
     let nothingAt = fleet.arrivesAt;
     for (let t = 0; t < 500; t++) {
+      const timeCandidate = fleet.arrivesAt + t;
+      if (expeditionBlackHoleRoll(fleet.id, timeCandidate)) continue;
       const kind = expeditionKindFromRoll(
-        expeditionRoll(fleet.id, fleet.arrivesAt + t),
+        expeditionRoll(fleet.id, timeCandidate),
       );
-      if (kind === "resources") resourcesAt = fleet.arrivesAt + t;
-      if (kind === "nothing") nothingAt = fleet.arrivesAt + t;
+      if (kind === "resources") resourcesAt = timeCandidate;
+      if (kind === "nothing") nothingAt = timeCandidate;
     }
 
     fleet.arrivesAt = resourcesAt;
@@ -219,11 +222,13 @@ describe("Thread I XP grants live", () => {
     fleet.reportId = null;
     // Re-find a nothing roll for the new fleet id.
     for (let t = 0; t < 500; t++) {
+      const timeCandidate = nothingAt + t;
+      if (expeditionBlackHoleRoll(fleet.id, timeCandidate)) continue;
       if (
-        expeditionKindFromRoll(expeditionRoll(fleet.id, nothingAt + t)) ===
+        expeditionKindFromRoll(expeditionRoll(fleet.id, timeCandidate)) ===
         "nothing"
       ) {
-        fleet.arrivesAt = nothingAt + t;
+        fleet.arrivesAt = timeCandidate;
         break;
       }
     }

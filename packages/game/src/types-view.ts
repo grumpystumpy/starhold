@@ -107,7 +107,10 @@ export type ExpeditionKind =
   | "nothing"
   | "pirates"
   | "starshards"
-  | "miniPlanet";
+  | "miniPlanet"
+  | "blackHole"
+  | "newPirateBase"
+  | "newAlienBase";
 
 export interface ExpeditionReport {
   id: string;
@@ -123,6 +126,9 @@ export interface ExpeditionReport {
   /** Mini-planet discovery coords (finder-only). */
   miniPlanetId?: string;
   miniCoords?: Coordinates;
+  newPirateBaseId?: string;
+  newAlienBaseId?: string;
+  newBaseCoords?: Coordinates;
   summary: string;
 }
 

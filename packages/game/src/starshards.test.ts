@@ -223,7 +223,8 @@ describe("Thread D Starshards / officers / skills", () => {
     assert.equal(expeditionKindFromRoll(69), "miniPlanet");
     assert.equal(expeditionKindFromRoll(70), "starshards");
     assert.equal(expeditionKindFromRoll(74), "starshards");
-    assert.equal(expeditionKindFromRoll(75), "pirates");
+    assert.equal(expeditionKindFromRoll(75), "newPirateBase");
+    assert.equal(expeditionKindFromRoll(79), "pirates");
   });
 
   it("claims daily login once per UTC day", () => {

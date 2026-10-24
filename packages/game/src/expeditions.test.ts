@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { EXPEDITION_SLOT } from "./catalog.js";
 import {
+  expeditionBlackHoleRoll,
   expeditionKindFromRoll,
   expeditionRoll,
   expeditionStarshardsFind,
@@ -28,8 +29,262 @@ describe("P2 expeditions", () => {
     assert.equal(expeditionKindFromRoll(69), "miniPlanet");
     assert.equal(expeditionKindFromRoll(70), "starshards");
     assert.equal(expeditionKindFromRoll(74), "starshards");
-    assert.equal(expeditionKindFromRoll(75), "pirates");
+    assert.equal(expeditionKindFromRoll(75), "newPirateBase");
+    assert.equal(expeditionKindFromRoll(76), "newPirateBase");
+    assert.equal(expeditionKindFromRoll(77), "newAlienBase");
+    assert.equal(expeditionKindFromRoll(78), "newAlienBase");
+    assert.equal(expeditionKindFromRoll(79), "pirates");
     assert.equal(expeditionKindFromRoll(99), "pirates");
+  });
+
+  it("handles black hole outcome (fleet lost completely) vs just above threshold", () => {
+    const universe = createUniverse("BlackHole Test", 8);
+    const p = joinUniverse(universe, "Captain", 100_000);
+    const planet = universe.planets[p.planet.id]!;
+    planet.ships.hauler = 10;
+    planet.resources.deuterium = 10_000;
+
+    // Find a fleetId + arrivesAt combination where expeditionBlackHoleRoll returns true
+    let bhTime = 100_100;
+    const fleetId = "flt_bh_test";
+    while (!expeditionBlackHoleRoll(fleetId, bhTime)) {
+      bhTime++;
+    }
+
+    const launch = launchFleet(universe, {
+      playerId: p.player.id,
+      mission: "expedition",
+      targetCoords: { ...planet.coords, slot: EXPEDITION_SLOT },
+      ships: { hauler: 10 },
+      now: bhTime - 100,
+    });
+    assert.ok(launch.ok);
+    if (!launch.ok) return;
+
+    // Swap fleet ID and arrival time to match our tested seed
+    delete universe.fleets[launch.fleet.id];
+    launch.fleet.id = fleetId;
+    launch.fleet.arrivesAt = bhTime;
+    universe.fleets[fleetId] = launch.fleet;
+
+    advanceUniverse(universe, bhTime);
+    // Fleet is destroyed and lost immediately upon arrival
+    assert.equal(universe.fleets[fleetId], undefined);
+    const reports = Object.values(universe.expeditionReports).filter(r => r.missionId === fleetId);
+    assert.equal(reports.length, 1);
+    const report = reports[0]!;
+    assert.equal(report.kind, "blackHole");
+    assert.match(report.summary, /black hole/i);
+
+    // Planet has 0 haulers remaining
+    assert.equal(universe.planets[planet.id]!.ships.hauler ?? 0, 0);
+
+    // Find a time where expeditionBlackHoleRoll returns false
+    let normalTime = 100_100;
+    while (expeditionBlackHoleRoll("flt_normal_test", normalTime)) {
+      normalTime++;
+    }
+    const fleetId2 = "flt_normal_test";
+    universe.planets[planet.id]!.ships.hauler = 10;
+    const launch2 = launchFleet(universe, {
+      playerId: p.player.id,
+      mission: "expedition",
+      targetCoords: { ...planet.coords, slot: EXPEDITION_SLOT },
+      ships: { hauler: 10 },
+      now: normalTime - 100,
+    });
+    assert.ok(launch2.ok);
+    if (!launch2.ok) return;
+
+    delete universe.fleets[launch2.fleet.id];
+    launch2.fleet.id = fleetId2;
+    launch2.fleet.arrivesAt = normalTime;
+    universe.fleets[fleetId2] = launch2.fleet;
+
+    advanceUniverse(universe, normalTime);
+    const f2 = universe.fleets[fleetId2];
+    assert.ok(f2);
+    assert.ok(f2.reportId);
+    const report2 = universe.expeditionReports[f2.reportId!];
+    assert.notEqual(report2.kind, "blackHole");
+  });
+
+  it("nothing outcome leaves ships, resources, and XP unchanged", () => {
+    const universe = createUniverse("Nothing Test", 8);
+    const p = joinUniverse(universe, "Explorer", 100_000);
+    const planet = universe.planets[p.planet.id]!;
+    planet.ships.hauler = 5;
+    planet.resources.deuterium = 5_000;
+    const playerBefore = universe.players[p.player.id]!;
+    const xpBefore = playerBefore.xp ?? 0;
+
+    let time = 100_100;
+    const fleetId = "flt_nothing_test";
+    while (expeditionBlackHoleRoll(fleetId, time) || expeditionKindFromRoll(expeditionRoll(fleetId, time)) !== "nothing") {
+      time++;
+    }
+
+    const launch = launchFleet(universe, {
+      playerId: p.player.id,
+      mission: "expedition",
+      targetCoords: { ...planet.coords, slot: EXPEDITION_SLOT },
+      ships: { hauler: 5 },
+      now: time - 100,
+    });
+    assert.ok(launch.ok);
+    if (!launch.ok) return;
+
+    delete universe.fleets[launch.fleet.id];
+    launch.fleet.id = fleetId;
+    launch.fleet.arrivesAt = time;
+    universe.fleets[fleetId] = launch.fleet;
+
+    advanceUniverse(universe, time);
+    const f = universe.fleets[fleetId];
+    assert.ok(f && f.reportId);
+    const report = universe.expeditionReports[f.reportId!];
+    assert.equal(report.kind, "nothing");
+    assert.deepEqual(report.cargoGained, { metal: 0, crystal: 0, deuterium: 0 });
+
+    const playerAfter = universe.players[p.player.id]!;
+    assert.equal(playerAfter.xp ?? 0, xpBefore);
+
+    advanceUniverse(universe, f.arrivesAt);
+    assert.equal(universe.planets[planet.id]!.ships.hauler, 5);
+  });
+
+  it("spawns new pirate base and new alien base in target galaxy on free slot, falling back to ambush when galaxy full", () => {
+    const universe = createUniverse("New NPC Base Test", 8);
+    const p = joinUniverse(universe, "Pioneer", 100_000);
+    const planet = universe.planets[p.planet.id]!;
+    planet.ships.hauler = 10;
+    planet.resources.deuterium = 10_000;
+
+    // 1. Spawn New Pirate Base
+    let timeP = 100_100;
+    const fleetIdP = "flt_new_pirate";
+    while (
+      expeditionBlackHoleRoll(fleetIdP, timeP) ||
+      expeditionKindFromRoll(expeditionRoll(fleetIdP, timeP)) !== "newPirateBase"
+    ) {
+      timeP++;
+    }
+
+    universe.fleets[fleetIdP] = {
+      id: fleetIdP,
+      ownerPlayerId: p.player.id,
+      mission: "expedition",
+      originPlanetId: planet.id,
+      targetCoords: { galaxy: 1, system: 1, slot: EXPEDITION_SLOT },
+      ships: { hauler: 10 },
+      cargo: { metal: 0, crystal: 0, deuterium: 0 },
+      arrivesAt: timeP,
+      returnsAt: timeP + 1000,
+      phase: "outbound",
+    };
+
+    advanceUniverse(universe, timeP);
+    const fP = universe.fleets[fleetIdP];
+    assert.ok(fP && fP.reportId);
+    const reportP = universe.expeditionReports[fP.reportId!];
+    assert.equal(reportP.kind, "newPirateBase");
+    assert.ok(reportP.newPirateBaseId);
+    assert.ok(reportP.newBaseCoords);
+    assert.equal(reportP.newBaseCoords!.galaxy, 1);
+    assert.ok(reportP.newBaseCoords!.slot >= 1 && reportP.newBaseCoords!.slot <= 15);
+    assert.notEqual(reportP.newBaseCoords!.slot, 16);
+    assert.ok(universe.pirateBases?.[reportP.newPirateBaseId!]);
+    assert.match(reportP.summary, new RegExp(`${reportP.newBaseCoords!.galaxy}:${reportP.newBaseCoords!.system}:${reportP.newBaseCoords!.slot}`));
+
+    // 2. Spawn New Alien Base
+    let timeA = 100_100;
+    const fleetIdA = "flt_new_alien";
+    while (
+      expeditionBlackHoleRoll(fleetIdA, timeA) ||
+      expeditionKindFromRoll(expeditionRoll(fleetIdA, timeA)) !== "newAlienBase"
+    ) {
+      timeA++;
+    }
+
+    universe.fleets[fleetIdA] = {
+      id: fleetIdA,
+      ownerPlayerId: p.player.id,
+      mission: "expedition",
+      originPlanetId: planet.id,
+      targetCoords: { galaxy: 2, system: 1, slot: EXPEDITION_SLOT },
+      ships: { hauler: 10 },
+      cargo: { metal: 0, crystal: 0, deuterium: 0 },
+      arrivesAt: timeA,
+      returnsAt: timeA + 1000,
+      phase: "outbound",
+    };
+
+    advanceUniverse(universe, timeA);
+    const fA = universe.fleets[fleetIdA];
+    assert.ok(fA && fA.reportId);
+    const reportA = universe.expeditionReports[fA.reportId!];
+    assert.equal(reportA.kind, "newAlienBase");
+    assert.ok(reportA.newAlienBaseId);
+    assert.ok(reportA.newBaseCoords);
+    assert.equal(reportA.newBaseCoords!.galaxy, 2);
+    assert.ok(reportA.newBaseCoords!.slot >= 1 && reportA.newBaseCoords!.slot <= 15);
+    assert.notEqual(reportA.newBaseCoords!.slot, 16);
+    assert.ok(universe.alienBases?.[reportA.newAlienBaseId!]);
+    assert.match(reportA.summary, new RegExp(`${reportA.newBaseCoords!.galaxy}:${reportA.newBaseCoords!.system}:${reportA.newBaseCoords!.slot}`));
+
+    // 3. Fallback when galaxy is full
+    // Fill galaxy 3 slots 1..15 in all systems 1..399
+    for (let sys = 1; sys <= 399; sys++) {
+      for (let sl = 1; sl <= 15; sl++) {
+        const dummyId = `pir_dummy_${sys}_${sl}`;
+        universe.pirateBases![dummyId] = {
+          id: dummyId,
+          coords: { galaxy: 3, system: sys, slot: sl },
+          name: "Dummy Base",
+          tier: 0,
+          level: 0,
+          ships: {},
+          defenses: {},
+          resources: { metal: 0, crystal: 0, deuterium: 0 },
+          lastGrewAt: 100_000,
+          lastRaidAt: 100_000,
+          nextRaidAt: 200_000,
+          lastFreeSpawnAt: 100_000,
+          destroyedAt: null,
+          coalitionId: dummyId,
+          splitDone: true,
+        };
+      }
+    }
+
+    let timeFull = 100_100;
+    const fleetIdFull = "flt_full_gal";
+    while (
+      expeditionBlackHoleRoll(fleetIdFull, timeFull) ||
+      expeditionKindFromRoll(expeditionRoll(fleetIdFull, timeFull)) !== "newPirateBase"
+    ) {
+      timeFull++;
+    }
+
+    universe.fleets[fleetIdFull] = {
+      id: fleetIdFull,
+      ownerPlayerId: p.player.id,
+      mission: "expedition",
+      originPlanetId: planet.id,
+      targetCoords: { galaxy: 3, system: 1, slot: EXPEDITION_SLOT },
+      ships: { hauler: 10 },
+      cargo: { metal: 0, crystal: 0, deuterium: 0 },
+      arrivesAt: timeFull,
+      returnsAt: timeFull + 1000,
+      phase: "outbound",
+    };
+
+    advanceUniverse(universe, timeFull);
+    const fFull = universe.fleets[fleetIdFull];
+    assert.ok(fFull && fFull.reportId);
+    const reportFull = universe.expeditionReports[fFull.reportId!];
+    // Falls back to pirate ambush
+    assert.match(reportFull.summary, /pirate ambush/i);
   });
 
   it("launches to deep-space slot and returns with a report", () => {
