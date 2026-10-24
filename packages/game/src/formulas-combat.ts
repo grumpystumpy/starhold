@@ -256,6 +256,221 @@ function pickFocusTarget(
   return best;
 }
 
+/**
+ * Computes target weights for B3-07.
+ * Exclusive rapid-fire preference: if shooter has rapid fire (N > 1) against any present target type,
+ * candidate set is strictly the present target types with the maximum rapid fire factor N_max.
+ * Otherwise (when max RF among present types is 1), all present target types are candidates
+ * weighted by sqrt(toughness) * count * (isSwarmDrone && mothershipPresent ? 5 : 1).
+ */
+export function computeTargetWeights(
+  shooterId: CombatUnitId,
+  targetSideSnapshot: SidePools,
+  targetSideLive?: SidePools,
+  targetResearch?: ResearchLevels,
+  battlefield?: BattlefieldMods,
+): Partial<Record<CombatUnitId, number>> {
+  const live = targetSideLive ?? targetSideSnapshot;
+  const present: CombatUnitId[] = [];
+  for (const id of SHIP_ORDER) {
+    if ((live.ships[id] ?? 0) > 0) present.push(id);
+  }
+  for (const id of DEFENSE_ORDER) {
+    if ((live.defenses[id] ?? 0) > 0) present.push(id);
+  }
+
+  if (present.length === 0) return {};
+
+  let maxRF = 1;
+  for (const id of present) {
+    const rf = rapidFireFactor(shooterId, id);
+    if (rf > maxRF) maxRF = rf;
+  }
+
+  const candidates =
+    maxRF > 1
+      ? present.filter((id) => rapidFireFactor(shooterId, id) === maxRF)
+      : present;
+
+  const mothershipPresent =
+    (targetSideSnapshot.ships.swarmMothership ?? 0) > 0;
+  const weights: Partial<Record<CombatUnitId, number>> = {};
+
+  for (const id of candidates) {
+    const count = targetCount(targetSideSnapshot, id);
+    const stats = getUnitStats(id, targetResearch, battlefield);
+    const toughness = unitHp(stats.maxS, stats.maxA, stats.maxH, undefined);
+    let w = Math.sqrt(toughness) * count;
+    if (id === "swarmDrone" && mothershipPresent) {
+      w *= 5;
+    }
+    weights[id] = w;
+  }
+
+  return weights;
+}
+
+export function pickWeightedTarget(
+  shooterId: CombatUnitId,
+  targetSideSnapshot: SidePools,
+  targetSideLive: SidePools,
+  targetResearch: ResearchLevels | undefined,
+  battlefield: BattlefieldMods | undefined,
+  rng: () => number,
+): CombatUnitId | null {
+  const weights = computeTargetWeights(
+    shooterId,
+    targetSideSnapshot,
+    targetSideLive,
+    targetResearch,
+    battlefield,
+  );
+  const candidates = Object.keys(weights) as CombatUnitId[];
+  if (candidates.length === 0) return null;
+  if (candidates.length === 1) return candidates[0]!;
+
+  let totalWeight = 0;
+  for (const id of candidates) {
+    totalWeight += weights[id] ?? 0;
+  }
+  if (totalWeight <= 0) return candidates[0]!;
+
+  let roll = rng() * totalWeight;
+  for (const id of candidates) {
+    const w = weights[id] ?? 0;
+    roll -= w;
+    if (roll <= 0) return id;
+  }
+  return candidates[candidates.length - 1]!;
+}
+
+function calculateSingleUnitAttack(
+  firerId: CombatUnitId,
+  firerResearch: ResearchLevels | undefined,
+  swarmDroneCount: number,
+  opts?: {
+    attackMult?: number;
+    defenseSlot?: number;
+    battlefield?: BattlefieldMods;
+  },
+): number {
+  const attackMult = Math.max(0.01, opts?.attackMult ?? 1);
+  const battlefieldAtk = Math.max(0.01, opts?.battlefield?.attackMult ?? 1);
+  const slot = opts?.defenseSlot;
+
+  if ((SHIP_ORDER as string[]).includes(firerId)) {
+    const def = SHIPS[firerId as ShipId];
+    let atk = unitAtk(def.attack, firerResearch) * attackMult * battlefieldAtk;
+    if (firerId === "swarmDrone") {
+      atk *= swarmDroneAttackMult(swarmDroneCount);
+    }
+    return atk;
+  } else {
+    const def = DEFENSES[firerId as DefenseId];
+    let atk = unitAtk(def.attack, firerResearch) * battlefieldAtk;
+    if (
+      slot != null &&
+      def.slotAttackBonus &&
+      def.slotAttackBonus.slots.includes(slot)
+    ) {
+      atk *= def.slotAttackBonus.factor;
+    }
+    return atk;
+  }
+}
+
+function applyShotWithIntercept(
+  side: SidePools,
+  target: CombatUnitId,
+  damage: number,
+  research: ResearchLevels | undefined,
+  battlefield?: BattlefieldMods,
+): number {
+  let unabsorbed = 0;
+  for (const part of redistributeSwarmIntercept(target, damage, side)) {
+    const rem = applyDamageToTarget(
+      side,
+      part.target,
+      part.damage,
+      research,
+      battlefield,
+    );
+    unabsorbed += rem;
+  }
+  return unabsorbed;
+}
+
+
+export function fireGroupShots(
+  firerId: CombatUnitId,
+  groupCount: number,
+  targetSideSnapshot: SidePools,
+  targetSideLive: SidePools,
+  firerResearch: ResearchLevels | undefined,
+  targetResearch: ResearchLevels | undefined,
+  swarmDroneCount: number,
+  isDefenderFirer: boolean,
+  opts:
+    | {
+        defensePowerMult?: number;
+        attackMult?: number;
+        defenseSlot?: number;
+        battlefield?: BattlefieldMods;
+      }
+    | undefined,
+  rng: () => number,
+): void {
+  if (groupCount <= 0) return;
+  const unitAtkDamage = calculateSingleUnitAttack(
+    firerId,
+    firerResearch,
+    swarmDroneCount,
+    opts,
+  );
+  if (unitAtkDamage <= 0) return;
+
+  const defensePowerMult = Math.max(0.01, opts?.defensePowerMult ?? 1);
+  const unitEffectiveDamage = isDefenderFirer
+    ? unitAtkDamage * defensePowerMult
+    : unitAtkDamage / defensePowerMult;
+
+  for (let i = 0; i < groupCount; i++) {
+    let currentTarget = pickWeightedTarget(
+      firerId,
+      targetSideSnapshot,
+      targetSideLive,
+      targetResearch,
+      opts?.battlefield,
+      rng,
+    );
+
+    while (currentTarget != null) {
+      applyShotWithIntercept(
+        targetSideLive,
+        currentTarget,
+        unitEffectiveDamage,
+        targetResearch,
+        opts?.battlefield,
+      );
+
+      const rfFactor = rapidFireFactor(firerId, currentTarget);
+      if (rfFactor <= 1) break;
+
+      const pRepeat = (rfFactor - 1) / rfFactor;
+      if (rng() >= pRepeat) break;
+
+      currentTarget = pickWeightedTarget(
+        firerId,
+        targetSideSnapshot,
+        targetSideLive,
+        targetResearch,
+        opts?.battlefield,
+        rng,
+      );
+    }
+  }
+}
+
 export interface BattlefieldMods {
   shieldMult: number;
   attackMult: number;
@@ -310,10 +525,10 @@ function applyDamageToTarget(
   damage: number,
   research: ResearchLevels | undefined,
   battlefield?: BattlefieldMods,
-): void {
-  if (damage <= 0) return;
+): number {
+  if (damage <= 0) return 0;
   let count = targetCount(side, id);
-  if (count <= 0) return;
+  if (count <= 0) return damage;
 
   if (!side.unitDamage) side.unitDamage = {};
 
@@ -361,6 +576,7 @@ function applyDamageToTarget(
     }
   }
   side.unitDamage[id] = unitDmg;
+  return remainingDamage;
 }
 
 /**
@@ -466,70 +682,7 @@ export function applyHarvesterKamikaze(
   return harvesters;
 }
 
-function applyShotWithIntercept(
-  side: SidePools,
-  target: CombatUnitId,
-  damage: number,
-  research: ResearchLevels | undefined,
-  battlefield?: BattlefieldMods,
-): void {
-  for (const part of redistributeSwarmIntercept(target, damage, side)) {
-    applyDamageToTarget(side, part.target, part.damage, research, battlefield);
-  }
-}
 
-/** Snapshot damage intents from start-of-round counts (simultaneous fire). */
-function collectFire(
-  firerShips: FleetShips,
-  firerDefenses: DefenseStock | null,
-  targetShips: FleetShips,
-  targetDefenses: DefenseStock,
-  firerResearch: ResearchLevels | undefined,
-  opts?: {
-    attackMult?: number;
-    defenseSlot?: number;
-    battlefield?: BattlefieldMods;
-  },
-): Array<{ target: CombatUnitId; damage: number }> {
-  const shots: Array<{ target: CombatUnitId; damage: number }> = [];
-  const focus = pickFocusTarget(targetShips, targetDefenses);
-  if (!focus) return shots;
-  const attackMult = Math.max(0.01, opts?.attackMult ?? 1);
-  const battlefieldAtk = Math.max(0.01, opts?.battlefield?.attackMult ?? 1);
-  const slot = opts?.defenseSlot;
-
-  for (const id of livingShipIds(firerShips)) {
-    const def = SHIPS[id];
-    let atk =
-      unitAtk(def.attack, firerResearch) * attackMult * battlefieldAtk;
-    if (id === "swarmDrone") {
-      atk *= swarmDroneAttackMult(firerShips.swarmDrone ?? 0);
-    }
-    if (atk <= 0) continue;
-    const n = firerShips[id] ?? 0;
-    const rf = rapidFireFactor(id, focus);
-    shots.push({ target: focus, damage: n * atk * rf });
-  }
-  if (firerDefenses) {
-    for (const id of livingDefenseIds(firerDefenses)) {
-      const def = DEFENSES[id];
-      let atk =
-        unitAtk(def.attack, firerResearch) * attackMult * battlefieldAtk;
-      if (
-        slot != null &&
-        def.slotAttackBonus &&
-        def.slotAttackBonus.slots.includes(slot)
-      ) {
-        atk *= def.slotAttackBonus.factor;
-      }
-      if (atk <= 0) continue;
-      const n = firerDefenses[id] ?? 0;
-      const rf = rapidFireFactor(id, focus);
-      shots.push({ target: focus, damage: n * atk * rf });
-    }
-  }
-  return shots;
-}
 
 export interface CombatMods {
   /** Multiplies defender ship/defense firepower and effective HP (officer/skill). */
@@ -628,40 +781,70 @@ export function resolveCombat(
     const defShipsBefore = cloneFleetShips(defSide.ships);
     const defDefsBefore = cloneDefenses(defSide.defenses);
 
-    const atkShots = collectFire(
-      atkSide.ships,
-      null,
-      defSide.ships,
-      defSide.defenses,
-      attackerResearch,
-      { attackMult, battlefield },
-    );
-    const defShots = collectFire(
-      defSide.ships,
-      defSide.defenses,
-      atkSide.ships,
-      emptyDefenses(),
-      defenderResearch,
-      { defenseSlot, battlefield },
-    );
+    // Snapshots of target pools at the start of the round for simultaneous combat
+    const atkSideSnapshot: SidePools = {
+      ships: atkShipsBefore,
+      defenses: emptyDefenses(),
+    };
+    const defSideSnapshot: SidePools = {
+      ships: defShipsBefore,
+      defenses: defDefsBefore,
+    };
 
-    for (const shot of atkShots) {
-      // Higher defensePower → harder to kill (incoming damage reduced).
-      applyShotWithIntercept(
+    // Attacker ships fire as groups against defSide live pool
+    for (const id of SHIP_ORDER) {
+      const n = atkShipsBefore[id] ?? 0;
+      if (n <= 0) continue;
+      if (shipCount(defSide.ships) + defenseCount(defSide.defenses) <= 0) break;
+      fireGroupShots(
+        id,
+        n,
+        defSideSnapshot,
         defSide,
-        shot.target,
-        shot.damage / defensePowerMult,
+        attackerResearch,
         defenderResearch,
-        battlefield,
+        atkShipsBefore.swarmDrone ?? 0,
+        false,
+        { defensePowerMult, attackMult, battlefield },
+        rng,
       );
     }
-    for (const shot of defShots) {
-      applyShotWithIntercept(
+
+    // Defender ships fire as groups against atkSide live pool
+    for (const id of SHIP_ORDER) {
+      const n = defShipsBefore[id] ?? 0;
+      if (n <= 0) continue;
+      if (shipCount(atkSide.ships) <= 0) break;
+      fireGroupShots(
+        id,
+        n,
+        atkSideSnapshot,
         atkSide,
-        shot.target,
-        shot.damage * defensePowerMult,
+        defenderResearch,
         attackerResearch,
-        battlefield,
+        defShipsBefore.swarmDrone ?? 0,
+        true,
+        { defensePowerMult, defenseSlot, battlefield },
+        rng,
+      );
+    }
+
+    // Defender defenses fire as groups against atkSide live pool
+    for (const id of DEFENSE_ORDER) {
+      const n = defDefsBefore[id] ?? 0;
+      if (n <= 0) continue;
+      if (shipCount(atkSide.ships) <= 0) break;
+      fireGroupShots(
+        id,
+        n,
+        atkSideSnapshot,
+        atkSide,
+        defenderResearch,
+        attackerResearch,
+        defShipsBefore.swarmDrone ?? 0,
+        true,
+        { defensePowerMult, defenseSlot, battlefield },
+        rng,
       );
     }
 
