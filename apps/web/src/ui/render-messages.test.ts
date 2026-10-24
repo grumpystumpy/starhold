@@ -250,9 +250,9 @@ describe("messages inbox", () => {
       }),
     );
     assert.match(combat, /1,200 metal, 800 crystal/);
-    assert.match(combat, /Defenses destroyed: 10× Beam Emplacement/);
-    assert.match(combat, /Rebuilt: 7× Beam Emplacement/);
-    assert.match(combat, /Permanently lost: 3× Beam Emplacement/);
+    assert.match(combat, /Defenses destroyed: 10× Light Laser/);
+    assert.match(combat, /Rebuilt: 7× Light Laser/);
+    assert.match(combat, /Permanently lost: 3× Light Laser/);
     assert.match(combat, /400 metal, 80 crystal at 1:4:16/);
 
     const legacy = messagesPageHtml(
