@@ -2,6 +2,13 @@
 
 export type ResourceId = "metal" | "crystal" | "deuterium";
 
+export type WeaponType =
+  | "projectile"
+  | "laser"
+  | "ion"
+  | "plasma"
+  | "gravitational";
+
 export type BuildingId =
   | "metalMine"
   | "crystalMine"
@@ -45,6 +52,8 @@ export interface PlayerClassState {
 export type ShipId =
   | "scout"
   | "hauler"
+  | "fastCargo"
+  | "bulkCargo"
   | "interceptor"
   | "cruiser"
   | "bomber"
@@ -74,6 +83,7 @@ export type DefenseId =
   | "laserBattery"
   | "shieldDome"
   | "needleTurret"
+  | "prismLaser"
   | "arcLattice"
   | "pulseBastion"
   | "gaussRail"
@@ -100,7 +110,11 @@ export type ResearchId =
   | "computerTech"
   | "queueLogistics"
   | "swarmHold"
-  | "gravityWell";
+  | "gravityWell"
+  | "metallurgistTech"
+  | "crystalizerTech"
+  | "deutSynthesisTech"
+  | "researchNetwork";
 
 export type QueueKind = "building" | "ship" | "defense" | "research";
 
@@ -208,6 +222,7 @@ export interface ShipDef {
   cargo: number;
   /** Combat / travel (invented — not scraped genre values) */
   attack: number;
+  weapons: Partial<Record<WeaponType, number>>;
   shield: number;
   armor: number;
   hull: number;
@@ -241,6 +256,7 @@ export interface DefenseDef {
   /** Minimum shipyard level */
   shipyardLevel: number;
   attack: number;
+  weapons: Partial<Record<WeaponType, number>>;
   shield: number;
   armor: number;
   hull: number;

@@ -4,10 +4,13 @@ import {
   allianceBonusesForPlayer,
   computeRaidLoot,
   debrisFromDestroyed,
+  debrisFromDestroyedDefenses,
+  defenseRebuildRate,
   destroyedShipResources,
   effectiveCombatResearch,
   emptyDefenses,
   grantPlayerXp,
+  rebuildDefenses,
   resolveCombat,
   resourcesCostTotal,
   spoilSkimmerDebris,
@@ -91,7 +94,12 @@ export function resolveRaidArrival(
     },
   );
   target.ships = combat.defenderAfter;
-  target.defenses = combat.defensesAfter;
+  const rebuilt = rebuildDefenses(
+    defensesBefore,
+    combat.defensesAfter,
+    defenseRebuildRate(defenderOwner?.playerClass?.classId),
+  );
+  target.defenses = rebuilt.defensesAfter;
 
   const debrisAtk = debrisFromDestroyed(
     destroyedShipResources(fleet.ships, combat.attackerAfter),
@@ -99,9 +107,10 @@ export function resolveRaidArrival(
   const debrisDef = debrisFromDestroyed(
     destroyedShipResources(defenderBefore, combat.defenderAfter),
   );
+  const debrisGuns = debrisFromDestroyedDefenses(rebuilt.defensesPermanentlyLost);
   let debrisCreated: Resources = {
-    metal: debrisAtk.metal + debrisDef.metal,
-    crystal: debrisAtk.crystal + debrisDef.crystal,
+    metal: debrisAtk.metal + debrisDef.metal + debrisGuns.metal,
+    crystal: debrisAtk.crystal + debrisDef.crystal + debrisGuns.crystal,
     deuterium: 0,
   };
   const atkClassId = owner?.playerClass?.classId ?? null;
@@ -206,10 +215,10 @@ export function resolveRaidArrival(
       combat.attackerAfter,
       reportId,
     );
-    moonKillChancePct = kill.chancePct;
+    if (kill.chancePct > 0) moonKillChancePct = kill.chancePct;
     if (kill.destroyed) {
       moonDestroyed = true;
-      summary = `${combat.summary} Siege hulls shattered the moon (${kill.chancePct}% chance).`;
+      summary = `${combat.summary} Void Titans shattered the moon (${kill.chancePct}% chance).`;
     }
   } else {
     const moon = tryFormMoon(universe, target, debrisCreated, `${fleet.id}:${fleet.arrivesAt}`, now);
@@ -260,7 +269,10 @@ export function resolveRaidArrival(
     defenderBefore,
     defenderAfter: combat.defenderAfter,
     defensesBefore,
-    defensesAfter: combat.defensesAfter,
+    defensesAfter: rebuilt.defensesAfter,
+    defensesDestroyed: rebuilt.defensesDestroyed,
+    defensesRebuilt: rebuilt.defensesRebuilt,
+    defensesPermanentlyLost: rebuilt.defensesPermanentlyLost,
     loot,
     debrisCreated,
     outcome: combat.outcome,
