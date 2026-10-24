@@ -7,7 +7,6 @@ import { canPatchShell, patchLiveChrome } from "./patch-chrome";
 import { renderJoin, reconnectScreenHtml } from "./render-chrome";
 import {
   fleetDraftWithAcsPrefill,
-  rememberedFleetDraft,
   salvageFleetForm,
   type FleetDraft,
 } from "./render-fleets";
@@ -87,13 +86,18 @@ export function renderApp(
   startCountdownTick();
 }
 
-function fleetDraftForPage(
+export function fleetDraftForPage(
   root: HTMLElement,
   activePage: NavPage,
 ): FleetDraft | null {
   const salvaged = salvageFleetForm(root);
   const prefill = session.pendingAcsPrefill;
   if (activePage !== "fleet") return salvaged;
-  const draft = salvaged ?? rememberedFleetDraft();
-  return prefill ? fleetDraftWithAcsPrefill(draft, prefill) : draft;
+  const galaxyDraft = session.pendingGalaxyFleetDraft;
+  if (galaxyDraft) {
+    session.pendingGalaxyFleetDraft = null;
+    return galaxyDraft;
+  }
+  if (!prefill) return salvaged;
+  return fleetDraftWithAcsPrefill(salvaged, prefill);
 }

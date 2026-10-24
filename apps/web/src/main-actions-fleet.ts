@@ -137,7 +137,7 @@ export function doGalaxyFleetAction(
   mission: "colonize" | "raid",
 ): void {
   const next = fleetDraftAfterPreset(null, mission, {});
-  rememberFleetDraft({ ...next, targetCoords: coords });
+  session.pendingGalaxyFleetDraft = { ...next, targetCoords: coords };
   navigateTo("fleet");
 }
 

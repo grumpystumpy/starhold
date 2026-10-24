@@ -13,6 +13,7 @@ import { fmtEta } from "./format";
 import { syncChangedInputTypeValue } from "./morph-dom";
 import { flashHtml } from "./render-chrome-join";
 import { fleetComposer } from "./render-fleets-composer";
+import { fleetDraftForPage } from "./render-app";
 import { readFleetFormIn } from "../main-fleet-form";
 import {
   doApplyFleetPreset,
@@ -616,8 +617,13 @@ describe("galaxy fleet actions", () => {
     }
   });
 
-  it("prefills the Fleet tab for colonize and attack at step 1", () => {
+  it("consumes a galaxy attack prefill once instead of restoring the remembered step-2 draft", () => {
     const originalPage = session.activePage;
+    const remembered = {
+      ...blankFleetDraft(),
+      step: 2 as const,
+      counts: { scout: 1 },
+    };
     Object.assign(window, {
       location: {
         href: "http://starhold.local/galaxy",
@@ -627,27 +633,28 @@ describe("galaxy fleet actions", () => {
       },
       history: { pushState() {}, replaceState() {} },
     });
+    rememberFleetDraft(remembered);
     session.activePage = "galaxy";
 
-    doGalaxyFleetAction({ galaxy: 3, system: 8, slot: 6 }, "colonize");
-    assert.equal(session.activePage, "fleet");
-    assert.deepEqual(rememberedFleetDraft(), {
-      ...blankFleetDraft(),
-      mission: "colonize",
-      targetCoords: { galaxy: 3, system: 8, slot: 6 },
-    });
-
-    session.activePage = "galaxy";
     doGalaxyFleetAction({ galaxy: 3, system: 8, slot: 7 }, "raid");
     assert.equal(session.activePage, "fleet");
-    assert.equal(rememberedFleetDraft()?.mission, "raid");
-    assert.deepEqual(rememberedFleetDraft()?.targetCoords, {
+    const emptyRoot = make({ tag: "div" }) as unknown as HTMLElement;
+    const galaxyDraft = fleetDraftForPage(emptyRoot, "fleet");
+    assert.equal(galaxyDraft?.mission, "raid");
+    assert.deepEqual(galaxyDraft?.targetCoords, {
       galaxy: 3,
       system: 8,
       slot: 7,
     });
-    assert.equal(rememberedFleetDraft()?.step, 1);
+    assert.equal(galaxyDraft?.step, 1);
+    assert.equal(session.pendingGalaxyFleetDraft, null);
+
+    const nextDraft = fleetDraftForPage(emptyRoot, "fleet");
+    assert.notEqual(nextDraft?.step, 2);
+    assert.equal(rememberedFleetDraft()?.step, 2);
+
     session.activePage = originalPage;
+    session.pendingGalaxyFleetDraft = null;
     rememberFleetDraft(null);
   });
 });
