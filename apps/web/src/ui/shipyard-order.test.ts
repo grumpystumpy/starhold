@@ -135,6 +135,20 @@ describe("Shipyard and Defenses owned count and weakest-first ordering", () => {
       assert.doesNotMatch(laserHtml, />×2,500</);
     });
 
+    it("needleTurret displays 'Rocket Launcher' and an old save with needleTurret count N still has N", () => {
+      const pl = dummyPlanet();
+      const countN = 42;
+      pl.defenses = {
+        needleTurret: countN,
+      } as Partial<Record<DefenseId, number>>;
+
+      const html = defenseRow("needleTurret", pl, false);
+      assert.match(html, /Rocket Launcher/);
+      assert.match(html, /Owned 42/);
+      assert.equal(pl.defenses.needleTurret, countN);
+      assert.equal(DEFENSES.needleTurret.name, "Rocket Launcher");
+    });
+
     it("handles missing defenses map gracefully", () => {
       const pl = dummyPlanet();
       delete (pl as Partial<PlayerView["planet"]>).defenses;

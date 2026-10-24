@@ -44,7 +44,7 @@ Attacker only has ships; defender has ships + defenses.
 | Interceptor → Scout | 2 | |
 | Cruiser → Hauler | 3 | Line ships punish freighters |
 | Cruiser → Probe | 4 | |
-| Bomber → Beam Emplacement | 4 | Breach guns |
+| Bomber → Light Laser | 4 | Breach guns |
 | Bomber → Scout | 2 | |
 | Scout → Probe | 2 | |
 | Whisper Probe / Colonizer | — | atk 0; never fire |

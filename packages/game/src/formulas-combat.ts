@@ -536,7 +536,7 @@ export interface CombatMods {
   defensePower?: number;
   /** Multiplies attacker ship firepower (Fleeter class). */
   attackMult?: number;
-  /** Defender planet slot (Frost Lance cold-slot bonus). */
+  /** Defender planet slot (Cryo Ion Lance cold-slot bonus). */
   defenseSlot?: number;
   /** Location battlefield mods (e.g. Moving Fortress) — both sides. */
   battlefield?: BattlefieldMods;

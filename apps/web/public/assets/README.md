@@ -18,7 +18,7 @@ Original vector art drawn for this project (SVG). **Not** scraped or copied from
 | `buildings/` | Ore Extractor, Crystal Lattice, Deut Still, Solar Array, vaults, tank, Shipyard, Research Lab |
 | `ships/` | Scout Skiff, Ore Hauler, Interceptor, Whisper Probe, Salvage Trawler, Colonizer |
 | `planets/` | Rocky world + colony plate for roster / planet header |
-| `defenses/` | Beam Emplacement + Aegis Cupola (buildable) |
+| `defenses/` | Light Laser + Small Shield Dome (buildable) |
 | `resources/` | Metal, crystal, deuterium, energy chips |
 | `ui/` | Empty hangar placeholder |
 
