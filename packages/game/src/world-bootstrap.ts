@@ -300,7 +300,7 @@ export function joinUniverse(
   const planet: PlanetState = {
     id: planetId,
     ownerPlayerId: playerId,
-    name: `${trimmed}'s Colony`,
+    name: `${trimmed} homeworld`,
     coords,
     kind: "planet",
     parentPlanetId: null,

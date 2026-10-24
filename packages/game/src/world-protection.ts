@@ -10,12 +10,15 @@ import { utcDayKey } from "./world-boosts.js";
 /** Pirates ignore a new player until 48 hours after creation. */
 export const PIRATE_NEW_PLAYER_PROTECTION_MS = 48 * 60 * 60 * 1000;
 
-/** True while empire points are strictly below the permanent end threshold. */
+/** True while below the points threshold and before the player forfeits protection. */
 export function isNewbieProtected(
   universe: UniverseState,
   player: PlayerState,
 ): boolean {
-  return empirePoints(universe, player) < NEWBIE_PROTECTION_POINTS;
+  return (
+    player.newbieForfeitedAt == null &&
+    empirePoints(universe, player) < NEWBIE_PROTECTION_POINTS
+  );
 }
 
 /**

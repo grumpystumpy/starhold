@@ -16,6 +16,43 @@ import {
 } from "./world.js";
 import { graduateNewbieProtection } from "./test-graduate.js";
 
+function resolveRaidLootForClass(
+  classId: "fleeter" | "miner" | undefined,
+  defenderResources: { metal: number; crystal: number; deuterium: number },
+) {
+  const universe = createUniverse("Raid Loot Share", 8);
+  const attacker = joinUniverse(universe, "Raider", 40_000_000);
+  const defender = joinUniverse(universe, "Victim", 40_000_001);
+  graduateNewbieProtection(universe, universe.players[defender.player.id]!);
+  const attackerState = universe.players[attacker.player.id]!;
+  if (classId === undefined) {
+    delete attackerState.playerClass;
+  } else {
+    attackerState.playerClass!.classId = classId;
+  }
+  universe.planets[attacker.planet.id].ships.hauler = 1;
+  universe.planets[attacker.planet.id].resources.deuterium = 10_000;
+  universe.planets[defender.planet.id].resources = { ...defenderResources };
+
+  const launch = launchFleet(
+    universe,
+    attacker.player.id,
+    defender.planet.id,
+    "raid",
+    { hauler: 1 },
+    40_000_100,
+  );
+  assert.ok(launch.ok, launch.ok ? undefined : launch.error);
+  universe.planets[defender.planet.id].lastTickAt = launch.fleet.arrivesAt;
+  advanceUniverse(universe, launch.fleet.arrivesAt);
+  const returning = universe.fleets[launch.fleet.id];
+  assert.ok(returning?.reportId);
+  return {
+    loot: universe.reports[returning.reportId]!.loot,
+    attacker: universe.players[attacker.player.id]!,
+  };
+}
+
 describe("fleet formulas", () => {
   it("measures coordinate distance", () => {
     assert.equal(
@@ -58,6 +95,40 @@ describe("fleet formulas", () => {
     assert.equal(loot.metal, 500);
     assert.equal(loot.crystal, 200);
     assert.equal(loot.deuterium, 100);
+  });
+
+  it("gives Fleeter raids 75% and other classes 50% of lootable resources", () => {
+    const resources = { metal: 1000, crystal: 400, deuterium: 200 };
+    assert.deepEqual(resolveRaidLootForClass("fleeter", resources).loot, {
+      metal: 750,
+      crystal: 300,
+      deuterium: 150,
+    });
+    assert.deepEqual(resolveRaidLootForClass("miner", resources).loot, {
+      metal: 500,
+      crystal: 200,
+      deuterium: 100,
+    });
+  });
+
+  it("defaults an old player state without a class field to 50% raid loot", () => {
+    const result = resolveRaidLootForClass(undefined, {
+      metal: 1000,
+      crystal: 400,
+      deuterium: 200,
+    });
+    assert.deepEqual(result.loot, {
+      metal: 500,
+      crystal: 200,
+      deuterium: 100,
+    });
+    assert.equal(result.attacker.playerClass?.classId, null);
+  });
+
+  it("caps Fleeter and non-Fleeter loot at the surviving fleet's cargo", () => {
+    const resources = { metal: 20_000, crystal: 0, deuterium: 0 };
+    assert.equal(resolveRaidLootForClass("fleeter", resources).loot.metal, 5000);
+    assert.equal(resolveRaidLootForClass("miner", resources).loot.metal, 5000);
   });
 
   it("favors stronger defender", () => {

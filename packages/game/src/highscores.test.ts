@@ -11,6 +11,7 @@ import {
 import {
   createUniverse,
   empirePoints,
+  galaxyViewFor,
   highscoresBoard,
   joinUniverse,
   launchFleet,
@@ -20,6 +21,57 @@ import { emptyBuildings } from "./world-bootstrap.js";
 import { graduateNewbieProtection } from "./test-graduate.js";
 
 describe("P2 highscores", () => {
+  it("shows an owner's empire total and debris in the galaxy row", () => {
+    const universe = createUniverse("Galaxy Points", 8);
+    const joined = joinUniverse(universe, "Galaxy Scorer", 149_000_000);
+    const player = universe.players[joined.player.id]!;
+    player.research.energyTech = 5;
+    const planet = universe.planets[joined.planet.id]!;
+    universe.debris[`${planet.coords.galaxy}:${planet.coords.system}:${planet.coords.slot}`] = {
+      coords: planet.coords,
+      metal: 1200,
+      crystal: 340,
+    };
+
+    const row = galaxyViewFor(
+      universe,
+      player.id,
+      planet.coords.galaxy,
+      planet.coords.system,
+    ).slots.find((slot) => slot.planetId === planet.id);
+
+    assert.ok(row);
+    assert.equal(row.empirePoints, empirePoints(universe, player));
+    assert.notEqual(row.empirePoints, planetPoints(planet));
+    assert.deepEqual(row.debris, { metal: 1200, crystal: 340 });
+  });
+
+  it("has no debris for an empty field and builds from a legacy state without debris", () => {
+    const universe = createUniverse("Legacy Galaxy", 8);
+    const joined = joinUniverse(universe, "Legacy Viewer", 149_000_001);
+    const player = universe.players[joined.player.id]!;
+    const planet = universe.planets[joined.planet.id]!;
+    player.research.energyTech = 3;
+    planet.buildings.metalMine = 14;
+    planet.resources.metal = 4321;
+    delete (universe as Partial<typeof universe>).debris;
+
+    const galaxy = galaxyViewFor(
+      universe,
+      joined.player.id,
+      planet.coords.galaxy,
+      planet.coords.system,
+    );
+
+    const row = galaxy.slots.find((slot) => slot.planetId === planet.id);
+    assert.ok(row);
+    assert.equal(row.debris, null);
+    assert.equal(player.research.energyTech, 3);
+    assert.equal(planet.buildings.metalMine, 14);
+    assert.equal(planet.resources.metal, 4321);
+    assert.deepEqual(universe.debris, {});
+  });
+
   it("counts research once across two colonies", () => {
     const universe = createUniverse("Score Drift", 8);
     const a = joinUniverse(universe, "Scorer", 150_000_000);

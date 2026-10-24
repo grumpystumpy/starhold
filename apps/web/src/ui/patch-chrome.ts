@@ -127,9 +127,6 @@ export function patchLiveChrome(
       : "Daily claimed";
   }
 
-  const refresh = root.querySelector<HTMLButtonElement>('[data-testid="refresh-btn"]');
-  if (refresh) refresh.disabled = state.busy;
-
   shell.dataset.planetId = planet.id;
   shell.dataset.page = shell.dataset.page ?? "";
   shell.dataset.busy = state.busy ? "1" : "0";
