@@ -1,7 +1,9 @@
+import "../test-dom";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createUniverse, joinUniverse, playerView } from "@starhold/game";
-import { shellHtml } from "./render-shell.js";
+
+const { shellHtml } = await import("./render-shell.js");
 
 describe("newbie bonus header badge", () => {
   it("shows remaining time while active and omits the badge when forfeited or expired", () => {
