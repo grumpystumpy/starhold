@@ -8,7 +8,12 @@ import {
   SKILLS,
   STARSHARDS_DAILY_LOGIN,
 } from "./catalog.js";
-import { expeditionKindFromRoll } from "./world-expedition.js";
+import {
+  EXPEDITION_BLACK_HOLE_CHANCE,
+  EXPEDITION_NEW_ALIEN_BASE_ROLL_COUNT,
+  EXPEDITION_NEW_PIRATE_BASE_ROLL_COUNT,
+  expeditionKindFromRoll,
+} from "./world-expedition.js";
 import { storageFor } from "./formulas-build.js";
 import { playerBoosts, storageForPlanet } from "./world-boosts.js";
 import { addCargoToPlanet, advancePlanet } from "./world-tick.js";
@@ -218,13 +223,21 @@ describe("Thread D Starshards / officers / skills", () => {
   });
 
   it("maps expedition rolls including 5% starshards band", () => {
+    assert.equal(EXPEDITION_BLACK_HOLE_CHANCE, 0.002);
+    assert.equal(EXPEDITION_NEW_PIRATE_BASE_ROLL_COUNT, 2);
+    assert.equal(EXPEDITION_NEW_ALIEN_BASE_ROLL_COUNT, 0.7);
     assert.equal(expeditionKindFromRoll(67), "nothing");
     assert.equal(expeditionKindFromRoll(68), "miniPlanet");
     assert.equal(expeditionKindFromRoll(69), "miniPlanet");
     assert.equal(expeditionKindFromRoll(70), "starshards");
     assert.equal(expeditionKindFromRoll(74), "starshards");
     assert.equal(expeditionKindFromRoll(75), "newPirateBase");
-    assert.equal(expeditionKindFromRoll(79), "pirates");
+    assert.equal(expeditionKindFromRoll(76), "newPirateBase");
+    assert.equal(expeditionKindFromRoll(77), "newAlienBase");
+    assert.equal(expeditionKindFromRoll(77.6), "newAlienBase");
+    assert.equal(expeditionKindFromRoll(77.7), "pirates");
+    assert.equal(expeditionKindFromRoll(78), "pirates");
+    assert.equal(expeditionKindFromRoll(99), "pirates");
   });
 
   it("claims daily login once per UTC day", () => {

@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { EXPEDITION_SLOT } from "./catalog.js";
 import {
+  EXPEDITION_BLACK_HOLE_CHANCE,
+  EXPEDITION_NEW_ALIEN_BASE_ROLL_COUNT,
+  EXPEDITION_NEW_PIRATE_BASE_ROLL_COUNT,
   expeditionBlackHoleRoll,
   expeditionKindFromRoll,
   expeditionRoll,
@@ -19,6 +22,9 @@ import {
 
 describe("P2 expeditions", () => {
   it("maps rolls to kinds", () => {
+    assert.equal(EXPEDITION_BLACK_HOLE_CHANCE, 0.002);
+    assert.equal(EXPEDITION_NEW_PIRATE_BASE_ROLL_COUNT, 2);
+    assert.equal(EXPEDITION_NEW_ALIEN_BASE_ROLL_COUNT, 0.7);
     assert.equal(expeditionKindFromRoll(0), "resources");
     assert.equal(expeditionKindFromRoll(39), "resources");
     assert.equal(expeditionKindFromRoll(40), "ships");
@@ -32,8 +38,9 @@ describe("P2 expeditions", () => {
     assert.equal(expeditionKindFromRoll(75), "newPirateBase");
     assert.equal(expeditionKindFromRoll(76), "newPirateBase");
     assert.equal(expeditionKindFromRoll(77), "newAlienBase");
-    assert.equal(expeditionKindFromRoll(78), "newAlienBase");
-    assert.equal(expeditionKindFromRoll(79), "pirates");
+    assert.equal(expeditionKindFromRoll(77.6), "newAlienBase");
+    assert.equal(expeditionKindFromRoll(77.7), "pirates");
+    assert.equal(expeditionKindFromRoll(78), "pirates");
     assert.equal(expeditionKindFromRoll(99), "pirates");
   });
 
@@ -325,6 +332,8 @@ describe("P2 expeditions", () => {
         "pirates",
         "starshards",
         "miniPlanet",
+        "newPirateBase",
+        "newAlienBase",
       ].includes(report.kind),
     );
 
