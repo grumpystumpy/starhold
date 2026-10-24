@@ -217,6 +217,7 @@ export const RESEARCH_ORDER: ResearchId[] = [
   "queueLogistics",
   "swarmHold",
   "gravityWell",
+  "researchNetwork",
 ];
 
 /** Hard cap per queue kind (Round 2 contract v1). */

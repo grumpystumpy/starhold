@@ -97,7 +97,8 @@ export type ResearchId =
   | "computerTech"
   | "queueLogistics"
   | "swarmHold"
-  | "gravityWell";
+  | "gravityWell"
+  | "researchNetwork";
 
 export type QueueKind = "building" | "ship" | "defense" | "research";
 
