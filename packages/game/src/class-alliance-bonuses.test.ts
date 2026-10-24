@@ -500,15 +500,15 @@ describe("alliance classes", () => {
     const plainShield = raidReport({
       atkClass: null,
       defClass: null,
-      atkShips: { scout: 15 },
-      defDefenses: { laserBattery: 9 },
+      atkShips: { scout: 18 },
+      defDefenses: { laserBattery: 11 },
     });
     const builderShield = raidReport({
       atkClass: null,
       defClass: null,
       atkAlliance: "builder",
-      atkShips: { scout: 15 },
-      defDefenses: { laserBattery: 9 },
+      atkShips: { scout: 18 },
+      defDefenses: { laserBattery: 11 },
     });
     assert.ok(builderShield.report.rounds < plainShield.report.rounds);
 
