@@ -211,6 +211,7 @@ type SidePools = {
   /** Damage state for front unit per CombatUnitId. */
   unitDamage?: Partial<Record<CombatUnitId, UnitDamageState>>;
   residual?: Partial<Record<CombatUnitId, number>>;
+  unitStatMult?: number;
 };
 
 function shipCount(ships: FleetShips): number {
@@ -266,9 +267,10 @@ function getUnitStats(
   id: CombatUnitId,
   research: ResearchLevels | undefined,
   battlefield?: BattlefieldMods,
+  unitStatMult = 1,
 ) {
-  const sMult = battlefield?.shieldMult ?? 1;
-  const aMult = battlefield?.armorMult ?? 1;
+  const sMult = (battlefield?.shieldMult ?? 1) * unitStatMult;
+  const aMult = (battlefield?.armorMult ?? 1) * unitStatMult;
   let shield = 0;
   let armor = 0;
   let hull = 0;
@@ -317,7 +319,7 @@ function applyDamageToTarget(
 
   if (!side.unitDamage) side.unitDamage = {};
 
-  const stats = getUnitStats(id, research, battlefield);
+  const stats = getUnitStats(id, research, battlefield, side.unitStatMult ?? 1);
   const maxS = stats.maxS;
   const maxA = stats.maxA;
   const maxH = stats.maxH;
@@ -406,7 +408,7 @@ function mothershipHullFraction(
 ): number {
   const count = side.ships?.swarmMothership ?? 0;
   if (count <= 0) return 0;
-  const stats = getUnitStats("swarmMothership", research, battlefield);
+  const stats = getUnitStats("swarmMothership", research, battlefield, side.unitStatMult ?? 1);
   if (stats.maxH <= 0) return 0;
   if (side.unitDamage?.swarmMothership) {
     const unitDmg = side.unitDamage.swarmMothership;
@@ -542,6 +544,7 @@ export interface CombatMods {
   battlefield?: BattlefieldMods;
   /** Seed for deterministic RNG. */
   seed?: string;
+  defenderUnitStatMult?: number;
 }
 
 function createRng(seedStr?: string) {
@@ -580,6 +583,7 @@ export function resolveCombat(
     ships: normalizeFleetShips(defender),
     defenses: { ...emptyDefenses(), ...defenses },
     unitDamage: {},
+    unitStatMult: mods?.defenderUnitStatMult ?? 1,
   };
 
   if (shipCount(atkSide.ships) <= 0) {

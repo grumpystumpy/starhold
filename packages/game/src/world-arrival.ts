@@ -24,6 +24,7 @@ import {
   tickAcsGroups,
 } from "./world-acs.js";
 import { resolveRaidArrival } from "./world-arrival-raid.js";
+import { isNewbieBonusActive, NEWBIE_PRODUCTION_MULT } from "./world-protection.js";
 import { harvestAsteroidField } from "./world-asteroids.js";
 import {
   emptyBuildings,
@@ -437,7 +438,8 @@ export function advancePlanetNow(
       mineOutput:
         lb.production *
         boosts.mineOutput *
-        classBonuses(owner?.playerClass?.classId).mineOutput,
+        classBonuses(owner?.playerClass?.classId).mineOutput *
+        (isNewbieBonusActive(universe, owner, now) ? NEWBIE_PRODUCTION_MULT : 1),
       energyOutput:
         boosts.energyOutput *
         classBonuses(owner?.playerClass?.classId).energyOutput,
