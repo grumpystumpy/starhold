@@ -4,6 +4,12 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { BASE_INCOME_PER_HOUR } from "./data/tuning.js";
 import {
+  coordDistance,
+  emptyFleetShips,
+  fleetCargoCapacity,
+  flightSecondsOneWay,
+} from "./formulas.js";
+import {
   createUniverse,
   ensureUniverseShape,
   joinUniverse,
@@ -12,8 +18,12 @@ import {
   queueResearch,
   advancePlanet,
   advanceUniverse,
+  launchFleet,
+  MIN_FLIGHT_SECONDS,
   RESEARCH,
   RESEARCH_ORDER,
+  SHIPS,
+  SHIP_ORDER,
   type UniverseState,
 } from "./index.js";
 
@@ -149,5 +159,181 @@ describe("B4-04 Metallurgist / Crystalizer / Deut Synthesis Researches", () => {
     assert.equal(RESEARCH.metallurgistTech.name, "Metallurgist");
     assert.equal(RESEARCH.crystalizerTech.name, "Crystalizer");
     assert.equal(RESEARCH.deutSynthesisTech.name, "Deut Synthesis");
+  });
+});
+
+describe("B4-05 Cargo Hold and B4-06 Fleet Speed Researches", () => {
+  it("registers both research definitions and catalog entries", () => {
+    assert.deepEqual(RESEARCH_ORDER.slice(-2), ["cargoHoldTech", "fleetSpeedTech"]);
+    assert.equal(RESEARCH.cargoHoldTech.name, "Cargo Hold");
+    assert.equal(RESEARCH.fleetSpeedTech.name, "Fleet Thrusters");
+  });
+
+  it("Cargo Hold level 0 is baseline and each level boosts every ship's cargo", () => {
+    for (const id of SHIP_ORDER) {
+      const ships = emptyFleetShips();
+      ships[id] = 1;
+      const base = SHIPS[id].cargo;
+
+      assert.equal(fleetCargoCapacity(ships), base);
+      assert.equal(fleetCargoCapacity(ships, 0), base);
+      assert.equal(
+        fleetCargoCapacity(ships, 3),
+        Math.floor(base * (1 + 0.05 * 3)),
+        `${id} cargo at level 3`,
+      );
+    }
+  });
+
+  it("Cargo Hold permits transport cargo above baseline capacity", () => {
+    const universe = createUniverse("Cargo Hold Transport", 1);
+    const owner = joinUniverse(universe, "Cargo Owner", 1_000_000);
+    const other = joinUniverse(universe, "Temporary Target", 1_000_001);
+    const target = universe.planets[other.planet.id]!;
+    target.ownerPlayerId = owner.player.id;
+    owner.player.planetIds.push(target.id);
+    owner.player.research.cargoHoldTech = 1;
+    owner.planet.ships.hauler = 1;
+    owner.planet.resources = {
+      metal: 20_000,
+      crystal: 20_000,
+      deuterium: 20_000,
+    };
+    const boostedCapacity = fleetCargoCapacity(owner.planet.ships, 1);
+
+    const launch = launchFleet(universe, {
+      playerId: owner.player.id,
+      mission: "transport",
+      targetPlanetId: target.id,
+      ships: { hauler: 1 },
+      cargo: { metal: boostedCapacity, crystal: 0, deuterium: 0 },
+      now: 1_000_100,
+    });
+
+    assert.equal(launch.ok, true, launch.ok ? "" : launch.error);
+    if (launch.ok) assert.equal(launch.fleet.cargo.metal, boostedCapacity);
+  });
+
+  it("Fleet Speed level 0 is baseline and level N boosts cruise speed", () => {
+    const origin = { galaxy: 1, system: 1, slot: 1 };
+    const target = { galaxy: 1, system: 10, slot: 1 };
+    const ships = emptyFleetShips();
+    ships.scout = 1;
+    const distance = coordDistance(origin, target);
+    const baseline = flightSecondsOneWay(origin, target, ships, 1);
+    const levelZero = flightSecondsOneWay(origin, target, ships, 1, 0, null, 0);
+    const levelFive = flightSecondsOneWay(origin, target, ships, 1, 0, null, 5);
+
+    assert.equal(levelZero, baseline);
+    assert.equal(
+      levelFive,
+      Math.max(
+        MIN_FLIGHT_SECONDS,
+        Math.ceil(
+          (distance * 1_000_000) /
+            (SHIPS.scout.speed * (1 + 0.02 * 5)),
+        ),
+      ),
+    );
+    assert.ok(levelFive < baseline);
+  });
+
+  it("Fleet Speed shortens outbound and return durations on launch", () => {
+    const travelDurations = (fleetSpeedTech: number) => {
+      const universe = createUniverse(`Fleet Speed ${fleetSpeedTech}`, 1);
+      universe.skipNpcRaids = true;
+      const { planet, player } = joinUniverse(
+        universe,
+        "Speed Researcher",
+        2_000_000,
+      );
+      player.research.fleetSpeedTech = fleetSpeedTech;
+      planet.ships.recycler = 1;
+      planet.resources.deuterium = 100_000;
+      const targetCoords = {
+        galaxy: planet.coords.galaxy,
+        system: planet.coords.system === 1 ? 2 : planet.coords.system - 1,
+        slot: 16,
+      };
+      const debrisKey = `${targetCoords.galaxy}:${targetCoords.system}:${targetCoords.slot}`;
+      universe.debris[debrisKey] = {
+        coords: targetCoords,
+        metal: 1_000,
+        crystal: 1_000,
+      };
+      const now = 2_000_100;
+      const launch = launchFleet(universe, {
+        playerId: player.id,
+        mission: "harvest",
+        targetCoords,
+        ships: { recycler: 1 },
+        now,
+      });
+      assert.equal(launch.ok, true, launch.ok ? "" : launch.error);
+      if (!launch.ok) return { outbound: Infinity, returning: Infinity };
+
+      const outbound = launch.fleet.arrivesAt - now;
+      advanceUniverse(universe, launch.fleet.arrivesAt);
+      const returningFleet = universe.fleets[launch.fleet.id];
+      assert.ok(returningFleet);
+      return {
+        outbound,
+        returning: returningFleet.arrivesAt - launch.fleet.arrivesAt,
+      };
+    };
+
+    const baseline = travelDurations(0);
+    const boosted = travelDurations(5);
+    assert.ok(boosted.outbound < baseline.outbound);
+    assert.ok(boosted.returning < baseline.returning);
+  });
+
+  it("old save defaults both researches to 0 without changing saved progress", () => {
+    const path = fileURLToPath(
+      new URL("../../../apps/server/src/fixtures/catalog-complete-save.json", import.meta.url),
+    );
+    const fixture = JSON.parse(readFileSync(path, "utf8")) as {
+      universe: UniverseState;
+      planetId: string;
+    };
+    const universe = fixture.universe;
+    const player = Object.values(universe.players)[0];
+    assert.ok(player);
+    const researchBefore = { ...player.research };
+    const planetBefore = JSON.parse(
+      JSON.stringify(universe.planets[fixture.planetId]),
+    );
+    const fleetsBefore = JSON.parse(JSON.stringify(universe.fleets));
+    const progressBefore = {
+      planetIds: [...player.planetIds],
+      researchQueue: JSON.parse(JSON.stringify(player.researchQueue ?? [])),
+      starshards: player.starshards,
+      level: player.level,
+      xp: player.xp,
+      xpTotal: player.xpTotal,
+    };
+
+    ensureUniverseShape(universe);
+
+    assert.equal(player.research.cargoHoldTech, 0);
+    assert.equal(player.research.fleetSpeedTech, 0);
+    for (const id of Object.keys(researchBefore) as Array<
+      keyof typeof researchBefore
+    >) {
+      assert.equal(player.research[id], researchBefore[id]);
+    }
+    assert.deepEqual(universe.planets[fixture.planetId], planetBefore);
+    assert.deepEqual(universe.fleets, fleetsBefore);
+    assert.deepEqual(
+      {
+        planetIds: player.planetIds,
+        researchQueue: player.researchQueue,
+        starshards: player.starshards,
+        level: player.level,
+        xp: player.xp,
+        xpTotal: player.xpTotal,
+      },
+      progressBefore,
+    );
   });
 });
