@@ -84,30 +84,30 @@ export const SHOP_ITEMS: Record<string, ShopItemDefinition> = {
     name: "Moon Field Expansion S",
     category: "fields_moon",
     tier: "S",
-    bonus: 3,
-    baseUnitCost: 50,
-    starshards: computeShopItemCost(50, "S", 3), // 150
-    description: "Permanently adds +3 fields capacity to the target moon.",
+    bonus: 2,
+    baseUnitCost: 40,
+    starshards: computeShopItemCost(40, "S", 2), // 80
+    description: "Permanently adds +2 fields capacity to the target moon.",
   },
   item_moon_fields_m: {
     id: "item_moon_fields_m",
     name: "Moon Field Expansion M",
     category: "fields_moon",
     tier: "M",
-    bonus: 6,
-    baseUnitCost: 50,
-    starshards: computeShopItemCost(50, "M", 6), // round(0.95 * 50 * 6) = 285
-    description: "Permanently adds +6 fields capacity to the target moon.",
+    bonus: 4,
+    baseUnitCost: 40,
+    starshards: computeShopItemCost(40, "M", 4), // round(0.95 * 40 * 4) = 152
+    description: "Permanently adds +4 fields capacity to the target moon.",
   },
   item_moon_fields_l: {
     id: "item_moon_fields_l",
     name: "Moon Field Expansion L",
     category: "fields_moon",
     tier: "L",
-    bonus: 12,
-    baseUnitCost: 50,
-    starshards: computeShopItemCost(50, "L", 12), // round(0.95 * 50 * 12) = 570
-    description: "Permanently adds +12 fields capacity to the target moon.",
+    bonus: 8,
+    baseUnitCost: 40,
+    starshards: computeShopItemCost(40, "L", 8), // round(0.95 * 40 * 8) = 304
+    description: "Permanently adds +8 fields capacity to the target moon.",
   },
 
   // 24h Hull Buff +5% / +10% / +15%
@@ -117,8 +117,8 @@ export const SHOP_ITEMS: Record<string, ShopItemDefinition> = {
     category: "buff_hull",
     tier: "S",
     bonus: 5,
-    baseUnitCost: 30,
-    starshards: computeShopItemCost(30, "S", 5), // 150
+    baseUnitCost: 12,
+    starshards: computeShopItemCost(12, "S", 5), // 60
     description: "Grants +5% Hull strength for 24 hours.",
   },
   item_buff_hull_m: {
@@ -127,8 +127,8 @@ export const SHOP_ITEMS: Record<string, ShopItemDefinition> = {
     category: "buff_hull",
     tier: "M",
     bonus: 10,
-    baseUnitCost: 30,
-    starshards: computeShopItemCost(30, "M", 10), // round(0.95 * 30 * 10) = 285
+    baseUnitCost: 12,
+    starshards: computeShopItemCost(12, "M", 10), // round(0.95 * 12 * 10) = 114
     description: "Grants +10% Hull strength for 24 hours.",
   },
   item_buff_hull_l: {
@@ -137,8 +137,8 @@ export const SHOP_ITEMS: Record<string, ShopItemDefinition> = {
     category: "buff_hull",
     tier: "L",
     bonus: 15,
-    baseUnitCost: 30,
-    starshards: computeShopItemCost(30, "L", 15), // round(0.95 * 30 * 15) = 428
+    baseUnitCost: 12,
+    starshards: computeShopItemCost(12, "L", 15), // round(0.95 * 12 * 15) = 171
     description: "Grants +15% Hull strength for 24 hours.",
   },
 
@@ -149,8 +149,8 @@ export const SHOP_ITEMS: Record<string, ShopItemDefinition> = {
     category: "buff_armor",
     tier: "S",
     bonus: 5,
-    baseUnitCost: 30,
-    starshards: computeShopItemCost(30, "S", 5), // 150
+    baseUnitCost: 12,
+    starshards: computeShopItemCost(12, "S", 5), // 60
     description: "Grants +5% Armor protection for 24 hours.",
   },
   item_buff_armor_m: {
@@ -159,8 +159,8 @@ export const SHOP_ITEMS: Record<string, ShopItemDefinition> = {
     category: "buff_armor",
     tier: "M",
     bonus: 10,
-    baseUnitCost: 30,
-    starshards: computeShopItemCost(30, "M", 10), // round(0.95 * 30 * 10) = 285
+    baseUnitCost: 12,
+    starshards: computeShopItemCost(12, "M", 10), // round(0.95 * 12 * 10) = 114
     description: "Grants +10% Armor protection for 24 hours.",
   },
   item_buff_armor_l: {
@@ -169,8 +169,8 @@ export const SHOP_ITEMS: Record<string, ShopItemDefinition> = {
     category: "buff_armor",
     tier: "L",
     bonus: 15,
-    baseUnitCost: 30,
-    starshards: computeShopItemCost(30, "L", 15), // round(0.95 * 30 * 15) = 428
+    baseUnitCost: 12,
+    starshards: computeShopItemCost(12, "L", 15), // round(0.95 * 12 * 15) = 171
     description: "Grants +15% Armor protection for 24 hours.",
   },
 
@@ -181,8 +181,8 @@ export const SHOP_ITEMS: Record<string, ShopItemDefinition> = {
     category: "buff_shield",
     tier: "S",
     bonus: 5,
-    baseUnitCost: 30,
-    starshards: computeShopItemCost(30, "S", 5), // 150
+    baseUnitCost: 12,
+    starshards: computeShopItemCost(12, "S", 5), // 60
     description: "Grants +5% Shield capacity for 24 hours.",
   },
   item_buff_shield_m: {
@@ -191,8 +191,8 @@ export const SHOP_ITEMS: Record<string, ShopItemDefinition> = {
     category: "buff_shield",
     tier: "M",
     bonus: 10,
-    baseUnitCost: 30,
-    starshards: computeShopItemCost(30, "M", 10), // round(0.95 * 30 * 10) = 285
+    baseUnitCost: 12,
+    starshards: computeShopItemCost(12, "M", 10), // round(0.95 * 12 * 10) = 114
     description: "Grants +10% Shield capacity for 24 hours.",
   },
   item_buff_shield_l: {
@@ -201,8 +201,8 @@ export const SHOP_ITEMS: Record<string, ShopItemDefinition> = {
     category: "buff_shield",
     tier: "L",
     bonus: 15,
-    baseUnitCost: 30,
-    starshards: computeShopItemCost(30, "L", 15), // round(0.95 * 30 * 15) = 428
+    baseUnitCost: 12,
+    starshards: computeShopItemCost(12, "L", 15), // round(0.95 * 12 * 15) = 171
     description: "Grants +15% Shield capacity for 24 hours.",
   },
 
@@ -213,8 +213,8 @@ export const SHOP_ITEMS: Record<string, ShopItemDefinition> = {
     category: "fleet_slots",
     tier: "S",
     bonus: 1,
-    baseUnitCost: 200,
-    starshards: computeShopItemCost(200, "S", 1), // 200
+    baseUnitCost: 40,
+    starshards: computeShopItemCost(40, "S", 1), // 40
     description: "Grants +1 extra fleet slot for 24 hours.",
   },
   item_fleet_slots_m: {
@@ -223,8 +223,8 @@ export const SHOP_ITEMS: Record<string, ShopItemDefinition> = {
     category: "fleet_slots",
     tier: "M",
     bonus: 2,
-    baseUnitCost: 200,
-    starshards: computeShopItemCost(200, "M", 2), // round(0.95 * 200 * 2) = 380
+    baseUnitCost: 40,
+    starshards: computeShopItemCost(40, "M", 2), // round(0.95 * 40 * 2) = 76
     description: "Grants +2 extra fleet slots for 24 hours.",
   },
   item_fleet_slots_l: {
@@ -233,8 +233,8 @@ export const SHOP_ITEMS: Record<string, ShopItemDefinition> = {
     category: "fleet_slots",
     tier: "L",
     bonus: 4,
-    baseUnitCost: 200,
-    starshards: computeShopItemCost(200, "L", 4), // round(0.95 * 200 * 4) = 760
+    baseUnitCost: 40,
+    starshards: computeShopItemCost(40, "L", 4), // round(0.95 * 40 * 4) = 152
     description: "Grants +4 extra fleet slots for 24 hours.",
   },
 };

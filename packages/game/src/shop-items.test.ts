@@ -79,6 +79,15 @@ describe("Shop Items (STA-44)", () => {
     assert.equal(SHOP_ITEMS.item_planet_fields_s.starshards, 100);
     assert.equal(SHOP_ITEMS.item_planet_fields_m.starshards, 190);
     assert.equal(SHOP_ITEMS.item_planet_fields_l.starshards, 380);
+    assert.equal(SHOP_ITEMS.item_moon_fields_s.starshards, 80);
+    assert.equal(SHOP_ITEMS.item_moon_fields_m.starshards, 152);
+    assert.equal(SHOP_ITEMS.item_moon_fields_l.starshards, 304);
+    assert.equal(SHOP_ITEMS.item_buff_hull_s.starshards, 60);
+    assert.equal(SHOP_ITEMS.item_buff_hull_m.starshards, 114);
+    assert.equal(SHOP_ITEMS.item_buff_hull_l.starshards, 171);
+    assert.equal(SHOP_ITEMS.item_fleet_slots_s.starshards, 40);
+    assert.equal(SHOP_ITEMS.item_fleet_slots_m.starshards, 76);
+    assert.equal(SHOP_ITEMS.item_fleet_slots_l.starshards, 152);
   });
 
   it("purchase deducts starshards and rejects invalid attempts without state change", () => {
@@ -97,10 +106,10 @@ describe("Shop Items (STA-44)", () => {
     assert.equal(res1.ok, false);
     assert.equal(p.starshards, initialShards);
 
-    // Insufficient starshards (buying item_fleet_slots_m for 380 shards with only 150)
+    // Insufficient starshards (buying item_fleet_slots_l for 152 shards with only 150)
     const res2 = buyShopItem(universe, {
       playerId: p.id,
-      itemId: "item_fleet_slots_m",
+      itemId: "item_fleet_slots_l",
     });
     assert.equal(res2.ok, false);
     assert.equal(p.starshards, initialShards);
@@ -184,14 +193,14 @@ describe("Shop Items (STA-44)", () => {
     assert.equal(failRes.ok, false);
     assert.equal(fieldsCap(moon), initialMoonCap);
 
-    // Apply moon field item S (+3) -> succeed
+    // Apply moon field item S (+2) -> succeed
     const okMoonRes = buyShopItem(universe, {
       playerId: p.id,
       itemId: "item_moon_fields_s",
       targetPlanetId: moon.id,
     });
     assert.equal(okMoonRes.ok, true);
-    assert.equal(fieldsCap(moon), initialMoonCap + 3);
+    assert.equal(fieldsCap(moon), initialMoonCap + 2);
   });
 
   it("timed items expire after 24h, grant boosts (fleet slots, combat), and reject duplicates while active", () => {
