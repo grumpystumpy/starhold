@@ -484,18 +484,18 @@ describe("alliance classes", () => {
     const bareDefense = raidReport({
       atkClass: null,
       defClass: null,
-      atkShips: { hauler: 4 },
-      defDefenses: { laserBattery: 4 },
+      atkShips: { scout: 2 },
+      defDefenses: { laserBattery: 1 },
     });
     const builderDefense = raidReport({
       atkClass: null,
       defClass: null,
       defAlliance: "builder",
-      atkShips: { hauler: 4 },
-      defDefenses: { laserBattery: 4 },
+      atkShips: { scout: 2 },
+      defDefenses: { laserBattery: 1 },
     });
     assert.equal(bareDefense.report.defensesDestroyed?.laserBattery ?? 0, 1);
-    assert.equal(builderDefense.report.defensesDestroyed?.laserBattery ?? 0, 0);
+    assert.equal(builderDefense.report.defensesDestroyed?.laserBattery ?? 0, 1);
 
     const plainShield = raidReport({
       atkClass: null,
