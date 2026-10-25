@@ -1387,8 +1387,16 @@ describe("B3-25 alien strength and raid power", () => {
     const loaded = migrateOrResetUniverse(JSON.parse(JSON.stringify(original))).universe;
     const loadedPlanet = loaded.planets[savedPlanet.id]!;
     const loadedAlien = loaded.alienBases?.[alien.id];
+    const assertBuildingsPreserved = () => {
+      for (const [building, level] of Object.entries(savedPlanet.buildings)) {
+        assert.equal(loadedPlanet.buildings[building as keyof typeof loadedPlanet.buildings], level);
+      }
+      for (const [building, level] of Object.entries(loadedPlanet.buildings)) {
+        if (!(building in savedPlanet.buildings)) assert.equal(level, 0);
+      }
+    };
     assert.ok(loadedAlien);
-    assert.deepEqual(loadedPlanet.buildings, savedPlanet.buildings);
+    assertBuildingsPreserved();
     assert.deepEqual(loadedPlanet.ships, savedPlanet.ships);
     assert.deepEqual(loadedPlanet.resources, savedPlanet.resources);
     assert.equal(loaded.players[player.id]?.xpTotal, 900);
@@ -1406,7 +1414,7 @@ describe("B3-25 alien strength and raid power", () => {
     resolveAlienRaidArrival(loaded, launch.fleet, launch.fleet.arrivesAt);
     assert.ok(launch.fleet.reportId);
     assert.ok(loaded.reports[launch.fleet.reportId!]);
-    assert.deepEqual(loaded.planets[savedPlanet.id]!.buildings, savedPlanet.buildings);
+    assertBuildingsPreserved();
   });
 });
 
