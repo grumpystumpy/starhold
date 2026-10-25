@@ -263,6 +263,7 @@ export function resolveRaidArrival(
     }
   }
 
+  const originPlanet = universe.planets[fleet.originPlanetId];
   const report: CombatReport = {
     id: reportId,
     at: now,
@@ -271,6 +272,7 @@ export function resolveRaidArrival(
     defenderPlayerId: target.ownerPlayerId,
     attackerName: owner?.name ?? "Unknown",
     defenderName: defenderOwner?.name ?? "Unknown",
+    originCoords: originPlanet ? { ...originPlanet.coords } : undefined,
     targetCoords: { ...target.coords },
     attackerBefore: { ...fleet.ships },
     attackerAfter: combat.attackerAfter,

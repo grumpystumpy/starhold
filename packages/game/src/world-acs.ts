@@ -470,6 +470,7 @@ export function resolveAcsGroup(
           speed * returnBonus.fleetSpeed,
           drive,
           recyclerHullScale(returnBonus.recyclerSpeed),
+          owner?.research?.fleetSpeedTech ?? 0,
         )
       : 1;
     f.phase = "returning";
