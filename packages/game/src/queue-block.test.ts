@@ -48,6 +48,14 @@ describe("upgrade and research gates", () => {
           labLevel: 12,
           requires: { computerTech: 8, gravityWell: 1 },
         },
+        cargoHoldTech: {
+          labLevel: 2,
+          requires: { combustionDrive: 1 },
+        },
+        fleetSpeedTech: {
+          labLevel: 3,
+          requires: { combustionDrive: 2 },
+        },
       },
     );
   });

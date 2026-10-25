@@ -370,6 +370,19 @@ export async function authJoin(name: string): Promise<PlayerView> {
   return parse<PlayerView>(res);
 }
 
+export async function buyShopItem(
+  playerId: string,
+  itemId: string,
+  targetPlanetId?: string,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/shop/buy-item", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, itemId, targetPlanetId }),
+  });
+  return parse<PlayerView>(res);
+}
+
 export async function logoutAccount(): Promise<void> {
   await credFetch("/api/auth/logout", { method: "POST" });
 }

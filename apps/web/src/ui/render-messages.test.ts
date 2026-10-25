@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { PlayerView } from "@starhold/game";
 import {
+  closeReportWindow,
   collectInbox,
   messagesPageHtml,
+  openReportWindow,
   setConfirmDelete,
   setInboxFilter,
 } from "./render-messages";
@@ -337,5 +339,161 @@ describe("messages inbox", () => {
     assert.equal(confirm.match(/Delete all/g)?.length ?? 0, 0);
     setConfirmDelete(null);
     setInboxFilter("all");
+  });
+
+  it("renders open report buttons and opens sub-window for combat, spy, and expedition reports", () => {
+    closeReportWindow();
+    const combatReport = {
+      id: "c_test_1",
+      at: 1000,
+      missionId: "m_test_1",
+      attackerPlayerId: "p1",
+      defenderPlayerId: "p2",
+      attackerName: "Alpha",
+      defenderName: "Bravo",
+      originCoords: { galaxy: 1, system: 10, slot: 2 },
+      targetCoords: { galaxy: 1, system: 20, slot: 5 },
+      attackerBefore: { scout: 10, cruiser: 2 },
+      attackerAfter: { scout: 8, cruiser: 2 },
+      defenderBefore: { interceptor: 5 },
+      defenderAfter: { interceptor: 0 },
+      defensesBefore: { laserBattery: 4 },
+      defensesAfter: { laserBattery: 1 },
+      defensesDestroyed: { laserBattery: 3 },
+      defensesRebuilt: { laserBattery: 2 },
+      defensesPermanentlyLost: { laserBattery: 1 },
+      loot: { metal: 500, crystal: 300, deuterium: 100 },
+      debrisCreated: { metal: 1200, crystal: 800, deuterium: 0 },
+      outcome: "attacker_win",
+      rounds: 2,
+      summary: "Battle summary text",
+      roundLog: [
+        {
+          round: 1,
+          attackerLosses: { ships: { scout: 1 } },
+          defenderLosses: { ships: { interceptor: 3 }, defenses: { laserBattery: 2 } },
+          debrisThisRound: { metal: 800, crystal: 500, deuterium: 0 },
+        },
+        {
+          round: 2,
+          attackerLosses: { ships: { scout: 1 } },
+          defenderLosses: { ships: { interceptor: 2 }, defenses: { laserBattery: 1 } },
+          debrisThisRound: { metal: 400, crystal: 300, deuterium: 0 },
+        },
+      ],
+    };
+
+    const spyReport = {
+      id: "s_test_1",
+      at: 2000,
+      missionId: "m_test_2",
+      spyPlayerId: "p1",
+      targetPlayerId: "p2",
+      targetName: "Bravo",
+      targetCoords: { galaxy: 1, system: 20, slot: 5 },
+      detail: 3,
+      resources: { metal: 1000, crystal: 500, deuterium: 200 },
+      buildings: { mineMetal: 5 },
+      ships: { scout: 2 },
+      defenses: { laserBattery: 1 },
+      research: { weaponsTech: 2 },
+      summary: "Spy summary text",
+    };
+
+    const expeditionReport = {
+      id: "e_test_1",
+      at: 3000,
+      missionId: "m_test_3",
+      playerId: "p1",
+      targetCoords: { galaxy: 1, system: 1, slot: 16 },
+      kind: "resources" as const,
+      cargoGained: { metal: 1500, crystal: 800, deuterium: 0 },
+      shipsDelta: {},
+      summary: "Expedition summary text",
+    };
+
+    const view = baseView({
+      reports: [combatReport] as PlayerView["reports"],
+      spyReports: [spyReport] as PlayerView["spyReports"],
+      expeditionReports: [expeditionReport] as PlayerView["expeditionReports"],
+    });
+
+    const pageHtml = messagesPageHtml(view);
+    assert.match(pageHtml, /data-testid="open-report-combat-c_test_1"/);
+    assert.match(pageHtml, /data-testid="open-report-spy-s_test_1"/);
+    assert.match(pageHtml, /data-testid="open-report-expedition-e_test_1"/);
+    assert.doesNotMatch(pageHtml, /data-testid="report-subwindow"/);
+
+    // Open Combat Report
+    openReportWindow("combat", "c_test_1");
+    const combatWinHtml = messagesPageHtml(view);
+    assert.match(combatWinHtml, /data-testid="report-subwindow"/);
+    assert.match(combatWinHtml, /data-testid="close-report-window"/);
+    assert.match(combatWinHtml, /Alpha \(1:10:2\)/);
+    assert.match(combatWinHtml, /Bravo \(1:20:5\)/);
+    assert.match(combatWinHtml, /Scout Skiff/);
+    assert.match(combatWinHtml, /Aegis Cruiser/);
+    assert.match(combatWinHtml, /Light Laser/);
+    assert.match(combatWinHtml, /Total ships lost/);
+    assert.match(combatWinHtml, /data-testid="battle-round-tab-1"/);
+    assert.match(combatWinHtml, /data-testid="battle-round-tab-2"/);
+    assert.match(combatWinHtml, /800 metal, 500 crystal/);
+    assert.match(combatWinHtml, /1,200 metal, 800 crystal/);
+
+    // Open Spy Report
+    openReportWindow("spy", "s_test_1");
+    const spyWinHtml = messagesPageHtml(view);
+    assert.match(spyWinHtml, /data-testid="report-subwindow"/);
+    assert.match(spyWinHtml, /Espionage Report/);
+    assert.match(spyWinHtml, /Bravo/);
+    assert.match(spyWinHtml, /1,000 metal, 500 crystal, 200 deuterium/);
+
+    // Open Expedition Report
+    openReportWindow("expedition", "e_test_1");
+    const expWinHtml = messagesPageHtml(view);
+    assert.match(expWinHtml, /data-testid="report-subwindow"/);
+    assert.match(expWinHtml, /Expedition Report/);
+    assert.match(expWinHtml, /1,500 metal, 800 crystal/);
+
+    closeReportWindow();
+  });
+
+  it("renders legacy combat report without originCoords, roundLog, or defensesDestroyed cleanly in sub-window", () => {
+    closeReportWindow();
+    const legacyReport = {
+      id: "c_legacy_1",
+      at: 500,
+      missionId: "m_legacy_1",
+      attackerPlayerId: "p1",
+      defenderPlayerId: "p2",
+      attackerName: "AlphaLegacy",
+      defenderName: "BravoLegacy",
+      targetCoords: { galaxy: 2, system: 15, slot: 3 },
+      attackerBefore: { scout: 5 },
+      attackerAfter: { scout: 5 },
+      defenderBefore: {},
+      defenderAfter: {},
+      defensesBefore: {},
+      defensesAfter: {},
+      loot: { metal: 100, crystal: 50, deuterium: 0 },
+      debrisCreated: { metal: 0, crystal: 0, deuterium: 0 },
+      outcome: "attacker_win" as const,
+      rounds: 1,
+      summary: "Legacy combat summary",
+    };
+
+    const view = baseView({
+      reports: [legacyReport] as PlayerView["reports"],
+    });
+
+    openReportWindow("combat", "c_legacy_1");
+    const legacyHtml = messagesPageHtml(view);
+    assert.match(legacyHtml, /data-testid="report-subwindow"/);
+    assert.match(legacyHtml, /AlphaLegacy/);
+    assert.match(legacyHtml, /BravoLegacy \(2:15:3\)/);
+    assert.match(legacyHtml, /Summary only — older reports have no round replay/);
+    assert.doesNotMatch(legacyHtml, /Defenses destroyed:/);
+
+    closeReportWindow();
   });
 });

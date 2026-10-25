@@ -114,7 +114,9 @@ export type ResearchId =
   | "metallurgistTech"
   | "crystalizerTech"
   | "deutSynthesisTech"
-  | "researchNetwork";
+  | "researchNetwork"
+  | "cargoHoldTech"
+  | "fleetSpeedTech";
 
 export type QueueKind = "building" | "ship" | "defense" | "research";
 
@@ -510,6 +512,19 @@ export interface OfficerDef {
 export interface OfficerState {
   officerId: OfficerId;
   activatedAt: number;
+  expiresAt: number;
+}
+
+export interface ActiveItemBuff {
+  itemId: string;
+  category:
+    | "fields_planet"
+    | "fields_moon"
+    | "buff_hull"
+    | "buff_armor"
+    | "buff_shield"
+    | "fleet_slots";
+  bonus: number;
   expiresAt: number;
 }
 

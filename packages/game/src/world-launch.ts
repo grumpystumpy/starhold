@@ -177,7 +177,10 @@ export function launchFleet(
       crystal: Math.max(0, Math.floor(opts.cargo?.crystal ?? 0)),
       deuterium: Math.max(0, Math.floor(opts.cargo?.deuterium ?? 0)),
     };
-    const cap = fleetCargoCapacityForHarvest(ships);
+    const cap = fleetCargoCapacityForHarvest(
+      ships,
+      player.research.cargoHoldTech ?? 0,
+    );
     const total = want.metal + want.crystal + want.deuterium;
     if (total < 1) {
       return { ok: false, error: "Load at least some cargo to transport." };
@@ -260,6 +263,7 @@ export function launchFleet(
             Math.max(0.01, lb.fleetTime),
           player.research.combustionDrive ?? 0,
           hullScale,
+          player.research.fleetSpeedTech ?? 0,
         );
   const fleetId = `flt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
   const fleet: FleetMission = {

@@ -241,6 +241,8 @@ export const RESEARCH_ORDER: ResearchId[] = [
   "crystalizerTech",
   "deutSynthesisTech",
   "researchNetwork",
+  "cargoHoldTech",
+  "fleetSpeedTech",
 ];
 
 /** Hard cap per queue kind (Round 2 contract v1). */
@@ -297,6 +299,8 @@ export {
   SEASON_LEADERBOARD_TOP,
   SEASON_REWARD_TOP_N,
   FOUNDATION_ARK_BOOTSTRAP,
+  CARGO_HOLD_BONUS_PER_LEVEL,
+  FLEET_SPEED_BONUS_PER_LEVEL,
   SWARM_NUMBERS_THRESHOLD,
   SWARM_NUMBERS_BONUS_PER,
   SWARM_NUMBERS_BONUS_CAP_COUNT,

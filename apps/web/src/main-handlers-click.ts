@@ -25,6 +25,7 @@ import {
   doApplyFleetPreset,
   doBuild,
   doBuildDefense,
+  doBuyShopItem,
   doCancelQueue,
   doChangeClass,
   doChooseClass,
@@ -76,7 +77,9 @@ import {
 } from "./main-actions";
 import { parseGalaxyCoords } from "./galaxy-coords";
 import {
+  closeReportWindow,
   isInboxFilter,
+  openReportWindow,
   setConfirmDelete,
   setInboxFilter,
 } from "./ui/render-messages";
@@ -117,6 +120,20 @@ export function bindClickHandlers(): void {
         return;
       }
 
+      const buyShopItemBtn = closestActionEl(target, "[data-buy-shop-item]");
+      if (buyShopItemBtn) {
+        ev.preventDefault();
+        const itemId = buyShopItemBtn.getAttribute("data-buy-shop-item");
+        if (itemId) {
+          const targetSelect = root.querySelector<HTMLSelectElement>(
+            `[data-item-target="${itemId}"]`,
+          );
+          const targetPlanetId = targetSelect?.value || undefined;
+          void doBuyShopItem(itemId, targetPlanetId);
+        }
+        return;
+      }
+
       const resourceTrade = closestActionEl(target, "[data-trade-resources]");
       if (resourceTrade) {
         ev.preventDefault();
@@ -147,6 +164,31 @@ export function bindClickHandlers(): void {
           setInboxFilter(raw);
           schedulePaint();
         }
+        return;
+      }
+
+      const openReportBtn = closestActionEl(target, "[data-open-report]");
+      if (openReportBtn) {
+        ev.preventDefault();
+        const raw = openReportBtn.getAttribute("data-open-report");
+        if (raw) {
+          const idx = raw.indexOf(":");
+          if (idx !== -1) {
+            const kind = raw.slice(0, idx) as "combat" | "spy" | "expedition";
+            const id = raw.slice(idx + 1);
+            if (kind === "combat" || kind === "spy" || kind === "expedition") {
+              openReportWindow(kind, id);
+              schedulePaint();
+            }
+          }
+        }
+        return;
+      }
+
+      if (closestActionEl(target, "[data-close-report]")) {
+        ev.preventDefault();
+        closeReportWindow();
+        schedulePaint();
         return;
       }
 
@@ -438,9 +480,10 @@ export function bindClickHandlers(): void {
       if (roundTab) {
         ev.preventDefault();
         const round = Number(roundTab.getAttribute("data-battle-round-tab"));
-        const reportId = roundTab
-          .closest("details")
-          ?.getAttribute("data-battle-report");
+        const reportId =
+          roundTab.getAttribute("data-report-id") ||
+          roundTab.closest("details")?.getAttribute("data-battle-report") ||
+          roundTab.closest("[data-battle-report]")?.getAttribute("data-battle-report");
         if (!reportId || !Number.isFinite(round)) return;
         setBattleReplayRound(reportId, round);
         schedulePaint();

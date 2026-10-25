@@ -82,7 +82,11 @@ export function anomalyForgeShipTimeFactor(planet: PlanetState): number {
 export function fieldsCap(planet: PlanetState): number {
   if (isMoon(planet)) {
     const lunar = planet.buildings.lunarBase ?? 0;
-    return MOON_FIELDS_BASE + lunar * MOON_FIELDS_PER_LUNAR_BASE;
+    const extra =
+      typeof planet.fieldsCap === "number" && planet.fieldsCap > MOON_FIELDS_BASE
+        ? planet.fieldsCap - MOON_FIELDS_BASE
+        : 0;
+    return MOON_FIELDS_BASE + lunar * MOON_FIELDS_PER_LUNAR_BASE + extra;
   }
   let rolled =
     typeof planet.fieldsCap === "number" && planet.fieldsCap > 0

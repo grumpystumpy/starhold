@@ -976,6 +976,8 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
 };
 
 export const ENERGY_TECH_ENERGY_PER_LEVEL = 0.05;
+export const CARGO_HOLD_BONUS_PER_LEVEL = 0.05;
+export const FLEET_SPEED_BONUS_PER_LEVEL = 0.02;
 
 export const RESEARCH: Record<ResearchId, ResearchDef> = {
   energyTech: {
@@ -1116,6 +1118,26 @@ export const RESEARCH: Record<ResearchId, ResearchDef> = {
     baseResearchSeconds: 40,
     labLevel: 2,
     requires: { energyTech: 2 },
+  },
+  cargoHoldTech: {
+    id: "cargoHoldTech",
+    name: "Cargo Hold",
+    description: "+5% cargo capacity per level for every ship.",
+    baseCost: { metal: 80, crystal: 120, deuterium: 40 },
+    costGrowth: 2.5,
+    baseResearchSeconds: 48,
+    labLevel: 2,
+    requires: { combustionDrive: 1 },
+  },
+  fleetSpeedTech: {
+    id: "fleetSpeedTech",
+    name: "Fleet Thrusters",
+    description: "+2% fleet speed per level.",
+    baseCost: { metal: 100, crystal: 60, deuterium: 120 },
+    costGrowth: 2.5,
+    baseResearchSeconds: 52,
+    labLevel: 3,
+    requires: { combustionDrive: 2 },
   },
 
   researchNetwork: {

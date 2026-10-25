@@ -37,6 +37,63 @@ import {
   normalizeFleetShips,
 } from "./formulas-travel.js";
 
+export const ION_SHIELD_RECHARGE_FACTOR = 0.95;
+export const ION_DISABLE_MAX_CHANCE = 0.03;
+
+export function ionDisableChance(
+  ionShare: number,
+  armorLeftFraction: number,
+): number {
+  const normIon = Math.min(1, Math.max(0, ionShare));
+  const normArmorLeft = Math.min(1, Math.max(0, armorLeftFraction));
+  return (
+    ION_DISABLE_MAX_CHANCE *
+    normIon *
+    Math.min(1, Math.max(0, (1 - normArmorLeft) / 0.8))
+  );
+}
+
+export function hullExplosionChance(hullLeftFraction: number): number {
+  if (hullLeftFraction >= 1) return 0;
+  return Math.min(0.40, Math.max(0, (0.40 * (1 - hullLeftFraction)) / 0.9));
+}
+
+export function sampleBinomialOrNormal(
+  n: number,
+  p: number,
+  rng: () => number,
+): number {
+  if (n <= 0 || p <= 0) return 0;
+  if (p >= 1) return n;
+
+  if (n <= 64) {
+    let count = 0;
+    for (let i = 0; i < n; i++) {
+      if (rng() < p) count++;
+    }
+    return count;
+  }
+
+  const u1 = Math.max(1e-12, rng());
+  const u2 = rng();
+  const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  const mean = n * p;
+  const sd = Math.sqrt(n * p * (1 - p));
+  return Math.min(n, Math.max(0, Math.round(mean + z * sd)));
+}
+
+export const sampleCount = sampleBinomialOrNormal;
+
+function getUnitWeaponShare(
+  id: CombatUnitId,
+  weapon: "ion" | "gravitational",
+): number {
+  if ((SHIP_ORDER as readonly string[]).includes(id)) {
+    return SHIPS[id as ShipId].weapons?.[weapon] ?? 0;
+  }
+  return DEFENSES[id as DefenseId].weapons?.[weapon] ?? 0;
+}
+
 export function unitCombatPower(
   attack: number,
   shield: number,
@@ -276,9 +333,18 @@ type SidePools = {
   residual?: Partial<Record<CombatUnitId, number>>;
   /** Alliance ship-shield multiplier. Ships only. */
   shipShieldMult?: number;
+  shipArmorMult?: number;
+  shipHullMult?: number;
   /** Alliance defense hull/armor/shield multiplier. Defenses only. */
   defenseStatMult?: number;
   unitStatMult?: number;
+
+  shieldCapMult?: Partial<Record<CombatUnitId, number>>;
+  tookIonShieldDmgThisRound?: Partial<Record<CombatUnitId, boolean>>;
+  ionArmorDmgThisRound?: Partial<Record<CombatUnitId, number>>;
+  totalArmorDmgThisRound?: Partial<Record<CombatUnitId, number>>;
+  disabledCount?: Partial<Record<CombatUnitId, number>>;
+  pendingGravitational?: Array<{ targetId: CombatUnitId; rawDamage: number }>;
 };
 
 function shipCount(ships: FleetShips): number {
@@ -433,7 +499,7 @@ function calculateSingleUnitAttack(
     return atk;
   } else {
     const def = DEFENSES[firerId as DefenseId];
-    let atk = unitAtk(def.attack, firerResearch) * battlefieldAtk;
+    let atk = unitAtk(def.attack, firerResearch) * battlefieldAtk * weaponMult;
     if (
       slot != null &&
       def.slotAttackBonus &&
@@ -451,6 +517,7 @@ function applyShotWithIntercept(
   damage: number,
   research: ResearchLevels | undefined,
   battlefield?: BattlefieldMods,
+  ionShareOfFirer: number = 0,
 ): number {
   let unabsorbed = 0;
   for (const part of redistributeSwarmIntercept(target, damage, side)) {
@@ -460,6 +527,7 @@ function applyShotWithIntercept(
       part.damage,
       research,
       battlefield,
+      ionShareOfFirer,
     );
     unabsorbed += rem;
   }
@@ -501,6 +569,8 @@ export function fireGroupShots(
     ? unitAtkDamage * defensePowerMult
     : unitAtkDamage / defensePowerMult;
 
+  const ionShareOfFirer = getUnitWeaponShare(firerId, "ion");
+
   for (let i = 0; i < groupCount; i++) {
     let currentTarget = pickWeightedTarget(
       firerId,
@@ -518,6 +588,7 @@ export function fireGroupShots(
         unitEffectiveDamage,
         targetResearch,
         opts?.battlefield,
+        ionShareOfFirer,
       );
 
       const rfFactor = rapidFireFactor(firerId, currentTarget);
@@ -535,6 +606,194 @@ export function fireGroupShots(
         rng,
       );
     }
+  }
+}
+
+function applyGravitationalDamageToGroup(
+  side: SidePools,
+  id: CombatUnitId,
+  rawDamage: number,
+  research: ResearchLevels | undefined,
+  battlefield?: BattlefieldMods,
+): void {
+  if (rawDamage <= 0) return;
+  let count = targetCount(side, id);
+  if (count <= 0) return;
+
+  if (!side.unitDamage) side.unitDamage = {};
+  const stats = getUnitStats(id, research, battlefield, side);
+  const maxS = stats.maxS;
+  const maxA = stats.maxA;
+  const maxH = stats.maxH;
+
+  let unitDmg = side.unitDamage[id] ?? {
+    frontShieldDmg: 0,
+    frontArmorDmg: 0,
+    frontHullDmg: 0,
+  };
+  let remainingRaw = rawDamage;
+
+  while (remainingRaw > 0 && count > 0) {
+    // 1. Shield layer (mult 0.7)
+    const curS = Math.max(0, maxS - unitDmg.frontShieldDmg);
+    if (curS > 0) {
+      const rawNeededForShield = curS / 0.7;
+      const rawToShield = Math.min(remainingRaw, rawNeededForShield);
+      const sAbs = rawToShield * 0.7;
+      unitDmg.frontShieldDmg += sAbs;
+      remainingRaw -= rawToShield;
+    }
+
+    // 2. Armor layer (mult 1.4)
+    if (remainingRaw > 0) {
+      const curA = Math.max(0, maxA - unitDmg.frontArmorDmg);
+      if (curA > 0) {
+        const rawNeededForArmor = curA / 1.4;
+        const rawToArmor = Math.min(remainingRaw, rawNeededForArmor);
+        const aAbs = rawToArmor * 1.4;
+        unitDmg.frontArmorDmg += aAbs;
+        remainingRaw -= rawToArmor;
+        if (!side.totalArmorDmgThisRound) side.totalArmorDmgThisRound = {};
+        side.totalArmorDmgThisRound[id] =
+          (side.totalArmorDmgThisRound[id] ?? 0) + aAbs;
+      }
+    }
+
+    // 3. Hull layer (mult 1.4)
+    if (remainingRaw > 0) {
+      const curH = Math.max(0, maxH - unitDmg.frontHullDmg);
+      if (curH > 0) {
+        const rawNeededForHull = curH / 1.4;
+        const rawToHull = Math.min(remainingRaw, rawNeededForHull);
+        const hAbs = rawToHull * 1.4;
+        unitDmg.frontHullDmg += hAbs;
+        remainingRaw -= rawToHull;
+      }
+    }
+
+    if (unitDmg.frontHullDmg >= maxH && maxH > 0) {
+      count -= 1;
+      setTargetCount(side, id, count);
+      unitDmg = { frontShieldDmg: 0, frontArmorDmg: 0, frontHullDmg: 0 };
+      if (count <= 0) break;
+    }
+  }
+  side.unitDamage[id] = unitDmg;
+}
+
+function fireGravitationalVolley(
+  firerId: CombatUnitId,
+  activeCount: number,
+  targetSideLive: SidePools,
+  firerResearch: ResearchLevels | undefined,
+  targetResearch: ResearchLevels | undefined,
+  swarmDroneCount: number,
+  isDefenderFirer: boolean,
+  opts:
+    | {
+        defensePowerMult?: number;
+        attackMult?: number;
+        weaponMult?: number;
+        defenseSlot?: number;
+        battlefield?: BattlefieldMods;
+      }
+    | undefined,
+): void {
+  const gravShare = getUnitWeaponShare(firerId, "gravitational");
+  if (gravShare <= 0 || activeCount <= 0) return;
+
+  const unitAtkDamage = calculateSingleUnitAttack(
+    firerId,
+    firerResearch,
+    swarmDroneCount,
+    opts,
+  );
+  if (unitAtkDamage <= 0) return;
+
+  const defensePowerMult = Math.max(0.01, opts?.defensePowerMult ?? 1);
+  const unitEffectiveDamage = isDefenderFirer
+    ? unitAtkDamage * defensePowerMult
+    : unitAtkDamage / defensePowerMult;
+
+  const gravTotalDamage = activeCount * unitEffectiveDamage * gravShare;
+  if (gravTotalDamage <= 0) return;
+
+  // Target selection (1/5 of enemy fleet)
+  let totalEnemyUnits = 0;
+  const candidateList: Array<{
+    id: CombatUnitId;
+    count: number;
+    weight: number;
+  }> = [];
+  const mothershipPresent = (targetSideLive.ships.swarmMothership ?? 0) > 0;
+
+  for (const id of SHIP_ORDER) {
+    const c = targetSideLive.ships[id] ?? 0;
+    if (c > 0) {
+      totalEnemyUnits += c;
+      const stats = getUnitStats(
+        id,
+        targetResearch,
+        opts?.battlefield,
+        targetSideLive,
+      );
+      const toughness = unitHp(stats.maxS, stats.maxA, stats.maxH, undefined);
+      let w = Math.sqrt(toughness) * c;
+      if (id === "swarmDrone" && mothershipPresent) w *= 5;
+      candidateList.push({ id, count: c, weight: w });
+    }
+  }
+  for (const id of DEFENSE_ORDER) {
+    const c = targetSideLive.defenses[id] ?? 0;
+    if (c > 0) {
+      totalEnemyUnits += c;
+      const stats = getUnitStats(
+        id,
+        targetResearch,
+        opts?.battlefield,
+        targetSideLive,
+      );
+      const toughness = unitHp(stats.maxS, stats.maxA, stats.maxH, undefined);
+      candidateList.push({ id, count: c, weight: Math.sqrt(toughness) * c });
+    }
+  }
+
+  if (candidateList.length === 0 || totalEnemyUnits <= 0) return;
+
+  candidateList.sort((a, b) => b.weight - a.weight);
+
+  const targetUnitsNeeded = Math.max(1, Math.ceil(totalEnemyUnits * 0.20));
+  let coveredUnits = 0;
+  const selectedGroups: Array<{ id: CombatUnitId; count: number }> = [];
+
+  for (const cand of candidateList) {
+    selectedGroups.push({ id: cand.id, count: cand.count });
+    coveredUnits += cand.count;
+    if (coveredUnits >= targetUnitsNeeded) break;
+  }
+
+  let totalSelectedUnits = 0;
+  for (const g of selectedGroups) {
+    totalSelectedUnits += g.count;
+  }
+  if (totalSelectedUnits <= 0) return;
+
+  for (const g of selectedGroups) {
+    const rawGroupDamage = gravTotalDamage * (g.count / totalSelectedUnits);
+    applyGravitationalDamageToGroup(
+      targetSideLive,
+      g.id,
+      rawGroupDamage * 0.5,
+      targetResearch,
+      opts?.battlefield,
+    );
+    if (!targetSideLive.pendingGravitational) {
+      targetSideLive.pendingGravitational = [];
+    }
+    targetSideLive.pendingGravitational.push({
+      targetId: g.id,
+      rawDamage: rawGroupDamage * 0.5,
+    });
   }
 }
 
@@ -559,8 +818,8 @@ function getUnitStats(
   if ((SHIP_ORDER as string[]).includes(id)) {
     const d = SHIPS[id as ShipId];
     shield = d.shield * (side?.shipShieldMult ?? 1);
-    armor = d.armor;
-    hull = d.hull;
+    armor = d.armor * (side?.shipArmorMult ?? 1);
+    hull = d.hull * (side?.shipHullMult ?? 1);
   } else {
     const d = DEFENSES[id as DefenseId];
     const stat = side?.defenseStatMult ?? 1;
@@ -568,7 +827,9 @@ function getUnitStats(
     armor = d.armor * stat;
     hull = d.hull * stat;
   }
-  const maxS = shield * sMult * (1 + (research?.shieldingTech ?? 0) * 0.08);
+  const sCap = side?.shieldCapMult?.[id] ?? 1;
+  const maxS =
+    shield * sMult * (1 + (research?.shieldingTech ?? 0) * 0.08) * sCap;
   const maxA = armor * aMult * (1 + (research?.armourTech ?? 0) * 0.08);
   const maxH = hull * aMult * (1 + (research?.armourTech ?? 0) * 0.08);
   return { maxS, maxA, maxH };
@@ -595,6 +856,7 @@ function applyDamageToTarget(
   damage: number,
   research: ResearchLevels | undefined,
   battlefield?: BattlefieldMods,
+  ionShareOfFirer: number = 0,
 ): number {
   if (damage <= 0) return 0;
   let count = targetCount(side, id);
@@ -624,11 +886,29 @@ function applyDamageToTarget(
     unitDmg.frontShieldDmg += sAbs;
     remainingDamage -= sAbs;
 
+    if (sAbs > 0 && ionShareOfFirer > 0) {
+      if (!side.tookIonShieldDmgThisRound) {
+        side.tookIonShieldDmgThisRound = {};
+      }
+      side.tookIonShieldDmgThisRound[id] = true;
+    }
+
     // Layer 2: Armor
     if (remainingDamage > 0) {
       const aAbs = Math.min(remainingDamage, curA);
       unitDmg.frontArmorDmg += aAbs;
       remainingDamage -= aAbs;
+
+      if (aAbs > 0) {
+        if (!side.totalArmorDmgThisRound) side.totalArmorDmgThisRound = {};
+        side.totalArmorDmgThisRound[id] =
+          (side.totalArmorDmgThisRound[id] ?? 0) + aAbs;
+        if (ionShareOfFirer > 0) {
+          if (!side.ionArmorDmgThisRound) side.ionArmorDmgThisRound = {};
+          side.ionArmorDmgThisRound[id] =
+            (side.ionArmorDmgThisRound[id] ?? 0) + aAbs * ionShareOfFirer;
+        }
+      }
     }
 
     // Layer 3: Hull
@@ -768,6 +1048,10 @@ export interface CombatMods {
   attackerShieldMult?: number;
   /** Alliance ship shields for the defender. */
   defenderShieldMult?: number;
+  attackerArmorMult?: number;
+  defenderArmorMult?: number;
+  attackerHullMult?: number;
+  defenderHullMult?: number;
   /** Alliance ship weapons for the attacker (after attackMult). */
   attackerWeaponMult?: number;
   /** Alliance ship weapons for the defender (ships only, not defense fire). */
@@ -778,7 +1062,7 @@ export interface CombatMods {
 }
 
 function createRng(seedStr?: string) {
-  let s = hashSeed(seedStr ?? "starhold-combat-default");
+  let s = hashSeed(seedStr ?? "starhold-combat-v1");
   return function nextFloat(): number {
     s = (s + 0x6d2b79f5) | 0;
     let t = Math.imul(s ^ (s >>> 15), 1 | s);
@@ -799,7 +1083,7 @@ export function resolveCombat(
   mods?: CombatMods,
 ): CombatResolution {
   const rng = createRng(mods?.seed);
-  void rng; // Available for stochastic options / seed initialization
+
   const defensePowerMult = Math.max(0.01, mods?.defensePower ?? 1);
   const attackMult = Math.max(0.01, mods?.attackMult ?? 1);
   const defenseSlot = mods?.defenseSlot;
@@ -809,6 +1093,8 @@ export function resolveCombat(
     defenses: emptyDefenses(),
     unitDamage: {},
     shipShieldMult: mods?.attackerShieldMult ?? 1,
+    shipArmorMult: mods?.attackerArmorMult ?? 1,
+    shipHullMult: mods?.attackerHullMult ?? 1,
     defenseStatMult: 1,
   };
   const defSide: SidePools = {
@@ -816,6 +1102,8 @@ export function resolveCombat(
     defenses: { ...emptyDefenses(), ...defenses },
     unitDamage: {},
     shipShieldMult: mods?.defenderShieldMult ?? 1,
+    shipArmorMult: mods?.defenderArmorMult ?? 1,
+    shipHullMult: mods?.defenderHullMult ?? 1,
     defenseStatMult: mods?.defenderDefenseStatMult ?? 1,
     unitStatMult: mods?.defenderUnitStatMult ?? 1,
   };
@@ -848,18 +1136,56 @@ export function resolveCombat(
   const roundLog: CombatRoundLog[] = [];
   for (let r = 1; r <= MAX_COMBAT_ROUNDS; r++) {
     rounds = r;
-    // Full shield recharge each round on all surviving units
-    if (atkSide.unitDamage) {
-      for (const key of Object.keys(atkSide.unitDamage) as CombatUnitId[]) {
-        const d = atkSide.unitDamage[key];
-        if (d) d.frontShieldDmg = 0;
+
+    // 1. Shield recharge + Ion cap update + reset round tracking
+    const allUnitIds = [...SHIP_ORDER, ...DEFENSE_ORDER] as CombatUnitId[];
+    for (const side of [atkSide, defSide]) {
+      for (const id of allUnitIds) {
+        if (r >= 2) {
+          if (side.tookIonShieldDmgThisRound?.[id]) {
+            if (!side.shieldCapMult) side.shieldCapMult = {};
+            side.shieldCapMult[id] = Math.max(
+              0,
+              (side.shieldCapMult[id] ?? 1) * ION_SHIELD_RECHARGE_FACTOR,
+            );
+          }
+        }
+        if (side.unitDamage?.[id]) {
+          side.unitDamage[id]!.frontShieldDmg = 0;
+        }
+      }
+      side.tookIonShieldDmgThisRound = {};
+      side.ionArmorDmgThisRound = {};
+      side.totalArmorDmgThisRound = {};
+    }
+
+    // 2. Apply pending gravitational damage (queued from previous round)
+    for (const [side, research] of [
+      [atkSide, attackerResearch],
+      [defSide, defenderResearch],
+    ] as const) {
+      if (side.pendingGravitational && side.pendingGravitational.length > 0) {
+        const pendingList = side.pendingGravitational;
+        side.pendingGravitational = [];
+        for (const item of pendingList) {
+          if (targetCount(side, item.targetId) > 0) {
+            applyGravitationalDamageToGroup(
+              side,
+              item.targetId,
+              item.rawDamage,
+              research,
+              battlefield,
+            );
+          }
+        }
       }
     }
-    if (defSide.unitDamage) {
-      for (const key of Object.keys(defSide.unitDamage) as CombatUnitId[]) {
-        const d = defSide.unitDamage[key];
-        if (d) d.frontShieldDmg = 0;
-      }
+
+    if (
+      shipCount(atkSide.ships) <= 0 ||
+      shipCount(defSide.ships) + defenseCount(defSide.defenses) <= 0
+    ) {
+      break;
     }
 
     const atkShipsBefore = cloneFleetShips(atkSide.ships);
@@ -875,71 +1201,187 @@ export function resolveCombat(
       ships: defShipsBefore,
       defenses: defDefsBefore,
     };
+
     // Attacker ships fire as groups against defSide live pool
     for (const id of SHIP_ORDER) {
       const n = atkShipsBefore[id] ?? 0;
       if (n <= 0) continue;
+      const disabled = atkSide.disabledCount?.[id] ?? 0;
+      const activeCount = Math.max(0, n - disabled);
+      if (activeCount <= 0) continue;
       if (shipCount(defSide.ships) + defenseCount(defSide.defenses) <= 0) break;
-      fireGroupShots(
-        id,
-        n,
-        defSideSnapshot,
-        defSide,
-        attackerResearch,
-        defenderResearch,
-        atkShipsBefore.swarmDrone ?? 0,
-        false,
-        {
-          defensePowerMult,
-          attackMult,
-          weaponMult: mods?.attackerWeaponMult,
-          battlefield,
-        },
-        rng,
-      );
+
+      const gravShare = getUnitWeaponShare(id, "gravitational");
+      if (gravShare > 0) {
+        fireGroupShots(
+          id,
+          activeCount,
+          defSideSnapshot,
+          defSide,
+          attackerResearch,
+          defenderResearch,
+          atkShipsBefore.swarmDrone ?? 0,
+          false,
+          {
+            defensePowerMult,
+            attackMult,
+            weaponMult: (mods?.attackerWeaponMult ?? 1) * (1 - gravShare),
+            battlefield,
+          },
+          rng,
+        );
+        fireGravitationalVolley(
+          id,
+          activeCount,
+          defSide,
+          attackerResearch,
+          defenderResearch,
+          atkShipsBefore.swarmDrone ?? 0,
+          false,
+          {
+            defensePowerMult,
+            attackMult,
+            weaponMult: mods?.attackerWeaponMult,
+            battlefield,
+          },
+        );
+      } else {
+        fireGroupShots(
+          id,
+          activeCount,
+          defSideSnapshot,
+          defSide,
+          attackerResearch,
+          defenderResearch,
+          atkShipsBefore.swarmDrone ?? 0,
+          false,
+          {
+            defensePowerMult,
+            attackMult,
+            weaponMult: mods?.attackerWeaponMult,
+            battlefield,
+          },
+          rng,
+        );
+      }
     }
 
     // Defender ships fire as groups against atkSide live pool
     for (const id of SHIP_ORDER) {
       const n = defShipsBefore[id] ?? 0;
       if (n <= 0) continue;
+      const disabled = defSide.disabledCount?.[id] ?? 0;
+      const activeCount = Math.max(0, n - disabled);
+      if (activeCount <= 0) continue;
       if (shipCount(atkSide.ships) <= 0) break;
-      fireGroupShots(
-        id,
-        n,
-        atkSideSnapshot,
-        atkSide,
-        defenderResearch,
-        attackerResearch,
-        defShipsBefore.swarmDrone ?? 0,
-        true,
-        {
-          defensePowerMult,
-          defenseSlot,
-          weaponMult: mods?.defenderWeaponMult,
-          battlefield,
-        },
-        rng,
-      );
+
+      const gravShare = getUnitWeaponShare(id, "gravitational");
+      if (gravShare > 0) {
+        fireGroupShots(
+          id,
+          activeCount,
+          atkSideSnapshot,
+          atkSide,
+          defenderResearch,
+          attackerResearch,
+          defShipsBefore.swarmDrone ?? 0,
+          true,
+          {
+            defensePowerMult,
+            defenseSlot,
+            weaponMult: (mods?.defenderWeaponMult ?? 1) * (1 - gravShare),
+            battlefield,
+          },
+          rng,
+        );
+        fireGravitationalVolley(
+          id,
+          activeCount,
+          atkSide,
+          defenderResearch,
+          attackerResearch,
+          defShipsBefore.swarmDrone ?? 0,
+          true,
+          {
+            defensePowerMult,
+            defenseSlot,
+            weaponMult: mods?.defenderWeaponMult,
+            battlefield,
+          },
+        );
+      } else {
+        fireGroupShots(
+          id,
+          activeCount,
+          atkSideSnapshot,
+          atkSide,
+          defenderResearch,
+          attackerResearch,
+          defShipsBefore.swarmDrone ?? 0,
+          true,
+          {
+            defensePowerMult,
+            defenseSlot,
+            weaponMult: mods?.defenderWeaponMult,
+            battlefield,
+          },
+          rng,
+        );
+      }
     }
 
     // Defender defenses fire as groups against atkSide live pool
     for (const id of DEFENSE_ORDER) {
       const n = defDefsBefore[id] ?? 0;
       if (n <= 0) continue;
+      const disabled = defSide.disabledCount?.[id] ?? 0;
+      const activeCount = Math.max(0, n - disabled);
+      if (activeCount <= 0) continue;
       if (shipCount(atkSide.ships) <= 0) break;
-      fireGroupShots(
-        id,
-        n,
-        atkSideSnapshot,
-        atkSide,
-        defenderResearch,
-        attackerResearch,
-        defShipsBefore.swarmDrone ?? 0,
-        true,
-        { defensePowerMult, defenseSlot, battlefield },
-        rng,
-      );
+
+      const gravShare = getUnitWeaponShare(id, "gravitational");
+      if (gravShare > 0) {
+        fireGroupShots(
+          id,
+          activeCount,
+          atkSideSnapshot,
+          atkSide,
+          defenderResearch,
+          attackerResearch,
+          defShipsBefore.swarmDrone ?? 0,
+          true,
+          {
+            defensePowerMult,
+            defenseSlot,
+            weaponMult: 1 - gravShare,
+            battlefield,
+          },
+          rng,
+        );
+        fireGravitationalVolley(
+          id,
+          activeCount,
+          atkSide,
+          defenderResearch,
+          attackerResearch,
+          defShipsBefore.swarmDrone ?? 0,
+          true,
+          { defensePowerMult, defenseSlot, battlefield },
+        );
+      } else {
+        fireGroupShots(
+          id,
+          activeCount,
+          atkSideSnapshot,
+          atkSide,
+          defenderResearch,
+          attackerResearch,
+          defShipsBefore.swarmDrone ?? 0,
+          true,
+          { defensePowerMult, defenseSlot, battlefield },
+          rng,
+        );
+      }
     }
 
     applyHarvesterKamikaze(
@@ -956,6 +1398,61 @@ export function resolveCombat(
       attackerResearch,
       battlefield,
     );
+
+    // End-of-round Ion Disables & Hull Explosions
+    for (const [side, research] of [
+      [atkSide, attackerResearch],
+      [defSide, defenderResearch],
+    ] as const) {
+      const nextDisabled: Partial<Record<CombatUnitId, number>> = {};
+
+      for (const id of allUnitIds) {
+        let count = targetCount(side, id);
+        if (count <= 0) continue;
+
+        const stats = getUnitStats(id, research, battlefield, side);
+        const unitDmg = side.unitDamage?.[id];
+
+        // A. Ion Armor Disable (sampled for next round)
+        const ionDmg = side.ionArmorDmgThisRound?.[id] ?? 0;
+        const totalDmg = side.totalArmorDmgThisRound?.[id] ?? 0;
+        if (ionDmg > 0 && totalDmg > 0) {
+          const ionShare = ionDmg / totalDmg;
+          const curA =
+            stats.maxA > 0
+              ? Math.max(0, stats.maxA - (unitDmg?.frontArmorDmg ?? 0))
+              : 0;
+          const armorLeftFraction = stats.maxA > 0 ? curA / stats.maxA : 0;
+          const pDisable = ionDisableChance(ionShare, armorLeftFraction);
+          const disabledCount = sampleBinomialOrNormal(count, pDisable, rng);
+          if (disabledCount > 0) {
+            nextDisabled[id] = disabledCount;
+          }
+        }
+
+        // B. Hull Explosions (evaluated immediately at end of round)
+        if (unitDmg && unitDmg.frontHullDmg > 0 && stats.maxH > 0) {
+          const curH = Math.max(0, stats.maxH - unitDmg.frontHullDmg);
+          const hullLeftFraction = curH / stats.maxH;
+          const pExplode = hullExplosionChance(hullLeftFraction);
+          if (pExplode > 0) {
+            const explodedCount = sampleBinomialOrNormal(1, pExplode, rng);
+            if (explodedCount > 0) {
+              count -= 1;
+              setTargetCount(side, id, count);
+              if (!side.unitDamage) side.unitDamage = {};
+              side.unitDamage[id] = {
+                frontShieldDmg: 0,
+                frontArmorDmg: 0,
+                frontHullDmg: 0,
+              };
+            }
+          }
+        }
+      }
+
+      side.disabledCount = nextDisabled;
+    }
 
     const attackerLosses = lossesFromSnapshots(atkShipsBefore, atkSide.ships);
     const defenderLosses = lossesFromSnapshots(
