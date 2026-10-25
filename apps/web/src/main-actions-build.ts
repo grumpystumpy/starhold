@@ -20,6 +20,7 @@ import {
   session,
   setFlash,
 } from "./session";
+import { noteCancelledQueueItem } from "./main-actions-session";
 import { fmt } from "./ui/format";
 import { captureGameEvent } from "./telemetry";
 import { settleMutation } from "./recover-action";
@@ -283,6 +284,7 @@ export async function doCancelQueue(
     schedulePaint();
     return;
   }
+  noteCancelledQueueItem(itemId);
   session.busy = true;
   clearFlash();
   schedulePaint();
