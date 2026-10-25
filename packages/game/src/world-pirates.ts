@@ -126,6 +126,10 @@ import {
 } from "./world-protection.js";
 import { addDebris, subtractCargo } from "./world-tick.js";
 
+export const ALIEN_TECH_OFFSET = 2;
+export const ALIEN_RAID_POWER_FACTOR_MIN = 0.90;
+export const ALIEN_RAID_POWER_FACTOR_MAX = 1.00;
+
 const PIRATE_NAMES = [
   "Black Comet Hold",
   "Corsair Nest",
@@ -180,10 +184,32 @@ export function pirateCombatResearchForOpponent(
   return research;
 }
 
+export function alienCombatResearchForOpponent(
+  opponentResearch?: ResearchLevels,
+): ResearchLevels {
+  const research = emptyResearch();
+  research.weaponsTech = Math.max(
+    0,
+    (opponentResearch?.weaponsTech ?? 0) + ALIEN_TECH_OFFSET,
+  );
+  research.armourTech = Math.max(
+    0,
+    (opponentResearch?.armourTech ?? 0) + ALIEN_TECH_OFFSET,
+  );
+  research.shieldingTech = Math.max(
+    0,
+    (opponentResearch?.shieldingTech ?? 0) + ALIEN_TECH_OFFSET,
+  );
+  return research;
+}
+
 export function pirateCombatResearch(
   base: PirateBase | AlienBase,
   opponentResearch?: ResearchLevels,
 ): ResearchLevels {
+  if (opponentResearch && base.id.startsWith("aln:")) {
+    return alienCombatResearchForOpponent(opponentResearch);
+  }
   if (opponentResearch && base.id.startsWith("pir:")) {
     return pirateCombatResearchForOpponent(opponentResearch);
   }
@@ -438,6 +464,25 @@ function scaleShips(base: FleetShips, factor: number): FleetShips {
     }
   }
   return out;
+}
+
+export function alienRaidPowerFactor(seed: string): number {
+  return (
+    ALIEN_RAID_POWER_FACTOR_MIN +
+    ((hashSeed(seed) % 1001) / 1000) *
+      (ALIEN_RAID_POWER_FACTOR_MAX - ALIEN_RAID_POWER_FACTOR_MIN)
+  );
+}
+
+export function scaleAlienRaidFleet(
+  full: FleetShips,
+  defenderPower: number,
+  seed: string,
+): FleetShips {
+  const eligible = normalizeFleetShips(full);
+  const cap = Math.max(0, defenderPower * alienRaidPowerFactor(seed));
+  const factor = Math.min(1, cap / Math.max(1, fleetCombatPower(eligible)));
+  return scaleShips(eligible, factor);
 }
 
 function mergeHangarAtLeast(current: FleetShips, template: FleetShips): FleetShips {
@@ -1454,7 +1499,7 @@ export function applyNpcRaidOnPlanet(
   const defenderResearch = effectiveCombatResearch(owner);
   const npcResearch = faction === "pirate"
     ? pirateCombatResearchForOpponent(defenderResearch)
-    : pirateCombatResearch(base);
+    : alienCombatResearchForOpponent(defenderResearch);
   const raidFleet =
     faction === "pirate"
       ? scalePirateRaidFleet(
@@ -1463,9 +1508,10 @@ export function applyNpcRaidOnPlanet(
           planet.ships,
           PIRATE_RAID_POWER_FACTOR_PLAYER,
         )
-      : scalePirateRaidFleet(
+      : scaleAlienRaidFleet(
           base.ships,
           planetDefensePower(planet, universe),
+          `${base.id}:alien-raid:${now}`,
         );
   if (fleetShipCount(raidFleet) < 1) return;
   const defenderBefore = { ...planet.ships };
@@ -1864,7 +1910,7 @@ function resolveNpcRaidArrival(
   const attackerResearch = effectiveCombatResearch(owner);
   const defenderResearch = kind === "pirate"
     ? pirateCombatResearchForOpponent(attackerResearch)
-    : pirateCombatResearch(base);
+    : alienCombatResearchForOpponent(attackerResearch);
   const combat = resolveCombat(
     fleet.ships,
     defenderBefore,

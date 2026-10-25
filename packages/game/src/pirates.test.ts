@@ -27,9 +27,11 @@ import {
 import {
   emptyDefenses,
   defenseCombatPower,
+  effectiveCombatResearch,
   emptyFleetShips,
   fleetCombatPower,
   fleetShipCount,
+  resolveCombat,
 } from "./formulas.js";
 import {
   activeAlienBases,
@@ -62,11 +64,19 @@ import {
   PIRATE_TECH_OFFSET,
 } from "./data/tuning.js";
 import {
+  ALIEN_RAID_POWER_FACTOR_MAX,
+  ALIEN_RAID_POWER_FACTOR_MIN,
+  ALIEN_TECH_OFFSET,
+  alienCombatResearchForOpponent,
+  alienRaidPowerFactor,
+  applyNpcRaidOnPlanet,
   applyStrongShipCap,
   createPirateBase,
   findNearestOpenSlot1,
+  resolveAlienRaidArrival,
   pirateCombatResearch,
   pirateCombatResearchForOpponent,
+  scaleAlienRaidFleet,
 } from "./world-pirates.js";
 
 let restoreInputs: (() => void) | undefined;
@@ -938,7 +948,7 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
     }
   });
 
-  it("alien raid on a player planet uses main's sizing formula (factor 1.4, no cap), while pirate raid uses 0.70 + cap via real raid path", () => {
+  it("alien raids use seeded 90-100% power scaling while pirate raids use 0.70 + strong-ship cap", () => {
     const now = 1_000_000_000_000;
     const universe = createUniverse("Raid Sizing Real Path Test", 8);
     delete universe.skipNpcRaids;
@@ -969,11 +979,12 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
     universe.pirateBases = {};
 
     const defenderPower = fleetCombatPower(planetState.ships, player.research) + defenseCombatPower(planetState.defenses ?? {}, player.research);
-    const expectedAlienRaid = scalePirateRaidFleet(alienBase.ships, defenderPower);
+    const alienRaidSeed = `${alienBase.id}:alien-raid:${now + 1000}`;
+    const expectedAlienRaid = scaleAlienRaidFleet(alienBase.ships, defenderPower, alienRaidSeed);
 
     assert.equal(PIRATE_RAID_POWER_FACTOR, 1.4);
     assert.ok((expectedAlienRaid.cruiser ?? 0) > 0, "alien raid includes cruisers despite defender having 0");
-    assert.ok(fleetCombatPower(expectedAlienRaid) <= Math.max(PIRATE_RAID_POWER_FLOOR, defenderPower * PIRATE_RAID_POWER_FACTOR));
+    assert.ok(fleetCombatPower(expectedAlienRaid) <= defenderPower * ALIEN_RAID_POWER_FACTOR_MAX);
 
     const prevE2E = process.env.STARHOLD_E2E;
     delete process.env.STARHOLD_E2E;
@@ -1165,6 +1176,237 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
     } finally {
       if (prevE2E != null) process.env.STARHOLD_E2E = prevE2E;
     }
+  });
+});
+
+describe("B3-25 alien strength and raid power", () => {
+  it("sets alien combat research to opponent +2, including zero-tech opponents", () => {
+    const research = alienCombatResearchForOpponent({
+      weaponsTech: 8,
+      armourTech: 4,
+      shieldingTech: 1,
+    });
+    assert.equal(ALIEN_TECH_OFFSET, 2);
+    assert.equal(research.weaponsTech, 10);
+    assert.equal(research.armourTech, 6);
+    assert.equal(research.shieldingTech, 3);
+
+    const zeroTech = alienCombatResearchForOpponent({
+      weaponsTech: 0,
+      armourTech: 0,
+      shieldingTech: 0,
+    });
+    assert.equal(zeroTech.weaponsTech, 2);
+    assert.equal(zeroTech.armourTech, 2);
+    assert.equal(zeroTech.shieldingTech, 2);
+
+    const universe = createUniverse("Alien Research Defaults", 8);
+    const { player, planet } = joinUniverse(universe, "Opponent", Date.now());
+    const alien = createAlienBase(
+      universe,
+      planet.coords.galaxy,
+      Math.min(MAP_SYSTEMS, planet.coords.system + 1),
+      1,
+      Date.now(),
+      player.id,
+      1,
+    );
+    alien.techs = { weapons: 4, armour: 3, shielding: 2 };
+    assert.deepEqual(
+      pirateCombatResearch(alien, {
+        weaponsTech: 1,
+        armourTech: 0,
+        shieldingTech: 5,
+      }),
+      alienCombatResearchForOpponent({
+        weaponsTech: 1,
+        armourTech: 0,
+        shieldingTech: 5,
+      }),
+    );
+    assert.deepEqual(pirateCombatResearch(alien), {
+      ...alienCombatResearchForOpponent(),
+      weaponsTech: 4,
+      armourTech: 3,
+      shieldingTech: 2,
+    });
+  });
+
+  it("scales alien raid power deterministically to 90-100% without exceeding stock", () => {
+    const seed = "aln:1:2:1:alien-raid:1700000000000";
+    const factor = alienRaidPowerFactor(seed);
+    assert.equal(factor, alienRaidPowerFactor(seed));
+    assert.ok(factor >= ALIEN_RAID_POWER_FACTOR_MIN);
+    assert.ok(factor <= ALIEN_RAID_POWER_FACTOR_MAX);
+
+    const stock = { ...emptyFleetShips(), interceptor: 2500 };
+    const defenderPower = 69_000;
+    const raid = scaleAlienRaidFleet(stock, defenderPower, seed);
+    assert.deepEqual(raid, scaleAlienRaidFleet(stock, defenderPower, seed));
+    assert.ok(fleetCombatPower(raid) >= defenderPower * ALIEN_RAID_POWER_FACTOR_MIN);
+    assert.ok(fleetCombatPower(raid) <= defenderPower * ALIEN_RAID_POWER_FACTOR_MAX);
+    for (const id of Object.keys(raid) as (keyof typeof raid)[]) {
+      assert.ok(raid[id] <= stock[id]);
+    }
+    assert.equal(raid.cruiser, 0);
+  });
+
+  it("uses opponent +2 tech and seeded power scaling for an alien planet raid", () => {
+    const now = Date.now();
+    const universe = createUniverse("Alien Planet Raid Tech", 8);
+    const { player, planet } = joinUniverse(
+      universe,
+      "Alien Raid Defender",
+      now - 30 * 86_400_000,
+    );
+    player.createdAt = now - 30 * 86_400_000;
+    player.research = { weaponsTech: 5, armourTech: 3, shieldingTech: 4 };
+    const planetState = universe.planets[planet.id]!;
+    planetState.ships = { ...emptyFleetShips(), interceptor: 20 };
+    planetState.defenses = emptyDefenses();
+
+    const alien = createAlienBase(
+      universe,
+      planetState.coords.galaxy,
+      Math.min(MAP_SYSTEMS, planetState.coords.system + 1),
+      1,
+      now,
+      player.id,
+      1,
+    );
+    alien.ships = { ...emptyFleetShips(), interceptor: 1000 };
+    universe.alienBases = { [alien.id]: alien };
+
+    const defenderResearch = effectiveCombatResearch(player)!;
+    const defenderPower =
+      fleetCombatPower(planetState.ships, player.research) +
+      defenseCombatPower(planetState.defenses, player.research);
+    const raidFleet = scaleAlienRaidFleet(
+      alien.ships,
+      defenderPower,
+      `${alien.id}:alien-raid:${now}`,
+    );
+    const expectedCombat = resolveCombat(
+      raidFleet,
+      { ...planetState.ships },
+      planetState.defenses,
+      alienCombatResearchForOpponent(defenderResearch),
+      defenderResearch,
+    );
+
+    applyNpcRaidOnPlanet(universe, alien, planetState, now, "alien", () => {});
+
+    const report = Object.values(universe.reports).find(
+      (entry) => entry.missionId === alien.id,
+    );
+    assert.ok(report);
+    assert.deepEqual(report.attackerBefore, raidFleet);
+    assert.equal(report.outcome, expectedCombat.outcome);
+    assert.deepEqual(report.attackerAfter, expectedCombat.attackerAfter);
+    assert.deepEqual(report.defenderAfter, expectedCombat.defenderAfter);
+  });
+
+  it("uses opponent +2 tech when a player fleet attacks an alien base", () => {
+    const now = Date.now();
+    const universe = createUniverse("Alien Base Raid Tech", 8);
+    const { player, planet } = joinUniverse(
+      universe,
+      "Alien Base Attacker",
+      now - 30 * 86_400_000,
+    );
+    player.createdAt = now - 30 * 86_400_000;
+    player.research = { weaponsTech: 5, armourTech: 3, shieldingTech: 4 };
+    const planetState = universe.planets[planet.id]!;
+    planetState.ships = { ...emptyFleetShips(), interceptor: 20 };
+    planetState.resources.deuterium = 100_000;
+
+    const alien = createAlienBase(
+      universe,
+      planetState.coords.galaxy,
+      Math.min(MAP_SYSTEMS, planetState.coords.system + 1),
+      1,
+      now,
+      player.id,
+      1,
+    );
+    alien.ships = { ...emptyFleetShips(), interceptor: 20 };
+    alien.defenses = emptyDefenses();
+    universe.alienBases = { [alien.id]: alien };
+
+    const launch = launchFleet(universe, {
+      playerId: player.id,
+      mission: "alienRaid",
+      ships: { interceptor: 10 },
+      alienBaseId: alien.id,
+      now,
+    });
+    assert.equal(launch.ok, true);
+    if (!launch.ok) return;
+
+    const attackerResearch = effectiveCombatResearch(player)!;
+    const expectedCombat = resolveCombat(
+      launch.fleet.ships,
+      { ...alien.ships },
+      alien.defenses,
+      attackerResearch,
+      alienCombatResearchForOpponent(attackerResearch),
+    );
+    resolveAlienRaidArrival(universe, launch.fleet, launch.fleet.arrivesAt);
+
+    const report = universe.reports[launch.fleet.reportId!];
+    assert.ok(report);
+    assert.equal(report.outcome, expectedCombat.outcome);
+    assert.deepEqual(report.attackerAfter, expectedCombat.attackerAfter);
+    assert.deepEqual(report.defenderAfter, expectedCombat.defenderAfter);
+  });
+
+  it("loads an existing alien base from a save, preserves progress, and resolves its raid", () => {
+    const now = Date.now();
+    const original = createUniverse("Alien Old Save", 8);
+    const { player, planet } = joinUniverse(original, "Alien Save Player", now);
+    const savedPlanet = original.planets[planet.id]!;
+    savedPlanet.buildings = { metalMine: 21, crystalMine: 17, solarPlant: 23 };
+    savedPlanet.ships = { ...emptyFleetShips(), interceptor: 20, hauler: 4 };
+    savedPlanet.resources = { metal: 40_000, crystal: 25_000, deuterium: 100_000 };
+    player.xp = 900;
+    player.xpTotal = 900;
+
+    const alien = createAlienBase(
+      original,
+      savedPlanet.coords.galaxy,
+      Math.min(MAP_SYSTEMS, savedPlanet.coords.system + 1),
+      1,
+      now,
+      player.id,
+      3,
+    );
+    alien.ships = { ...emptyFleetShips(), interceptor: 20 };
+    original.alienBases = { [alien.id]: alien };
+    original.planets = { [savedPlanet.id]: savedPlanet };
+
+    const loaded = migrateOrResetUniverse(JSON.parse(JSON.stringify(original))).universe;
+    const loadedPlanet = loaded.planets[savedPlanet.id]!;
+    const loadedAlien = loaded.alienBases?.[alien.id];
+    assert.ok(loadedAlien);
+    assert.deepEqual(loadedPlanet.buildings, savedPlanet.buildings);
+    assert.deepEqual(loadedPlanet.ships, savedPlanet.ships);
+    assert.deepEqual(loadedPlanet.resources, savedPlanet.resources);
+    assert.equal(loaded.players[player.id]?.xpTotal, 900);
+    assert.deepEqual(loadedAlien.ships, alien.ships);
+
+    const launch = launchFleet(loaded, {
+      playerId: player.id,
+      mission: "alienRaid",
+      ships: { interceptor: 5 },
+      alienBaseId: alien.id,
+      now: now + 1000,
+    });
+    assert.equal(launch.ok, true);
+    if (!launch.ok) return;
+    resolveAlienRaidArrival(loaded, launch.fleet, launch.fleet.arrivesAt);
+    assert.ok(launch.fleet.reportId);
+    assert.ok(loaded.reports[launch.fleet.reportId!]);
+    assert.deepEqual(loaded.planets[savedPlanet.id]!.buildings, savedPlanet.buildings);
   });
 });
 
