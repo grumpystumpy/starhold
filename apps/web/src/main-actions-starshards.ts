@@ -40,6 +40,7 @@ export async function doBuyShopItem(
   targetPlanetId?: string,
 ): Promise<void> {
   if (!session.view || session.busy) return;
+  const beforeStarshards = session.view.starshards ?? 0;
   const item = session.view.shopCatalog?.[itemId];
   const itemName = item?.name ?? "Shop item";
   session.busy = true;
@@ -56,7 +57,7 @@ export async function doBuyShopItem(
     await settleMutation({
       err,
       failureFallback: "Shop item purchase failed.",
-      applied: () => false,
+      applied: (view) => (view.starshards ?? 0) < beforeStarshards,
       successNotice: () => `${itemName} purchased.`,
     });
   } finally {
