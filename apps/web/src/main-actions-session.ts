@@ -198,7 +198,9 @@ function checkAndNotifyQueueCompletions(): void {
     }
 
     if (messages.length > 0) {
-      setFlash("notice", messages.join(" · "));
+      if (!session.error || Date.now() >= session.flashUntil) {
+        setFlash("notice", messages.join(" · "));
+      }
     }
   }
 
