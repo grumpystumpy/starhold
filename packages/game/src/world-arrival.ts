@@ -6,6 +6,7 @@ import {
   coordsKey,
   emptyDefenses,
   empireColonyCap,
+  fleetCargoCapacity,
   fleetShipCount,
   flightSecondsOneWay,
   levelBonuses,
@@ -283,7 +284,10 @@ export function resolveFleetArrival(
     } else if (fleet.mission === "harvest") {
       const field = getDebris(universe, fleet.targetCoords);
       if (field) {
-        const cap = fleetCargoCapacityForHarvest(fleet.ships);
+        const cap = fleetCargoCapacityForHarvest(
+          fleet.ships,
+          owner?.research?.cargoHoldTech ?? 0,
+        );
         const takeMetal = Math.min(field.metal, cap);
         let remainingCap = cap - takeMetal;
         const takeCrystal = Math.min(field.crystal, remainingCap);
@@ -301,7 +305,10 @@ export function resolveFleetArrival(
     } else if (fleet.mission === "harvestAsteroid") {
       const asteroidId = fleet.targetAsteroidId;
       if (asteroidId) {
-        const cap = fleetCargoCapacityForHarvest(fleet.ships);
+        const cap = fleetCargoCapacityForHarvest(
+          fleet.ships,
+          owner?.research?.cargoHoldTech ?? 0,
+        );
         fleet.cargo = harvestAsteroidField(universe, asteroidId, cap);
       }
     } else if (fleet.mission === "expedition") {
@@ -326,6 +333,7 @@ export function resolveFleetArrival(
         returnBonus.fleetSpeed,
       drive,
       recyclerHullScale(returnBonus.recyclerSpeed),
+      owner?.research?.fleetSpeedTech ?? 0,
     );
     if (fleetShipCount(fleet.ships) <= 0) {
       clearOccupationIfFleetGone(universe, fleet);
@@ -384,12 +392,11 @@ export function resolveFleetArrival(
   delete universe.fleets[live.id];
 }
 
-export function fleetCargoCapacityForHarvest(ships: FleetShips): number {
-  let cap = 0;
-  for (const id of SHIP_ORDER) {
-    cap += (ships[id] ?? 0) * SHIPS[id].cargo;
-  }
-  return cap;
+export function fleetCargoCapacityForHarvest(
+  ships: FleetShips,
+  cargoHoldLevel = 0,
+): number {
+  return fleetCargoCapacity(ships, cargoHoldLevel);
 }
 
 export function advanceFleets(universe: UniverseState, now: number): void {

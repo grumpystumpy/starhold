@@ -1,7 +1,9 @@
 import {
   BUILDINGS,
   DEFENSES,
+  CARGO_HOLD_BONUS_PER_LEVEL,
   ENERGY_TECH_ENERGY_PER_LEVEL,
+  FLEET_SPEED_BONUS_PER_LEVEL,
   MIN_FLIGHT_SECONDS,
   RESEARCH,
   SHIPS,
@@ -70,6 +72,8 @@ export function emptyResearch(): ResearchLevels {
     crystalizerTech: 0,
     deutSynthesisTech: 0,
     researchNetwork: 0,
+    cargoHoldTech: 0,
+    fleetSpeedTech: 0,
   };
 }
 
@@ -217,12 +221,18 @@ export function fleetShipCount(ships: FleetShips): number {
   return n;
 }
 
-export function fleetCargoCapacity(ships: FleetShips): number {
+export function fleetCargoCapacity(
+  ships: FleetShips,
+  cargoHoldLevel = 0,
+): number {
   let cap = 0;
   for (const id of SHIP_ORDER) {
     cap += (ships[id] ?? 0) * SHIPS[id].cargo;
   }
-  return cap;
+  if (cargoHoldLevel <= 0) return cap;
+  return Math.floor(
+    cap * (1 + Math.max(0, cargoHoldLevel) * CARGO_HOLD_BONUS_PER_LEVEL),
+  );
 }
 
 /**
@@ -275,11 +285,13 @@ export function flightSecondsOneWay(
   fleetSpeed: number,
   combustionDriveLevel = 0,
   hullSpeedScale?: Partial<Record<ShipId, number>> | null,
+  fleetSpeedTechLevel = 0,
 ): number {
   const distance = Math.max(1, coordDistance(origin, target));
   const cruise =
     fleetCruiseSpeed(ships, hullSpeedScale) *
-    (1 + combustionDriveLevel * 0.1);
+    (1 + combustionDriveLevel * 0.1) *
+    (1 + Math.max(0, fleetSpeedTechLevel) * FLEET_SPEED_BONUS_PER_LEVEL);
   const raw = Math.ceil(
     (distance * 1_000_000) / (cruise * Math.max(0.1, fleetSpeed)),
   );
