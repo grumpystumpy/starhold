@@ -313,6 +313,8 @@ export function fleetComposer(
     sampleShips,
     view.universe.fleetSpeed ?? view.universe.speed,
     view.player.research.combustionDrive ?? 0,
+    undefined,
+    view.player.research.fleetSpeedTech ?? 0,
   );
   const sampleFuel = fuelCostOneWay(
     view.planet.coords,
@@ -584,7 +586,10 @@ function flightPreview(
   speedPercent: number,
 ): { eta: number | null; fuel: number | null; cap: number } {
   const ships = normalizeFleetShips(counts);
-  const cap = fleetCargoCapacity(ships);
+  const cap = fleetCargoCapacity(
+    ships,
+    view.player.research.cargoHoldTech ?? 0,
+  );
   if (!destination) return { eta: null, fuel: null, cap };
   const fleetSpeed = view.universe.fleetSpeed ?? view.universe.speed;
   const baseEta = flightSecondsOneWay(
@@ -593,6 +598,8 @@ function flightPreview(
     ships,
     fleetSpeed,
     view.player.research.combustionDrive ?? 0,
+    undefined,
+    view.player.research.fleetSpeedTech ?? 0,
   );
   const baseFuel = fuelCostOneWay(view.planet.coords, destination, ships);
   const pct = clampFleetSpeed(speedPercent);

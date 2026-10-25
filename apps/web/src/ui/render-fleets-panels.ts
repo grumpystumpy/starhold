@@ -303,9 +303,16 @@ export function galaxyPanel(
 ): string {
   const { galaxy } = view;
   const inAlliance = Boolean(view.alliance);
+
+  const occupiedCount = galaxy.slots.filter((s) => s.planetId).length;
+  const moonsCount = galaxy.slots.filter((s) => s.hasMoon).length;
+  const debrisCount = galaxy.slots.filter(
+    (s) => s.debris && (s.debris.metal > 0 || s.debris.crystal > 0),
+  ).length;
+
   const rows = galaxy.slots
     .map((s) => {
-      const debris = s.debris
+      const debrisText = s.debris
         ? ` · debris ${fmt(s.debris.metal)}/${fmt(s.debris.crystal)}`
         : "";
       const moon = s.hasMoon ? " · Moon" : "";
@@ -353,12 +360,25 @@ export function galaxyPanel(
             testId: `galaxy-moon-art-${s.coords.slot}`,
           })
         : "";
-      return `<li class="galaxy-slot${marker ? " galaxy-slot-marked" : ""}" data-testid="galaxy-slot-${s.coords.slot}" data-art-id="${escapeAttr(s.artId)}"><span class="galaxy-slot-main">${pin}${disc}${moonDisc}<span class="galaxy-slot-label">${fmt(s.coords.slot)}. ${who}${debris}</span></span><span class="galaxy-slot-side">${fmtCoords(s.coords)}${actions}${fleetActions}</span></li>`;
+
+      const slotTypeClass = s.isOwn
+        ? "galaxy-slot-own"
+        : foreignPlanet
+          ? "galaxy-slot-occupied"
+          : "galaxy-slot-empty";
+
+      const debrisBadge = s.debris
+        ? `<span class="galaxy-debris-badge" data-testid="galaxy-debris-${s.coords.slot}">Debris: ${fmt(s.debris.metal)}M / ${fmt(s.debris.crystal)}C</span>`
+        : "";
+
+      return `<li class="galaxy-slot ${slotTypeClass}${marker ? " galaxy-slot-marked" : ""}" data-testid="galaxy-slot-${s.coords.slot}" data-art-id="${escapeAttr(s.artId)}"><span class="galaxy-slot-main">${pin}${disc}${moonDisc}${debrisBadge}<span class="galaxy-slot-label">${fmt(s.coords.slot)}. ${who}${debrisText}</span></span><span class="galaxy-slot-side"><span class="galaxy-slot-coords">${fmtCoords(s.coords)}</span>${actions}${fleetActions}</span></li>`;
     })
     .join("");
+
   const markerTools = inAlliance
     ? `<div class="galaxy-alliance-tools alliance-form" data-testid="galaxy-alliance-tools"><label>Marker note<input type="text" id="galaxy-marker-note" data-testid="galaxy-marker-note" maxlength="80" placeholder="Siege window" ${busy ? "disabled" : ""} /></label></div>`
     : "";
+
   const asteroids =
     galaxy.asteroids?.length > 0
       ? `<ul class="roster" data-testid="galaxy-asteroids">${galaxy.asteroids
@@ -368,15 +388,19 @@ export function galaxyPanel(
           )
           .join("")}</ul>`
       : `<p class="hint" data-testid="galaxy-asteroids-empty">No asteroid fields in this system.</p>`;
+
   const pirate = galaxy.pirateBase
     ? `<p class="hint pirate-row" data-testid="galaxy-pirate">${escapeHtml(galaxy.pirateBase.name)} · Lv ${fmt(galaxy.pirateBase.level ?? galaxy.pirateBase.tier)} · threat ${escapeHtml(galaxy.pirateBase.threatHint)} · ${fmtCoords(galaxy.pirateBase.coords)}</p>`
     : `<p class="hint" data-testid="galaxy-pirate-empty">No pirate base reported.</p>`;
+
   const alien = galaxy.alienBase
     ? `<p class="hint alien-row" data-testid="galaxy-alien">${escapeHtml(galaxy.alienBase.name)} · Aliens · Lv ${fmt(galaxy.alienBase.level ?? galaxy.alienBase.tier)} · threat ${escapeHtml(galaxy.alienBase.threatHint)}${galaxy.alienBase.active ? "" : " · buildup"} · ${fmtCoords(galaxy.alienBase.coords)}</p>`
     : `<p class="hint" data-testid="galaxy-alien-empty">No alien base reported.</p>`;
+
   const deep = galaxy.deepSpace
     ? `<p class="hint" data-testid="galaxy-deep-space">Deep space ${fmtCoords(galaxy.deepSpace.coords)} — expedition target.</p>`
     : "";
+
   const maxTip = infoTooltip({
     title: "Send max expeditions",
     lines: [
@@ -390,6 +414,7 @@ export function galaxyPanel(
     ],
     testId: "galaxy-max-expeditions-tip",
   });
+
   const scanTip = infoTooltip({
     title: "Scan system",
     lines: [
@@ -399,26 +424,36 @@ export function galaxyPanel(
     requires: ["Whisper Probe in orbit"],
     testId: "galaxy-scan-tip",
   });
+
   return `
     <section class="panel" data-testid="galaxy-panel">
-      <h2>Galaxy</h2>
-      <div class="galaxy-nav">
-        <button type="button" data-galaxy-galaxy-nav="prev" data-testid="galaxy-galaxy-prev" ${busy ? "disabled" : ""}>◀ Galaxy</button>
-        <button type="button" data-galaxy-nav="prev" data-testid="galaxy-prev" ${busy ? "disabled" : ""}>◀ System</button>
-        <form data-galaxy-jump-form><input id="galaxy-jump" data-testid="galaxy-jump" type="text" inputmode="decimal" enterkeyhint="go" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="Galaxy and system" placeholder="9:143" /></form>
-        <span data-testid="galaxy-label">${galaxy.galaxy}:${galaxy.system} / ${MAP_SYSTEMS}</span>
-        <button type="button" data-galaxy-nav="next" data-testid="galaxy-next" ${busy ? "disabled" : ""}>System ▶</button>
-        <button type="button" data-galaxy-galaxy-nav="next" data-testid="galaxy-galaxy-next" ${busy ? "disabled" : ""}>Galaxy ▶</button>
-      </div>
-      <div class="galaxy-actions" data-testid="galaxy-actions">
-        <span class="galaxy-action">
-          <button type="button" data-galaxy-max-expeditions data-testid="galaxy-max-expeditions" ${busy ? "disabled" : ""} title="${maxTip.title}">Send max expeditions</button>
-          ${maxTip.html}
-        </span>
-        <span class="galaxy-action">
-          <button type="button" data-galaxy-scan-system data-testid="galaxy-scan-system" ${busy ? "disabled" : ""} title="${scanTip.title}">Scan system (probes)</button>
-          ${scanTip.html}
-        </span>
+      <h2>Galaxy Navigation</h2>
+      <div class="galaxy-system-bar" data-testid="galaxy-system-bar">
+        <div class="galaxy-nav">
+          <button type="button" data-galaxy-galaxy-nav="prev" data-testid="galaxy-galaxy-prev" ${busy ? "disabled" : ""}>◀ Galaxy</button>
+          <button type="button" data-galaxy-nav="prev" data-testid="galaxy-prev" ${busy ? "disabled" : ""}>◀ System</button>
+          <form data-galaxy-jump-form><input id="galaxy-jump" data-testid="galaxy-jump" type="text" inputmode="decimal" enterkeyhint="go" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="Galaxy and system" placeholder="9:143" /></form>
+          <span data-testid="galaxy-label">${galaxy.galaxy}:${galaxy.system} / ${MAP_SYSTEMS}</span>
+          <button type="button" data-galaxy-nav="next" data-testid="galaxy-next" ${busy ? "disabled" : ""}>System ▶</button>
+          <button type="button" data-galaxy-galaxy-nav="next" data-testid="galaxy-galaxy-next" ${busy ? "disabled" : ""}>Galaxy ▶</button>
+        </div>
+        <div class="system-summary-chips">
+          <span class="chip chip-planets">${occupiedCount} / 15 Planets</span>
+          <span class="chip chip-moons">${moonsCount} Moons</span>
+          <span class="chip chip-debris">${debrisCount} Debris</span>
+          <span class="chip chip-pirate${galaxy.pirateBase ? " is-active" : ""}">${galaxy.pirateBase ? "Pirate Base" : "Clear Sector"}</span>
+          <span class="chip chip-alien${galaxy.alienBase ? " is-active" : ""}">${galaxy.alienBase ? "Alien Threat" : "No Aliens"}</span>
+        </div>
+        <div class="galaxy-actions" data-testid="galaxy-actions">
+          <span class="galaxy-action">
+            <button type="button" data-galaxy-max-expeditions data-testid="galaxy-max-expeditions" ${busy ? "disabled" : ""} title="${maxTip.title}">Send max expeditions</button>
+            ${maxTip.html}
+          </span>
+          <span class="galaxy-action">
+            <button type="button" data-galaxy-scan-system data-testid="galaxy-scan-system" ${busy ? "disabled" : ""} title="${scanTip.title}">Scan system (probes)</button>
+            ${scanTip.html}
+          </span>
+        </div>
       </div>
       <p class="hint">Send max uses the Expedition preset and fills free expedition slots from ships in orbit on the selected colony. Scan probes every foreign-owned planet/moon in this system.</p>
       ${markerTools}
@@ -434,19 +469,29 @@ export function galaxyPanel(
           const who = mini.playerName
             ? `${escapeHtml(mini.playerName)}${mini.isOwn ? " (you)" : ""}`
             : escapeHtml(mini.name);
-          return `<li data-testid="galaxy-mini-${escapeAttr(mini.planetId)}" data-art-id="${escapeAttr(mini.artId)}"><span class="galaxy-slot-main">${planetDiscHtml({ src: mini.artThumbUrl, artId: mini.artId, size: 40, testId: `galaxy-mini-art-${mini.planetId}` })}<span class="galaxy-slot-label">Mini ${fmt(mini.coords.slot)}. ${who}${debris}</span></span><span class="galaxy-slot-coords">${fmtCoords(mini.coords)}</span></li>`;
+          return `<li data-testid="galaxy-mini-${escapeAttr(mini.planetId)}" data-art-id="${escapeAttr(mini.artId)}"><span class="galaxy-slot-main">${planetDiscHtml({ src: mini.artThumbUrl, artId: mini.artId, size: 40, testId: `galaxy-mini-art-${mini.planetId}` })}<span class="galaxy-slot-label">Mini ${fmt(mini.coords.slot)}. ${who}${debris}</span></span><span class="galaxy-slot-side"><span class="galaxy-slot-coords">${fmtCoords(mini.coords)}</span></span></li>`;
         })
         .join("")}</ul>`
           : ""
       }
-      <h3 class="subhead">Deep space</h3>
-      ${deep}
-      <h3 class="subhead">Asteroids</h3>
-      ${asteroids}
-      <h3 class="subhead">Pirates</h3>
-      ${pirate}
-      <h3 class="subhead">Aliens</h3>
-      ${alien}
+      <div class="galaxy-tactical-deck">
+        <div class="tactical-section">
+          <h3 class="subhead">Deep space</h3>
+          ${deep}
+        </div>
+        <div class="tactical-section">
+          <h3 class="subhead">Asteroids</h3>
+          ${asteroids}
+        </div>
+        <div class="tactical-section">
+          <h3 class="subhead">Pirates</h3>
+          ${pirate}
+        </div>
+        <div class="tactical-section">
+          <h3 class="subhead">Aliens</h3>
+          ${alien}
+        </div>
+      </div>
       <p class="hint">Use Fleet → Colonize / Harvest / Expedition with coords from this view.</p>
     </section>
   `;
