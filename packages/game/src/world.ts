@@ -221,6 +221,17 @@ export {
   type StarshardActionResult,
 } from "./world-starshards.js";
 export {
+  buyShopItem,
+  computeShopItemCost,
+  computeShopItemPerUnitCost,
+  SHOP_ITEMS,
+  type BuyShopItemParams,
+  type BuyShopItemResult,
+  type ShopItemCategory,
+  type ShopItemDefinition,
+  type ShopItemTier,
+} from "./world-shop-items.js";
+export {
   claimGoal,
   ensureGoalBoard,
   goalsView,

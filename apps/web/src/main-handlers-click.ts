@@ -25,6 +25,7 @@ import {
   doApplyFleetPreset,
   doBuild,
   doBuildDefense,
+  doBuyShopItem,
   doCancelQueue,
   doChangeClass,
   doChooseClass,
@@ -113,6 +114,20 @@ export function bindClickHandlers(): void {
         const tab = shopTab.getAttribute("data-shop-tab");
         if (tab === "resources" || tab === "officers" || tab === "skills") {
           navigateShopTab(tab);
+        }
+        return;
+      }
+
+      const buyShopItemBtn = closestActionEl(target, "[data-buy-shop-item]");
+      if (buyShopItemBtn) {
+        ev.preventDefault();
+        const itemId = buyShopItemBtn.getAttribute("data-buy-shop-item");
+        if (itemId) {
+          const targetSelect = root.querySelector<HTMLSelectElement>(
+            `[data-item-target="${itemId}"]`,
+          );
+          const targetPlanetId = targetSelect?.value || undefined;
+          void doBuyShopItem(itemId, targetPlanetId);
         }
         return;
       }

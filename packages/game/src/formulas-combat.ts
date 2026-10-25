@@ -276,6 +276,8 @@ type SidePools = {
   residual?: Partial<Record<CombatUnitId, number>>;
   /** Alliance ship-shield multiplier. Ships only. */
   shipShieldMult?: number;
+  shipArmorMult?: number;
+  shipHullMult?: number;
   /** Alliance defense hull/armor/shield multiplier. Defenses only. */
   defenseStatMult?: number;
   unitStatMult?: number;
@@ -559,8 +561,8 @@ function getUnitStats(
   if ((SHIP_ORDER as string[]).includes(id)) {
     const d = SHIPS[id as ShipId];
     shield = d.shield * (side?.shipShieldMult ?? 1);
-    armor = d.armor;
-    hull = d.hull;
+    armor = d.armor * (side?.shipArmorMult ?? 1);
+    hull = d.hull * (side?.shipHullMult ?? 1);
   } else {
     const d = DEFENSES[id as DefenseId];
     const stat = side?.defenseStatMult ?? 1;
@@ -768,6 +770,10 @@ export interface CombatMods {
   attackerShieldMult?: number;
   /** Alliance ship shields for the defender. */
   defenderShieldMult?: number;
+  attackerArmorMult?: number;
+  defenderArmorMult?: number;
+  attackerHullMult?: number;
+  defenderHullMult?: number;
   /** Alliance ship weapons for the attacker (after attackMult). */
   attackerWeaponMult?: number;
   /** Alliance ship weapons for the defender (ships only, not defense fire). */
@@ -809,6 +815,8 @@ export function resolveCombat(
     defenses: emptyDefenses(),
     unitDamage: {},
     shipShieldMult: mods?.attackerShieldMult ?? 1,
+    shipArmorMult: mods?.attackerArmorMult ?? 1,
+    shipHullMult: mods?.attackerHullMult ?? 1,
     defenseStatMult: 1,
   };
   const defSide: SidePools = {
@@ -816,6 +824,8 @@ export function resolveCombat(
     defenses: { ...emptyDefenses(), ...defenses },
     unitDamage: {},
     shipShieldMult: mods?.defenderShieldMult ?? 1,
+    shipArmorMult: mods?.defenderArmorMult ?? 1,
+    shipHullMult: mods?.defenderHullMult ?? 1,
     defenseStatMult: mods?.defenderDefenseStatMult ?? 1,
     unitStatMult: mods?.defenderUnitStatMult ?? 1,
   };

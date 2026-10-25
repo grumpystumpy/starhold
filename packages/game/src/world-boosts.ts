@@ -25,6 +25,9 @@ export interface PlayerBoosts {
   energyOutput: number;
   storageCapacity: number;
   espionageLevel: number;
+  hullBuff: number;
+  armorBuff: number;
+  shieldBuff: number;
 }
 
 export function emptyBoosts(): PlayerBoosts {
@@ -37,6 +40,9 @@ export function emptyBoosts(): PlayerBoosts {
     energyOutput: 1,
     storageCapacity: 1,
     espionageLevel: 0,
+    hullBuff: 1,
+    armorBuff: 1,
+    shieldBuff: 1,
   };
 }
 
@@ -118,6 +124,23 @@ export function playerBoosts(
       applyEffect(boosts, scaleEffect(effect, level));
     }
   }
+
+  // Active item buffs
+  if (player.itemBuffs && player.itemBuffs.length > 0) {
+    const active = player.itemBuffs.filter((b) => b.expiresAt > now);
+    for (const itemBuff of active) {
+      if (itemBuff.category === "fleet_slots") {
+        boosts.fleetSlots += itemBuff.bonus;
+      } else if (itemBuff.category === "buff_hull") {
+        boosts.hullBuff *= 1 + itemBuff.bonus / 100;
+      } else if (itemBuff.category === "buff_armor") {
+        boosts.armorBuff *= 1 + itemBuff.bonus / 100;
+      } else if (itemBuff.category === "buff_shield") {
+        boosts.shieldBuff *= 1 + itemBuff.bonus / 100;
+      }
+    }
+  }
+
   return boosts;
 }
 

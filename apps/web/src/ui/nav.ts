@@ -16,9 +16,10 @@ export const NAV_PAGES = [
 ] as const;
 
 export type NavPage = (typeof NAV_PAGES)[number];
-export type ShopTab = "resources" | "officers" | "skills";
+export type ShopTab = "items" | "resources" | "officers" | "skills";
 
 export const SHOP_TABS: readonly ShopTab[] = [
+  "items",
   "resources",
   "officers",
   "skills",
@@ -32,9 +33,10 @@ export function shopTabFromUrl(pathname: string, search: string): ShopTab {
   const queryTab = new URLSearchParams(search).get("shopTab");
   if (isShopTab(queryTab)) return queryTab;
   const path = pathname.replace(/\/+$/, "");
+  if (path === "/items") return "items";
   if (path === "/officers") return "officers";
   if (path === "/skills") return "skills";
-  return "resources";
+  return "items";
 }
 
 export const NAV_LABELS: Record<NavPage, string> = {

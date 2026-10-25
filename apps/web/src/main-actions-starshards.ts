@@ -1,6 +1,7 @@
 import type { OfficerId, PlayerClassId } from "@starhold/game";
 import {
   activateOfficerHire,
+  buyShopItem,
   changeClass,
   chooseClass,
   claimDaily,
@@ -27,6 +28,36 @@ export async function doClaimDaily(): Promise<void> {
       failureFallback: "Daily claim failed.",
       applied: (view) => view.player.lastDailyLoginUtc !== before,
       successNotice: () => "Daily Starshards claimed.",
+    });
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doBuyShopItem(
+  itemId: string,
+  targetPlanetId?: string,
+): Promise<void> {
+  if (!session.view || session.busy) return;
+  const item = session.view.shopCatalog?.[itemId];
+  const itemName = item?.name ?? "Shop item";
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    session.view = await buyShopItem(
+      session.view.player.id,
+      itemId,
+      targetPlanetId,
+    );
+    setFlash("notice", `${itemName} purchased.`);
+  } catch (err) {
+    await settleMutation({
+      err,
+      failureFallback: "Shop item purchase failed.",
+      applied: () => false,
+      successNotice: () => `${itemName} purchased.`,
     });
   } finally {
     session.busy = false;

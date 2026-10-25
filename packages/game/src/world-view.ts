@@ -66,6 +66,7 @@ import { goalsView } from "./world-goals.js";
 import { occupationForPlanet } from "./world-occupation.js";
 import { empireDriftBeaconCount, playerKnowsMini } from "./world-mini.js";
 import { seasonLeaderboardView } from "./world-seasons.js";
+import { SHOP_ITEMS } from "./world-shop-items.js";
 import { getDebris } from "./world-tick.js";
 import {
   isNewbieBonusActive,
@@ -426,6 +427,31 @@ export function playerView(
     .sort((a, b) => a.arrivesAt - b.arrivesAt)
     .slice(0, 20);
 
+  const activeItemBuffs = (player.itemBuffs ?? [])
+    .filter((b) => b.expiresAt > now)
+    .map((b) => ({
+      itemId: b.itemId,
+      category: b.category,
+      bonus: b.bonus,
+      expiresAt: b.expiresAt,
+      remainingMs: Math.max(0, b.expiresAt - now),
+    }));
+
+  const shopCatalog = Object.fromEntries(
+    Object.entries(SHOP_ITEMS).map(([key, item]) => [
+      key,
+      {
+        id: item.id,
+        name: item.name,
+        category: item.category,
+        tier: item.tier,
+        bonus: item.bonus,
+        starshards: item.starshards,
+        description: item.description,
+      },
+    ]),
+  );
+
   return {
     now,
     universe: {
@@ -514,5 +540,7 @@ export function playerView(
     openAcsGroups: listOpenAcsForAlliance(universe, player.allianceId),
     goals: goalsView(player, now),
     seasonLeaderboard: seasonLeaderboardView(universe, player, now),
+    activeItemBuffs,
+    shopCatalog,
   };
 }
