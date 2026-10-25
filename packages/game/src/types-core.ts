@@ -114,7 +114,9 @@ export type ResearchId =
   | "metallurgistTech"
   | "crystalizerTech"
   | "deutSynthesisTech"
-  | "researchNetwork";
+  | "researchNetwork"
+  | "cargoHoldTech"
+  | "fleetSpeedTech";
 
 export type QueueKind = "building" | "ship" | "defense" | "research";
 
