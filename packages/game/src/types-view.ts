@@ -54,6 +54,7 @@ export interface CombatReport {
   defenderPlayerId: string;
   attackerName: string;
   defenderName: string;
+  originCoords?: Coordinates;
   targetCoords: Coordinates;
   attackerBefore: FleetShips;
   attackerAfter: FleetShips;

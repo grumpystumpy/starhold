@@ -244,4 +244,28 @@ describe("P2 multi-round combat + rapid fire", () => {
     assert.ok(report.roundLog);
     assert.equal(report.roundLog!.length, report.rounds);
   });
+
+  it("resolveRaidArrival populates report.originCoords with attacking fleet origin planet coordinates", () => {
+    const universe = createUniverse("Origin Coords Test", 8);
+    const a = joinUniverse(universe, "AtkOrigin", 150_000_000);
+    const b = joinUniverse(universe, "DefTarget", 150_000_001);
+    graduateNewbieProtection(universe, universe.players[b.player.id]!);
+    universe.planets[a.planet.id].ships.scout = 3;
+
+    const launch = launchFleet(
+      universe,
+      a.player.id,
+      b.planet.id,
+      "raid",
+      { scout: 3 },
+      150_000_100,
+    );
+    assert.equal(launch.ok, true);
+    if (!launch.ok) return;
+
+    advanceUniverse(universe, launch.fleet.arrivesAt);
+    const report = Object.values(universe.reports)[0];
+    assert.ok(report);
+    assert.deepEqual(report.originCoords, a.planet.coords);
+  });
 });

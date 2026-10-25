@@ -14,7 +14,29 @@ import {
 } from "@starhold/game";
 import { fmt, fmtCoords } from "./format";
 import { escapeAttr, escapeHtml } from "./render-escape";
-import { combatBattleExtrasHtml } from "./render-fleets-panels";
+import { battleReplayRound, combatBattleExtrasHtml } from "./render-fleets-panels";
+
+export type OpenReportState = {
+  kind: "combat" | "spy" | "expedition";
+  id: string;
+} | null;
+
+let openReport: OpenReportState = null;
+
+export function openReportWindow(
+  kind: "combat" | "spy" | "expedition",
+  id: string,
+): void {
+  openReport = { kind, id };
+}
+
+export function closeReportWindow(): void {
+  openReport = null;
+}
+
+export function currentOpenReport(): OpenReportState {
+  return openReport;
+}
 
 export type InboxKind =
   | "combat"
@@ -174,6 +196,237 @@ function namedCounts(
     .filter((id) => (bag[id] ?? 0) > 0 && names[id])
     .map((id) => `${fmt(bag[id] ?? 0)}× ${names[id]!.name}`);
   return parts.join(", ");
+}
+
+function unitLossLine(
+  ships: Partial<Record<string, number>> | undefined,
+  defenses?: Partial<Record<string, number>>,
+): string {
+  const parts: string[] = [];
+  for (const id of SHIP_ORDER) {
+    const n = ships?.[id] ?? 0;
+    if (n > 0) parts.push(`${fmt(n)}× ${escapeHtml(SHIPS[id].name)}`);
+  }
+  if (defenses) {
+    for (const id of DEFENSE_ORDER) {
+      const n = defenses[id] ?? 0;
+      if (n > 0) parts.push(`${fmt(n)}× ${escapeHtml(DEFENSES[id].name)}`);
+    }
+  }
+  return parts.length ? parts.join(", ") : "none";
+}
+
+function renderReportSubwindow(view: PlayerView): string {
+  if (!openReport) return "";
+
+  const { kind, id } = openReport;
+
+  if (kind === "combat") {
+    const report = (view.reports ?? []).find((r) => r.id === id);
+    if (!report) return "";
+
+    const atkCoords = report.originCoords
+      ? ` (${fmtCoords(report.originCoords)})`
+      : "";
+    const defCoords = ` (${fmtCoords(report.targetCoords)})`;
+
+    let attackerRows = "";
+    let attackerTotalShipsLost = 0;
+    for (const shipId of SHIP_ORDER) {
+      const before = report.attackerBefore?.[shipId] ?? 0;
+      const after = report.attackerAfter?.[shipId] ?? 0;
+      if (before > 0 || after > 0) {
+        const lost = Math.max(0, before - after);
+        attackerTotalShipsLost += lost;
+        attackerRows += `<tr><td>${escapeHtml(SHIPS[shipId].name)}</td><td>${fmt(before)}</td><td>${fmt(after)}</td><td>${fmt(lost)}</td></tr>`;
+      }
+    }
+    if (!attackerRows) {
+      attackerRows = `<tr><td colspan="4" class="meta">No ships present</td></tr>`;
+    }
+
+    let defenderRows = "";
+    let defenderTotalShipsLost = 0;
+    for (const shipId of SHIP_ORDER) {
+      const before = report.defenderBefore?.[shipId] ?? 0;
+      const after = report.defenderAfter?.[shipId] ?? 0;
+      if (before > 0 || after > 0) {
+        const lost = Math.max(0, before - after);
+        defenderTotalShipsLost += lost;
+        defenderRows += `<tr><td>${escapeHtml(SHIPS[shipId].name)}</td><td>${fmt(before)}</td><td>${fmt(after)}</td><td>${fmt(lost)}</td></tr>`;
+      }
+    }
+    for (const defId of DEFENSE_ORDER) {
+      const before = report.defensesBefore?.[defId] ?? 0;
+      const after = report.defensesAfter?.[defId] ?? 0;
+      if (before > 0 || after > 0) {
+        const lost = Math.max(0, before - after);
+        defenderRows += `<tr><td>${escapeHtml(DEFENSES[defId].name)}</td><td>${fmt(before)}</td><td>${fmt(after)}</td><td>${fmt(lost)}</td></tr>`;
+      }
+    }
+    if (!defenderRows) {
+      defenderRows = `<tr><td colspan="4" class="meta">No units present</td></tr>`;
+    }
+
+    const log = report.roundLog ?? [];
+    let roundReplayHtml = "";
+    if (log.length > 0) {
+      const selected = battleReplayRound(report.id) ?? log[0]!.round;
+      const tabs = log
+        .map(
+          (round) =>
+            `<button type="button" class="battle-round-tab${round.round === selected ? " is-active" : ""}" data-battle-round-tab="${round.round}" data-report-id="${escapeAttr(report.id)}" data-testid="battle-round-tab-${round.round}">R${fmt(round.round)}</button>`,
+        )
+        .join("");
+      const panes = log
+        .map((round) => {
+          const active = round.round === selected;
+          const metal = round.debrisThisRound?.metal ?? 0;
+          const crystal = round.debrisThisRound?.crystal ?? 0;
+          const roundDebris =
+            metal + crystal > 0
+              ? `${fmt(metal)} metal, ${fmt(crystal)} crystal`
+              : "none";
+          return `<div class="battle-round" data-battle-round="${round.round}" ${active ? "" : "hidden"} data-testid="battle-round-${round.round}">
+            <p class="meta"><strong>Round ${fmt(round.round)}</strong></p>
+            <p class="meta">Attacker losses: ${unitLossLine(round.attackerLosses.ships)}</p>
+            <p class="meta">Defender losses: ${unitLossLine(round.defenderLosses.ships, round.defenderLosses.defenses)}</p>
+            <p class="meta">Round debris: ${roundDebris}</p>
+          </div>`;
+        })
+        .join("");
+      roundReplayHtml = `<div class="battle-replay" data-battle-report="${escapeAttr(report.id)}" data-testid="battle-replay">
+        <div class="battle-round-tabs" role="tablist">${tabs}</div>
+        ${panes}
+      </div>`;
+    } else {
+      roundReplayHtml = `<p class="hint" data-testid="battle-replay-legacy">Summary only — older reports have no round replay.</p>`;
+    }
+
+    const debrisText = resourceNames(report.debrisCreated) || "None";
+    const lootText = resourceNames(report.loot) || "None";
+    let defenseSummaryHtml = "";
+    if (report.defensesDestroyed) {
+      const destroyed = namedCounts(DEFENSE_ORDER, DEFENSES, report.defensesDestroyed) || "None";
+      const rebuilt = namedCounts(DEFENSE_ORDER, DEFENSES, report.defensesRebuilt) || "None";
+      const lost = namedCounts(DEFENSE_ORDER, DEFENSES, report.defensesPermanentlyLost) || "None";
+      defenseSummaryHtml = `<p class="meta">Defenses destroyed: ${destroyed}</p>
+      <p class="meta">Defenses rebuilt: ${rebuilt}</p>
+      <p class="meta">Defenses permanently lost: ${lost}</p>`;
+    }
+
+    return `
+      <div class="report-subwindow-backdrop">
+        <div class="report-subwindow" data-testid="report-subwindow">
+          <div class="report-subwindow-header">
+            <h3 class="report-subwindow-title">Combat Report — ${escapeHtml(report.attackerName)}${atkCoords} vs ${escapeHtml(report.defenderName)}${defCoords}</h3>
+            <button type="button" class="report-subwindow-close ghost" data-close-report data-testid="close-report-window" aria-label="Close">✕</button>
+          </div>
+          <div class="report-section">
+            <p class="meta"><strong>Outcome:</strong> ${escapeHtml(report.outcome.replace("_", " "))} (${fmt(report.rounds)} round${report.rounds === 1 ? "" : "s"})</p>
+            <p class="meta"><strong>Attacker:</strong> ${escapeHtml(report.attackerName)}${atkCoords}</p>
+            <p class="meta"><strong>Defender:</strong> ${escapeHtml(report.defenderName)}${defCoords}</p>
+          </div>
+          <div class="report-compositions">
+            <div class="report-side">
+              <h4>Attacker Fleet</h4>
+              <table class="report-composition-table">
+                <thead><tr><th>Unit</th><th>Before</th><th>After</th><th>Lost</th></tr></thead>
+                <tbody>${attackerRows}</tbody>
+                <tfoot><tr><td colspan="3"><strong>Total ships lost</strong></td><td><strong>${fmt(attackerTotalShipsLost)}</strong></td></tr></tfoot>
+              </table>
+            </div>
+            <div class="report-side">
+              <h4>Defender Fleet & Defenses</h4>
+              <table class="report-composition-table">
+                <thead><tr><th>Unit</th><th>Before</th><th>After</th><th>Lost</th></tr></thead>
+                <tbody>${defenderRows}</tbody>
+                <tfoot><tr><td colspan="3"><strong>Total ships lost</strong></td><td><strong>${fmt(defenderTotalShipsLost)}</strong></td></tr></tfoot>
+              </table>
+            </div>
+          </div>
+          <div class="report-section">
+            <h4>Rounds Replay</h4>
+            ${roundReplayHtml}
+          </div>
+          <div class="report-section">
+            <h4>Debris & Summary</h4>
+            <p class="meta"><strong>Debris field created:</strong> ${debrisText}</p>
+            <p class="meta"><strong>Loot:</strong> ${lootText}</p>
+            ${defenseSummaryHtml}
+            ${report.summary ? `<p class="meta"><strong>Summary:</strong> ${escapeHtml(report.summary)}</p>` : ""}
+          </div>
+        </div>
+      </div>`;
+  }
+
+  if (kind === "spy") {
+    const report = (view.spyReports ?? []).find((r) => r.id === id);
+    if (!report) return "";
+
+    const resources = resourceNames(report.resources) || "None detected";
+    const ships = namedCounts(SHIP_ORDER, SHIPS, report.ships) || "None detected";
+    const defenses = namedCounts(DEFENSE_ORDER, DEFENSES, report.defenses) || "None detected";
+    const buildings = namedLevels(BUILDING_ORDER, BUILDINGS, report.buildings) || "None detected";
+    const research = namedLevels(RESEARCH_ORDER, RESEARCH, report.research) || "None detected";
+
+    return `
+      <div class="report-subwindow-backdrop">
+        <div class="report-subwindow" data-testid="report-subwindow">
+          <div class="report-subwindow-header">
+            <h3 class="report-subwindow-title">Espionage Report — ${escapeHtml(report.targetName)} (${fmtCoords(report.targetCoords)})</h3>
+            <button type="button" class="report-subwindow-close ghost" data-close-report data-testid="close-report-window" aria-label="Close">✕</button>
+          </div>
+          <div class="report-section">
+            <p class="meta"><strong>Target:</strong> ${escapeHtml(report.targetName)} (${fmtCoords(report.targetCoords)})</p>
+            <p class="meta"><strong>Detail Level:</strong> Spy L${fmt(report.detail)}</p>
+            <p class="meta"><strong>Summary:</strong> ${escapeHtml(report.summary)}</p>
+          </div>
+          <div class="report-section">
+            <h4>Scanned Details</h4>
+            <p class="meta"><strong>Resources:</strong> ${resources}</p>
+            <p class="meta"><strong>Ships:</strong> ${ships}</p>
+            <p class="meta"><strong>Defenses:</strong> ${defenses}</p>
+            <p class="meta"><strong>Buildings:</strong> ${buildings}</p>
+            <p class="meta"><strong>Research:</strong> ${research}</p>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  if (kind === "expedition") {
+    const report = (view.expeditionReports ?? []).find((r) => r.id === id);
+    if (!report) return "";
+
+    const cargo = resourceNames(report.cargoGained) || "None";
+    const ships = namedCounts(SHIP_ORDER, SHIPS, report.shipsDelta) || "None";
+    const starshards = (report.starshardsGained ?? 0) > 0 ? `+${fmt(report.starshardsGained!)} ✦` : "None";
+    const debris = resourceNames(report.debrisCreated) || "None";
+
+    return `
+      <div class="report-subwindow-backdrop">
+        <div class="report-subwindow" data-testid="report-subwindow">
+          <div class="report-subwindow-header">
+            <h3 class="report-subwindow-title">Expedition Report — ${fmtCoords(report.targetCoords)}</h3>
+            <button type="button" class="report-subwindow-close ghost" data-close-report data-testid="close-report-window" aria-label="Close">✕</button>
+          </div>
+          <div class="report-section">
+            <p class="meta"><strong>Coordinates:</strong> ${fmtCoords(report.targetCoords)}</p>
+            <p class="meta"><strong>Outcome Kind:</strong> ${escapeHtml(report.kind)}</p>
+            <p class="meta"><strong>Summary:</strong> ${escapeHtml(report.summary)}</p>
+          </div>
+          <div class="report-section">
+            <h4>Findings</h4>
+            <p class="meta"><strong>Cargo Gained:</strong> ${cargo}</p>
+            <p class="meta"><strong>Ships Gained/Lost:</strong> ${ships}</p>
+            <p class="meta"><strong>Starshards Gained:</strong> ${starshards}</p>
+            <p class="meta"><strong>Ambush Debris Created:</strong> ${debris}</p>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  return "";
 }
 
 /** Full espionage layers, using display names. Closed until the player opens it. */
@@ -374,6 +627,10 @@ export function messagesPageHtml(
                 ? (view.spyReports ?? []).find((r) => r.id === item.id)
                 : undefined;
             const spyDetail = spy ? spyReportDetailsHtml(spy) : "";
+            const openReportBtn =
+              item.kind === "combat" || item.kind === "spy" || item.kind === "expedition"
+                ? `<button type="button" class="ghost open-report-btn" data-open-report="${escapeAttr(item.kind)}:${escapeAttr(item.id)}" data-testid="open-report-${escapeAttr(item.kind)}-${escapeAttr(item.id)}">Open report</button>`
+                : "";
             return `<li class="message-row${item.unread ? " message-unread" : ""}" id="msg-${escapeAttr(item.kind)}-${escapeAttr(item.id)}" data-testid="message-${escapeAttr(item.kind)}-${escapeAttr(item.id)}" data-kind="${escapeAttr(item.kind)}" data-bucket="${inboxBucket(item.kind)}"${item.unread ? ' data-unread="1"' : ""}>
               <div class="message-head">
                 <span class="message-kind" data-testid="message-kind">${escapeHtml(kindLabel(item.kind))}</span>
@@ -381,6 +638,7 @@ export function messagesPageHtml(
               </div>
               ${title}
               <span class="meta message-body">${escapeHtml(item.body)}</span>
+              ${openReportBtn}
               ${extras}
               ${spyDetail}
               ${readBtn}
@@ -417,5 +675,6 @@ export function messagesPageHtml(
         ${deleteControl(filter, deleteCount, busy)}
       </div>
       ${list}
+      ${renderReportSubwindow(view)}
     </section>`;
 }
