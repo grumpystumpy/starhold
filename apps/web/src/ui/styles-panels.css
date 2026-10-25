@@ -86,11 +86,46 @@
   min-width: 12rem;
 }
 
+.galaxy-system-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg2) 75%, transparent);
+}
+
+.system-summary-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.chip {
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg0) 80%, transparent);
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  color: var(--fg);
+}
+
+.chip-pirate.is-active,
+.chip-alien.is-active {
+  border-color: var(--warn, #e0a45a);
+  color: var(--warn, #e0a45a);
+  background: color-mix(in srgb, var(--warn, #e0a45a) 15%, transparent);
+}
+
 .galaxy-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  margin: 0.5rem 0 0.75rem;
+  margin: 0.25rem 0 0;
   align-items: center;
 }
 
@@ -106,7 +141,6 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  margin-bottom: 0.65rem;
 }
 
 .galaxy-nav button {
@@ -424,6 +458,23 @@ a.message-title:hover {
 .galaxy-slot {
   flex-wrap: wrap;
   align-items: center;
+  padding: 0.45rem 0.55rem;
+  border-radius: 4px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 45%, transparent);
+}
+
+.galaxy-slot-own {
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+  border-left: 3px solid var(--ok);
+}
+
+.galaxy-slot-occupied {
+  background: color-mix(in srgb, var(--bg2) 40%, transparent);
+  border-left: 3px solid color-mix(in srgb, var(--line) 80%, transparent);
+}
+
+.galaxy-slot-empty {
+  opacity: 0.82;
 }
 
 .galaxy-slot-marked {
@@ -436,6 +487,36 @@ a.message-title:hover {
   color: var(--accent);
   font-weight: 700;
   margin-right: 0.25rem;
+}
+
+.galaxy-debris-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.galaxy-tactical-deck {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+}
+
+.tactical-section {
+  border: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+  border-radius: 6px;
+  padding: 0.65rem 0.85rem;
+  background: color-mix(in srgb, var(--bg2) 40%, transparent);
+}
+
+.tactical-section .subhead {
+  margin-top: 0;
+  margin-bottom: 0.35rem;
 }
 
 .galaxy-slot-side,
@@ -459,6 +540,10 @@ a.message-title:hover {
   .galaxy-slot-side {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .galaxy-tactical-deck {
+    grid-template-columns: 1fr;
   }
 
   .item-thumb {
