@@ -515,6 +515,19 @@ export interface OfficerState {
   expiresAt: number;
 }
 
+export interface ActiveItemBuff {
+  itemId: string;
+  category:
+    | "fields_planet"
+    | "fields_moon"
+    | "buff_hull"
+    | "buff_armor"
+    | "buff_shield"
+    | "fleet_slots";
+  bonus: number;
+  expiresAt: number;
+}
+
 export type SkillBranch = "economy" | "military" | "exploration";
 
 export interface SkillNodeDef {

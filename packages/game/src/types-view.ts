@@ -1,5 +1,6 @@
 import type {
   AcsGroup,
+  ActiveItemBuff,
   AsteroidField,
   BodyKind,
   BuildingId,
@@ -27,6 +28,14 @@ import type {
   SkillNodeDef,
   SlotProductionMult,
 } from "./types-core.js";
+
+export interface ActiveItemBuffView {
+  itemId: string;
+  category: string;
+  bonus: number;
+  expiresAt: number;
+  remainingMs: number;
+}
 
 
 export type CombatOutcome = "attacker_win" | "defender_win" | "draw";
@@ -456,6 +465,8 @@ export interface PlayerState {
    * The live `season` object is zeroed when the month rolls.
    */
   seasonArchive?: Record<string, SeasonPlayerCounters>;
+  /** Active item 24h buffs or slot licenses. Missing on older saves. */
+  itemBuffs?: ActiveItemBuff[];
 }
 
 /** UTC period keys + per-goal counters. Rolled lazily on read. */
@@ -714,6 +725,21 @@ export interface PlayerView {
   goals: GoalView[];
   /** Current month leaderboard plus sealed claim offers. */
   seasonLeaderboard: SeasonLeaderboardView;
+  /** Active 24h item buffs. */
+  activeItemBuffs: ActiveItemBuffView[];
+  /** Shop items catalog for UI. */
+  shopCatalog: Record<
+    string,
+    {
+      id: string;
+      name: string;
+      category: string;
+      tier: string;
+      bonus: number;
+      starshards: number;
+      description: string;
+    }
+  >;
 }
 
 export interface PublicPlayer extends PlanetArtFields {

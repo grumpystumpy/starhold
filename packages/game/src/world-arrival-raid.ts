@@ -66,8 +66,10 @@ export function resolveRaidArrival(
   const defCls = classBonuses(defenderOwner?.playerClass?.classId);
   const atkAlly = allianceBonusesForPlayer(universe, fleet.ownerPlayerId);
   const defAlly = allianceBonusesForPlayer(universe, target.ownerPlayerId);
+  const atkBoosts = playerBoosts(owner, now);
+  const defBoosts = playerBoosts(defenderOwner, now);
   const defensePower =
-    playerBoosts(defenderOwner, now).defensePower * defCls.defensePower;
+    defBoosts.defensePower * defCls.defensePower;
   const fortressField = isMovingFortress(target)
     ? {
         shieldMult: MINI_FORTRESS_SHIELD_MULT,
@@ -87,8 +89,12 @@ export function resolveRaidArrival(
       defenseSlot: target.coords.slot,
       battlefield: fortressField,
       seed: `${fleet.id}:${fleet.arrivesAt}`,
-      attackerShieldMult: atkAlly.shipShield,
-      defenderShieldMult: defAlly.shipShield,
+      attackerShieldMult: atkAlly.shipShield * atkBoosts.shieldBuff,
+      defenderShieldMult: defAlly.shipShield * defBoosts.shieldBuff,
+      attackerArmorMult: atkBoosts.armorBuff,
+      defenderArmorMult: defBoosts.armorBuff,
+      attackerHullMult: atkBoosts.hullBuff,
+      defenderHullMult: defBoosts.hullBuff,
       attackerWeaponMult: atkAlly.shipWeapon,
       defenderWeaponMult: defAlly.shipWeapon,
       defenderDefenseStatMult: defAlly.defenseStat,
