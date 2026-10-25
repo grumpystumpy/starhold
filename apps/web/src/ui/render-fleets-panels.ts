@@ -178,7 +178,7 @@ export function reportsHtml(
               ? ` · share ${escapeHtml(r.shareCode)}`
               : "";
           return `<li data-testid="report-${r.id}" data-report-id="${escapeAttr(r.id)}">
-            <strong>${role}: ${escapeHtml(r.outcome)}</strong>${typeof r.rounds === "number" ? ` · ${r.rounds}r` : ""} vs ${escapeHtml(r.attackerPlayerId === selfId ? r.defenderName : r.attackerName)} @ ${fmtCoords(r.targetCoords)}${loot}${debris}${moon}${xp}${share}
+            <strong>${role}: ${escapeHtml(r.outcome)}</strong>${typeof r.rounds === "number" ? ` · ${fmt(r.rounds)}r` : ""} vs ${escapeHtml(r.attackerPlayerId === selfId ? r.defenderName : r.attackerName)} @ ${fmtCoords(r.targetCoords)}${loot}${debris}${moon}${xp}${share}
             <br/><span class="meta">${escapeHtml(r.summary)}</span>
             ${combatBattleExtrasHtml(r)}
           </li>`;
@@ -312,8 +312,11 @@ export function galaxyPanel(
 
   const rows = galaxy.slots
     .map((s) => {
-      const debrisText = s.debris
-        ? ` · debris ${fmt(s.debris.metal)}/${fmt(s.debris.crystal)}`
+      const hasDebris = Boolean(
+        s.debris && (s.debris.metal > 0 || s.debris.crystal > 0),
+      );
+      const debrisText = hasDebris
+        ? ` · <span class="galaxy-debris-badge" data-testid="galaxy-debris-${s.coords.slot}">debris ${fmt(s.debris!.metal)}/${fmt(s.debris!.crystal)}</span>`
         : "";
       const moon = s.hasMoon ? " · Moon" : "";
       const tag = s.allianceTag ? ` [${escapeHtml(s.allianceTag)}]` : "";
@@ -367,11 +370,7 @@ export function galaxyPanel(
           ? "galaxy-slot-occupied"
           : "galaxy-slot-empty";
 
-      const debrisBadge = s.debris
-        ? `<span class="galaxy-debris-badge" data-testid="galaxy-debris-${s.coords.slot}">Debris: ${fmt(s.debris.metal)}M / ${fmt(s.debris.crystal)}C</span>`
-        : "";
-
-      return `<li class="galaxy-slot ${slotTypeClass}${marker ? " galaxy-slot-marked" : ""}" data-testid="galaxy-slot-${s.coords.slot}" data-art-id="${escapeAttr(s.artId)}"><span class="galaxy-slot-main">${pin}${disc}${moonDisc}${debrisBadge}<span class="galaxy-slot-label">${fmt(s.coords.slot)}. ${who}${debrisText}</span></span><span class="galaxy-slot-side"><span class="galaxy-slot-coords">${fmtCoords(s.coords)}</span>${actions}${fleetActions}</span></li>`;
+      return `<li class="galaxy-slot ${slotTypeClass}${marker ? " galaxy-slot-marked" : ""}" data-testid="galaxy-slot-${s.coords.slot}" data-art-id="${escapeAttr(s.artId)}"><span class="galaxy-slot-main">${pin}${disc}${moonDisc}<span class="galaxy-slot-label">${fmt(s.coords.slot)}. ${who}${debrisText}</span></span><span class="galaxy-slot-side"><span class="galaxy-slot-coords">${fmtCoords(s.coords)}</span>${actions}${fleetActions}</span></li>`;
     })
     .join("");
 
@@ -438,9 +437,9 @@ export function galaxyPanel(
           <button type="button" data-galaxy-galaxy-nav="next" data-testid="galaxy-galaxy-next" ${busy ? "disabled" : ""}>Galaxy ▶</button>
         </div>
         <div class="system-summary-chips">
-          <span class="chip chip-planets">${occupiedCount} / 15 Planets</span>
-          <span class="chip chip-moons">${moonsCount} Moons</span>
-          <span class="chip chip-debris">${debrisCount} Debris</span>
+          <span class="chip chip-planets">${fmt(occupiedCount)} / 15 Planets</span>
+          <span class="chip chip-moons">${fmt(moonsCount)} Moons</span>
+          <span class="chip chip-debris">${fmt(debrisCount)} Debris</span>
           <span class="chip chip-pirate${galaxy.pirateBase ? " is-active" : ""}">${galaxy.pirateBase ? "Pirate Base" : "Clear Sector"}</span>
           <span class="chip chip-alien${galaxy.alienBase ? " is-active" : ""}">${galaxy.alienBase ? "Alien Threat" : "No Aliens"}</span>
         </div>
@@ -463,8 +462,11 @@ export function galaxyPanel(
           ? `<h3 class="subhead">Mini planets</h3>
       <ul class="roster galaxy-slots" data-testid="galaxy-minis">${galaxy.minis
         .map((mini) => {
-          const debris = mini.debris
-            ? ` · debris ${fmt(mini.debris.metal)}/${fmt(mini.debris.crystal)}`
+          const hasDebris = Boolean(
+            mini.debris && (mini.debris.metal > 0 || mini.debris.crystal > 0),
+          );
+          const debris = hasDebris
+            ? ` · debris ${fmt(mini.debris!.metal)}/${fmt(mini.debris!.crystal)}`
             : "";
           const who = mini.playerName
             ? `${escapeHtml(mini.playerName)}${mini.isOwn ? " (you)" : ""}`

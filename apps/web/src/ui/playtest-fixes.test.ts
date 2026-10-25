@@ -96,8 +96,8 @@ describe("playtest fixes", () => {
       1_700_000_000_000,
       false,
     );
-    assert.match(vault, /30,000/);
-    assert.match(vault, /60,000/);
+    assert.match(vault, /30k/);
+    assert.match(vault, /60k/);
     assert.match(vault, /Capacity starts at 30,000/);
   });
 
@@ -311,7 +311,7 @@ describe("playtest fixes", () => {
         speedPercent: 100,
       },
     );
-    assert.match(protectedOnly, /under 2,500 points are protected/);
+    assert.match(protectedOnly, /under 2\.5k points are protected/);
     assert.doesNotMatch(protectedOnly, /Attack Newbie/);
   });
 
@@ -347,7 +347,7 @@ describe("playtest fixes", () => {
     assert.match(html, /data-testid="spy-detail-s1"/);
     assert.match(html, /Full report/);
     assert.match(html, /Solar Array L3/);
-    assert.match(html, /1,000/);
+    assert.match(html, /1k/);
     assert.match(html, /Power Discipline/);
     assert.doesNotMatch(html, /solarPlant|energyTech|fieldsCap/);
 
@@ -401,7 +401,7 @@ describe("playtest fixes", () => {
     } as unknown as PlayerView;
     const html = seasonsPage(view, false);
     assert.match(html, /data-testid="season-economy-tip"/);
-    assert.match(html, /1 point for every 1,000/);
+    assert.match(html, /1 point for every 1k/);
     assert.match(html, /480 resources are banked/);
     assert.doesNotMatch(html, /fieldsCap/);
   });

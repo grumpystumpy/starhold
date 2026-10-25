@@ -10,6 +10,7 @@ import {
   type ResearchId,
   type ShipId,
 } from "@starhold/game";
+import { fmt } from "./ui/format";
 import {
   clearFlash,
   closestActionEl,
@@ -958,7 +959,7 @@ export function bindClickHandlers(): void {
       );
       const win = fortressRelocateLandingWindow(g, s);
       const cost = fortressRelocateDeutCost(session.view.planet.coords, g, s);
-      hint.innerHTML = `Aim a system in an allowed galaxy. Landing window for current aim: <strong>${win.galaxy}:${win.systemMin}–${win.galaxy}:${win.systemMax}</strong> (±${MINI_FORTRESS_RELOCATE_ACCURACY} systems). Free mini slot on landing. Est. cost at current aim: ${cost} deut.`;
+      hint.innerHTML = `Aim a system in an allowed galaxy. Landing window for current aim: <strong>${win.galaxy}:${win.systemMin}–${win.galaxy}:${win.systemMax}</strong> (±${MINI_FORTRESS_RELOCATE_ACCURACY} systems). Free mini slot on landing. Est. cost at current aim: ${fmt(cost)} deut.`;
     }
   });
 }

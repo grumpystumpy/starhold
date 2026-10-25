@@ -97,13 +97,16 @@ describe("galaxy page rendering", () => {
     assert.match(html, /class="[^"]*galaxy-slot-own[^"]*"[^>]*data-testid="galaxy-slot-1"/);
     assert.match(html, /data-testid="galaxy-moon-art-1"/);
     assert.match(html, /data-testid="galaxy-debris-1"/);
+    assert.match(html, /debris 500\/200/);
+    assert.doesNotMatch(html, /500M/);
+    assert.match(html, /1\.2k pts/);
     assert.match(html, /class="[^"]*galaxy-slot-occupied[^"]*galaxy-slot-marked[^"]*"[^>]*data-testid="galaxy-slot-2"/);
     assert.match(html, /data-testid="galaxy-marker-2"/);
     assert.match(html, /data-testid="galaxy-spy-2"/);
     assert.match(html, /data-testid="galaxy-attack-2"/);
     assert.match(html, /class="[^"]*galaxy-slot-empty[^"]*"[^>]*data-testid="galaxy-slot-3"/);
     assert.match(html, /data-testid="galaxy-colonize-3"/);
-    assert.match(html, /3,400 pts/);
+    assert.match(html, /3\.4k pts/);
   });
 
   it("renders pirate base, alien base, asteroids, mini planets, and deep space cards with testids", () => {
@@ -153,6 +156,7 @@ describe("galaxy page rendering", () => {
     assert.match(html, /data-testid="galaxy-mini-mini-1"/);
     assert.match(html, /data-testid="galaxy-asteroids"/);
     assert.match(html, /data-testid="asteroid-ast-1"/);
+    assert.match(html, /5k\/2k\/1k/);
     assert.match(html, /data-testid="galaxy-pirate"/);
     assert.match(html, /data-testid="galaxy-alien"/);
   });

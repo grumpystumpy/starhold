@@ -325,7 +325,7 @@ async function runViewport(browser, viewport, ids) {
     await page.click('[data-testid="mission-raid"]');
     await page.waitForSelector('[data-testid="fleet-targets-protected"]');
     const protectedText = await page.locator('[data-testid="fleet-targets-protected"]').innerText();
-    assert(protectedText.includes("2,500"), `${tag} protection copy: ${protectedText}`);
+    assert(protectedText.includes("2.5k"), `${tag} protection copy: ${protectedText}`);
     const raidOptions = await optionTexts(page);
     assert(
       !raidOptions.some((t) => t.includes(ids.victimName)),
@@ -387,7 +387,7 @@ async function runViewport(browser, viewport, ids) {
     await page.goto(seasonsUrl, { waitUntil: "domcontentloaded" });
     await page.waitForSelector('[data-testid="season-economy-tip"]');
     const seasonText = await page.locator('[data-testid="season-board-economy"]').innerText();
-    assert(seasonText.includes("1,000"), `${tag} economy tooltip: ${seasonText}`);
+    assert(seasonText.includes("1k"), `${tag} economy tooltip: ${seasonText}`);
     assert(
       seasonText.toLowerCase().includes("building") &&
         seasonText.toLowerCase().includes("research"),

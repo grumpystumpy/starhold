@@ -118,14 +118,14 @@ export function fleetComposer(
     const pirate = view.galaxy.pirateBase;
     if (pirate) {
       options.push(
-        `<option value="pirate:${escapeAttr(pirate.id)}">${escapeHtml(pirate.name)} · Lv ${pirate.level ?? pirate.tier} · ${pirate.threatHint} · ${fmtCoords(pirate.coords)}</option>`,
+        `<option value="pirate:${escapeAttr(pirate.id)}">${escapeHtml(pirate.name)} · Lv ${fmt(pirate.level ?? pirate.tier)} · ${pirate.threatHint} · ${fmtCoords(pirate.coords)}</option>`,
       );
     }
   } else if (mission === "alienRaid") {
     const alien = view.galaxy.alienBase;
     if (alien) {
       options.push(
-        `<option value="alien:${escapeAttr(alien.id)}">${escapeHtml(alien.name)} · Aliens · Lv ${alien.level ?? alien.tier} · ${alien.threatHint} · ${fmtCoords(alien.coords)}</option>`,
+        `<option value="alien:${escapeAttr(alien.id)}">${escapeHtml(alien.name)} · Aliens · Lv ${fmt(alien.level ?? alien.tier)} · ${alien.threatHint} · ${fmtCoords(alien.coords)}</option>`,
       );
     }
   } else if (mission === "espionage") {

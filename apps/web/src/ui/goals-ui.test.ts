@@ -10,7 +10,7 @@ describe("goal reward text", () => {
       crystal: 1000,
       deuterium: 500,
     });
-    assert.equal(resources, "2,000 metal · 1,000 crystal · 500 deuterium");
+    assert.equal(resources, "2k metal · 1k crystal · 500 deuterium");
     assert.equal(resources.includes("_"), false);
 
     const weekly = goalRewardText({
@@ -21,7 +21,7 @@ describe("goal reward text", () => {
     });
     assert.equal(
       weekly,
-      "12,000 metal · 6,000 crystal · 3,000 deuterium",
+      "12k metal · 6k crystal · 3k deuterium",
     );
 
     const shards = goalRewardText({

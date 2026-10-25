@@ -61,7 +61,7 @@ describe("galaxy jump controls", () => {
     const html = galaxyPanel(view, false);
 
     assert.match(html, /900 pts/);
-    assert.match(html, /debris 1,200\/340/);
+    assert.match(html, /debris 1\.2k\/340/);
     assert.doesNotMatch(html, /47 pts/);
   });
 

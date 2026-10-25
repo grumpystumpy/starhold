@@ -251,7 +251,7 @@ describe("messages inbox", () => {
         ] as PlayerView["expeditionReports"],
       }),
     );
-    assert.match(combat, /1,200 metal, 800 crystal/);
+    assert.match(combat, /1\.2k metal, 800 crystal/);
     assert.match(combat, /Defenses destroyed: 10× Light Laser/);
     assert.match(combat, /Rebuilt: 7× Light Laser/);
     assert.match(combat, /Permanently lost: 3× Light Laser/);
@@ -438,7 +438,7 @@ describe("messages inbox", () => {
     assert.match(combatWinHtml, /data-testid="battle-round-tab-1"/);
     assert.match(combatWinHtml, /data-testid="battle-round-tab-2"/);
     assert.match(combatWinHtml, /800 metal, 500 crystal/);
-    assert.match(combatWinHtml, /1,200 metal, 800 crystal/);
+    assert.match(combatWinHtml, /1\.2k metal, 800 crystal/);
 
     // Open Spy Report
     openReportWindow("spy", "s_test_1");
@@ -446,14 +446,14 @@ describe("messages inbox", () => {
     assert.match(spyWinHtml, /data-testid="report-subwindow"/);
     assert.match(spyWinHtml, /Espionage Report/);
     assert.match(spyWinHtml, /Bravo/);
-    assert.match(spyWinHtml, /1,000 metal, 500 crystal, 200 deuterium/);
+    assert.match(spyWinHtml, /1k metal, 500 crystal, 200 deuterium/);
 
     // Open Expedition Report
     openReportWindow("expedition", "e_test_1");
     const expWinHtml = messagesPageHtml(view);
     assert.match(expWinHtml, /data-testid="report-subwindow"/);
     assert.match(expWinHtml, /Expedition Report/);
-    assert.match(expWinHtml, /1,500 metal, 800 crystal/);
+    assert.match(expWinHtml, /1\.5k metal, 800 crystal/);
 
     closeReportWindow();
   });

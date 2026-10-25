@@ -89,10 +89,10 @@ async function runViewport(browser, viewport) {
     assert((await foundry.innerText()).includes("Locked"), `${tag} locked label`);
     const vault = page.locator('[data-testid="building-metalStorage"]');
     const vaultText = await vault.innerText();
-    assert(vaultText.includes("30,000"), `${tag} vault tooltip/description: ${vaultText}`);
-    assert(vaultText.includes("60,000"), `${tag} next vault cap missing`);
+    assert(vaultText.includes("30k") || vaultText.includes("30,000"), `${tag} vault tooltip/description: ${vaultText}`);
+    assert(vaultText.includes("60k") || vaultText.includes("60,000"), `${tag} next vault cap missing`);
     const cap = await page.locator('[data-testid="res-metal"] .sub').innerText();
-    assert(cap.includes("30,000") || cap.includes("60,000"), `${tag} metal cap ${cap}`);
+    assert(cap.includes("30k") || cap.includes("60k") || cap.includes("30,000") || cap.includes("60,000"), `${tag} metal cap ${cap}`);
 
     const solar = page.locator('[data-testid="upgrade-solarPlant"]');
     const solarLabel = await solar.innerText();
