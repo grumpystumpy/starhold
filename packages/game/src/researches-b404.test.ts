@@ -299,7 +299,7 @@ describe("B4-05 Cargo Hold and B4-06 Fleet Speed Researches", () => {
     const universe = fixture.universe;
     const player = Object.values(universe.players)[0];
     assert.ok(player);
-    const researchBefore = { ...player.research };
+    const playerBefore = JSON.parse(JSON.stringify(player)) as typeof player;
     const planetBefore = JSON.parse(
       JSON.stringify(universe.planets[fixture.planetId]),
     );
@@ -315,14 +315,44 @@ describe("B4-05 Cargo Hold and B4-06 Fleet Speed Researches", () => {
 
     ensureUniverseShape(universe);
 
-    assert.equal(player.research.cargoHoldTech, 0);
-    assert.equal(player.research.fleetSpeedTech, 0);
-    for (const id of Object.keys(researchBefore) as Array<
-      keyof typeof researchBefore
-    >) {
-      assert.equal(player.research[id], researchBefore[id]);
+    for (const id of [
+      "cargoHoldTech",
+      "fleetSpeedTech",
+      "metallurgistTech",
+      "crystalizerTech",
+      "deutSynthesisTech",
+      "researchNetwork",
+    ] as const) {
+      assert.equal(player.research[id], 0);
     }
-    assert.deepEqual(universe.planets[fixture.planetId], planetBefore);
+    const playerExpected = JSON.parse(
+      JSON.stringify(playerBefore),
+    ) as typeof player;
+    for (const id of [
+      "cargoHoldTech",
+      "fleetSpeedTech",
+      "metallurgistTech",
+      "crystalizerTech",
+      "deutSynthesisTech",
+      "researchNetwork",
+    ] as const) {
+      if (playerExpected.research[id] == null) {
+        playerExpected.research[id] = 0;
+      }
+    }
+    playerExpected.hiddenReportIds ??= [];
+    playerExpected.officerLevels ??= {};
+    playerExpected.skillLevels ??= {};
+    assert.deepEqual(player, playerExpected);
+
+    const planet = universe.planets[fixture.planetId]!;
+    assert.equal(planet.ships.bulkCargo, 0);
+    assert.equal(planet.ships.fastCargo, 0);
+    assert.equal(planet.defenses?.prismLaser, 0);
+    planetBefore.ships.bulkCargo = 0;
+    planetBefore.ships.fastCargo = 0;
+    planetBefore.defenses.prismLaser = 0;
+    assert.deepEqual(planet, planetBefore);
     assert.deepEqual(universe.fleets, fleetsBefore);
     assert.deepEqual(
       {

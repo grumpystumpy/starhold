@@ -340,9 +340,11 @@ export function resolveFleetArrival(
       delete universe.fleets[fleet.id];
       return;
     }
-    fleet.phase = "returning";
-    fleet.arrivesAt = now + returnSecs * 1000;
-    universe.fleets[fleet.id] = fleet;
+    universe.fleets[fleet.id] = {
+      ...fleet,
+      phase: "returning",
+      arrivesAt: now + returnSecs * 1000,
+    };
     return;
   }
 
