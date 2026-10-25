@@ -610,10 +610,23 @@ async function uiSmoke() {
     page,
     "scout build ready",
     () => {
+      const parseCompact = (text) => {
+        if (!text) return 0;
+        const match = String(text).replace(/,/g, "").match(/([0-9.,]+)\s*([kMBT])?/i);
+        if (!match) return 0;
+        const num = parseFloat(match[1]);
+        if (isNaN(num)) return 0;
+        const unit = match[2]?.toUpperCase();
+        if (unit === "K") return num * 1e3;
+        if (unit === "M") return num * 1e6;
+        if (unit === "B") return num * 1e9;
+        if (unit === "T") return num * 1e12;
+        return num;
+      };
       const btn = document.querySelector('[data-testid="build-scout"]');
       const metalText =
         document.querySelector('[data-testid="res-metal"] .value')?.textContent ?? "0";
-      const metal = parseCompactNumber(metalText);
+      const metal = parseCompact(metalText);
       const label = btn?.textContent ?? "";
       const queue = Boolean(document.querySelector('[data-testid="build-queue"]'));
       const shipQ = Boolean(document.querySelector('[data-testid="ship-queue"]'));
@@ -640,10 +653,23 @@ async function uiSmoke() {
   await page.click('[data-testid="build-scout"]');
   await page.waitForFunction(
     () => {
+      const parseCompact = (text) => {
+        if (!text) return 0;
+        const match = String(text).replace(/,/g, "").match(/([0-9.,]+)\s*([kMBT])?/i);
+        if (!match) return 0;
+        const num = parseFloat(match[1]);
+        if (isNaN(num)) return 0;
+        const unit = match[2]?.toUpperCase();
+        if (unit === "K") return num * 1e3;
+        if (unit === "M") return num * 1e6;
+        if (unit === "B") return num * 1e9;
+        if (unit === "T") return num * 1e12;
+        return num;
+      };
       const hangar = document.querySelector('[data-testid="hangar-count-scout"]');
       const q = document.querySelector('[data-testid="ship-queue"]');
       const ok = document.querySelector('[data-testid="flash-ok"]');
-      const n = parseCompactNumber(hangar?.textContent ?? "0");
+      const n = parseCompact(hangar?.textContent ?? "0");
       return n >= 1 || Boolean(q) || Boolean(ok?.textContent?.match(/scout|Hangar|Queued/i));
     },
     undefined,
@@ -654,8 +680,21 @@ async function uiSmoke() {
     page,
     "scout hangar",
     () => {
+      const parseCompact = (text) => {
+        if (!text) return 0;
+        const match = String(text).replace(/,/g, "").match(/([0-9.,]+)\s*([kMBT])?/i);
+        if (!match) return 0;
+        const num = parseFloat(match[1]);
+        if (isNaN(num)) return 0;
+        const unit = match[2]?.toUpperCase();
+        if (unit === "K") return num * 1e3;
+        if (unit === "M") return num * 1e6;
+        if (unit === "B") return num * 1e9;
+        if (unit === "T") return num * 1e12;
+        return num;
+      };
       const hangar = document.querySelector('[data-testid="hangar-count-scout"]');
-      const n = parseCompactNumber(hangar?.textContent ?? "0");
+      const n = parseCompact(hangar?.textContent ?? "0");
       return n >= 1 ? true : { hangar: hangar?.textContent ?? null };
     },
     30_000,
