@@ -43,11 +43,11 @@ describe("nav routes", () => {
     assert.ok(NAV_PAGES.includes("shop"));
     assert.ok(!(NAV_PAGES as readonly string[]).includes("officers"));
     assert.ok(!(NAV_PAGES as readonly string[]).includes("skills"));
-    assert.deepEqual(SHOP_TABS, ["resources", "officers", "skills"]);
+    assert.deepEqual(SHOP_TABS, ["items", "resources", "officers", "skills"]);
     assert.equal(shopTabFromUrl("/shop", "?shopTab=skills"), "skills");
     assert.equal(shopTabFromUrl("/officers", ""), "officers");
     assert.equal(shopTabFromUrl("/skills", ""), "skills");
-    assert.equal(shopTabFromUrl("/shop", ""), "resources");
+    assert.equal(shopTabFromUrl("/shop", ""), "items");
   });
 
   it("renders the existing Officers and Skills panels as Shop sub-tabs", () => {
@@ -57,7 +57,7 @@ describe("nav routes", () => {
     const officers = shopPageHtml(view, false, "officers");
     const skills = shopPageHtml(view, false, "skills");
     assert.match(officers, /data-testid="officers-panel"/);
-    assert.equal((officers.match(/data-shop-tab=/g) ?? []).length, 3);
+    assert.equal((officers.match(/data-shop-tab=/g) ?? []).length, 4);
     assert.match(officers, /data-shop-tab="officers"/);
     assert.match(officers, /aria-selected="true"/);
     assert.match(skills, /data-testid="skills-panel"/);

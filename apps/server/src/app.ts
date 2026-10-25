@@ -17,6 +17,7 @@ import {
   type ShipId,
   abandonOccupation,
   activateOfficer,
+  buyShopItem,
   deletePlayerMessages,
   isMessageCategory,
   advanceUniverse,
@@ -331,6 +332,36 @@ export function createApp(): Hono {
         Date.now(),
         body.planetId,
       );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    }, { playerIds: [body.playerId] });
+  });
+
+  app.post("/api/shop/buy-item", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      itemId?: string;
+      targetPlanetId?: string;
+    };
+    if (!body.playerId || !body.itemId) {
+      return c.json({ error: "playerId and itemId required." }, 400);
+    }
+    const sessionId = readSessionId(c);
+    if (!sessionId) return c.json({ error: "Sign in required." }, 401);
+    const session = await getSession(sessionId);
+    if (!session) return c.json({ error: "Sign in required." }, 401);
+    const account = await getAccountById(session.accountId);
+    if (!account?.playerId) return c.json({ error: "Sign in required." }, 401);
+    if (account.playerId !== body.playerId) {
+      return c.json({ error: "You do not own this player." }, 403);
+    }
+    return withUniverse((universe) => {
+      const result = buyShopItem(universe, {
+        playerId: body.playerId!,
+        itemId: body.itemId!,
+        targetPlanetId: body.targetPlanetId,
+        now: Date.now(),
+      });
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
     }, { playerIds: [body.playerId] });
