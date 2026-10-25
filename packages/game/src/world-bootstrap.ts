@@ -192,6 +192,8 @@ export function ensureUniverseShape(universe: UniverseState): void {
     if (player.research.metallurgistTech == null) player.research.metallurgistTech = 0;
     if (player.research.crystalizerTech == null) player.research.crystalizerTech = 0;
     if (player.research.deutSynthesisTech == null) player.research.deutSynthesisTech = 0;
+    if (player.research.cargoHoldTech == null) player.research.cargoHoldTech = 0;
+    if (player.research.fleetSpeedTech == null) player.research.fleetSpeedTech = 0;
     if (player.research.researchNetwork == null) {
       player.research.researchNetwork = 0;
     }
