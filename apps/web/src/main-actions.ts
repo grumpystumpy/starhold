@@ -41,6 +41,7 @@ export {
   doClaimDaily,
   doClaimGoal,
   doTradeResources,
+  doBuyShopItem,
   doActivateOfficer,
   doRaiseOfficer,
   doUnlockSkill,
