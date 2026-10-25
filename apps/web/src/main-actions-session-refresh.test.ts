@@ -42,9 +42,10 @@ async function advanceBy(delay: number): Promise<void> {
 }
 
 function view(queues: {
-  buildQueue?: { completesAt: number }[];
-  researchQueue?: { completesAt: number }[];
-  shipQueue?: { completesAt: number }[];
+  buildQueue?: any[];
+  researchQueue?: any[];
+  shipQueue?: any[];
+  defenseQueue?: any[];
 } = {}): PlayerView {
   return {
     now,
@@ -58,7 +59,7 @@ function view(queues: {
       buildings: {},
       buildQueue: queues.buildQueue ?? [],
       shipQueue: queues.shipQueue ?? [],
-      defenseQueue: [],
+      defenseQueue: queues.defenseQueue ?? [],
       ships: {},
       defenses: {},
     },
@@ -120,6 +121,105 @@ it("fetches once shortly after the earliest queue completion", async () => {
     assert.equal(fetch.count(), 1);
   } finally {
     fetch.restore();
+  }
+});
+
+it("schedules a completion timer when only defenseQueue has items", async () => {
+  reset();
+  const fetch = mockStateFetch();
+  try {
+    setView(view({ defenseQueue: [{ id: "dq1", defenseId: "laserBattery", count: 4, completesAt: now + 1_000 }] }));
+    await advanceBy(1_249);
+    assert.equal(fetch.count(), 0);
+    await advanceBy(1);
+    assert.equal(fetch.count(), 1);
+  } finally {
+    fetch.restore();
+  }
+});
+
+it("shows exact completion notices when research, ship, and defense items finish", async () => {
+  reset();
+  const originalFetch = globalThis.fetch;
+  let fetchStep = 0;
+
+  const initialResearchItem = { id: "rq1", researchId: "energyTech", targetLevel: 5, completesAt: now + 1_000 };
+  const initialShipItem = { id: "sq1", shipId: "interceptor", count: 10, completesAt: now + 2_000 };
+  const initialDefenseItem = { id: "dq1", defenseId: "laserBattery", count: 4, completesAt: now + 3_000 };
+
+  globalThis.fetch = async () => {
+    fetchStep += 1;
+    if (fetchStep === 1) {
+      // Research finished
+      return new Response(JSON.stringify(view({
+        shipQueue: [initialShipItem],
+        defenseQueue: [initialDefenseItem],
+      })), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (fetchStep === 2) {
+      // Ship finished
+      return new Response(JSON.stringify(view({
+        defenseQueue: [initialDefenseItem],
+      })), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (fetchStep === 3) {
+      // Defense finished
+      return new Response(JSON.stringify(view({})), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return new Response(JSON.stringify(view({})), { status: 200, headers: { "content-type": "application/json" } });
+  };
+
+  try {
+    setView(view({
+      researchQueue: [initialResearchItem],
+      shipQueue: [initialShipItem],
+      defenseQueue: [initialDefenseItem],
+    }));
+
+    // Advance to research completion
+    await advanceBy(1_250);
+    assert.equal(session.notice, "Research complete: Power Discipline → level 5");
+
+    // Advance to ship completion
+    await advanceBy(1_000);
+    assert.equal(session.notice, "Shipyard: Interceptor × 10 finished");
+
+    // Advance to defense completion
+    await advanceBy(1_000);
+    assert.equal(session.notice, "Defense: Light Laser × 4 finished");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+it("does not repeat completion notice on subsequent poll or reload", async () => {
+  reset();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    return new Response(JSON.stringify(view({})), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  try {
+    const researchItem = { id: "rq1", researchId: "energyTech", targetLevel: 5, completesAt: now + 1_000 };
+    setView(view({ researchQueue: [researchItem] }));
+
+    await advanceBy(1_250);
+    assert.equal(session.notice, "Research complete: Power Discipline → level 5");
+
+    // Clear notice as if user or timer cleared flash
+    session.notice = null;
+
+    // Trigger another background refresh/poll
+    const { silentRefresh } = await import("./main-actions-session");
+    await silentRefresh("p1");
+
+    // Notice should NOT reappear
+    assert.equal(session.notice, null);
+  } finally {
+    globalThis.fetch = originalFetch;
   }
 });
 
