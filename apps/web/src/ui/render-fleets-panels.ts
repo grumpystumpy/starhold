@@ -329,6 +329,14 @@ export function galaxyPanel(
       const actions = inAlliance
         ? `<span class="galaxy-slot-actions"><button type="button" data-galaxy-mark="${s.coords.slot}" data-testid="galaxy-mark-${s.coords.slot}" ${busy ? "disabled" : ""}>Mark</button><button type="button" data-galaxy-propose="${s.coords.slot}" data-testid="galaxy-propose-${s.coords.slot}" ${busy ? "disabled" : ""}>Propose Joint Strike</button></span>`
         : "";
+      const foreignPlanet = Boolean(s.planetId && s.playerId && !s.isOwn);
+      const colonizableSlot =
+        !s.planetId && s.coords.slot >= 1 && s.coords.slot <= 15;
+      const fleetActions = foreignPlanet
+        ? `<span class="galaxy-slot-actions"><button type="button" data-galaxy-spy="${s.coords.slot}" data-testid="galaxy-spy-${s.coords.slot}" ${busy ? "disabled" : ""}>Spy</button><button type="button" data-galaxy-attack="${s.coords.slot}" data-testid="galaxy-attack-${s.coords.slot}" ${busy ? "disabled" : ""}>Attack</button></span>`
+        : colonizableSlot
+          ? `<span class="galaxy-slot-actions"><button type="button" data-galaxy-colonize="${s.coords.slot}" data-testid="galaxy-colonize-${s.coords.slot}" ${busy ? "disabled" : ""}>Colonize</button></span>`
+          : "";
       const disc = planetDiscHtml({
         src: s.artThumbUrl,
         artId: s.artId,
@@ -345,7 +353,7 @@ export function galaxyPanel(
             testId: `galaxy-moon-art-${s.coords.slot}`,
           })
         : "";
-      return `<li class="galaxy-slot${marker ? " galaxy-slot-marked" : ""}" data-testid="galaxy-slot-${s.coords.slot}" data-art-id="${escapeAttr(s.artId)}"><span class="galaxy-slot-main">${pin}${disc}${moonDisc}<span class="galaxy-slot-label">${fmt(s.coords.slot)}. ${who}${debris}</span></span><span class="galaxy-slot-side">${fmtCoords(s.coords)}${actions}</span></li>`;
+      return `<li class="galaxy-slot${marker ? " galaxy-slot-marked" : ""}" data-testid="galaxy-slot-${s.coords.slot}" data-art-id="${escapeAttr(s.artId)}"><span class="galaxy-slot-main">${pin}${disc}${moonDisc}<span class="galaxy-slot-label">${fmt(s.coords.slot)}. ${who}${debris}</span></span><span class="galaxy-slot-side">${fmtCoords(s.coords)}${actions}${fleetActions}</span></li>`;
     })
     .join("");
   const markerTools = inAlliance

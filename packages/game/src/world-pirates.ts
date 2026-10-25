@@ -58,10 +58,17 @@ import {
   SHIPS,
   SHIP_ORDER,
 } from "./catalog.js";
+import {
+  PIRATE_RAID_POWER_FACTOR_PLAYER,
+  PIRATE_TECH_OFFSET,
+} from "./data/tuning.js";
 import { mintCombatShareCode } from "./combat-share.js";
 import {
   computeRaidLoot,
+  debrisFromDestroyed,
+  debrisFromDestroyedDefenses,
   defenseCombatPower,
+  defenseRebuildRate,
   destroyedShipResources,
   effectiveCombatResearch,
   emptyDefenses,
@@ -71,8 +78,10 @@ import {
   fleetShipCount,
   grantPlayerXp,
   normalizeFleetShips,
+  rebuildDefenses,
   resolveCombat,
   resourcesCostTotal,
+  spoilSkimmerDebris,
   xpForCombatLose,
   xpForCombatWin,
   xpForPirateBaseDestroy,
@@ -108,11 +117,14 @@ import { noteGoalMetric } from "./world-goals.js";
 import { emptyCargo, planetAtCoords } from "./world-bootstrap.js";
 import { consumeTickBudget, syncPlanetForTick, tickBudget } from "./tick-budget.js";
 import { pushEventLog } from "./world-event-log.js";
+import { tryFormMoon } from "./world-moons.js";
 import {
+  isNewbieBonusActive,
+  NEWBIE_DEFENSE_MULT,
   pirateRaidPickWeight,
   recordSuccessfulPirateRaid,
 } from "./world-protection.js";
-import { subtractCargo } from "./world-tick.js";
+import { addDebris, subtractCargo } from "./world-tick.js";
 
 const PIRATE_NAMES = [
   "Black Comet Hold",
@@ -157,7 +169,24 @@ export function pirateTechsForLevel(level: number): PirateTechs {
   return { weapons: v, armour: v, shielding: v };
 }
 
-export function pirateCombatResearch(base: PirateBase | AlienBase): ResearchLevels {
+export function pirateCombatResearchForOpponent(
+  opponentResearch?: ResearchLevels,
+): ResearchLevels {
+  const research = emptyResearch();
+  if (!opponentResearch) return research;
+  research.weaponsTech = Math.max(0, (opponentResearch.weaponsTech ?? 0) - PIRATE_TECH_OFFSET);
+  research.armourTech = Math.max(0, (opponentResearch.armourTech ?? 0) - PIRATE_TECH_OFFSET);
+  research.shieldingTech = Math.max(0, (opponentResearch.shieldingTech ?? 0) - PIRATE_TECH_OFFSET);
+  return research;
+}
+
+export function pirateCombatResearch(
+  base: PirateBase | AlienBase,
+  opponentResearch?: ResearchLevels,
+): ResearchLevels {
+  if (opponentResearch && base.id.startsWith("pir:")) {
+    return pirateCombatResearchForOpponent(opponentResearch);
+  }
   const techs = base.techs ?? pirateTechsForLevel(base.level ?? base.tier ?? 0);
   const research = emptyResearch();
   research.weaponsTech = techs.weapons;
@@ -398,7 +427,7 @@ export function rollNextRaidAt(
 function scaleShips(base: FleetShips, factor: number): FleetShips {
   const out = emptyFleetShips();
   for (const id of SHIP_ORDER) {
-    out[id] = Math.max(0, Math.floor((base[id] ?? 0) * factor));
+    out[id] = Math.max(0, Math.floor((base[id] ?? 0) * factor + 1e-9));
   }
   if (fleetShipCount(out) < 1 && fleetShipCount(base) > 0) {
     for (const id of SHIP_ORDER) {
@@ -559,12 +588,36 @@ export function alienBaseAtCoords(
   );
 }
 
-function slotBlocked(universe: UniverseState, coords: Coordinates): boolean {
+export function slotBlocked(universe: UniverseState, coords: Coordinates): boolean {
   return Boolean(
     planetAtCoords(universe, coords) ||
       pirateBaseAtCoords(universe, coords) ||
       alienBaseAtCoords(universe, coords),
   );
+}
+
+/**
+ * Find a free slot in a galaxy (slots 1..15 only, never slot 16, never occupied, never on a mini planet).
+ * Iterates through systems 1..MAP_SYSTEMS in the given galaxy.
+ */
+export function findFreeSlotInGalaxy(
+  universe: UniverseState,
+  galaxy: number,
+  seedKey: string,
+): Coordinates | null {
+  const freeSlots: Coordinates[] = [];
+  for (let system = 1; system <= MAP_SYSTEMS; system++) {
+    for (let slot = 1; slot <= 15; slot++) {
+      const coords = { galaxy, system, slot };
+      if (!slotBlocked(universe, coords)) {
+        freeSlots.push(coords);
+      }
+    }
+  }
+
+  if (freeSlots.length === 0) return null;
+  const idx = hashSeed(seedKey) % freeSlots.length;
+  return freeSlots[idx]!;
 }
 
 function systemOccupiedByNpc(
@@ -993,16 +1046,48 @@ export function pirateRespawnAt(destroyedAt: number, baseId: string): number {
   );
 }
 
+export function applyStrongShipCap(
+  baseShips: FleetShips,
+  defenderShips?: FleetShips,
+): FleetShips {
+  if (!defenderShips) return normalizeFleetShips(baseShips);
+
+  const interceptorCost = resourcesCostTotal(SHIPS.interceptor.cost);
+  const out = normalizeFleetShips(baseShips);
+
+  for (const id of SHIP_ORDER) {
+    const cost = resourcesCostTotal(SHIPS[id].cost);
+    if (cost > interceptorCost) {
+      let defenderStrongerCount = 0;
+      for (const otherId of SHIP_ORDER) {
+        const otherCost = resourcesCostTotal(SHIPS[otherId].cost);
+        if (otherCost >= cost) {
+          defenderStrongerCount += defenderShips[otherId] ?? 0;
+        }
+      }
+      out[id] = Math.min(out[id] ?? 0, defenderStrongerCount);
+    }
+  }
+
+  return out;
+}
+
 export function scalePirateRaidFleet(
   full: FleetShips,
   defenderPower: number,
+  defenderShips?: FleetShips,
+  factorOverride?: number,
 ): FleetShips {
-  const fullPower = Math.max(1, fleetCombatPower(full));
-  const cap =
-    Math.max(PIRATE_RAID_POWER_FLOOR, defenderPower * PIRATE_RAID_POWER_FACTOR) ||
-    PIRATE_RAID_POWER_FLOOR;
-  if (fullPower <= cap) return normalizeFleetShips(full);
-  return scaleShips(full, cap / fullPower);
+  const factor =
+    factorOverride ??
+    (defenderShips ? PIRATE_RAID_POWER_FACTOR_PLAYER : PIRATE_RAID_POWER_FACTOR);
+  const eligible = defenderShips ? applyStrongShipCap(full, defenderShips) : normalizeFleetShips(full);
+  const eligiblePower = Math.max(1, fleetCombatPower(eligible));
+  const cap = defenderShips
+    ? Math.max(0, defenderPower * factor)
+    : Math.max(PIRATE_RAID_POWER_FLOOR, defenderPower * factor) || PIRATE_RAID_POWER_FLOOR;
+  const scaleFactor = Math.min(1, cap / eligiblePower);
+  return scaleShips(eligible, scaleFactor);
 }
 
 function applyFreeSpawnsPirate(base: PirateBase, now: number): void {
@@ -1336,7 +1421,24 @@ export function pickRaidTarget(
   return npcPool[roll % npcPool.length]!;
 }
 
-function applyNpcRaidOnPlanet(
+function battleDebris(
+  atkBefore: FleetShips,
+  atkAfter: FleetShips,
+  defBefore: FleetShips,
+  defAfter: FleetShips,
+  permanentlyLost: Partial<Record<DefenseId, number>>,
+): Resources {
+  const atk = debrisFromDestroyed(destroyedShipResources(atkBefore, atkAfter));
+  const def = debrisFromDestroyed(destroyedShipResources(defBefore, defAfter));
+  const guns = debrisFromDestroyedDefenses(permanentlyLost);
+  return {
+    metal: atk.metal + def.metal + guns.metal,
+    crystal: atk.crystal + def.crystal + guns.crystal,
+    deuterium: 0,
+  };
+}
+
+export function applyNpcRaidOnPlanet(
   universe: UniverseState,
   base: PirateBase | AlienBase,
   planet: PlanetState,
@@ -1349,21 +1451,95 @@ function applyNpcRaidOnPlanet(
   planet = live;
   const owner = universe.players[planet.ownerPlayerId];
   if (!owner) return;
-  const npcResearch = pirateCombatResearch(base);
-  const raidFleet = scalePirateRaidFleet(
-    base.ships,
-    planetDefensePower(planet, universe),
-  );
+  const defenderResearch = effectiveCombatResearch(owner);
+  const npcResearch = faction === "pirate"
+    ? pirateCombatResearchForOpponent(defenderResearch)
+    : pirateCombatResearch(base);
+  const raidFleet =
+    faction === "pirate"
+      ? scalePirateRaidFleet(
+          base.ships,
+          planetDefensePower(planet, universe),
+          planet.ships,
+          PIRATE_RAID_POWER_FACTOR_PLAYER,
+        )
+      : scalePirateRaidFleet(
+          base.ships,
+          planetDefensePower(planet, universe),
+        );
   if (fleetShipCount(raidFleet) < 1) return;
+  const defenderBefore = { ...planet.ships };
+  const defensesBefore = planet.defenses ?? emptyDefenses();
   const combat = resolveCombat(
     raidFleet,
-    planet.ships,
-    planet.defenses ?? emptyDefenses(),
+    defenderBefore,
+    defensesBefore,
     npcResearch,
-    effectiveCombatResearch(owner),
+    defenderResearch,
+    {
+      defenderUnitStatMult: isNewbieBonusActive(universe, owner, now)
+        ? NEWBIE_DEFENSE_MULT
+        : 1,
+    },
+  );
+  const rebuilt = rebuildDefenses(
+    defensesBefore,
+    combat.defensesAfter,
+    defenseRebuildRate(owner.playerClass?.classId),
   );
   planet.ships = combat.defenderAfter;
-  planet.defenses = combat.defensesAfter;
+  planet.defenses = rebuilt.defensesAfter;
+  const debrisCreated = battleDebris(
+    raidFleet,
+    combat.attackerAfter,
+    defenderBefore,
+    combat.defenderAfter,
+    rebuilt.defensesPermanentlyLost,
+  );
+  addDebris(universe, planet.coords, debrisCreated);
+  let moonFormed = false;
+  if (planet.kind !== "moon" && planet.coords.slot !== 16) {
+    const moon = tryFormMoon(
+      universe,
+      planet,
+      debrisCreated,
+      `${base.id}:npc-raid:${now}`,
+      now,
+    );
+    moonFormed = Boolean(moon);
+  }
+  if (!universe.reports) universe.reports = {};
+  const reportId = `rpt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  const npcId = faction === "pirate" ? "npc_pirates" : "npc_aliens";
+  universe.reports[reportId] = {
+    id: reportId,
+    at: now,
+    missionId: base.id,
+    attackerPlayerId: npcId,
+    defenderPlayerId: owner.id,
+    attackerName: base.name,
+    defenderName: owner.name,
+    targetCoords: { ...planet.coords },
+    attackerBefore: { ...raidFleet },
+    attackerAfter: combat.attackerAfter,
+    defenderBefore,
+    defenderAfter: combat.defenderAfter,
+    defensesBefore,
+    defensesAfter: rebuilt.defensesAfter,
+    defensesDestroyed: rebuilt.defensesDestroyed,
+    defensesRebuilt: rebuilt.defensesRebuilt,
+    defensesPermanentlyLost: rebuilt.defensesPermanentlyLost,
+    loot: emptyCargo(),
+    debrisCreated,
+    outcome: combat.outcome,
+    rounds: combat.rounds,
+    summary: moonFormed
+      ? `${combat.summary} A moon coalesced from the debris field.`
+      : combat.summary,
+    moonFormed,
+    roundLog: combat.roundLog.length ? combat.roundLog : undefined,
+    shareCode: mintCombatShareCode(universe),
+  };
   const sent = fleetShipCount(raidFleet);
   const survived = fleetShipCount(combat.attackerAfter);
   if (sent > 0) {
@@ -1372,6 +1548,7 @@ function applyNpcRaidOnPlanet(
   if (combat.outcome === "attacker_win") {
     const loot = computeRaidLoot(planet.resources, combat.attackerAfter);
     subtractCargo(planet, loot);
+    universe.reports[reportId].loot = loot;
     base.resources = {
       metal: base.resources.metal + loot.metal,
       crystal: base.resources.crystal + loot.crystal,
@@ -1400,6 +1577,7 @@ function applyNpcRaidOnPlanet(
       pirateBaseId: base.id,
       outcome: combat.outcome,
       planetId: planet.id,
+      raidFleet: JSON.stringify(raidFleet),
     },
   });
   universe.players[owner.id] = owner;
@@ -1408,7 +1586,7 @@ function applyNpcRaidOnPlanet(
   }
 }
 
-function applyNpcRaidOnNpc(
+export function applyNpcRaidOnNpc(
   universe: UniverseState,
   base: PirateBase | AlienBase,
   other: PirateBase | AlienBase,
@@ -1424,15 +1602,30 @@ function applyNpcRaidOnNpc(
     );
   const raidFleet = scalePirateRaidFleet(base.ships, otherPower);
   if (fleetShipCount(raidFleet) < 1) return;
+  const defenderBefore = { ...other.ships };
+  const defensesBefore = other.defenses ?? emptyDefenses();
   const combat = resolveCombat(
     raidFleet,
-    other.ships,
-    other.defenses ?? emptyDefenses(),
+    defenderBefore,
+    defensesBefore,
     pirateCombatResearch(base),
     pirateCombatResearch(other),
   );
+  const rebuilt = rebuildDefenses(
+    defensesBefore,
+    combat.defensesAfter,
+    defenseRebuildRate(null),
+  );
   other.ships = combat.defenderAfter;
-  other.defenses = combat.defensesAfter;
+  other.defenses = rebuilt.defensesAfter;
+  const debrisCreated = battleDebris(
+    raidFleet,
+    combat.attackerAfter,
+    defenderBefore,
+    combat.defenderAfter,
+    rebuilt.defensesPermanentlyLost,
+  );
+  addDebris(universe, other.coords, debrisCreated);
   const sent = fleetShipCount(raidFleet);
   const survived = fleetShipCount(combat.attackerAfter);
   if (sent > 0) {
@@ -1668,15 +1861,31 @@ function resolveNpcRaidArrival(
   const defenderBefore = { ...base.ships };
   const defensesBefore = { ...base.defenses };
   const tierAtFight = base.tier;
+  const attackerResearch = effectiveCombatResearch(owner);
+  const defenderResearch = kind === "pirate"
+    ? pirateCombatResearchForOpponent(attackerResearch)
+    : pirateCombatResearch(base);
   const combat = resolveCombat(
     fleet.ships,
     defenderBefore,
     defensesBefore,
-    effectiveCombatResearch(owner),
-    pirateCombatResearch(base),
+    attackerResearch,
+    defenderResearch,
+  );
+  const rebuilt = rebuildDefenses(
+    defensesBefore,
+    combat.defensesAfter,
+    defenseRebuildRate(null),
   );
   base.ships = combat.defenderAfter;
-  base.defenses = combat.defensesAfter;
+  base.defenses = rebuilt.defensesAfter;
+  let debrisCreated = battleDebris(
+    fleet.ships,
+    combat.attackerAfter,
+    defenderBefore,
+    combat.defenderAfter,
+    rebuilt.defensesPermanentlyLost,
+  );
   const killed = resourcesCostTotal(
     destroyedShipResources(defenderBefore, combat.defenderAfter),
   );
@@ -1688,6 +1897,13 @@ function resolveNpcRaidArrival(
       metal: Math.max(0, base.resources.metal - loot.metal),
       crystal: Math.max(0, base.resources.crystal - loot.crystal),
       deuterium: Math.max(0, base.resources.deuterium - loot.deuterium),
+    };
+    const skim = spoilSkimmerDebris(debrisCreated, combat.attackerAfter);
+    debrisCreated = skim.remaining;
+    loot = {
+      metal: loot.metal + skim.skimmed.metal,
+      crystal: loot.crystal + skim.skimmed.crystal,
+      deuterium: loot.deuterium,
     };
     if (kind === "pirate") markPirateDestroyed(base as PirateBase, now);
     else markAlienDestroyed(base as AlienBase, now);
@@ -1709,6 +1925,8 @@ function resolveNpcRaidArrival(
     universe.players[owner.id] = owner;
   }
 
+  addDebris(universe, base.coords, debrisCreated);
+
   const label = kind === "pirate" ? "Pirate" : "Alien";
   const reportId = `rpt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
   universe.reports[reportId] = {
@@ -1725,9 +1943,12 @@ function resolveNpcRaidArrival(
     defenderBefore,
     defenderAfter: combat.defenderAfter,
     defensesBefore,
-    defensesAfter: combat.defensesAfter,
+    defensesAfter: rebuilt.defensesAfter,
+    defensesDestroyed: rebuilt.defensesDestroyed,
+    defensesRebuilt: rebuilt.defensesRebuilt,
+    defensesPermanentlyLost: rebuilt.defensesPermanentlyLost,
     loot,
-    debrisCreated: emptyCargo(),
+    debrisCreated,
     outcome: combat.outcome,
     rounds: combat.rounds,
     summary:

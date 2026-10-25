@@ -17,6 +17,13 @@ export {
 } from "./catalog-officers.js";
 export { SKILLS, SKILL_ORDER } from "./catalog-skills.js";
 export {
+  NEWBIE_BONUS_DURATION_MS,
+  NEWBIE_DEFENSE_MULT,
+  NEWBIE_PRODUCTION_MULT,
+  isNewbieBonusActive,
+  newbieBonusRemainingMs,
+} from "./world-protection.js";
+export {
   ENERGY_TECH_ENERGY_PER_LEVEL,
   FLAT_BONUS_LEVELS_PER_STEP,
   OFFICER_MAX_LEVEL,
@@ -40,7 +47,17 @@ export const RAID_LOOT_SHARE_OTHER = 0.5;
 export const RAID_LOOT_SHARE = RAID_LOOT_SHARE_OTHER;
 
 /** Fraction of destroyed ship metal/crystal that becomes debris. */
-export const DEBRIS_FROM_SHIPS = 0.3;
+export const DEBRIS_FROM_SHIPS = 0.6;
+
+/** Fraction of permanently lost defense metal/crystal that becomes debris. */
+export const DEBRIS_FROM_DEFENSES = 0.05;
+
+/** Defenses restored after a battle. Miner defenders use the higher rate. */
+export const DEFENSE_REBUILD_RATE = 0.7;
+export const DEFENSE_REBUILD_MINER_RATE = 0.9;
+
+/** Expedition pirate ambush: debris left at slot 16. */
+export const EXPEDITION_AMBUSH_DEBRIS_RATE = 0.4;
 
 /** Minimum one-way flight seconds after speed scaling. */
 export const MIN_FLIGHT_SECONDS = 8;
@@ -159,6 +176,8 @@ export const MINI_BUILDING_ORDER: BuildingId[] = [
 export const SHIP_ORDER: ShipId[] = [
   "scout",
   "hauler",
+  "fastCargo",
+  "bulkCargo",
   "interceptor",
   "cruiser",
   "bomber",
@@ -189,6 +208,7 @@ export const DEFENSE_ORDER: DefenseId[] = [
   "laserBattery",
   "shieldDome",
   "needleTurret",
+  "prismLaser",
   "arcLattice",
   "pulseBastion",
   "gaussRail",
@@ -217,6 +237,10 @@ export const RESEARCH_ORDER: ResearchId[] = [
   "queueLogistics",
   "swarmHold",
   "gravityWell",
+  "metallurgistTech",
+  "crystalizerTech",
+  "deutSynthesisTech",
+  "researchNetwork",
 ];
 
 /** Hard cap per queue kind (Round 2 contract v1). */
@@ -253,6 +277,8 @@ export {
   CLASS_CHANGE_COOLDOWN_MS,
   PLAYER_CLASS_ORDER,
   PLAYER_CLASS_BONUSES,
+  ALLIANCE_CLASS_ORDER,
+  ALLIANCE_CLASS_BONUSES,
   JUMP_GATE_BASE_COOLDOWN_MS,
   VAULT_SCOUT_YIELD_PER,
   VAULT_SCOUT_YIELD_CAP,

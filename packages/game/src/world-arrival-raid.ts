@@ -1,12 +1,16 @@
 import { mintCombatShareCode } from "./combat-share.js";
 import {
   classBonuses,
+  allianceBonusesForPlayer,
   computeRaidLoot,
   debrisFromDestroyed,
+  debrisFromDestroyedDefenses,
+  defenseRebuildRate,
   destroyedShipResources,
   effectiveCombatResearch,
   emptyDefenses,
   grantPlayerXp,
+  rebuildDefenses,
   resolveCombat,
   resourcesCostTotal,
   spoilSkimmerDebris,
@@ -45,6 +49,7 @@ import { maybeDestroyMoonWithTitans } from "./world-round2.js";
 import { pushEventLog } from "./world-event-log.js";
 import { awardSeasonPvpWin, isSeasonPvpMission } from "./world-seasons.js";
 import { addDebris, subtractCargo } from "./world-tick.js";
+import { isNewbieBonusActive, NEWBIE_DEFENSE_MULT } from "./world-protection.js";
 
 /** Resolve outbound raid at target; mutates fleet cargo/ships/reportId. */
 export function resolveRaidArrival(
@@ -59,6 +64,8 @@ export function resolveRaidArrival(
   const defensesBefore = { ...(target.defenses ?? emptyDefenses()) };
   const atkCls = classBonuses(owner?.playerClass?.classId);
   const defCls = classBonuses(defenderOwner?.playerClass?.classId);
+  const atkAlly = allianceBonusesForPlayer(universe, fleet.ownerPlayerId);
+  const defAlly = allianceBonusesForPlayer(universe, target.ownerPlayerId);
   const defensePower =
     playerBoosts(defenderOwner, now).defensePower * defCls.defensePower;
   const fortressField = isMovingFortress(target)
@@ -80,10 +87,27 @@ export function resolveRaidArrival(
       defenseSlot: target.coords.slot,
       battlefield: fortressField,
       seed: `${fleet.id}:${fleet.arrivesAt}`,
+      attackerShieldMult: atkAlly.shipShield,
+      defenderShieldMult: defAlly.shipShield,
+      attackerWeaponMult: atkAlly.shipWeapon,
+      defenderWeaponMult: defAlly.shipWeapon,
+      defenderDefenseStatMult: defAlly.defenseStat,
+      defenderUnitStatMult: isNewbieBonusActive(
+        universe,
+        defenderOwner,
+        now,
+      )
+        ? NEWBIE_DEFENSE_MULT
+        : 1,
     },
   );
   target.ships = combat.defenderAfter;
-  target.defenses = combat.defensesAfter;
+  const rebuilt = rebuildDefenses(
+    defensesBefore,
+    combat.defensesAfter,
+    defenseRebuildRate(defenderOwner?.playerClass?.classId),
+  );
+  target.defenses = rebuilt.defensesAfter;
 
   const debrisAtk = debrisFromDestroyed(
     destroyedShipResources(fleet.ships, combat.attackerAfter),
@@ -91,11 +115,27 @@ export function resolveRaidArrival(
   const debrisDef = debrisFromDestroyed(
     destroyedShipResources(defenderBefore, combat.defenderAfter),
   );
+  const debrisGuns = debrisFromDestroyedDefenses(rebuilt.defensesPermanentlyLost);
   let debrisCreated: Resources = {
-    metal: debrisAtk.metal + debrisDef.metal,
-    crystal: debrisAtk.crystal + debrisDef.crystal,
+    metal: debrisAtk.metal + debrisDef.metal + debrisGuns.metal,
+    crystal: debrisAtk.crystal + debrisDef.crystal + debrisGuns.crystal,
     deuterium: 0,
   };
+  const atkClassId = owner?.playerClass?.classId ?? null;
+  const defClassId = defenderOwner?.playerClass?.classId ?? null;
+  if (atkClassId && defClassId && atkClassId !== defClassId) {
+    const debrisMult = Math.max(
+      atkCls.debrisVsOtherClass,
+      defCls.debrisVsOtherClass,
+    );
+    if (debrisMult > 1) {
+      debrisCreated = {
+        metal: Math.floor(debrisCreated.metal * debrisMult),
+        crystal: Math.floor(debrisCreated.crystal * debrisMult),
+        deuterium: 0,
+      };
+    }
+  }
 
   let loot = emptyCargo();
   if (combat.outcome === "attacker_win") {
@@ -117,6 +157,13 @@ export function resolveRaidArrival(
             ),
           };
     loot = computeRaidLoot(lootResources, combat.attackerAfter);
+    if (atkAlly.loot !== 1) {
+      loot = {
+        metal: Math.floor(loot.metal * atkAlly.loot),
+        crystal: Math.floor(loot.crystal * atkAlly.loot),
+        deuterium: Math.floor(loot.deuterium * atkAlly.loot),
+      };
+    }
     subtractCargo(target, loot);
     const skim = spoilSkimmerDebris(debrisCreated, combat.attackerAfter);
     debrisCreated = skim.remaining;
@@ -176,10 +223,10 @@ export function resolveRaidArrival(
       combat.attackerAfter,
       reportId,
     );
-    moonKillChancePct = kill.chancePct;
+    if (kill.chancePct > 0) moonKillChancePct = kill.chancePct;
     if (kill.destroyed) {
       moonDestroyed = true;
-      summary = `${combat.summary} Siege hulls shattered the moon (${kill.chancePct}% chance).`;
+      summary = `${combat.summary} Void Titans shattered the moon (${kill.chancePct}% chance).`;
     }
   } else {
     const moon = tryFormMoon(universe, target, debrisCreated, `${fleet.id}:${fleet.arrivesAt}`, now);
@@ -230,7 +277,10 @@ export function resolveRaidArrival(
     defenderBefore,
     defenderAfter: combat.defenderAfter,
     defensesBefore,
-    defensesAfter: combat.defensesAfter,
+    defensesAfter: rebuilt.defensesAfter,
+    defensesDestroyed: rebuilt.defensesDestroyed,
+    defensesRebuilt: rebuilt.defensesRebuilt,
+    defensesPermanentlyLost: rebuilt.defensesPermanentlyLost,
     loot,
     debrisCreated,
     outcome: combat.outcome,

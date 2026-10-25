@@ -7,6 +7,7 @@ import {
   ALLIANCE_NAME_MIN,
   ALLIANCE_TAG_MAX,
   ALLIANCE_TAG_MIN,
+  ALLIANCE_CLASS_ORDER,
 } from "./catalog.js";
 import {
   planetPoints,
@@ -20,6 +21,7 @@ import type {
   AllianceRecord,
   AllianceRole,
   AllianceView,
+  AllianceClassId,
   PlayerState,
   UniverseState,
 } from "./types.js";
@@ -224,6 +226,7 @@ export function allianceViewFor(
     chat: shared.chat,
     intel: shared.intel,
     markers: shared.markers,
+    allianceClass: alliance.allianceClass ?? null,
   };
 }
 
@@ -496,6 +499,38 @@ export function setAllianceRole(
     }
   }
   target.role = role;
+  alliancesMap(universe)[alliance.id] = alliance;
+  return { ok: true };
+}
+
+export function isAllianceClassId(id: string): id is AllianceClassId {
+  return (ALLIANCE_CLASS_ORDER as readonly string[]).includes(id);
+}
+
+/** Leader-only. No cost and no cooldown (open question). */
+export function setAllianceClass(
+  universe: UniverseState,
+  playerId: string,
+  classId: AllianceClassId | null,
+  now = Date.now(),
+): AllianceActionResult {
+  ensureUniverseShape(universe);
+  advanceUniverse(universe, now);
+  const player = universe.players[playerId];
+  if (!player?.allianceId) {
+    return { ok: false, error: "Not in an alliance." };
+  }
+  const alliance = alliancesMap(universe)[player.allianceId];
+  const me = alliance?.members[playerId];
+  if (!alliance || !me) return { ok: false, error: "Not in an alliance." };
+  if (me.role !== "founder") {
+    return { ok: false, error: "Only the alliance leader can set the class." };
+  }
+  if (classId != null && !isAllianceClassId(classId)) {
+    return { ok: false, error: "Unknown alliance class." };
+  }
+  if (classId == null) delete alliance.allianceClass;
+  else alliance.allianceClass = classId;
   alliancesMap(universe)[alliance.id] = alliance;
   return { ok: true };
 }

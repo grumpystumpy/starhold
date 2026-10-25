@@ -19,11 +19,11 @@ function classBlurb(id: PlayerClassId): string {
     case "miner":
       return `Mines ×${b.mineOutput.toFixed(2)} · defense ×${b.defensePower.toFixed(2)} · defense build ×${b.defenseBuildTime.toFixed(2)}`;
     case "explorer":
-      return `Expedition yield ×${b.expeditionYield.toFixed(2)} · research ×${b.researchTime.toFixed(2)} · probe speed ×${b.probeSpeed.toFixed(2)} · +${fmt(b.expeditionSlots)} expedition slot`;
+      return `Expedition yield ×${b.expeditionYield.toFixed(2)} · research ×${b.researchTime.toFixed(2)} · probe speed ×${b.probeSpeed.toFixed(2)} · +${fmt(b.expeditionSlots)} expedition ${b.expeditionSlots === 1 ? "slot" : "slots"} · debris vs other classes ×${b.debrisVsOtherClass.toFixed(2)}`;
     case "fleeter":
       return `Attack ×${b.attack.toFixed(2)} · fleet speed ×${b.fleetSpeed.toFixed(2)} · ship build ×${b.shipBuildTime.toFixed(2)} · +${fmt(b.fleetSlots)} fleet slots`;
     case "expansionist":
-      return `+${fmt(b.colonySlots)} colony slots · colonizer speed ×${b.colonyShipSpeed.toFixed(2)} · building ×${b.buildingBuildTime.toFixed(2)} · Fold Bridge CD ×${b.jumpGateCooldown.toFixed(2)}`;
+      return `+${fmt(b.colonySlots)} colony slots · colonizer speed ×${b.colonyShipSpeed.toFixed(2)} · building ×${b.buildingBuildTime.toFixed(2)} · Fold Bridge CD ×${b.jumpGateCooldown.toFixed(2)} · +${fmt(b.colonyFields)} colony fields · own-world speed ×${b.ownWorldFleetSpeed.toFixed(2)}`;
     default: {
       const _exhaustive: never = id;
       return _exhaustive;

@@ -185,13 +185,22 @@ export function resolveLaunchTarget(
     const isMiniSlot =
       targetCoords.slot >= MINI_SLOT_MIN &&
       targetCoords.slot <= MINI_SLOT_MAX;
+    const slot16Debris = getDebris(universe, {
+      galaxy: targetCoords.galaxy,
+      system: targetCoords.system,
+      slot: EXPEDITION_SLOT,
+    });
+    const harvestSlot16 =
+      mission === "harvest" &&
+      targetCoords.slot === EXPEDITION_SLOT &&
+      Boolean(slot16Debris && slot16Debris.metal + slot16Debris.crystal > 0);
     if (
       targetCoords.galaxy < 1 ||
       targetCoords.galaxy > MAP_GALAXIES ||
       targetCoords.system < 1 ||
       targetCoords.system > MAP_SYSTEMS ||
       targetCoords.slot < 1 ||
-      (targetCoords.slot > MAP_SLOTS && !isMiniSlot)
+      (targetCoords.slot > MAP_SLOTS && !isMiniSlot && !harvestSlot16)
     ) {
       return { ok: false, error: "Coordinates out of map bounds." };
     }

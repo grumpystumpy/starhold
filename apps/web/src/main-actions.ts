@@ -29,10 +29,13 @@ export {
 export {
   doApplyFleetPreset,
   doDeleteFleetPreset,
+  doGalaxyFleetAction,
+  doGalaxySpy,
   doLaunchFleet,
   doLaunchMaxExpeditions,
   doSaveFleetPreset,
   doScanSystem,
+  GALAXY_SPY_PROBES,
 } from "./main-actions-fleet.js";
 export {
   doClaimDaily,
@@ -56,6 +59,7 @@ export {
   doPostAllianceChat,
   doProposeJointStrike,
   doSetAllianceJoinMode,
+  doSetAllianceClass,
   doSetAllianceRole,
   doShareAllianceIntel,
   doUpsertAllianceMarker,

@@ -35,6 +35,7 @@ export {
   previewBuildingUpgrade,
   previewResearchUpgrade,
 } from "./queue-block.js";
+export type { BuildingPreviewMods } from "./queue-block.js";
 export {
   migrateUniverseV2ToV3,
   migrateUniverseV3ToV4,
@@ -57,6 +58,7 @@ export {
   disbandAlliance,
   inviteToAlliance,
   isAllianceJoinMode,
+  isAllianceClassId,
   isAllianceRole,
   joinAlliance,
   kickFromAlliance,
@@ -64,6 +66,7 @@ export {
   normalizeAllianceName,
   normalizeAllianceTag,
   setAllianceJoinMode,
+  setAllianceClass,
   setAllianceRole,
 } from "./world-alliances.js";
 export {
@@ -118,8 +121,13 @@ export {
 } from "./world-view.js";
 export { ensureSystemVisited } from "./world-seed.js";
 export {
+  NEWBIE_BONUS_DURATION_MS,
+  NEWBIE_DEFENSE_MULT,
+  NEWBIE_PRODUCTION_MULT,
   graduateNewbieProtection,
+  isNewbieBonusActive,
   isNewbieProtected,
+  newbieBonusRemainingMs,
   pirateRaidPickWeight,
   recordSuccessfulPirateRaid,
 } from "./world-protection.js";
@@ -169,6 +177,8 @@ export {
   activePirateBases,
   alienBaseAtCoords,
   alienBaseId,
+  applyNpcRaidOnNpc,
+  applyNpcRaidOnPlanet,
   createAlienBase,
   createPirateBase,
   ensurePiratePopulation,

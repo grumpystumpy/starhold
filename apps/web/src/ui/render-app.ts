@@ -86,12 +86,18 @@ export function renderApp(
   startCountdownTick();
 }
 
-function fleetDraftForPage(
+export function fleetDraftForPage(
   root: HTMLElement,
   activePage: NavPage,
 ): FleetDraft | null {
   const salvaged = salvageFleetForm(root);
   const prefill = session.pendingAcsPrefill;
-  if (!prefill || activePage !== "fleet") return salvaged;
+  if (activePage !== "fleet") return salvaged;
+  const galaxyDraft = session.pendingGalaxyFleetDraft;
+  if (galaxyDraft) {
+    session.pendingGalaxyFleetDraft = null;
+    return galaxyDraft;
+  }
+  if (!prefill) return salvaged;
   return fleetDraftWithAcsPrefill(salvaged, prefill);
 }

@@ -26,6 +26,7 @@ import type {
   DefenseId,
   PlanetState,
   ResearchId,
+  ResearchLevels,
   Resources,
   ShipId,
 } from "./types.js";
@@ -91,6 +92,36 @@ export function fieldsCap(planet: PlanetState): number {
           `${planet.id}:${planet.coords.galaxy}:${planet.coords.system}:${planet.coords.slot}`,
         );
   return rolled + mantleLoomFieldsBonus(planet);
+}
+
+/** Read-time field cap. Never written back onto planet.fieldsCap. */
+export interface FieldCapMods {
+  homePlanetId?: string | null;
+  colonyFields?: number;
+  colonyFieldMult?: number;
+}
+
+export function effectiveFieldsCap(
+  planet: PlanetState,
+  mods?: FieldCapMods,
+): number {
+  const base = fieldsCap(planet);
+  if (isMoon(planet)) return base;
+  const home = mods?.homePlanetId;
+  if (!home || planet.id === home) return base;
+  const withClass = base + (mods?.colonyFields ?? 0);
+  const mult = mods?.colonyFieldMult ?? 1;
+  if (mult === 1) return withClass;
+  return Math.floor(withClass * mult);
+}
+
+export function scaleResourceCost(cost: Resources, mult: number): Resources {
+  if (mult === 1) return cost;
+  return {
+    metal: Math.floor(cost.metal * mult),
+    crystal: Math.floor(cost.crystal * mult),
+    deuterium: Math.floor(cost.deuterium * mult),
+  };
 }
 
 /** Cost to go from `currentLevel` → `currentLevel + 1`. */
@@ -379,8 +410,11 @@ export function fieldsUsed(planet: PlanetState): number {
   return used;
 }
 
-export function fieldsRemaining(planet: PlanetState): number {
-  return Math.max(0, fieldsCap(planet) - fieldsUsed(planet));
+export function fieldsRemaining(
+  planet: PlanetState,
+  mods?: FieldCapMods,
+): number {
+  return Math.max(0, effectiveFieldsCap(planet, mods) - fieldsUsed(planet));
 }
 
 export interface ProductionBoosts {
@@ -393,6 +427,7 @@ export function productionPerHour(
   universeSpeed = 1,
   energyTechLevel = 0,
   boosts?: ProductionBoosts,
+  research?: Partial<ResearchLevels>,
 ): Resources {
   const energyMult =
     (boosts?.energyOutput ?? 1) *
@@ -414,25 +449,33 @@ export function productionPerHour(
   const baseIncome = isMoon(planet) || !planet.ownerPlayerId
     ? { metal: 0, crystal: 0, deuterium: 0 }
     : BASE_INCOME_PER_HOUR;
+
+  const metTechMult = 1 + (research?.metallurgistTech ?? 0) * 0.05;
+  const cryTechMult = 1 + (research?.crystalizerTech ?? 0) * 0.05;
+  const deutTechMult = 1 + (research?.deutSynthesisTech ?? 0) * 0.05;
+
   return {
     metal:
       mineOutputPerHour("metal", planet.buildings.metalMine ?? 0) *
       factor *
       incomeScale *
-      pos.metal +
+      pos.metal *
+      metTechMult +
       baseIncome.metal,
     crystal:
       mineOutputPerHour("crystal", planet.buildings.crystalMine ?? 0) *
       factor *
       incomeScale *
-      pos.crystal +
+      pos.crystal *
+      cryTechMult +
       baseIncome.crystal,
     deuterium:
       mineOutputPerHour("deuterium", planet.buildings.deutSynth ?? 0) *
       factor *
       incomeScale *
       pos.deuterium *
-      ironwaterDeut +
+      ironwaterDeut *
+      deutTechMult +
       baseIncome.deuterium,
   };
 }

@@ -2,6 +2,13 @@
 
 export type ResourceId = "metal" | "crystal" | "deuterium";
 
+export type WeaponType =
+  | "projectile"
+  | "laser"
+  | "ion"
+  | "plasma"
+  | "gravitational";
+
 export type BuildingId =
   | "metalMine"
   | "crystalMine"
@@ -31,6 +38,9 @@ export type PlayerClassId =
   | "fleeter"
   | "expansionist";
 
+/** Alliance-wide class. Missing on old saves means no alliance bonus. */
+export type AllianceClassId = "destroyer" | "builder" | "explorer";
+
 export interface PlayerClassState {
   classId: PlayerClassId | null;
   chosenAt: number | null;
@@ -42,6 +52,8 @@ export interface PlayerClassState {
 export type ShipId =
   | "scout"
   | "hauler"
+  | "fastCargo"
+  | "bulkCargo"
   | "interceptor"
   | "cruiser"
   | "bomber"
@@ -71,6 +83,7 @@ export type DefenseId =
   | "laserBattery"
   | "shieldDome"
   | "needleTurret"
+  | "prismLaser"
   | "arcLattice"
   | "pulseBastion"
   | "gaussRail"
@@ -97,7 +110,11 @@ export type ResearchId =
   | "computerTech"
   | "queueLogistics"
   | "swarmHold"
-  | "gravityWell";
+  | "gravityWell"
+  | "metallurgistTech"
+  | "crystalizerTech"
+  | "deutSynthesisTech"
+  | "researchNetwork";
 
 export type QueueKind = "building" | "ship" | "defense" | "research";
 
@@ -205,6 +222,7 @@ export interface ShipDef {
   cargo: number;
   /** Combat / travel (invented — not scraped genre values) */
   attack: number;
+  weapons: Partial<Record<WeaponType, number>>;
   shield: number;
   armor: number;
   hull: number;
@@ -238,6 +256,7 @@ export interface DefenseDef {
   /** Minimum shipyard level */
   shipyardLevel: number;
   attack: number;
+  weapons: Partial<Record<WeaponType, number>>;
   shield: number;
   armor: number;
   hull: number;

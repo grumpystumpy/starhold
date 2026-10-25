@@ -5,6 +5,7 @@ import type {
   BuildingId,
   BuildQueueItem,
   Coordinates,
+  DefenseId,
   DefenseQueueItem,
   DefenseStock,
   FleetMission,
@@ -17,6 +18,7 @@ import type {
   AlienBase,
   PirateBase,
   PlayerClassState,
+  AllianceClassId,
   ResearchLevels,
   ResearchQueueItem,
   Resources,
@@ -59,6 +61,10 @@ export interface CombatReport {
   defenderAfter: FleetShips;
   defensesBefore: DefenseStock;
   defensesAfter: DefenseStock;
+  /** Combat losses before rebuild. Absent on legacy reports. */
+  defensesDestroyed?: Partial<Record<DefenseId, number>>;
+  defensesRebuilt?: Partial<Record<DefenseId, number>>;
+  defensesPermanentlyLost?: Partial<Record<DefenseId, number>>;
   loot: Resources;
   debrisCreated: Resources;
   outcome: CombatOutcome;
@@ -107,7 +113,10 @@ export type ExpeditionKind =
   | "nothing"
   | "pirates"
   | "starshards"
-  | "miniPlanet";
+  | "miniPlanet"
+  | "blackHole"
+  | "newPirateBase"
+  | "newAlienBase";
 
 export interface ExpeditionReport {
   id: string;
@@ -118,11 +127,16 @@ export interface ExpeditionReport {
   kind: ExpeditionKind;
   cargoGained: Resources;
   shipsDelta: Partial<FleetShips>;
+  /** Debris left by a pirate ambush. Absent on legacy reports. */
+  debrisCreated?: Resources;
   /** Starshards granted to the player (expedition find). */
   starshardsGained?: number;
   /** Mini-planet discovery coords (finder-only). */
   miniPlanetId?: string;
   miniCoords?: Coordinates;
+  newPirateBaseId?: string;
+  newAlienBaseId?: string;
+  newBaseCoords?: Coordinates;
   summary: string;
 }
 
@@ -238,6 +252,11 @@ export interface AllianceRecord {
   intel?: AllianceIntelStamp[];
   /** Galaxy markers. Missing on older saves — treat as []. */
   markers?: AllianceGalaxyMarker[];
+  /**
+   * Alliance class (Destroyer's / Builder's / Explorer's).
+   * Missing on older saves — no class, no bonus. Never required.
+   */
+  allianceClass?: AllianceClassId | null;
 }
 
 export interface AllianceMemberView {
@@ -263,6 +282,8 @@ export interface AllianceView {
   chat: AllianceChatMessage[];
   intel: AllianceIntelStamp[];
   markers: AllianceGalaxyMarker[];
+  /** Null when the alliance has not chosen a class. */
+  allianceClass: AllianceClassId | null;
 }
 
 export interface AllianceListEntry {
@@ -616,6 +637,7 @@ export interface GalaxyView {
 
 export interface PlayerView {
   now: number;
+  newbieBonusEndsAt?: number | null;
   universe: {
     id: string;
     name: string;

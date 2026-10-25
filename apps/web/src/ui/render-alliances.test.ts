@@ -79,5 +79,33 @@ describe("alliances panel", () => {
     assert.match(html, /Hold the lane/);
     assert.match(html, /data-testid="alliance-intel-empty"/);
     assert.match(html, /data-testid="alliance-markers-empty"/);
+    assert.match(html, /data-testid="alliance-class-select"/);
+    assert.match(html, /data-testid="alliance-class-label"/);
+    assert.match(html, /No alliance class/);
+  });
+
+  it("shows alliance class bonuses and hides the selector from members", () => {
+    const alliance = {
+      id: "ally_1",
+      name: "Solar Guard",
+      tag: "SOL",
+      joinMode: "open" as const,
+      createdAt: 1,
+      founderPlayerId: "p9",
+      myRole: "member" as const,
+      members: [],
+      pendingInvites: [],
+      memberCount: 2,
+      maxMembers: 16,
+      chat: [],
+      intel: [],
+      markers: [],
+      allianceClass: "destroyer" as const,
+    };
+    const html = alliancesPageHtml(baseView({ alliance }), false);
+    assert.match(html, /Class: Destroyer's/);
+    assert.match(html, /fleet speed ×1\.05/);
+    assert.match(html, /loot ×1\.10/);
+    assert.doesNotMatch(html, /data-testid="alliance-class-select"/);
   });
 });

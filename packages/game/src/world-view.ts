@@ -11,6 +11,7 @@ import {
 } from "./catalog.js";
 import {
   classBonuses,
+  allianceBonusesForPlayer,
   empireExpeditionCap,
   economySnapshot,
   empirePoints,
@@ -66,6 +67,11 @@ import { occupationForPlanet } from "./world-occupation.js";
 import { empireDriftBeaconCount, playerKnowsMini } from "./world-mini.js";
 import { seasonLeaderboardView } from "./world-seasons.js";
 import { getDebris } from "./world-tick.js";
+import {
+  isNewbieBonusActive,
+  NEWBIE_BONUS_DURATION_MS,
+  NEWBIE_PRODUCTION_MULT,
+} from "./world-protection.js";
 
 export { empirePoints };
 
@@ -341,6 +347,12 @@ export function playerView(
   universe.players[player.id] = player;
   const boosts = playerBoosts(player, now);
   const cls = classBonuses(player.playerClass?.classId);
+  const ally = allianceBonusesForPlayer(universe, player.id);
+  const fieldMods = {
+    homePlanetId: player.homePlanetId,
+    colonyFields: cls.colonyFields,
+    colonyFieldMult: ally.colonyFieldMult,
+  };
   const driftBeaconCount = empireDriftBeaconCount(universe, player.id);
   const fleetSlotCap =
     maxFleetSlots(player.research.computerTech ?? 0) +
@@ -453,11 +465,15 @@ export function playerView(
         mineOutput:
           levelBonuses(player.level ?? 1).production *
           boosts.mineOutput *
-          classBonuses(player.playerClass?.classId).mineOutput,
-        energyOutput:
-          boosts.energyOutput *
-          classBonuses(player.playerClass?.classId).energyOutput,
+          cls.mineOutput *
+          ally.mineOutput *
+          (isNewbieBonusActive(universe, player, now)
+            ? NEWBIE_PRODUCTION_MULT
+            : 1),
+        energyOutput: boosts.energyOutput * cls.energyOutput,
       },
+      player.research,
+      fieldMods,
       ),
       storage: storageForPlanet(universe, planet, now),
     },
@@ -478,6 +494,9 @@ export function playerView(
     spyReports,
     expeditionReports,
     sensorContacts,
+    newbieBonusEndsAt: isNewbieBonusActive(universe, player, now)
+      ? player.createdAt + NEWBIE_BONUS_DURATION_MS
+      : null,
     hostileInbound,
     starshards: player.starshards ?? 0,
     officers: player.officers ?? [],

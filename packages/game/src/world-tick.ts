@@ -191,6 +191,7 @@ export function advancePlanet(
       universeSpeed,
       energyTechLevel,
       boosts,
+      owner?.research,
     );
     const hours = elapsedMs / 3_600_000;
     const caps = storageForPlanet(owner, state, now);

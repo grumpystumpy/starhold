@@ -115,11 +115,13 @@ async function runViewport(browser, viewport) {
   const firstPoll = waitForState(page);
   await page.clock.fastForward(1_000);
   await firstPoll;
+  await new Promise((resolve) => setTimeout(resolve, 100));
   log = await waitForLog(page, (entries) => stateGets(entries).length === 1);
 
   const secondPoll = waitForState(page);
   await page.clock.fastForward(30_000);
   await secondPoll;
+  await new Promise((resolve) => setTimeout(resolve, 100));
   log = await waitForLog(page, (entries) => stateGets(entries).length === 2);
   const polls = stateGets(log);
   const gap = polls[1].t - polls[0].t;
@@ -137,6 +139,7 @@ async function runViewport(browser, viewport) {
 
   const hiddenAt = log.length;
   await page.evaluate(() => {
+    document.dispatchEvent(new Event("pointerdown", { bubbles: true }));
     window.__vis.hidden = true;
     document.dispatchEvent(new Event("visibilitychange"));
   });

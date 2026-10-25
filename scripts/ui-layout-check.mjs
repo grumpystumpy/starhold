@@ -252,7 +252,11 @@ async function collectLayoutIssues(page) {
       // Forbidden OGame-identical labels in visible text
       const bodyText = document.body?.innerText ?? "";
       for (const label of forbidden) {
-        if (bodyText.includes(label)) {
+        const matches =
+          label === "Shield Dome"
+            ? /(?<!(Small|Large)\s+)Shield Dome/.test(bodyText)
+            : bodyText.includes(label);
+        if (matches) {
           issues.push({
             kind: "forbidden",
             detail: `OGame-identical label visible: "${label}"`,

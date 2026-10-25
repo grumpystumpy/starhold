@@ -18,8 +18,10 @@ import {
   canCollectDebris,
   canResolveMiniPlanet,
   chronoLatheTimeFactor,
+  computeRaidLoot,
   emptyDefenses,
   emptyResearch,
+  fleetCargoCapacity,
   normalizeFleetShips,
   redistributeSwarmIntercept,
   resolveCombat,
@@ -45,6 +47,7 @@ describe("Round 2 ship catalog fixtures (Micah amendments)", () => {
   it("Void Titan (3rd largest) moon-killer stats", () => {
     const s = SHIPS.voidforgeTitan;
     assert.equal(s.name, "Void Titan");
+    assert.match(s.description, /Can destroy moons\./);
     assert.equal(s.cost.metal, 1_500_000);
     assert.equal(s.cost.crystal, 1_200_000);
     assert.equal(s.cost.deuterium, 400_000);
@@ -66,6 +69,11 @@ describe("Round 2 ship catalog fixtures (Micah amendments)", () => {
   it("World Eater is largest: highest cost/yard/reqs, no cargo", () => {
     const s = SHIPS.worldEater;
     assert.equal(s.name, "World Eater");
+    assert.match(
+      s.description,
+      /Destroys mini planets\. No cargo; cannot collect debris\./,
+    );
+    assert.doesNotMatch(s.description, /moon/i);
     assert.equal(s.cargo, 0);
     assert.equal(s.attack, 300_000);
     assert.equal(s.speed, 300);
@@ -87,12 +95,16 @@ describe("Round 2 ship catalog fixtures (Micah amendments)", () => {
       deuterium: 0,
     });
     assert.equal(SHIPS.swarmDrone.buildSeconds, 2);
+    assert.equal(SHIPS.swarmDrone.cargo, 20);
+    assert.equal(SHIPS.swarmDrone.attack, 25);
     assert.deepEqual(SHIPS.swarmHarvester.cost, {
       metal: 100,
       crystal: 75,
       deuterium: 25,
     });
     assert.equal(SHIPS.swarmHarvester.buildSeconds, 5);
+    assert.equal(SHIPS.swarmHarvester.cargo, 500);
+    assert.equal(SHIPS.swarmHarvester.attack, 1);
   });
 
   it("Mothership is 2nd largest with amended cargo/combat", () => {
@@ -199,6 +211,44 @@ describe("Swarm Hold capacity base 2000", () => {
       0,
     );
     assert.equal(over.ok, false);
+  });
+});
+
+describe("Swarm cargo capacity", () => {
+  it("counts drone and harvester cargo for raid loot and transport", () => {
+    const ships = normalizeFleetShips({
+      swarmDrone: 1,
+      swarmHarvester: 1,
+    });
+    assert.equal(fleetCargoCapacity(ships), 520);
+    assert.deepEqual(
+      computeRaidLoot(
+        { metal: 2_000, crystal: 0, deuterium: 0 },
+        ships,
+      ),
+      { metal: 520, crystal: 0, deuterium: 0 },
+    );
+
+    const universe = createUniverse("Swarm Cargo Transport", 8);
+    const a = joinUniverse(universe, "SwarmCargo", 240_000_000);
+    const target = universe.planets[universe.miniPlanetIds![0]!];
+    target.ownerPlayerId = a.player.id;
+    a.player.planetIds.push(target.id);
+    const origin = universe.planets[a.planet.id];
+    origin.ships.swarmDrone = 1;
+    origin.ships.swarmHarvester = 1;
+    origin.resources = { metal: 520, crystal: 0, deuterium: 10_000 };
+
+    const transport = launchFleet(universe, {
+      playerId: a.player.id,
+      mission: "transport",
+      targetPlanetId: target.id,
+      ships: { swarmDrone: 1, swarmHarvester: 1 },
+      cargo: { metal: 520 },
+      now: 240_000_100,
+    });
+    assert.equal(transport.ok, true, transport.ok ? "" : transport.error);
+    if (transport.ok) assert.equal(transport.fleet.cargo.metal, 520);
   });
 });
 

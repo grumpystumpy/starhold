@@ -28,6 +28,9 @@ import {
   rememberedFleetDraft,
   resetFleetComposer,
 } from "./ui/render-fleets-draft";
+import { navigateTo } from "./ui/router";
+
+export const GALAXY_SPY_PROBES = 1;
 
 function intentMission(intent: FleetPresetIntent): MissionType {
   switch (intent) {
@@ -113,6 +116,29 @@ export async function doLaunchFleet(opts: {
     session.busy = false;
     schedulePaint();
   }
+}
+
+export async function doGalaxySpy(coords: Coordinates): Promise<void> {
+  if (!session.view) return;
+  if ((session.view.planet.ships.probe ?? 0) < GALAXY_SPY_PROBES) {
+    setFlash("error", "No Whisper Probes in orbit.");
+    schedulePaint();
+    return;
+  }
+  await doLaunchFleet({
+    mission: "espionage",
+    ships: { probe: GALAXY_SPY_PROBES },
+    targetCoords: coords,
+  });
+}
+
+export function doGalaxyFleetAction(
+  coords: Coordinates,
+  mission: "colonize" | "raid",
+): void {
+  const next = fleetDraftAfterPreset(null, mission, {});
+  session.pendingGalaxyFleetDraft = { ...next, targetCoords: coords };
+  navigateTo("fleet");
 }
 
 export function doApplyFleetPreset(): void {

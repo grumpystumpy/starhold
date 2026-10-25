@@ -204,6 +204,103 @@ describe("messages inbox", () => {
     assert.match(combat, /message-combat-c9/);
   });
 
+  it("renders debris and rebuilt defenses, and still renders legacy reports", () => {
+    const combat = messagesPageHtml(
+      baseView({
+        reports: [
+          {
+            id: "c2",
+            at: 200,
+            missionId: "m2",
+            attackerPlayerId: "p1",
+            defenderPlayerId: "p2",
+            attackerName: "Alpha",
+            defenderName: "Bravo",
+            targetCoords: { galaxy: 1, system: 4, slot: 8 },
+            attackerBefore: {},
+            attackerAfter: {},
+            defenderBefore: {},
+            defenderAfter: {},
+            defensesBefore: {},
+            defensesAfter: {},
+            defensesDestroyed: { laserBattery: 10 },
+            defensesRebuilt: { laserBattery: 7 },
+            defensesPermanentlyLost: { laserBattery: 3 },
+            loot: { metal: 0, crystal: 0, deuterium: 0 },
+            debrisCreated: { metal: 1200, crystal: 800, deuterium: 0 },
+            outcome: "attacker_win",
+            rounds: 3,
+            summary: "Guns down",
+          },
+        ] as PlayerView["reports"],
+        expeditionReports: [
+          {
+            id: "e2",
+            at: 180,
+            missionId: "m4",
+            playerId: "p1",
+            targetCoords: { galaxy: 1, system: 4, slot: 16 },
+            kind: "pirates",
+            cargoGained: { metal: 0, crystal: 0, deuterium: 0 },
+            shipsDelta: {},
+            debrisCreated: { metal: 400, crystal: 80, deuterium: 0 },
+            summary: "Pirate ambush",
+          },
+        ] as PlayerView["expeditionReports"],
+      }),
+    );
+    assert.match(combat, /1,200 metal, 800 crystal/);
+    assert.match(combat, /Defenses destroyed: 10× Light Laser/);
+    assert.match(combat, /Rebuilt: 7× Light Laser/);
+    assert.match(combat, /Permanently lost: 3× Light Laser/);
+    assert.match(combat, /400 metal, 80 crystal at 1:4:16/);
+
+    const legacy = messagesPageHtml(
+      baseView({
+        reports: [
+          {
+            id: "old",
+            at: 10,
+            missionId: "old-m",
+            attackerPlayerId: "p1",
+            defenderPlayerId: "p2",
+            attackerName: "Alpha",
+            defenderName: "Bravo",
+            targetCoords: { galaxy: 1, system: 1, slot: 1 },
+            attackerBefore: {},
+            attackerAfter: {},
+            defenderBefore: {},
+            defenderAfter: {},
+            defensesBefore: {},
+            defensesAfter: {},
+            loot: { metal: 0, crystal: 0, deuterium: 0 },
+            debrisCreated: { metal: 0, crystal: 0, deuterium: 0 },
+            outcome: "draw",
+            rounds: 1,
+            summary: "Old report",
+          },
+        ] as PlayerView["reports"],
+        expeditionReports: [
+          {
+            id: "old-x",
+            at: 9,
+            missionId: "old-e",
+            playerId: "p1",
+            targetCoords: { galaxy: 2, system: 2, slot: 16 },
+            kind: "nothing",
+            cargoGained: { metal: 0, crystal: 0, deuterium: 0 },
+            shipsDelta: {},
+            summary: "Empty void",
+          },
+        ] as PlayerView["expeditionReports"],
+      }),
+    );
+    assert.match(legacy, /Old report/);
+    assert.match(legacy, /Empty void/);
+    assert.doesNotMatch(legacy, /Defenses destroyed/);
+    assert.doesNotMatch(legacy, /Debris:/);
+  });
+
   it("asks before deleting the current category only", () => {
     setConfirmDelete(null);
     setInboxFilter("alerts");

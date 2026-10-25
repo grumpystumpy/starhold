@@ -26,9 +26,10 @@ import {
   energyFactor,
   energyProduced,
   energyUsed,
-  fieldsCap,
   fieldsRemaining,
   fieldsUsed,
+  effectiveFieldsCap,
+  type FieldCapMods,
   productionPerHour,
   researchUpgradeCost,
   storageFor,
@@ -65,6 +66,10 @@ export function emptyResearch(): ResearchLevels {
     queueLogistics: 0,
     swarmHold: 0,
     gravityWell: 0,
+    metallurgistTech: 0,
+    crystalizerTech: 0,
+    deutSynthesisTech: 0,
+    researchNetwork: 0,
   };
 }
 
@@ -80,8 +85,9 @@ export function shipStockPoints(
 ): number {
   let points = 0;
   for (const [id, count] of Object.entries(ships)) {
-    if (!count) continue;
-    const c = SHIPS[id as ShipId].cost;
+    const ship = SHIPS[id as ShipId];
+    if (!count || !ship) continue;
+    const c = ship.cost;
     points += ((c.metal + c.crystal + c.deuterium) * count) / 1000;
   }
   return points;
@@ -156,6 +162,8 @@ export function economySnapshot(
   universeSpeed = 1,
   energyTechLevel = 0,
   boosts?: { mineOutput?: number; energyOutput?: number },
+  research?: Partial<ResearchLevels>,
+  fieldMods?: FieldCapMods,
 ): EconomySnapshot {
   const used = fieldsUsed(planet);
   const energyMult =
@@ -168,6 +176,7 @@ export function economySnapshot(
       universeSpeed,
       energyTechLevel,
       boosts,
+      research,
     ),
     temperatureK: planetTemperatureK(slot),
     energy: {
@@ -180,8 +189,8 @@ export function economySnapshot(
     storage: storageFor(planet),
     fields: {
       used,
-      cap: fieldsCap(planet),
-      remaining: fieldsRemaining(planet),
+      cap: effectiveFieldsCap(planet, fieldMods),
+      remaining: fieldsRemaining(planet, fieldMods),
       mantleLoomBonus: mantleLoomFieldsBonus(planet),
     },
     positionMult: productionMultForSlot(slot),
@@ -233,13 +242,26 @@ export function coordsKey(c: Coordinates): string {
 }
 
 /** Slowest hull in the fleet sets cruise speed (empty fleet → 1). */
-export function fleetCruiseSpeed(ships: FleetShips): number {
+export function fleetCruiseSpeed(
+  ships: FleetShips,
+  hullSpeedScale?: Partial<Record<ShipId, number>> | null,
+): number {
   let min = Infinity;
   for (const id of SHIP_ORDER) {
     const n = ships[id] ?? 0;
-    if (n > 0) min = Math.min(min, SHIPS[id].speed);
+    if (n > 0) {
+      const scale = hullSpeedScale?.[id] ?? 1;
+      min = Math.min(min, SHIPS[id].speed * scale);
+    }
   }
   return Number.isFinite(min) ? min : 1;
+}
+
+export function recyclerHullScale(
+  mult: number,
+): Partial<Record<ShipId, number>> | undefined {
+  if (mult === 1) return undefined;
+  return { recycler: mult };
 }
 
 /**
@@ -252,10 +274,12 @@ export function flightSecondsOneWay(
   ships: FleetShips,
   fleetSpeed: number,
   combustionDriveLevel = 0,
+  hullSpeedScale?: Partial<Record<ShipId, number>> | null,
 ): number {
   const distance = Math.max(1, coordDistance(origin, target));
   const cruise =
-    fleetCruiseSpeed(ships) * (1 + combustionDriveLevel * 0.1);
+    fleetCruiseSpeed(ships, hullSpeedScale) *
+    (1 + combustionDriveLevel * 0.1);
   const raw = Math.ceil(
     (distance * 1_000_000) / (cruise * Math.max(0.1, fleetSpeed)),
   );

@@ -7,6 +7,7 @@ import {
   defenseCost,
   previewResearchUpgrade,
   researchUpgradeSeconds,
+  scaleResourceCost,
   type DefenseId,
   type PlayerView,
   type ResearchId,
@@ -24,12 +25,14 @@ export function shipRow(
   id: ShipId,
   planet: PlayerView["planet"],
   _busy: boolean,
+  costMult = 1,
 ): string {
   const def = SHIPS[id];
   const count = planet.ships?.[id] ?? 0;
   const yard = planet.buildings.shipyard ?? 0;
+  const cost = scaleResourceCost(def.cost, costMult);
   const locked = yard < def.shipyardLevel;
-  const affordable = canAfford(planet.resources, def.cost);
+  const affordable = canAfford(planet.resources, cost);
   const queueFull = (planet.shipQueue?.length ?? 0) >= 8;
   let label = "Build";
   if (locked) label = "Locked";
@@ -45,11 +48,11 @@ export function shipRow(
         : null;
   const tip = costTooltip({
     action: `Build ${def.name}`,
-    cost: def.cost,
+    cost,
     detail: def.description,
     requires: [
       `Shipyard L${fmt(def.shipyardLevel)}+`,
-      `Cargo ${fmt(def.cargo)} · atk ${fmt(def.attack)}`,
+      `Cargo ${fmt(def.cargo)} · atk ${fmt(def.attack)} · Shield ${fmt(def.shield)} · Armor ${fmt(def.armor)} · Hull ${fmt(def.hull)}`,
     ],
     blocked,
   });
@@ -61,7 +64,7 @@ export function shipRow(
       <div>
         <h3>${escapeHtml(def.name)} <span class="meta">Owned ${fmt(count)}</span> ${tip.html}</h3>
         <p>${escapeHtml(def.description)}</p>
-        <div class="meta">${fmtCost(def.cost)} each · yard L${fmt(def.shipyardLevel)}+ · cargo ${fmt(def.cargo)} · atk ${fmt(def.attack)}${
+        <div class="meta">${fmtCost(cost)} each · yard L${fmt(def.shipyardLevel)}+ · cargo ${fmt(def.cargo)} · atk ${fmt(def.attack)} · Shield ${fmt(def.shield)} · Armor ${fmt(def.armor)} · Hull ${fmt(def.hull)}${
           locked ? ` · ${escapeHtml(lockMsg)}` : ""
         }</div>
       </div>
@@ -102,7 +105,7 @@ export function defenseRow(
     detail: def.description,
     requires: [
       `Shipyard L${fmt(def.shipyardLevel)}+`,
-      `Attack ${fmt(def.attack)}`,
+      `Attack ${fmt(def.attack)} · Shield ${fmt(def.shield)} · Armor ${fmt(def.armor)} · Hull ${fmt(def.hull)}`,
     ],
     blocked,
   });
@@ -112,7 +115,7 @@ export function defenseRow(
       <div>
         <h3>${escapeHtml(def.name)} <span class="meta">Owned ${fmt(have)}</span> ${tip.html}</h3>
         <p>${escapeHtml(def.description)}</p>
-        <div class="meta">${fmtCost(cost)} each · yard L${fmt(def.shipyardLevel)}+ · atk ${fmt(def.attack)}</div>
+        <div class="meta">${fmtCost(cost)} each · yard L${fmt(def.shipyardLevel)}+ · atk ${fmt(def.attack)} · Shield ${fmt(def.shield)} · Armor ${fmt(def.armor)} · Hull ${fmt(def.hull)}</div>
       </div>
       <div class="actions">
         <input type="number" min="1" max="999999" value="1" data-defense-count="${id}" data-testid="defense-count-${id}" ${locked ? "disabled" : ""} style="min-width:4rem;width:4.5rem" />
@@ -133,6 +136,23 @@ export function bestResearchLab(view: PlayerView): number {
   return best;
 }
 
+export function linkedResearchLab(view: PlayerView): number {
+  const networkLevel = view.player.research?.researchNetwork ?? 0;
+  const localLab = view.planet.buildings.researchLab ?? 0;
+  if (networkLevel < 1) return localLab;
+
+  const labs = view.ownedPlanets
+    .filter((owned) => !owned.isMoon)
+    .map((owned) => owned.researchLab);
+  if (!view.ownedPlanets.some((owned) => owned.id === view.planet.id)) {
+    labs.push(localLab);
+  }
+  return labs
+    .sort((a, b) => b - a)
+    .slice(0, networkLevel + 1)
+    .reduce((total, level) => total + level, 0);
+}
+
 function researchButtonLabel(error: string | null): string {
   if (!error) return "Research";
   if (error.includes("queue is full")) return "Queue full";
@@ -151,6 +171,7 @@ export function researchRow(
   const level = view.player.research?.[id] ?? 0;
   const lab = bestResearchLab(view);
   const localLab = view.planet.buildings.researchLab ?? 0;
+  const linkedLab = linkedResearchLab(view);
   const preview = previewResearchUpgrade(
     view.player,
     view.planet,
@@ -161,7 +182,7 @@ export function researchRow(
   );
   const cost = preview.cost;
   const secs = Math.ceil(
-    researchUpgradeSeconds(id, preview.current, localLab) /
+    researchUpgradeSeconds(id, preview.current, linkedLab) /
       view.universe.speed,
   );
   const blocked = preview.ok ? null : preview.error;

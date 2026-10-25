@@ -11,6 +11,8 @@ import {
   RESEARCH_ORDER,
   SHIP_ORDER,
   SHIPS,
+  allianceClassBonuses,
+  classBonuses,
   shipClassAllowed,
   fortressRelocateDeutCost,
   fortressRelocateLandingWindow,
@@ -157,6 +159,7 @@ function overviewPage(view: PlayerView, busy: boolean): string {
 
 function buildingsPage(view: PlayerView, busy: boolean): string {
   const { planet, universe, now } = view;
+  const buildMods = viewClassMods(view).building;
   const isMini = Boolean(planet.flags?.mini);
   const resourceIds = isMini
     ? MINI_RESOURCE_BUILDINGS
@@ -184,9 +187,9 @@ function buildingsPage(view: PlayerView, busy: boolean): string {
           : ""
       }
       <h3 class="subhead">Extraction &amp; storage</h3>
-      ${resourceIds.map((id) => buildingRow(id, planet, view.player, universe.speed, now, busy)).join("")}
+      ${resourceIds.map((id) => buildingRow(id, planet, view.player, universe.speed, now, busy, buildMods)).join("")}
       <h3 class="subhead">${isMini ? "Structures &amp; anomaly specials" : "Structures"}</h3>
-      ${facilityIds.map((id) => buildingRow(id, planet, view.player, universe.speed, now, busy)).join("")}
+      ${facilityIds.map((id) => buildingRow(id, planet, view.player, universe.speed, now, busy, buildMods)).join("")}
       ${
         buildQueueHtml(planet, now) ||
         (isMini
@@ -269,6 +272,23 @@ function compareDefensesWeakestFirst(a: DefenseId, b: DefenseId): number {
   return (DEFENSE_ORDER_INDEX.get(a) ?? 0) - (DEFENSE_ORDER_INDEX.get(b) ?? 0);
 }
 
+function viewClassMods(view: PlayerView) {
+  const cls = classBonuses(view.player.playerClass?.classId);
+  const ally = allianceClassBonuses(view.alliance?.allianceClass ?? null);
+  return {
+    building: {
+      costMult: ally.buildingCost,
+      timeMult: cls.buildingBuildTime * ally.buildingTime,
+      fieldMods: {
+        homePlanetId: view.player.homePlanetId,
+        colonyFields: cls.colonyFields,
+        colonyFieldMult: ally.colonyFieldMult,
+      },
+    },
+    shipCostMult: ally.shipCost,
+  };
+}
+
 export const WEAKEST_FIRST_SHIPS: ShipId[] = [...SHIP_ORDER].sort(
   compareShipsWeakestFirst,
 );
@@ -292,7 +312,7 @@ export function shipyardPage(view: PlayerView, busy: boolean): string {
           ? `<p class="hint" data-testid="shipyard-need-class">Choose a class on Overview to unlock class-exclusive hulls.</p>`
           : ""
       }
-      ${buildable.map((id) => shipRow(id, planet, busy)).join("")}
+      ${buildable.map((id) => shipRow(id, planet, busy, viewClassMods(view).shipCostMult)).join("")}
       ${
         shipQueueHtml(planet, now) ||
         `<p class="hint">Raise the Shipyard facility to unlock hulls.</p>`
@@ -311,7 +331,7 @@ export function shipyardPage(view: PlayerView, busy: boolean): string {
             title: def.name,
             lines: [
               def.description,
-              `In hangar ${fmt(count)} · cargo ${fmt(def.cargo)} · atk ${fmt(def.attack)}`,
+              `In hangar ${fmt(count)} · cargo ${fmt(def.cargo)} · atk ${fmt(def.attack)} · Shield ${fmt(def.shield)} · Armor ${fmt(def.armor)} · Hull ${fmt(def.hull)}`,
             ],
             testId: `hangar-tip-${id}`,
           });

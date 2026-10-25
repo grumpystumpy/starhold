@@ -8,11 +8,13 @@ import {
   SHIPS,
   SHIP_ORDER,
   shipClassAllowed,
+  type CombatReport,
   type DefenseId,
   type PlayerView,
   type ShipId,
 } from "@starhold/game";
 import { defenseRow, shipRow } from "./render-chrome-rows";
+import { reportsHtml } from "./render-fleets-panels";
 import {
   WEAKEST_FIRST_DEFENSES,
   WEAKEST_FIRST_SHIPS,
@@ -74,6 +76,44 @@ function combatStrength(def: { attack: number; shield: number; hull: number }): 
 }
 
 describe("Shipyard and Defenses owned count and weakest-first ordering", () => {
+  it("shows Shield, Armor, and Hull in order with catalog values", () => {
+    const shipHtml = shipRow("scout", dummyPlanet(), false);
+    const shipStats = `Shield ${SHIPS.scout.shield} · Armor ${SHIPS.scout.armor} · Hull ${SHIPS.scout.hull}`;
+    assert.ok(shipHtml.indexOf(shipStats) >= 0);
+
+    const defenseHtml = defenseRow("needleTurret", dummyPlanet(), false);
+    const defenseStats = `Shield ${DEFENSES.needleTurret.shield} · Armor ${DEFENSES.needleTurret.armor} · Hull ${DEFENSES.needleTurret.hull}`;
+    assert.ok(defenseHtml.indexOf(defenseStats) >= 0);
+  });
+
+  it("renders a legacy combat report without armor data", () => {
+    const oldReport = {
+      id: "legacy-report",
+      at: 1_700_000_000_000,
+      missionId: "legacy-mission",
+      attackerPlayerId: "p1",
+      defenderPlayerId: "p2",
+      attackerName: "Alpha",
+      defenderName: "Beta",
+      targetCoords: { galaxy: 1, system: 1, slot: 4 },
+      attackerBefore: {},
+      attackerAfter: {},
+      defenderBefore: {},
+      defenderAfter: {},
+      defensesBefore: {},
+      defensesAfter: {},
+      loot: { metal: 0, crystal: 0, deuterium: 0 },
+      debrisCreated: { metal: 0, crystal: 0 },
+      outcome: "attacker_win",
+      rounds: 1,
+      summary: "Legacy report",
+    } as unknown as CombatReport;
+    const html = reportsHtml([oldReport], "p1");
+
+    assert.match(html, /Legacy report/);
+    assert.doesNotMatch(html, /Armor/);
+  });
+
   describe("shipRow owned count", () => {
     it("displays 'Owned 0' when planet has no ships of that hull", () => {
       const pl = dummyPlanet();
@@ -133,6 +173,20 @@ describe("Shipyard and Defenses owned count and weakest-first ordering", () => {
       const laserHtml = defenseRow("laserBattery", pl, false);
       assert.match(laserHtml, /Owned 2,500/);
       assert.doesNotMatch(laserHtml, />×2,500</);
+    });
+
+    it("needleTurret displays 'Rocket Launcher' and an old save with needleTurret count N still has N", () => {
+      const pl = dummyPlanet();
+      const countN = 42;
+      pl.defenses = {
+        needleTurret: countN,
+      } as Partial<Record<DefenseId, number>>;
+
+      const html = defenseRow("needleTurret", pl, false);
+      assert.match(html, /Rocket Launcher/);
+      assert.match(html, /Owned 42/);
+      assert.equal(pl.defenses.needleTurret, countN);
+      assert.equal(DEFENSES.needleTurret.name, "Rocket Launcher");
     });
 
     it("handles missing defenses map gracefully", () => {

@@ -9,8 +9,11 @@ const sourceDir = fileURLToPath(new URL(".", import.meta.url));
 
 // These exported actions only update local UI state or issue GET requests.
 const nonPostActions = new Set([
-  "doApplyFleetPreset", "doRefresh", "doGalaxyNav", "doGalaxyJump", "doGalaxyGalaxyNav",
+  "doApplyFleetPreset", "doRefresh", "doGalaxyNav", "doGalaxyJump", "doGalaxyGalaxyNav", "doGalaxyFleetAction",
 ]);
+
+// These call another covered POST action that settles.
+const delegatingActions = new Map([["doGalaxySpy", "doLaunchFleet"]]);
 
 // These POSTs create credentials or sessions; recovery is the user retrying.
 const postRecoveryExemptActions = new Set(["doJoin", "doLogin", "doSignup"]);
@@ -76,6 +79,13 @@ describe("settleMutation coverage for exported POST actions", () => {
             continue;
           }
           if (postRecoveryExemptActions.has(name)) {
+            continue;
+          }
+          const delegatedAction = delegatingActions.get(name);
+          if (delegatedAction) {
+            assert.match(body, new RegExp(`${delegatedAction}\\s*\\(`));
+            assert.ok(moduleNames.includes(delegatedAction) || exported.has(delegatedAction),
+              `${name} must delegate to a discovered/covered action: ${delegatedAction}`);
             continue;
           }
           assert.match(body, /settleMutation\s*\(/, `${name} must re-check state after POST failure`);

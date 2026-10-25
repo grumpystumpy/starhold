@@ -867,6 +867,18 @@ export async function setAllianceJoinModeRequest(
   return parse<PlayerView>(res);
 }
 
+export async function setAllianceClassRequest(
+  playerId: string,
+  allianceClass: "destroyer" | "builder" | "explorer" | null,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/alliance/set-class", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, allianceClass }),
+  });
+  return parse<PlayerView>(res);
+}
+
 export async function disbandAllianceRequest(
   playerId: string,
 ): Promise<PlayerView> {

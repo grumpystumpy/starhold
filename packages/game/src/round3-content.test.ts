@@ -32,6 +32,7 @@ import {
   solarTempFactor,
   spoilSkimmerDebris,
 } from "./index.js";
+import { ensureUniverseShape } from "./world-bootstrap.js";
 
 const R3_DEFENSE_IDS = [
   "needleTurret",
@@ -68,7 +69,34 @@ describe("Round 3 content + engine (11–19)", () => {
       assert.ok(!MISSILE_NAMES.test(id));
     }
     assert.equal(R3_DEFENSE_IDS.length, 15);
-    assert.equal(DEFENSE_ORDER.length, 17); // +2 legacy
+    assert.equal(DEFENSE_ORDER.length, 18); // +2 legacy + Prism Laser
+  });
+
+  it("Prism Laser tuning and old-save defense default", () => {
+    assert.deepEqual(DEFENSES.prismLaser, {
+      id: "prismLaser",
+      name: "Prism Laser",
+      description: "Crystal-focused prism emitter.",
+      cost: { metal: 60, crystal: 200, deuterium: 0 },
+      buildSeconds: 9,
+      shipyardLevel: 2,
+      attack: 22,
+      weapons: { laser: 1 },
+      shield: 6,
+      armor: 9,
+      hull: 22,
+    });
+    assert.equal(DEFENSE_ORDER[DEFENSE_ORDER.indexOf("needleTurret") + 1], "prismLaser");
+
+    const universe = createUniverse("Prism Laser old save", 8);
+    const { planet } = joinUniverse(universe, "PrismTester", 1_000_000);
+    const preserved = { ...planet.defenses };
+    delete (planet.defenses as Partial<typeof planet.defenses>).prismLaser;
+    const loaded = migrateOrResetUniverse(JSON.parse(JSON.stringify(universe))).universe;
+    assert.equal(loaded.planets[planet.id].defenses.prismLaser, 0);
+    for (const [id, count] of Object.entries(preserved)) {
+      assert.equal(loaded.planets[planet.id].defenses[id as keyof typeof planet.defenses], count);
+    }
   });
 
   it("warships + Helio Buoy + class ships exist in tuning", () => {
@@ -95,6 +123,25 @@ describe("Round 3 content + engine (11–19)", () => {
     assert.equal(SHIPS.gridStake.stationary, true);
     assert.equal(SHIPS.vaultScout.classExclusive, "explorer");
     assert.equal(SHIPS.foundationArk.classExclusive, "expansionist");
+  });
+
+  it("adds fast and bulk cargo ships and defaults them on old planets", () => {
+    assert.equal(SHIPS.fastCargo.cargo, 10_000);
+    assert.equal(SHIPS.bulkCargo.cargo, 50_000);
+    assert.equal(SHIP_ORDER[SHIP_ORDER.indexOf("hauler") + 1], "fastCargo");
+    assert.equal(SHIP_ORDER[SHIP_ORDER.indexOf("hauler") + 2], "bulkCargo");
+
+    const universe = createUniverse("Cargo old save", 8);
+    const { planet } = joinUniverse(universe, "Cargo", 1_700_000);
+    const oldSave = structuredClone(universe);
+    const oldPlanet = oldSave.planets[planet.id]!;
+    delete oldPlanet.ships.fastCargo;
+    delete oldPlanet.ships.bulkCargo;
+    oldPlanet.ships.hauler = 7;
+    ensureUniverseShape(oldSave);
+    assert.equal(oldPlanet.ships.fastCargo, 0);
+    assert.equal(oldPlanet.ships.bulkCargo, 0);
+    assert.equal(oldPlanet.ships.hauler, 7);
   });
 
   it("Mantle Loom + Rig Foundry + Well Binding in catalogs", () => {

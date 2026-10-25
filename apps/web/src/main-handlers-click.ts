@@ -61,7 +61,10 @@ import {
   doSelectPlanet,
   doDeleteMessages,
   doMarkEventsRead,
+  doGalaxyFleetAction,
+  doGalaxySpy,
   doSetAllianceJoinMode,
+  doSetAllianceClass,
   doSetAllianceRole,
   doSetSeasonSkin,
   doSetSeasonTitle,
@@ -194,6 +197,49 @@ export function bindClickHandlers(): void {
       if (closestActionEl(target, "[data-galaxy-scan-system]")) {
         ev.preventDefault();
         void doScanSystem();
+        return;
+      }
+
+      const spySlot = closestActionEl(target, "[data-galaxy-spy]");
+      if (spySlot) {
+        ev.preventDefault();
+        const slot = Number(spySlot.getAttribute("data-galaxy-spy"));
+        const galaxy = session.view?.galaxy;
+        if (galaxy && Number.isInteger(slot)) {
+          void doGalaxySpy({
+            galaxy: galaxy.galaxy,
+            system: galaxy.system,
+            slot,
+          });
+        }
+        return;
+      }
+
+      const colonizeSlot = closestActionEl(target, "[data-galaxy-colonize]");
+      if (colonizeSlot) {
+        ev.preventDefault();
+        const slot = Number(colonizeSlot.getAttribute("data-galaxy-colonize"));
+        const galaxy = session.view?.galaxy;
+        if (galaxy && Number.isInteger(slot)) {
+          doGalaxyFleetAction(
+            { galaxy: galaxy.galaxy, system: galaxy.system, slot },
+            "colonize",
+          );
+        }
+        return;
+      }
+
+      const attackSlot = closestActionEl(target, "[data-galaxy-attack]");
+      if (attackSlot) {
+        ev.preventDefault();
+        const slot = Number(attackSlot.getAttribute("data-galaxy-attack"));
+        const galaxy = session.view?.galaxy;
+        if (galaxy && Number.isInteger(slot)) {
+          doGalaxyFleetAction(
+            { galaxy: galaxy.galaxy, system: galaxy.system, slot },
+            "raid",
+          );
+        }
         return;
       }
 
@@ -632,6 +678,18 @@ export function bindClickHandlers(): void {
     ) {
       const mode = el.value === "invite" ? "invite" : "open";
       void doSetAllianceJoinMode(mode);
+      return;
+    }
+    if (
+      el instanceof HTMLSelectElement &&
+      el.matches("[data-alliance-class-select]")
+    ) {
+      const value = el.value;
+      const allianceClass =
+        value === "destroyer" || value === "builder" || value === "explorer"
+          ? value
+          : null;
+      void doSetAllianceClass(allianceClass);
       return;
     }
     if (

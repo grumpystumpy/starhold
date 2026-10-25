@@ -2,6 +2,7 @@ import { FOUNDATION_ARK_BOOTSTRAP, SHIPS, SHIP_ORDER } from "./catalog.js";
 import { invalidateArtContext } from "./planet-art.js";
 import {
   classBonuses,
+  allianceBonusesForPlayer,
   coordsKey,
   emptyDefenses,
   empireColonyCap,
@@ -10,7 +11,9 @@ import {
   levelBonuses,
   maxColonies,
   normalizeFleetShips,
+  recyclerHullScale,
   rollPlanetFields,
+  travelBonusMult,
 } from "./formulas.js";
 import type { BuildingId } from "./types.js";
 import type {
@@ -24,6 +27,7 @@ import {
   tickAcsGroups,
 } from "./world-acs.js";
 import { resolveRaidArrival } from "./world-arrival-raid.js";
+import { isNewbieBonusActive, NEWBIE_PRODUCTION_MULT } from "./world-protection.js";
 import { harvestAsteroidField } from "./world-asteroids.js";
 import {
   emptyBuildings,
@@ -308,12 +312,20 @@ export function resolveFleetArrival(
       resolveAlienRaidArrival(universe, fleet, now);
     }
 
+    const returnBonus = travelBonusMult(
+      universe,
+      fleet.ownerPlayerId,
+      origin.id,
+      fleet.targetPlanetId,
+    );
     const returnSecs = flightSecondsOneWay(
       fleet.targetCoords,
       origin.coords,
       fleet.ships,
-      effectiveFleetSpeed(universe, fleet.ownerPlayerId, now),
+      effectiveFleetSpeed(universe, fleet.ownerPlayerId, now) *
+        returnBonus.fleetSpeed,
       drive,
+      recyclerHullScale(returnBonus.recyclerSpeed),
     );
     if (fleetShipCount(fleet.ships) <= 0) {
       clearOccupationIfFleetGone(universe, fleet);
@@ -427,6 +439,8 @@ export function advancePlanetNow(
   const energyTech = owner?.research.energyTech ?? 0;
   const boosts = playerBoosts(owner, now);
   const lb = levelBonuses(owner?.level ?? 1);
+  const cls = classBonuses(owner?.playerClass?.classId);
+  const ally = allianceBonusesForPlayer(universe, owner?.id);
   const before = { ...planet.resources };
   const advanced = advancePlanet(
     planet,
@@ -437,10 +451,12 @@ export function advancePlanetNow(
       mineOutput:
         lb.production *
         boosts.mineOutput *
-        classBonuses(owner?.playerClass?.classId).mineOutput,
-      energyOutput:
-        boosts.energyOutput *
-        classBonuses(owner?.playerClass?.classId).energyOutput,
+        cls.mineOutput *
+        ally.mineOutput *
+        (isNewbieBonusActive(universe, owner, now)
+          ? NEWBIE_PRODUCTION_MULT
+          : 1),
+      energyOutput: boosts.energyOutput * cls.energyOutput,
     },
     owner,
   );

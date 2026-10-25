@@ -2,6 +2,7 @@ import type {
   AcsPrefill,
   AllianceJoinMode,
   AllianceRole,
+  AllianceClassId,
   Coordinates,
   PlayerView,
 } from "@starhold/game";
@@ -17,6 +18,7 @@ import {
   postAllianceChatRequest,
   proposeAllianceStrikeRequest,
   setAllianceJoinModeRequest,
+  setAllianceClassRequest,
   setAllianceRoleRequest,
   shareAllianceIntelRequest,
   upsertAllianceMarkerRequest,
@@ -299,6 +301,39 @@ export async function doSetAllianceJoinMode(
       failureFallback: "Join mode change failed.",
       applied: (view) => view.alliance?.joinMode === joinMode,
       successNotice: () => `Join mode: ${joinMode}.`,
+    });
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doSetAllianceClass(
+  allianceClass: AllianceClassId | null,
+): Promise<void> {
+  if (!session.view) return;
+  if (session.busy) {
+    setFlash("error", "Still applying the last action — try again in a moment.");
+    schedulePaint();
+    return;
+  }
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    session.view = await setAllianceClassRequest(
+      session.view.player.id,
+      allianceClass,
+    );
+    setFlash("notice", allianceClass ? `Alliance class: ${allianceClass}.` : "Alliance class cleared.");
+  } catch (err) {
+    await settleMutation({
+      err,
+      failureFallback: "Alliance class change failed.",
+      applied: (view) =>
+        (view.alliance?.allianceClass ?? null) === allianceClass,
+      successNotice: () =>
+        allianceClass ? `Alliance class: ${allianceClass}.` : "Alliance class cleared.",
     });
   } finally {
     session.busy = false;
