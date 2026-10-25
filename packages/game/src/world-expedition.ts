@@ -272,7 +272,10 @@ export function resolveExpeditionArrival(
       system: fleet.targetCoords.system,
       slot: EXPEDITION_SLOT,
     }, debrisCreated);
-    const crumb = Math.min(40, fleetCargoCapacity(after));
+    const crumb = Math.min(
+      40,
+      fleetCargoCapacity(after, ownerForYield?.research?.cargoHoldTech ?? 0),
+    );
     cargoGained = {
       metal: Math.floor(crumb * 0.5),
       crystal: Math.floor(crumb * 0.3),

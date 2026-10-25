@@ -411,8 +411,9 @@ function addCargoOverflowLost(
   current: Resources,
   ships: PlanetState["ships"],
   add: Resources,
+  cargoHoldLevel = 0,
 ): Resources {
-  const cap = fleetCargoCapacity(ships);
+  const cap = fleetCargoCapacity(ships, cargoHoldLevel);
   const used = current.metal + current.crystal + current.deuterium;
   let free = Math.max(0, Math.floor(cap - used));
   const out = { ...current };
@@ -576,6 +577,7 @@ export function destroyMiniPlanet(
   attackerCargo: Resources,
   planet: PlanetState,
   keepFleetId?: string,
+  cargoHoldLevel = 0,
 ): Resources {
   const payout: Resources = {
     metal: Math.floor(planet.resources.metal * MINI_DESTROY_RESOURCE_MULT),
@@ -586,6 +588,7 @@ export function destroyMiniPlanet(
     attackerCargo,
     attackerFleetShips,
     payout,
+    cargoHoldLevel,
   );
 
   const residual = buildingResidualCost(planet);
@@ -688,12 +691,14 @@ export function applyMiniPlanetResolve(
     }
     const kind = miniKindOf(planet);
     const coords = { ...planet.coords };
+    const attacker = universe.players[fleet.ownerPlayerId];
     fleet.cargo = destroyMiniPlanet(
       universe,
       fleet.ships,
       fleet.cargo ?? emptyCargo(),
       planet,
       fleet.id,
+      attacker?.research?.cargoHoldTech ?? 0,
     );
     reseedMiniAfterDestroy(
       universe,
