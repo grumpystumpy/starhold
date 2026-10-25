@@ -1,7 +1,7 @@
 import "./test-dom";
 import assert from "node:assert/strict";
 import { after, it } from "node:test";
-import type { PlayerView } from "@starhold/game";
+import type { BuildQueueItem, DefenseQueueItem, PlayerView, ResearchQueueItem, ShipQueueItem } from "@starhold/game";
 
 const { stopPolling } = await import("./main-actions-session");
 const { schedulePaint, session, setPaintImpl } = await import("./session");
@@ -42,10 +42,10 @@ async function advanceBy(delay: number): Promise<void> {
 }
 
 function view(queues: {
-  buildQueue?: any[];
-  researchQueue?: any[];
-  shipQueue?: any[];
-  defenseQueue?: any[];
+  buildQueue?: Partial<BuildQueueItem>[];
+  researchQueue?: Partial<ResearchQueueItem>[];
+  shipQueue?: Partial<ShipQueueItem>[];
+  defenseQueue?: Partial<DefenseQueueItem>[];
 } = {}): PlayerView {
   return {
     now,

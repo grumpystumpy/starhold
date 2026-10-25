@@ -14,4 +14,18 @@ describe("save fixture", () => {
     assert.equal(readFileSync(path, "utf8"), before);
     assert.deepEqual(JSON.parse(readFileSync(path, "utf8")), loaded);
   });
+
+  it("loads catalog-complete-save fixture and preserves player progress and queue state", () => {
+    const path = fileURLToPath(new URL("../../server/src/fixtures/catalog-complete-save.json", import.meta.url));
+    const raw = readFileSync(path, "utf8");
+    const save = JSON.parse(raw);
+    assert.ok(save.universe, "save fixture has universe");
+    const planet = save.universe.planets[save.planetId];
+    assert.ok(planet, "save fixture has planet");
+    assert.ok(Array.isArray(planet.buildQueue), "planet buildQueue preserved");
+    assert.ok(Array.isArray(planet.shipQueue), "planet shipQueue preserved");
+    assert.ok(Array.isArray(planet.defenseQueue), "planet defenseQueue preserved");
+    assert.ok(planet.buildings, "planet buildings preserved");
+    assert.ok(planet.defenses, "planet defenses preserved");
+  });
 });

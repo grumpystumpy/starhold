@@ -1,4 +1,4 @@
-import { BUILDINGS, DEFENSES, MAP_GALAXIES, MAP_SYSTEMS, RESEARCH, SHIPS, type PlayerView } from "@starhold/game";
+import { DEFENSES, MAP_GALAXIES, MAP_SYSTEMS, RESEARCH, SHIPS, type PlayerView } from "@starhold/game";
 import {
   ApiError,
   authJoin,
@@ -185,16 +185,6 @@ function checkAndNotifyQueueCompletions(): void {
         }
       }
 
-      // 4. Building Queue
-      for (const item of previousTrackedView.planet.buildQueue ?? []) {
-        if (!currentView.planet.buildQueue?.some((b) => b.id === item.id)) {
-          if (item.completesAt <= now && !cancelledQueueItemIds.has(item.id) && !notifiedQueueItemIds.has(item.id)) {
-            notifiedQueueItemIds.add(item.id);
-            const name = BUILDINGS[item.buildingId]?.name ?? item.buildingId;
-            messages.push(`Upgrade complete: ${name} → level ${item.targetLevel}`);
-          }
-        }
-      }
     }
 
     if (messages.length > 0) {
