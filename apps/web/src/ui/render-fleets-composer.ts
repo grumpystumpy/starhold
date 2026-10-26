@@ -12,7 +12,7 @@ import {
   type PlayerView,
 } from "@starhold/game";
 import { SHIP_ART } from "./assets";
-import { fmt, fmtCoords, fmtEta } from "./format";
+import { fmt, fmtCoords, fmtCoordsLink, fmtEta } from "./format";
 import { escapeAttr, escapeHtml } from "./render-escape";
 import {
   clampFleetSpeed,
@@ -118,14 +118,14 @@ export function fleetComposer(
     const pirate = view.galaxy.pirateBase;
     if (pirate) {
       options.push(
-        `<option value="pirate:${escapeAttr(pirate.id)}">${escapeHtml(pirate.name)} · Lv ${pirate.level ?? pirate.tier} · ${pirate.threatHint} · ${fmtCoords(pirate.coords)}</option>`,
+        `<option value="pirate:${escapeAttr(pirate.id)}">${escapeHtml(pirate.name)} · Lv ${fmt(pirate.level ?? pirate.tier)} · ${pirate.threatHint} · ${fmtCoords(pirate.coords)}</option>`,
       );
     }
   } else if (mission === "alienRaid") {
     const alien = view.galaxy.alienBase;
     if (alien) {
       options.push(
-        `<option value="alien:${escapeAttr(alien.id)}">${escapeHtml(alien.name)} · Aliens · Lv ${alien.level ?? alien.tier} · ${alien.threatHint} · ${fmtCoords(alien.coords)}</option>`,
+        `<option value="alien:${escapeAttr(alien.id)}">${escapeHtml(alien.name)} · Aliens · Lv ${fmt(alien.level ?? alien.tier)} · ${alien.threatHint} · ${fmtCoords(alien.coords)}</option>`,
       );
     }
   } else if (mission === "espionage") {
@@ -488,7 +488,7 @@ export function fleetComposer(
     <form id="fleet-form" data-testid="fleet-form" class="fleet-form" data-fleet-step="2">
       <p class="fleet-step-label" data-testid="fleet-step">Step 2 of 2 · Destination</p>
       <p class="hint" data-testid="fleet-slot-counters">Fleets ${fmt(fleetActive)}/${fmt(fleetCap)} · Expeditions ${fmt(expeditionActive)}/${fmt(expeditionCap)}</p>
-      <p data-testid="fleet-coords">Coords ${destination ? fmtCoords(destination) : "—"} · ${escapeHtml(kind)}</p>
+      <p data-testid="fleet-coords">Coords ${destination ? fmtCoordsLink(destination) : "—"} · ${escapeHtml(kind)}</p>
       <fieldset class="mission-pick">
         <legend>Mission</legend>
         ${missionRadios}

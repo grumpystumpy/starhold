@@ -21,12 +21,12 @@ export function recommendedNext(view: PlayerView): string {
       return "Recommended next: raise the Crater Hab to expand moon fields.";
     }
     if (sensor < 1) {
-      return "Recommended next: build a Horizon Scanner to scan inbound fleets.";
+      return "Recommended next: build a System Scanner to scan inbound fleets.";
     }
     if (gate < 1) {
       return "Recommended next: raise a Fold Bridge to hop fleets between moons.";
     }
-    return "Recommended next: park fleets here, jump to another moon, or watch Horizon Scanner contacts.";
+    return "Recommended next: park fleets here, jump to another moon, or watch System Scanner contacts.";
   }
   if (planet.flags?.mini) {
     const siphon = planet.buildings.riftSiphon ?? 0;

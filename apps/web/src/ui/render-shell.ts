@@ -81,20 +81,29 @@ function navQuery(view: PlayerView): { playerId: string; planetId: string } {
   return { playerId: view.player.id, planetId: view.planet.id };
 }
 
-function pageDropdown(view: PlayerView, active: NavPage): string {
-  return `
-    <label class="nav-dropdown-wrap" data-testid="nav-dropdown-wrap">
-      <span class="nav-dropdown-label">Page</span>
-      <select class="nav-dropdown" data-nav-select data-testid="nav-dropdown" aria-label="Game pages">
-        ${NAV_PAGES.map((id) => {
-          const href = hrefForPage(id, navQuery(view));
-          const unread = id === "messages" ? unreadEventCount(view.player) : 0;
-          const label =
-            unread > 0 ? `${NAV_LABELS[id]} (${fmt(unread)})` : NAV_LABELS[id];
-          return `<option value="${id}" data-href="${escapeAttr(href)}"${id === active ? " selected" : ""}>${escapeHtml(label)}</option>`;
-        }).join("")}
-      </select>
-    </label>`;
+function planetDropdown(view: PlayerView, busy: boolean): string {
+  const bodies =
+    view.ownedPlanets.length > 0
+      ? view.ownedPlanets
+      : [
+          {
+            id: view.planet.id,
+            name: view.planet.name,
+            coords: view.planet.coords,
+            isHome: true,
+            isActive: true,
+            isMoon: view.planet.kind === "moon",
+            isMini: Boolean(view.planet.flags?.mini),
+          },
+        ];
+  const options = bodies
+    .map((p) => {
+      const label = `${p.name}${p.isMini ? " · Mini" : p.isMoon ? " · Moon" : ""}${p.isHome ? " ★" : ""} (${fmtCoords(p.coords)})`;
+      const selected = p.isActive || p.id === view.planet.id ? " selected" : "";
+      return `<option value="${escapeAttr(p.id)}"${selected}>${escapeHtml(label)}</option>`;
+    })
+    .join("");
+  return `<label class="nav-dropdown-wrap" data-testid="planet-dropdown-wrap"><span class="nav-dropdown-label">Colony</span><select class="nav-dropdown" data-planet-select data-testid="planet-dropdown" aria-label="Planets, moons, and mini planets" ${busy ? "disabled" : ""}>${options}</select></label>`;
 }
 
 function leftNav(view: PlayerView, active: NavPage): string {
@@ -181,15 +190,16 @@ export function shellHtml(
     Math.floor((progress.xp / Math.max(1, progress.xpToNext)) * 100),
   );
 
+  const coordLink = `<a href="/galaxy?galaxy=${planet.coords.galaxy}&amp;system=${planet.coords.system}" class="coord-link" data-galaxy-coords="${fmtCoords(planet.coords)}">${fmtCoords(planet.coords)}</a>`;
   return `
     <div class="game-shell" data-testid="game-shell" data-page="${activePage}" data-planet-id="${escapeAttr(planet.id)}" data-busy="${state.busy ? "1" : "0"}">
       <header class="topbar shell-top">
-        ${pageDropdown(view, activePage)}
+        ${planetDropdown(view, state.busy)}
         <div class="topbar-brand">
           ${heroArt}
           <div>
             <h1 class="brand">Starhold</h1>
-            <div class="coords" data-testid="planet-coords">${escapeHtml(planet.name)}${planet.flags?.mini ? " · Mini" : planet.kind === "moon" ? " · Moon" : ""} · ${fmtCoords(planet.coords)} · ${escapeHtml(universe.name)} @ ${universe.speed}×${Number(PRODUCTION_MULT) > 1 ? ` · income ×${PRODUCTION_MULT} (test)` : ""}</div>
+            <div class="coords" data-testid="planet-coords">${escapeHtml(planet.name)}${planet.flags?.mini ? " · Mini" : planet.kind === "moon" ? " · Moon" : ""} · ${coordLink} · ${escapeHtml(universe.name)} @ ${universe.speed}×${Number(PRODUCTION_MULT) > 1 ? ` · income ×${PRODUCTION_MULT} (test)` : ""}</div>
           </div>
         </div>
         ${view.newbieBonusEndsAt != null && view.newbieBonusEndsAt - view.now > 0 ? `<div class="topbar-newbie-badge" data-testid="newbie-bonus-badge">Newbie bonus: +50% prod · +100% def (${Math.ceil((view.newbieBonusEndsAt - view.now) / (60 * 60 * 1000))}h left)</div>` : ""}

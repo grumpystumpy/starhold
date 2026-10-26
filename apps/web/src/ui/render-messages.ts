@@ -198,22 +198,65 @@ function namedCounts(
   return parts.join(", ");
 }
 
-function unitLossLine(
-  ships: Partial<Record<string, number>> | undefined,
-  defenses?: Partial<Record<string, number>>,
-): string {
-  const parts: string[] = [];
+export function combatLossSummary(report: CombatReport): {
+  attackerShipsLost: number;
+  defenderShipsLost: number;
+  attackerPointsLost: number;
+  defenderPointsLost: number;
+} {
+  let attackerShipsLost = 0;
+  let attackerCost = 0;
   for (const id of SHIP_ORDER) {
-    const n = ships?.[id] ?? 0;
-    if (n > 0) parts.push(`${fmt(n)}× ${escapeHtml(SHIPS[id].name)}`);
+    const lost = Math.max(0, (report.attackerBefore?.[id] ?? 0) - (report.attackerAfter?.[id] ?? 0));
+    attackerShipsLost += lost;
+    const shipCost = SHIPS[id].cost.metal + SHIPS[id].cost.crystal + SHIPS[id].cost.deuterium;
+    attackerCost += lost * shipCost;
   }
-  if (defenses) {
-    for (const id of DEFENSE_ORDER) {
-      const n = defenses[id] ?? 0;
-      if (n > 0) parts.push(`${fmt(n)}× ${escapeHtml(DEFENSES[id].name)}`);
-    }
+
+  let defenderShipsLost = 0;
+  let defenderCost = 0;
+  for (const id of SHIP_ORDER) {
+    const lost = Math.max(0, (report.defenderBefore?.[id] ?? 0) - (report.defenderAfter?.[id] ?? 0));
+    defenderShipsLost += lost;
+    const shipCost = SHIPS[id].cost.metal + SHIPS[id].cost.crystal + SHIPS[id].cost.deuterium;
+    defenderCost += lost * shipCost;
   }
-  return parts.length ? parts.join(", ") : "none";
+
+  for (const id of DEFENSE_ORDER) {
+    const defLost = report.defensesPermanentlyLost?.[id] ?? Math.max(0, (report.defensesBefore?.[id] ?? 0) - (report.defensesAfter?.[id] ?? 0));
+    const defCost = DEFENSES[id].cost.metal + DEFENSES[id].cost.crystal + DEFENSES[id].cost.deuterium;
+    defenderCost += defLost * defCost;
+  }
+
+  return {
+    attackerShipsLost,
+    defenderShipsLost,
+    attackerPointsLost: Math.floor(attackerCost / 1000),
+    defenderPointsLost: Math.floor(defenderCost / 1000),
+  };
+}
+
+export function viewerResult(
+  report: CombatReport,
+  selfId: string,
+): "victory" | "defeat" | "draw" {
+  if (report.outcome === "draw") return "draw";
+  const won =
+    (report.outcome === "attacker_win" && report.attackerPlayerId === selfId) ||
+    (report.outcome === "defender_win" && report.defenderPlayerId === selfId);
+  return won ? "victory" : "defeat";
+}
+
+function resultPresentation(
+  res: "victory" | "defeat" | "draw",
+): { label: "Win" | "Lose" | "Draw"; className: string; resultAttr: string } {
+  if (res === "victory") {
+    return { label: "Win", className: "combat-report-win", resultAttr: "win" };
+  }
+  if (res === "defeat") {
+    return { label: "Lose", className: "combat-report-loss", resultAttr: "loss" };
+  }
+  return { label: "Draw", className: "combat-report-draw", resultAttr: "draw" };
 }
 
 function renderReportSubwindow(view: PlayerView): string {
@@ -225,83 +268,14 @@ function renderReportSubwindow(view: PlayerView): string {
     const report = (view.reports ?? []).find((r) => r.id === id);
     if (!report) return "";
 
+    const res = viewerResult(report, view.player.id);
+    const pres = resultPresentation(res);
+    const loss = combatLossSummary(report);
+
     const atkCoords = report.originCoords
-      ? ` (${fmtCoords(report.originCoords)})`
+      ? `<a href="/galaxy?galaxy=${report.originCoords.galaxy}&amp;system=${report.originCoords.system}" class="coord-link" data-galaxy-coords="${fmtCoords(report.originCoords)}">${fmtCoords(report.originCoords)}</a>`
       : "";
-    const defCoords = ` (${fmtCoords(report.targetCoords)})`;
-
-    let attackerRows = "";
-    let attackerTotalShipsLost = 0;
-    for (const shipId of SHIP_ORDER) {
-      const before = report.attackerBefore?.[shipId] ?? 0;
-      const after = report.attackerAfter?.[shipId] ?? 0;
-      if (before > 0 || after > 0) {
-        const lost = Math.max(0, before - after);
-        attackerTotalShipsLost += lost;
-        attackerRows += `<tr><td>${escapeHtml(SHIPS[shipId].name)}</td><td>${fmt(before)}</td><td>${fmt(after)}</td><td>${fmt(lost)}</td></tr>`;
-      }
-    }
-    if (!attackerRows) {
-      attackerRows = `<tr><td colspan="4" class="meta">No ships present</td></tr>`;
-    }
-
-    let defenderRows = "";
-    let defenderTotalShipsLost = 0;
-    for (const shipId of SHIP_ORDER) {
-      const before = report.defenderBefore?.[shipId] ?? 0;
-      const after = report.defenderAfter?.[shipId] ?? 0;
-      if (before > 0 || after > 0) {
-        const lost = Math.max(0, before - after);
-        defenderTotalShipsLost += lost;
-        defenderRows += `<tr><td>${escapeHtml(SHIPS[shipId].name)}</td><td>${fmt(before)}</td><td>${fmt(after)}</td><td>${fmt(lost)}</td></tr>`;
-      }
-    }
-    for (const defId of DEFENSE_ORDER) {
-      const before = report.defensesBefore?.[defId] ?? 0;
-      const after = report.defensesAfter?.[defId] ?? 0;
-      if (before > 0 || after > 0) {
-        const lost = Math.max(0, before - after);
-        defenderRows += `<tr><td>${escapeHtml(DEFENSES[defId].name)}</td><td>${fmt(before)}</td><td>${fmt(after)}</td><td>${fmt(lost)}</td></tr>`;
-      }
-    }
-    if (!defenderRows) {
-      defenderRows = `<tr><td colspan="4" class="meta">No units present</td></tr>`;
-    }
-
-    const log = report.roundLog ?? [];
-    let roundReplayHtml = "";
-    if (log.length > 0) {
-      const selected = battleReplayRound(report.id) ?? log[0]!.round;
-      const tabs = log
-        .map(
-          (round) =>
-            `<button type="button" class="battle-round-tab${round.round === selected ? " is-active" : ""}" data-battle-round-tab="${round.round}" data-report-id="${escapeAttr(report.id)}" data-testid="battle-round-tab-${round.round}">R${fmt(round.round)}</button>`,
-        )
-        .join("");
-      const panes = log
-        .map((round) => {
-          const active = round.round === selected;
-          const metal = round.debrisThisRound?.metal ?? 0;
-          const crystal = round.debrisThisRound?.crystal ?? 0;
-          const roundDebris =
-            metal + crystal > 0
-              ? `${fmt(metal)} metal, ${fmt(crystal)} crystal`
-              : "none";
-          return `<div class="battle-round" data-battle-round="${round.round}" ${active ? "" : "hidden"} data-testid="battle-round-${round.round}">
-            <p class="meta"><strong>Round ${fmt(round.round)}</strong></p>
-            <p class="meta">Attacker losses: ${unitLossLine(round.attackerLosses.ships)}</p>
-            <p class="meta">Defender losses: ${unitLossLine(round.defenderLosses.ships, round.defenderLosses.defenses)}</p>
-            <p class="meta">Round debris: ${roundDebris}</p>
-          </div>`;
-        })
-        .join("");
-      roundReplayHtml = `<div class="battle-replay" data-battle-report="${escapeAttr(report.id)}" data-testid="battle-replay">
-        <div class="battle-round-tabs" role="tablist">${tabs}</div>
-        ${panes}
-      </div>`;
-    } else {
-      roundReplayHtml = `<p class="hint" data-testid="battle-replay-legacy">Summary only — older reports have no round replay.</p>`;
-    }
+    const defCoords = `<a href="/galaxy?galaxy=${report.targetCoords.galaxy}&amp;system=${report.targetCoords.system}" class="coord-link" data-galaxy-coords="${fmtCoords(report.targetCoords)}">${fmtCoords(report.targetCoords)}</a>`;
 
     const debrisText = resourceNames(report.debrisCreated) || "None";
     const lootText = resourceNames(report.loot) || "None";
@@ -317,37 +291,15 @@ function renderReportSubwindow(view: PlayerView): string {
 
     return `
       <div class="report-subwindow-backdrop">
-        <div class="report-subwindow" data-testid="report-subwindow">
+        <div class="report-subwindow ${pres.className}" data-combat-result="${pres.resultAttr}" data-testid="report-subwindow">
           <div class="report-subwindow-header">
-            <h3 class="report-subwindow-title">Combat Report — ${escapeHtml(report.attackerName)}${atkCoords} vs ${escapeHtml(report.defenderName)}${defCoords}</h3>
+            <h3 class="report-subwindow-title">Combat Report — ${escapeHtml(report.attackerName)} ${atkCoords ? `(${atkCoords})` : ""} vs ${escapeHtml(report.defenderName)} (${defCoords})</h3>
             <button type="button" class="report-subwindow-close ghost" data-close-report data-testid="close-report-window" aria-label="Close">✕</button>
           </div>
           <div class="report-section">
-            <p class="meta"><strong>Outcome:</strong> ${escapeHtml(report.outcome.replace("_", " "))} (${fmt(report.rounds)} round${report.rounds === 1 ? "" : "s"})</p>
-            <p class="meta"><strong>Attacker:</strong> ${escapeHtml(report.attackerName)}${atkCoords}</p>
-            <p class="meta"><strong>Defender:</strong> ${escapeHtml(report.defenderName)}${defCoords}</p>
-          </div>
-          <div class="report-compositions">
-            <div class="report-side">
-              <h4>Attacker Fleet</h4>
-              <table class="report-composition-table">
-                <thead><tr><th>Unit</th><th>Before</th><th>After</th><th>Lost</th></tr></thead>
-                <tbody>${attackerRows}</tbody>
-                <tfoot><tr><td colspan="3"><strong>Total ships lost</strong></td><td><strong>${fmt(attackerTotalShipsLost)}</strong></td></tr></tfoot>
-              </table>
-            </div>
-            <div class="report-side">
-              <h4>Defender Fleet & Defenses</h4>
-              <table class="report-composition-table">
-                <thead><tr><th>Unit</th><th>Before</th><th>After</th><th>Lost</th></tr></thead>
-                <tbody>${defenderRows}</tbody>
-                <tfoot><tr><td colspan="3"><strong>Total ships lost</strong></td><td><strong>${fmt(defenderTotalShipsLost)}</strong></td></tr></tfoot>
-              </table>
-            </div>
-          </div>
-          <div class="report-section">
-            <h4>Rounds Replay</h4>
-            ${roundReplayHtml}
+            <p class="meta"><strong>Result:</strong> ${pres.label} (${escapeHtml(report.outcome.replace("_", " "))})</p>
+            <p class="meta"><strong>Attacker:</strong> ${escapeHtml(report.attackerName)} ${atkCoords ? `(${atkCoords})` : ""} — Total ships lost: ${fmt(loss.attackerShipsLost)} · Points lost: ${fmt(loss.attackerPointsLost)}</p>
+            <p class="meta"><strong>Defender:</strong> ${escapeHtml(report.defenderName)} (${defCoords}) — Total ships lost: ${fmt(loss.defenderShipsLost)} · Points lost: ${fmt(loss.defenderPointsLost)}</p>
           </div>
           <div class="report-section">
             <h4>Debris & Summary</h4>
@@ -355,6 +307,9 @@ function renderReportSubwindow(view: PlayerView): string {
             <p class="meta"><strong>Loot:</strong> ${lootText}</p>
             ${defenseSummaryHtml}
             ${report.summary ? `<p class="meta"><strong>Summary:</strong> ${escapeHtml(report.summary)}</p>` : ""}
+            <div class="battle-report-actions">
+              <button type="button" class="ghost" data-copy-battle-share="${escapeAttr(report.id)}" data-testid="copy-battle-share-${escapeAttr(report.id)}">Copy share</button>
+            </div>
           </div>
         </div>
       </div>`;
@@ -458,16 +413,6 @@ function safeHref(href: string | undefined): string | null {
   return null;
 }
 
-function viewerResult(
-  report: CombatReport,
-  selfId: string,
-): "victory" | "defeat" | "draw" {
-  if (report.outcome === "draw") return "draw";
-  const won =
-    (report.outcome === "attacker_win" && report.attackerPlayerId === selfId) ||
-    (report.outcome === "defender_win" && report.defenderPlayerId === selfId);
-  return won ? "victory" : "defeat";
-}
 
 function combatItems(
   reports: PlayerView["reports"],
@@ -621,7 +566,16 @@ export function messagesPageHtml(
               item.kind === "combat"
                 ? (view.reports ?? []).find((r) => r.id === item.id)
                 : undefined;
-            const extras = report ? combatBattleExtrasHtml(report) : "";
+            let combatClasses = "";
+            let combatAttr = "";
+            let shareBtn = "";
+            if (report) {
+              const res = viewerResult(report, view.player.id);
+              const pres = resultPresentation(res);
+              combatClasses = ` ${pres.className}`;
+              combatAttr = ` data-combat-result="${pres.resultAttr}"`;
+              shareBtn = `<div class="battle-report-actions"><button type="button" class="ghost" data-copy-battle-share="${escapeAttr(report.id)}" data-testid="copy-battle-share-${escapeAttr(report.id)}">Copy share</button></div>`;
+            }
             const spy =
               item.kind === "spy"
                 ? (view.spyReports ?? []).find((r) => r.id === item.id)
@@ -631,7 +585,7 @@ export function messagesPageHtml(
               item.kind === "combat" || item.kind === "spy" || item.kind === "expedition"
                 ? `<button type="button" class="ghost open-report-btn" data-open-report="${escapeAttr(item.kind)}:${escapeAttr(item.id)}" data-testid="open-report-${escapeAttr(item.kind)}-${escapeAttr(item.id)}">Open report</button>`
                 : "";
-            return `<li class="message-row${item.unread ? " message-unread" : ""}" id="msg-${escapeAttr(item.kind)}-${escapeAttr(item.id)}" data-testid="message-${escapeAttr(item.kind)}-${escapeAttr(item.id)}" data-kind="${escapeAttr(item.kind)}" data-bucket="${inboxBucket(item.kind)}"${item.unread ? ' data-unread="1"' : ""}>
+            return `<li class="message-row${item.unread ? " message-unread" : ""}${combatClasses}" id="msg-${escapeAttr(item.kind)}-${escapeAttr(item.id)}" data-testid="message-${escapeAttr(item.kind)}-${escapeAttr(item.id)}" data-kind="${escapeAttr(item.kind)}" data-bucket="${inboxBucket(item.kind)}"${combatAttr}${item.unread ? ' data-unread="1"' : ""}>
               <div class="message-head">
                 <span class="message-kind" data-testid="message-kind">${escapeHtml(kindLabel(item.kind))}</span>
                 <time class="message-when meta" datetime="${escapeAttr(new Date(item.at).toISOString())}">${escapeHtml(fmtWhen(item.at))}</time>
@@ -639,7 +593,7 @@ export function messagesPageHtml(
               ${title}
               <span class="meta message-body">${escapeHtml(item.body)}</span>
               ${openReportBtn}
-              ${extras}
+              ${shareBtn}
               ${spyDetail}
               ${readBtn}
             </li>`;

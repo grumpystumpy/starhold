@@ -82,7 +82,7 @@ export function previewBuildingUpgrade(
     return fail(`${def.name} is maxed at level ${def.maxLevel}.`);
   }
   if (buildingId === "sensorArray" && (planet.buildings.lunarBase ?? 0) < 1) {
-    return fail("Horizon Scanner needs Crater Hab level 1.");
+    return fail("System Scanner needs Crater Hab level 1.");
   }
   if (buildingId === "jumpGate" && (planet.buildings.lunarBase ?? 0) < 1) {
     return fail("Fold Bridge needs Crater Hab level 1.");

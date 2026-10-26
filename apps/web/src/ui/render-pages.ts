@@ -13,6 +13,7 @@ import {
   SHIPS,
   allianceClassBonuses,
   classBonuses,
+  levelBonuses,
   shipClassAllowed,
   fortressRelocateDeutCost,
   fortressRelocateLandingWindow,
@@ -22,7 +23,7 @@ import {
   type ShipId,
 } from "@starhold/game";
 import { SHIP_ART, UI_ART } from "./assets";
-import { fmt, fmtCompact, fmtCoords } from "./format";
+import { fmt, fmtCompact, fmtCoords, fmtCoordsLink } from "./format";
 import { planetDiscHtml } from "./planet-disc";
 import type { NavPage } from "./nav";
 import { classPanelHtml } from "./render-class";
@@ -126,7 +127,7 @@ function overviewPage(view: PlayerView, busy: boolean): string {
           <p class="overview-commander" data-testid="commander-name">${escapeHtml(view.player.name)}</p>
           <p class="active-title" data-testid="active-title"${title ? "" : " hidden"}>${escapeHtml(title)}</p>
           <p class="overview-name" data-testid="overview-planet-name">${escapeHtml(planet.name)}${planet.flags?.mini ? " · Mini" : planet.kind === "moon" ? " · Moon" : ""}</p>
-          <p class="coords">${fmtCoords(planet.coords)}</p>
+          <p class="coords">${fmtCoordsLink(planet.coords)}</p>
           <p class="hint" data-testid="planet-fields">Fields ${fmt(economy.fields.used)} / ${fmt(economy.fields.cap)} · ${fmt(economy.fields.remaining)} free${loomBonus > 0 ? ` · Mantle Loom +${fmt(loomBonus)}` : ""}</p>
           <p class="hint" data-testid="planet-temperature">Temp ${fmt(tempK)} K · solar ×${solarTemp.toFixed(2)}${helio > 0 ? ` · Helio Buoy +${fmt(helio)}` : ""}</p>
         </div>
@@ -273,6 +274,7 @@ function compareDefensesWeakestFirst(a: DefenseId, b: DefenseId): number {
 }
 
 function viewClassMods(view: PlayerView) {
+  const lb = levelBonuses(view.player.level ?? 1);
   const cls = classBonuses(view.player.playerClass?.classId);
   const ally = allianceClassBonuses(view.alliance?.allianceClass ?? null);
   return {
@@ -286,6 +288,8 @@ function viewClassMods(view: PlayerView) {
       },
     },
     shipCostMult: ally.shipCost,
+    shipTimeMult: lb.shipBuild * cls.shipBuildTime * ally.shipTime,
+    defenseTimeMult: lb.shipBuild * cls.defenseBuildTime,
   };
 }
 
@@ -304,6 +308,7 @@ export function shipyardPage(view: PlayerView, busy: boolean): string {
     shipClassAllowed(id, classId),
   );
   const hangarEmpty = SHIP_ORDER.every((id) => (planet.ships[id] ?? 0) <= 0);
+  const mods = viewClassMods(view);
   return `
     <section class="panel" data-testid="hull-bay-panel">
       <h2>Shipyard</h2>
@@ -312,7 +317,7 @@ export function shipyardPage(view: PlayerView, busy: boolean): string {
           ? `<p class="hint" data-testid="shipyard-need-class">Choose a class on Overview to unlock class-exclusive hulls.</p>`
           : ""
       }
-      ${buildable.map((id) => shipRow(id, planet, busy, viewClassMods(view).shipCostMult)).join("")}
+      ${buildable.map((id) => shipRow(id, planet, busy, mods.shipCostMult, mods.shipTimeMult, view.universe.speed)).join("")}
       ${
         shipQueueHtml(planet, now) ||
         `<p class="hint">Raise the Shipyard facility to unlock hulls.</p>`
@@ -344,10 +349,11 @@ export function shipyardPage(view: PlayerView, busy: boolean): string {
 
 export function defensesPage(view: PlayerView, busy: boolean): string {
   const { planet, now } = view;
+  const mods = viewClassMods(view);
   return `
     <section class="panel" data-testid="defenses-panel">
       <h2>Defenses</h2>
-      ${WEAKEST_FIRST_DEFENSES.map((id) => defenseRow(id, planet, busy)).join("")}
+      ${WEAKEST_FIRST_DEFENSES.map((id) => defenseRow(id, planet, busy, mods.defenseTimeMult, view.universe.speed)).join("")}
       ${
         defenseQueueHtml(planet, now) ||
         `<p class="hint">Static guns fight with your hangar on raids.</p>`
@@ -393,7 +399,7 @@ function highscorePage(view: PlayerView): string {
         ${(view.highscores ?? [])
           .map(
             (h) =>
-              `<li data-testid="highscore-${h.rank}" data-player-id="${escapeAttr(h.playerId)}" data-home-planet="${escapeAttr(h.homePlanetId)}"><span class="row-with-thumb"><span class="hs-rank">#${fmt(h.rank)}</span>${planetDiscHtml({ src: h.artThumbUrl, artId: h.artId, size: 32 })}${h.allianceTag ? `[${escapeHtml(h.allianceTag)}] ` : ""}${escapeHtml(h.name)}${h.playerId === view.player.id ? " (you)" : ""}</span><span>Home ${escapeHtml(h.planetName || "world")} · ${fmtCoords(h.coords)} · ${fmtCompact(h.points)} pts · Lv ${fmt(h.level ?? 1)} · ${fmt(h.xpTotal ?? 0)} XP</span></li>`,
+              `<li data-testid="highscore-${h.rank}" data-player-id="${escapeAttr(h.playerId)}" data-home-planet="${escapeAttr(h.homePlanetId)}"><span class="row-with-thumb"><span class="hs-rank">#${fmt(h.rank)}</span>${planetDiscHtml({ src: h.artThumbUrl, artId: h.artId, size: 32 })}${h.allianceTag ? `[${escapeHtml(h.allianceTag)}] ` : ""}${escapeHtml(h.name)}${h.playerId === view.player.id ? " (you)" : ""}</span><span>Home ${escapeHtml(h.planetName || "world")} · ${fmtCoordsLink(h.coords)} · ${fmtCompact(h.points)} pts · Lv ${fmt(h.level ?? 1)} · ${fmt(h.xpTotal ?? 0)} XP</span></li>`,
           )
           .join("")}
       </ol>
@@ -405,7 +411,7 @@ function highscorePage(view: PlayerView): string {
         ${view.roster
           .map(
             (r) =>
-              `<li data-home-planet="${escapeAttr(r.planetId)}"><span class="row-with-thumb">${planetDiscHtml({ src: r.artThumbUrl, artId: r.artId, size: 32 })}${r.allianceTag ? `[${escapeHtml(r.allianceTag)}] ` : ""}${escapeHtml(r.name)}${r.id === view.player.id ? " (you)" : ""}</span><span>Home ${escapeHtml(r.planetName || "world")} · ${fmtCoords(r.coords)} · ${fmtCompact(r.pointsHint)} pts</span></li>`,
+              `<li data-home-planet="${escapeAttr(r.planetId)}"><span class="row-with-thumb">${planetDiscHtml({ src: r.artThumbUrl, artId: r.artId, size: 32 })}${r.allianceTag ? `[${escapeHtml(r.allianceTag)}] ` : ""}${escapeHtml(r.name)}${r.id === view.player.id ? " (you)" : ""}</span><span>Home ${escapeHtml(r.planetName || "world")} · ${fmtCoordsLink(r.coords)} · ${fmtCompact(r.pointsHint)} pts</span></li>`,
           )
           .join("")}
       </ul>

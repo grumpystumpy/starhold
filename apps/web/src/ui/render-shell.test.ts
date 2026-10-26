@@ -19,3 +19,16 @@ describe("newbie bonus header badge", () => {
     assert.doesNotMatch(html(now + 2), /data-testid="newbie-bonus-badge"/);
   });
 });
+
+describe("planet dropdown and coords link", () => {
+  it("renders top-left colony dropdown and clickable coordinate link", () => {
+    const now = 100_000_000;
+    const universe = createUniverse("Header", 1);
+    const { player } = joinUniverse(universe, "Commander", now);
+    const view = playerView(universe, player.id, now);
+    const html = shellHtml(view, { error: null, notice: null, busy: false }, "overview", "<div>Main</div>");
+    assert.match(html, /data-testid="planet-dropdown-wrap"/);
+    assert.match(html, /data-testid="planet-dropdown"/);
+    assert.match(html, /class="coord-link"/);
+  });
+});

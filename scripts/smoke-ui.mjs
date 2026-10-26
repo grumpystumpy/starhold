@@ -21,6 +21,20 @@ import { fleetToStep2 } from "./lib/fleet-two-step.mjs";
 const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:5173";
 const API = process.env.STARHOLD_API ?? "http://127.0.0.1:3001";
 
+function parseCompactNumber(text) {
+  if (!text) return 0;
+  const match = String(text).replace(/,/g, "").match(/([0-9.,]+)\s*([kMBT])?/i);
+  if (!match) return 0;
+  const num = parseFloat(match[1]);
+  if (isNaN(num)) return 0;
+  const unit = match[2]?.toUpperCase();
+  if (unit === "K") return num * 1e3;
+  if (unit === "M") return num * 1e6;
+  if (unit === "B") return num * 1e9;
+  if (unit === "T") return num * 1e12;
+  return num;
+}
+
 async function waitHealthy(ms = 30_000) {
   const activeClock = createActiveWaitClock();
   while (activeClock.elapsed() < ms) {
@@ -596,10 +610,23 @@ async function uiSmoke() {
     page,
     "scout build ready",
     () => {
+      const parseCompact = (text) => {
+        if (!text) return 0;
+        const match = String(text).replace(/,/g, "").match(/([0-9.,]+)\s*([kMBT])?/i);
+        if (!match) return 0;
+        const num = parseFloat(match[1]);
+        if (isNaN(num)) return 0;
+        const unit = match[2]?.toUpperCase();
+        if (unit === "K") return num * 1e3;
+        if (unit === "M") return num * 1e6;
+        if (unit === "B") return num * 1e9;
+        if (unit === "T") return num * 1e12;
+        return num;
+      };
       const btn = document.querySelector('[data-testid="build-scout"]');
       const metalText =
         document.querySelector('[data-testid="res-metal"] .value')?.textContent ?? "0";
-      const metal = Number(String(metalText).replace(/,/g, ""));
+      const metal = parseCompact(metalText);
       const label = btn?.textContent ?? "";
       const queue = Boolean(document.querySelector('[data-testid="build-queue"]'));
       const shipQ = Boolean(document.querySelector('[data-testid="ship-queue"]'));
@@ -626,10 +653,23 @@ async function uiSmoke() {
   await page.click('[data-testid="build-scout"]');
   await page.waitForFunction(
     () => {
+      const parseCompact = (text) => {
+        if (!text) return 0;
+        const match = String(text).replace(/,/g, "").match(/([0-9.,]+)\s*([kMBT])?/i);
+        if (!match) return 0;
+        const num = parseFloat(match[1]);
+        if (isNaN(num)) return 0;
+        const unit = match[2]?.toUpperCase();
+        if (unit === "K") return num * 1e3;
+        if (unit === "M") return num * 1e6;
+        if (unit === "B") return num * 1e9;
+        if (unit === "T") return num * 1e12;
+        return num;
+      };
       const hangar = document.querySelector('[data-testid="hangar-count-scout"]');
       const q = document.querySelector('[data-testid="ship-queue"]');
       const ok = document.querySelector('[data-testid="flash-ok"]');
-      const n = Number(String(hangar?.textContent ?? "0").replace(/,/g, ""));
+      const n = parseCompact(hangar?.textContent ?? "0");
       return n >= 1 || Boolean(q) || Boolean(ok?.textContent?.match(/scout|Hangar|Queued/i));
     },
     undefined,
@@ -640,8 +680,21 @@ async function uiSmoke() {
     page,
     "scout hangar",
     () => {
+      const parseCompact = (text) => {
+        if (!text) return 0;
+        const match = String(text).replace(/,/g, "").match(/([0-9.,]+)\s*([kMBT])?/i);
+        if (!match) return 0;
+        const num = parseFloat(match[1]);
+        if (isNaN(num)) return 0;
+        const unit = match[2]?.toUpperCase();
+        if (unit === "K") return num * 1e3;
+        if (unit === "M") return num * 1e6;
+        if (unit === "B") return num * 1e9;
+        if (unit === "T") return num * 1e12;
+        return num;
+      };
       const hangar = document.querySelector('[data-testid="hangar-count-scout"]');
-      const n = Number(String(hangar?.textContent ?? "0").replace(/,/g, ""));
+      const n = parseCompact(hangar?.textContent ?? "0");
       return n >= 1 ? true : { hangar: hangar?.textContent ?? null };
     },
     30_000,
@@ -653,7 +706,7 @@ async function uiSmoke() {
     (await page.textContent('[data-testid="hangar-count-scout"]')) ?? "0";
   const noticeOrHangar =
     (await page.locator('[data-testid="flash-ok"]').count()) >= 1 ||
-    Number(String(hangarCountText).replace(/,/g, "")) >= 1;
+    parseCompactNumber(hangarCountText) >= 1;
   if (!noticeOrHangar) throw new Error("lost build feedback after poll");
   logs.push("build-feedback-ok");
 
@@ -845,8 +898,8 @@ async function authAndGoalsSmoke() {
   if (progress?.trim() !== "0 / 3") {
     throw new Error(`daily pirate progress: ${progress}`);
   }
-  if (!reward?.includes("2,000") || !weeklyReward?.includes("12,000")) {
-    throw new Error(`goal rewards missing commas: ${reward} | ${weeklyReward}`);
+  if (!reward?.includes("2k") || !weeklyReward?.includes("12k")) {
+    throw new Error(`goal rewards missing compact format: ${reward} | ${weeklyReward}`);
   }
   if (panel.includes("_")) {
     throw new Error(`underscore in goals UI: ${panel}`);

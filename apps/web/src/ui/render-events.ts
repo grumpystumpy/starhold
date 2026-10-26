@@ -54,25 +54,46 @@ function originCoords(
   return "—";
 }
 
+function renderCoordLink(c: { galaxy: number; system: number; slot: number } | string): string {
+  if (typeof c === "string") return escapeHtml(c);
+  const formatted = fmtCoords(c);
+  return `<a href="/galaxy?galaxy=${c.galaxy}&amp;system=${c.system}" class="coord-link" data-galaxy-coords="${formatted}">${formatted}</a>`;
+}
+
 export function eventsBannerHtml(view: PlayerView, now = Date.now()): string {
   const rows = eventRows(view);
   if (rows.length === 0) return "";
-  return `<section class="events-banner" aria-label="Fleet events"><h2>Fleet events</h2><ul>${rows
-    .map(({ fleet, hostile }) => {
-      const presentation = eventPresentation(fleet, hostile);
-      const from = originCoords(view, fleet, hostile);
-      const to = fleet.mission === "jump" ? "—" : fmtCoords(fleet.targetCoords);
-      const returning = !hostile && fleet.phase === "returning";
-      const routeFrom = returning ? to : from;
-      const routeTo = returning ? from : to;
-      const arrival = new Date(fleet.arrivesAt).toLocaleTimeString(undefined, {
-        hour: "numeric",
-        minute: "2-digit",
-      });
-      const id = escapeHtml(`${hostile ? "hostile-" : ""}${fleet.id}`);
-      return `<li class="event-row ${presentation.className}" data-event-id="${id}" data-event-arrives-at="${fleet.arrivesAt}"><span class="event-kind">${presentation.label}</span><span class="event-route">${escapeHtml(missionLabel(fleet.mission))} · ${escapeHtml(routeFrom)} → ${escapeHtml(routeTo)}</span><span class="event-arrival"><time>${escapeHtml(arrival)}</time> · <span data-event-countdown>${formatEventCountdown(fleet.arrivesAt, now)}</span></span></li>`;
-    })
-    .join("")}</ul></section>`;
+
+  const renderRow = ({ fleet, hostile }: { fleet: FleetMission; hostile: boolean }, isSoonest = false) => {
+    const presentation = eventPresentation(fleet, hostile);
+    const fromStr = originCoords(view, fleet, hostile);
+    const toStr = fleet.mission === "jump" ? "—" : fmtCoords(fleet.targetCoords);
+    const returning = !hostile && fleet.phase === "returning";
+
+    const originC = view.ownedPlanets.find((planet) => planet.id === fleet.originPlanetId)?.coords ?? (hostile ? view.roster.find((entry) => entry.planetId === fleet.originPlanetId)?.coords : null);
+    const targetC = fleet.mission === "jump" ? "—" : fleet.targetCoords;
+
+    const routeFrom = returning ? (targetC === "—" ? "—" : renderCoordLink(targetC)) : (originC ? renderCoordLink(originC) : escapeHtml(fromStr));
+    const routeTo = returning ? (originC ? renderCoordLink(originC) : escapeHtml(fromStr)) : (targetC === "—" ? "—" : renderCoordLink(targetC));
+
+    const arrival = new Date(fleet.arrivesAt).toLocaleTimeString(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+    const id = escapeHtml(`${hostile ? "hostile-" : ""}${fleet.id}`);
+    const testid = isSoonest ? ' data-testid="event-soonest"' : "";
+    const tag = isSoonest ? "div" : "li";
+
+    return `<${tag} class="event-row ${presentation.className}" data-event-id="${id}" data-event-arrives-at="${fleet.arrivesAt}"${testid}><span class="event-kind">${presentation.label}</span><span class="event-route">${escapeHtml(missionLabel(fleet.mission))} · ${routeFrom} → ${routeTo}</span><span class="event-arrival"><time>${escapeHtml(arrival)}</time> · <span data-event-countdown>${formatEventCountdown(fleet.arrivesAt, now)}</span></span></${tag}>`;
+  };
+
+  const soonestHtml = renderRow(rows[0]!, true);
+  const remainingRows = rows.slice(1);
+  const remainingHtml = remainingRows.length > 0
+    ? `<ul class="events-dropdown-list" data-testid="events-dropdown-list">${remainingRows.map((r) => renderRow(r, false)).join("")}</ul>`
+    : `<ul class="events-dropdown-list" data-testid="events-dropdown-list"></ul>`;
+
+  return `<section class="events-banner" aria-label="Fleet events" data-testid="events-banner"><details class="events-dropdown" data-testid="events-dropdown"><summary class="events-dropdown-summary" data-testid="events-dropdown-summary"><h2>Fleet events (${rows.length})</h2>${soonestHtml}</summary>${remainingHtml}</details></section>`;
 }
 
 let timer: number | undefined;

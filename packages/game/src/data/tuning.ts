@@ -885,9 +885,9 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   },
   sensorArray: {
     id: "sensorArray",
-    name: "Horizon Scanner",
+    name: "System Scanner",
     description:
-      "Scans nearby systems for outbound fleets headed this way (moon only). Range grows with level.",
+      "Scans nearby systems for outbound fleets targeting planets and mini planets (cannot scan moons; moon only). Range grows with level.",
     baseCost: { metal: 4000, crystal: 8000, deuterium: 2000 },
     costGrowth: 2,
     baseBuildSeconds: 40,

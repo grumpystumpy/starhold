@@ -10,6 +10,7 @@ import {
   type ResearchId,
   type ShipId,
 } from "@starhold/game";
+import { fmt } from "./ui/format";
 import {
   clearFlash,
   closestActionEl,
@@ -203,6 +204,21 @@ export function bindClickHandlers(): void {
       if (closestActionEl(target, "[data-event-read-all]")) {
         ev.preventDefault();
         void doMarkEventsRead();
+        return;
+      }
+
+      const coordLink = closestActionEl(target, "[data-galaxy-coords]");
+      if (coordLink) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const raw = coordLink.getAttribute("data-galaxy-coords") ?? "";
+        const [g, s] = raw.split(":").map((part) => Number(part));
+        if (g && s && Number.isInteger(g) && Number.isInteger(s)) {
+          session.galaxyGalaxy = g;
+          session.galaxySystem = s;
+          navigateTo("galaxy");
+          void doGalaxyJump(g, s);
+        }
         return;
       }
 
@@ -715,6 +731,10 @@ export function bindClickHandlers(): void {
       if (page) navigateTo(page);
       return;
     }
+    if (el instanceof HTMLSelectElement && el.matches("[data-planet-select]")) {
+      if (el.value) void doSelectPlanet(el.value);
+      return;
+    }
     if (
       el instanceof HTMLSelectElement &&
       el.matches("[data-alliance-join-mode-select]")
@@ -958,7 +978,7 @@ export function bindClickHandlers(): void {
       );
       const win = fortressRelocateLandingWindow(g, s);
       const cost = fortressRelocateDeutCost(session.view.planet.coords, g, s);
-      hint.innerHTML = `Aim a system in an allowed galaxy. Landing window for current aim: <strong>${win.galaxy}:${win.systemMin}–${win.galaxy}:${win.systemMax}</strong> (±${MINI_FORTRESS_RELOCATE_ACCURACY} systems). Free mini slot on landing. Est. cost at current aim: ${cost} deut.`;
+      hint.innerHTML = `Aim a system in an allowed galaxy. Landing window for current aim: <strong>${win.galaxy}:${win.systemMin}–${win.galaxy}:${win.systemMax}</strong> (±${MINI_FORTRESS_RELOCATE_ACCURACY} systems). Free mini slot on landing. Est. cost at current aim: ${fmt(cost)} deut.`;
     }
   });
 }

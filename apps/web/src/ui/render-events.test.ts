@@ -78,13 +78,19 @@ describe("events banner", () => {
       1_700_000_000_000,
     );
 
-    assert.match(html, /1:2:3 → 1:4:8/);
+    assert.match(html, /data-testid="events-banner"/);
+    assert.match(html, /data-testid="events-dropdown"/);
+    assert.match(html, /data-testid="events-dropdown-summary"/);
+    assert.match(html, /data-testid="event-soonest"/);
+    assert.match(html, /data-testid="events-dropdown-list"/);
+    assert.match(html, /coord-link/);
+    assert.match(html, /1:2:3/);
+    assert.match(html, /1:4:8/);
     assert.match(html, /event-outgoing/);
-    assert.match(html, /1:4:8 → 1:2:3/);
     assert.match(html, /event-returning/);
     assert.match(html, /Raid/);
     assert.match(html, /data-event-countdown/);
-    assert.match(html, /Jump · 1:2:3 → —/);
+    assert.match(html, /Jump/);
     assert.doesNotMatch(html, /1:9:0/);
   });
 

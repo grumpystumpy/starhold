@@ -172,17 +172,10 @@ async function main() {
     .getByTestId(`message-combat-${report.id}`)
     .waitFor({ timeout: 10_000 });
   await page
-    .getByTestId(`battle-details-${report.id}`)
-    .locator("summary")
+    .getByTestId(`open-report-combat-${report.id}`)
     .click();
-  await page.getByTestId("battle-replay").waitFor({ timeout: 5_000 });
-  await page.getByTestId("battle-round-1").waitFor({ timeout: 5_000 });
-  if (report.roundLog.length > 1) {
-    const next = report.roundLog[1].round;
-    await page.getByTestId(`battle-round-tab-${next}`).click();
-    await page.getByTestId(`battle-round-${next}`).waitFor({ timeout: 5_000 });
-  }
-  logs.push("replay_ui_ok");
+  await page.getByTestId("report-subwindow").waitFor({ timeout: 5_000 });
+  logs.push("report_summary_ui_ok");
 
   await page.getByTestId(`copy-battle-share-${report.id}`).click();
   await page.getByTestId("flash-ok").waitFor({ timeout: 10_000 });

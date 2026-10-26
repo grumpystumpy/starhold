@@ -24,7 +24,7 @@ function resourcesPanel(view: PlayerView, busy: boolean): string {
 
   return `<section class="shop-resource-trade" data-testid="shop-resources">
     <h3>Resources</h3>
-    <p>Trade 1,500 Starshards for 3,000 metal, 2,000 crystal, and 1,000 deuterium, or trade that resource bundle back for 1,500 Starshards.</p>
+    <p>Trade ${fmt(1500)} Starshards for ${fmt(bundle.metal)} metal, ${fmt(bundle.crystal)} crystal, and ${fmt(bundle.deuterium)} deuterium, or trade that resource bundle back for ${fmt(1500)} Starshards.</p>
     <ul class="shop-resource-balances">
       <li>Metal: ${fmt(resources.metal)} / ${fmt(storage.metal)}</li>
       <li>Crystal: ${fmt(resources.crystal)} / ${fmt(storage.crystal)}</li>
@@ -32,8 +32,8 @@ function resourcesPanel(view: PlayerView, busy: boolean): string {
       <li>Starshards: ${fmt(balance)}</li>
     </ul>
     <div class="shop-trade-actions">
-      <button type="button" data-trade-resources="buy" data-testid="trade-buy-resources" ${busy || !canBuy ? "disabled" : ""}>Buy resource bundle · 1,500 ✦</button>
-      <button type="button" data-trade-resources="sell" data-testid="trade-sell-resources" ${busy || !canSell ? "disabled" : ""}>Sell resource bundle · +1,500 ✦</button>
+      <button type="button" data-trade-resources="buy" data-testid="trade-buy-resources" ${busy || !canBuy ? "disabled" : ""}>Buy resource bundle · ${fmt(1500)} ✦</button>
+      <button type="button" data-trade-resources="sell" data-testid="trade-sell-resources" ${busy || !canSell ? "disabled" : ""}>Sell resource bundle · +${fmt(1500)} ✦</button>
     </div>
   </section>`;
 }
@@ -103,7 +103,7 @@ function itemsPanel(view: PlayerView, busy: boolean): string {
       let activeBadge = "";
       if (activeBuff) {
         const remMinutes = Math.ceil(activeBuff.remainingMs / (60 * 1000));
-        activeBadge = `<span class="shop-buff-active">Active (${remMinutes}m left)</span>`;
+        activeBadge = `<span class="shop-buff-active">Active (${fmt(remMinutes)}m left)</span>`;
       }
 
       const disabled =

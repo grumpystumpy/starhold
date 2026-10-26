@@ -1,6 +1,7 @@
 import {
   BUILDINGS,
   buildingUpgradeSeconds,
+  levelBonuses,
   previewBuildingUpgrade,
   storageCap,
   type BuildingId,
@@ -249,9 +250,23 @@ export function buildingRow(
   const preview = previewBuildingUpgrade(planet, player, id, now, mods);
   const level = planet.buildings[id] ?? 0;
   const cost = preview.cost;
-  const secs = Math.ceil(
-    (buildingUpgradeSeconds(id, preview.current) * (mods?.timeMult ?? 1)) /
-      speed,
+  const naniteLevel =
+    id === "chronoLathe"
+      ? 0
+      : Math.max(0, Math.floor(planet.buildings.chronoLathe ?? 0));
+  const rigLevel =
+    id === "chronoLathe" || id === "rigFoundry"
+      ? 0
+      : Math.max(0, Math.floor(planet.buildings.rigFoundry ?? 0));
+  const lb = levelBonuses(player.level ?? 1);
+  const secs = Math.max(
+    1,
+    Math.ceil(
+      (buildingUpgradeSeconds(id, preview.current, naniteLevel, rigLevel) *
+        lb.buildTime *
+        (mods?.timeMult ?? 1)) /
+        speed,
+    ),
   );
   // Disable only when the server would reject. Client busy stays clickable
   // so a second tap surfaces "Still applying…" instead of a silent no-op.

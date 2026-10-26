@@ -14,5 +14,9 @@ describe("render-shop items tab", () => {
     assert.match(html, /Planet Field Expansion S/);
     assert.match(html, /Fleet Logistics License L/);
     assert.match(html, /data-buy-shop-item="item_planet_fields_s"/);
+
+    const resHtml = shopPageHtml(view, false, "resources");
+    assert.match(resHtml, /1\.5k/);
+    assert.match(resHtml, /3k metal, 2k crystal, and 1k deuterium/);
   });
 });

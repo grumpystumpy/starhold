@@ -1,33 +1,34 @@
 import type { Resources } from "@starhold/game";
 
-/** Shared display formatter — always thousands separators (2,000 not 2000). */
+/** Shared display formatter — universal floored compact number formatting. */
 export function fmt(n: number): string {
   if (!Number.isFinite(n)) return "—";
-  return Math.floor(n).toLocaleString("en-US");
+  const sign = n < 0 ? "-" : "";
+  const abs = Math.floor(Math.abs(n));
+  if (abs < 1000) return `${sign}${abs}`;
+
+  const tiers: Array<[number, string]> = [
+    [1_000_000_000_000, "T"],
+    [1_000_000_000, "B"],
+    [1_000_000, "M"],
+    [1_000, "k"],
+  ];
+  for (const [base, suffix] of tiers) {
+    if (abs >= base) {
+      const tenths = Math.floor(abs / (base / 10));
+      const whole = Math.floor(tenths / 10);
+      const frac = tenths % 10;
+      return frac === 0
+        ? `${sign}${whole}${suffix}`
+        : `${sign}${whole}.${frac}${suffix}`;
+    }
+  }
+  return `${sign}${abs}`;
 }
 
-/** Compact point totals — 999, 1.3K, 1.2M, 3.4B. */
+/** Compact point totals — alias to fmt. */
 export function fmtCompact(n: number): string {
-  if (!Number.isFinite(n)) return "—";
-  const sign = n < 0 ? "-" : "";
-  const abs = Math.abs(n);
-  if (abs < 1000) return `${sign}${Math.floor(abs)}`;
-
-  const units = ["", "K", "M", "B", "T"];
-  let unit = 0;
-  let scaled = abs;
-  while (scaled >= 1000 && unit < units.length - 1) {
-    scaled /= 1000;
-    unit += 1;
-  }
-  let rounded = Math.round(scaled * 10) / 10;
-  if (rounded >= 1000 && unit < units.length - 1) {
-    scaled /= 1000;
-    unit += 1;
-    rounded = Math.round(scaled * 10) / 10;
-  }
-  const text = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
-  return `${sign}${text}${units[unit]}`;
+  return fmt(n);
 }
 
 export function fmtCost(cost: Resources): string {
@@ -40,6 +41,15 @@ export function fmtCost(cost: Resources): string {
 
 export function fmtCoords(c: { galaxy: number; system: number; slot: number }): string {
   return `${c.galaxy}:${c.system}:${c.slot}`;
+}
+
+export function fmtCoordsLink(c: {
+  galaxy: number;
+  system: number;
+  slot: number;
+}): string {
+  const text = fmtCoords(c);
+  return `<a href="/galaxy?galaxy=${c.galaxy}&amp;system=${c.system}" class="coord-link" data-galaxy-coords="${text}" data-testid="coord-link-${c.galaxy}-${c.system}-${c.slot}">${text}</a>`;
 }
 
 export function remainingSeconds(completesAt: number, now: number): number {

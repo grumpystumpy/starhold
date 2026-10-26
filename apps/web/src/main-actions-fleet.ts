@@ -29,6 +29,7 @@ import {
   resetFleetComposer,
 } from "./ui/render-fleets-draft";
 import { navigateTo } from "./ui/router";
+import { fmt } from "./ui/format";
 
 export const GALAXY_SPY_PROBES = 1;
 
@@ -53,7 +54,7 @@ function intentMission(intent: FleetPresetIntent): MissionType {
 function fleetNotice(view: NonNullable<typeof session.view>, mission: MissionType): string {
   const live = view.fleets?.[0];
   return live
-    ? `Fleet ${live.mission} launched · ETA ${Math.ceil((live.arrivesAt - view.now) / 1000)}s.`
+    ? `Fleet ${live.mission} launched · ETA ${fmt(Math.ceil((live.arrivesAt - view.now) / 1000))}s.`
     : `Fleet ${mission} launched.`;
 }
 
@@ -63,7 +64,7 @@ function expeditionNotice(view: NonNullable<typeof session.view>, before: number
     view.fleets.filter((f) => f.mission === "expedition").length - before,
   );
   return launched > 0
-    ? `Sent ${launched} expedition${launched === 1 ? "" : "s"} (Expedition preset).`
+    ? `Sent ${fmt(launched)} expedition${launched === 1 ? "" : "s"} (Expedition preset).`
     : "No new expeditions launched.";
 }
 
@@ -73,7 +74,7 @@ function scanNotice(view: NonNullable<typeof session.view>, before: number): str
     view.fleets.filter((f) => f.mission === "espionage").length - before,
   );
   return launched > 0
-    ? `Scanning ${launched} owned planet${launched === 1 ? "" : "s"} with Whisper Probes.`
+    ? `Scanning ${fmt(launched)} owned planet${launched === 1 ? "" : "s"} with Whisper Probes.`
     : "No scans launched.";
 }
 

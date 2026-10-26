@@ -136,7 +136,7 @@ describe("Shipyard and Defenses owned count and weakest-first ordering", () => {
       assert.match(scoutHtml, /Owned 42/);
 
       const haulerHtml = shipRow("hauler", pl, false);
-      assert.match(haulerHtml, /Owned 1,500/);
+      assert.match(haulerHtml, /Owned 1\.5k/);
     });
 
     it("handles missing ships map gracefully", () => {
@@ -171,8 +171,8 @@ describe("Shipyard and Defenses owned count and weakest-first ordering", () => {
       assert.doesNotMatch(needleHtml, />×15</);
 
       const laserHtml = defenseRow("laserBattery", pl, false);
-      assert.match(laserHtml, /Owned 2,500/);
-      assert.doesNotMatch(laserHtml, />×2,500</);
+      assert.match(laserHtml, /Owned 2\.5k/);
+      assert.doesNotMatch(laserHtml, />×2\.5k</);
     });
 
     it("needleTurret displays 'Rocket Launcher' and an old save with needleTurret count N still has N", () => {

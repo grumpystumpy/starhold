@@ -72,6 +72,28 @@
   outline-offset: 2px;
 }
 
+.events-dropdown summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.events-dropdown summary::-webkit-details-marker {
+  display: none;
+}
+
+.events-dropdown-summary h2 {
+  margin: 0 0 0.25rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.events-dropdown-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
 .resource-bar {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));

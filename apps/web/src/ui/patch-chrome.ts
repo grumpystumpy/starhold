@@ -40,7 +40,47 @@ export function patchLiveChrome(
       Number(PRODUCTION_MULT) > 1
         ? ` · income ×${PRODUCTION_MULT} (test)`
         : "";
-    coords.textContent = `${planet.name}${planet.kind === "moon" ? " · Moon" : ""}${planet.flags?.mini ? " · Mini" : ""} · ${fmtCoords(planet.coords)} · ${universe.name} @ ${universe.speed}×${income}`;
+    const coordLink = `<a href="/galaxy?galaxy=${planet.coords.galaxy}&amp;system=${planet.coords.system}" class="coord-link" data-galaxy-coords="${fmtCoords(planet.coords)}">${fmtCoords(planet.coords)}</a>`;
+    coords.innerHTML = `${escapeHtml(planet.name)}${planet.kind === "moon" ? " · Moon" : ""}${planet.flags?.mini ? " · Mini" : ""} · ${coordLink} · ${escapeHtml(universe.name)} @ ${universe.speed}×${income}`;
+  }
+
+  const select = root.querySelector<HTMLSelectElement>('[data-testid="planet-dropdown"]');
+  if (select) {
+    select.disabled = state.busy;
+    const bodies =
+      view.ownedPlanets.length > 0
+        ? view.ownedPlanets
+        : [
+            {
+              id: planet.id,
+              name: planet.name,
+              coords: planet.coords,
+              isHome: true,
+              isActive: true,
+              isMoon: planet.kind === "moon",
+              isMini: Boolean(planet.flags?.mini),
+            },
+          ];
+    select.value = planet.id;
+    const options = select.querySelectorAll("option");
+    if (options.length === bodies.length) {
+      bodies.forEach((p, i) => {
+        const opt = options[i];
+        if (opt) {
+          opt.value = p.id;
+          opt.textContent = `${p.name}${p.isMini ? " · Mini" : p.isMoon ? " · Moon" : ""}${p.isHome ? " ★" : ""} (${fmtCoords(p.coords)})`;
+          opt.selected = p.isActive || p.id === planet.id;
+        }
+      });
+    } else {
+      select.innerHTML = bodies
+        .map((p) => {
+          const label = `${p.name}${p.isMini ? " · Mini" : p.isMoon ? " · Moon" : ""}${p.isHome ? " ★" : ""} (${fmtCoords(p.coords)})`;
+          const selected = p.isActive || p.id === planet.id ? " selected" : "";
+          return `<option value="${escapeHtml(p.id)}"${selected}>${escapeHtml(label)}</option>`;
+        })
+        .join("");
+    }
   }
 
   const topArt = root.querySelector<HTMLImageElement>(".topbar-brand .planet-disc");
