@@ -700,6 +700,8 @@ export interface PlayerView {
   officerLevels: Partial<Record<OfficerId, number>>;
   /** Number of hires already completed, used to quote the next hire/renewal. */
   officerRenewals: Partial<Record<OfficerId, number>>;
+  /** Combined research build time multiplier (level, class, astrolabe, relic, boosts). */
+  researchTimeMult?: number;
   /** Officer catalog for UI. */
   officerCatalog: OfficerDef[];
   /** Skill tree catalog for UI. */

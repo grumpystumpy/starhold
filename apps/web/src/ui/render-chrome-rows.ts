@@ -4,10 +4,15 @@ import {
   RESEARCH_ORDER,
   SHIPS,
   canAfford,
+  classBonuses,
   defenseCost,
+  defenseUnitBuildSeconds,
+  levelBonuses,
+  playerBoosts,
   previewResearchUpgrade,
   researchUpgradeSeconds,
   scaleResourceCost,
+  shipUnitBuildSeconds,
   type DefenseId,
   type PlayerView,
   type ResearchId,
@@ -26,6 +31,8 @@ export function shipRow(
   planet: PlayerView["planet"],
   _busy: boolean,
   costMult = 1,
+  timeMult = 1,
+  speed = 1,
 ): string {
   const def = SHIPS[id];
   const count = planet.ships?.[id] ?? 0;
@@ -46,9 +53,23 @@ export function shipRow(
       : !affordable
         ? "Not enough resources."
         : null;
+
+  const naniteLevel = Math.max(0, Math.floor(planet.buildings.chronoLathe ?? 0));
+  const rigLevel = Math.max(0, Math.floor(planet.buildings.rigFoundry ?? 0));
+  const anomalyLevel = Math.max(0, Math.floor(planet.buildings.anomalyForge ?? 0));
+  const unitSecs = Math.max(
+    1,
+    Math.ceil(
+      (shipUnitBuildSeconds(id, Math.max(1, yard), naniteLevel, rigLevel, anomalyLevel) *
+        timeMult) /
+        Math.max(0.01, speed),
+    ),
+  );
+
   const tip = costTooltip({
     action: `Build ${def.name}`,
     cost,
+    timeSecs: unitSecs,
     detail: def.description,
     requires: [
       `Shipyard L${fmt(def.shipyardLevel)}+`,
@@ -64,7 +85,7 @@ export function shipRow(
       <div>
         <h3>${escapeHtml(def.name)} <span class="meta">Owned ${fmt(count)}</span> ${tip.html}</h3>
         <p>${escapeHtml(def.description)}</p>
-        <div class="meta">${fmtCost(cost)} each · yard L${fmt(def.shipyardLevel)}+ · cargo ${fmt(def.cargo)} · atk ${fmt(def.attack)} · Shield ${fmt(def.shield)} · Armor ${fmt(def.armor)} · Hull ${fmt(def.hull)}${
+        <div class="meta">${fmtCost(cost)} each · ${fmtEta(unitSecs)} · yard L${fmt(def.shipyardLevel)}+ · cargo ${fmt(def.cargo)} · atk ${fmt(def.attack)} · Shield ${fmt(def.shield)} · Armor ${fmt(def.armor)} · Hull ${fmt(def.hull)}${
           locked ? ` · ${escapeHtml(lockMsg)}` : ""
         }</div>
       </div>
@@ -80,6 +101,8 @@ export function defenseRow(
   id: DefenseId,
   planet: PlayerView["planet"],
   _busy: boolean,
+  timeMult = 1,
+  speed = 1,
 ): string {
   const def = DEFENSES[id];
   const have = planet.defenses?.[id] ?? 0;
@@ -99,9 +122,22 @@ export function defenseRow(
       : !affordable
         ? "Not enough resources."
         : null;
+
+  const naniteLevel = Math.max(0, Math.floor(planet.buildings.chronoLathe ?? 0));
+  const rigLevel = Math.max(0, Math.floor(planet.buildings.rigFoundry ?? 0));
+  const unitSecs = Math.max(
+    1,
+    Math.ceil(
+      (defenseUnitBuildSeconds(id, Math.max(1, yard), naniteLevel, rigLevel) *
+        timeMult) /
+        Math.max(0.01, speed),
+    ),
+  );
+
   const tip = costTooltip({
     action: `Build ${def.name}`,
     cost,
+    timeSecs: unitSecs,
     detail: def.description,
     requires: [
       `Shipyard L${fmt(def.shipyardLevel)}+`,
@@ -115,7 +151,7 @@ export function defenseRow(
       <div>
         <h3>${escapeHtml(def.name)} <span class="meta">Owned ${fmt(have)}</span> ${tip.html}</h3>
         <p>${escapeHtml(def.description)}</p>
-        <div class="meta">${fmtCost(cost)} each · yard L${fmt(def.shipyardLevel)}+ · atk ${fmt(def.attack)} · Shield ${fmt(def.shield)} · Armor ${fmt(def.armor)} · Hull ${fmt(def.hull)}</div>
+        <div class="meta">${fmtCost(cost)} each · ${fmtEta(unitSecs)} · yard L${fmt(def.shipyardLevel)}+ · atk ${fmt(def.attack)} · Shield ${fmt(def.shield)} · Armor ${fmt(def.armor)} · Hull ${fmt(def.hull)}</div>
       </div>
       <div class="actions">
         <input type="number" min="1" max="999999" value="1" data-defense-count="${id}" data-testid="defense-count-${id}" ${locked ? "disabled" : ""} style="min-width:4rem;width:4.5rem" />
@@ -181,9 +217,17 @@ export function researchRow(
     localLab,
   );
   const cost = preview.cost;
-  const secs = Math.ceil(
-    researchUpgradeSeconds(id, preview.current, linkedLab) /
-      view.universe.speed,
+  const fallbackMult =
+    (levelBonuses(view.player.level ?? 1).researchTime *
+      classBonuses(view.player.playerClass?.classId).researchTime) /
+    Math.max(0.01, playerBoosts(view.player, view.now).researchSpeed);
+  const mult = view.researchTimeMult ?? fallbackMult;
+  const secs = Math.max(
+    1,
+    Math.ceil(
+      (researchUpgradeSeconds(id, preview.current, linkedLab) * mult) /
+        view.universe.speed,
+    ),
   );
   const blocked = preview.ok ? null : preview.error;
   const label = researchButtonLabel(blocked);

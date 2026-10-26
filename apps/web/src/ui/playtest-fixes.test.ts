@@ -3,8 +3,14 @@ import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 import { researchUpgradeSeconds, type PlayerView } from "@starhold/game";
 import { fmtEta } from "./format";
+import {
+  buildingUpgradeSeconds,
+  defenseUnitBuildSeconds,
+  levelBonuses,
+  shipUnitBuildSeconds,
+} from "@starhold/game";
 import { buildingRow, joinScreenHtml } from "./render-chrome-join";
-import { researchRow } from "./render-chrome-rows";
+import { defenseRow, researchRow, shipRow } from "./render-chrome-rows";
 import { fleetComposer } from "./render-fleets-composer";
 import { spyReportsHtml } from "./render-fleets-panels";
 import { messagesPageHtml } from "./render-messages";
@@ -404,6 +410,72 @@ describe("playtest fixes", () => {
     assert.match(html, /1 point for every 1k/);
     assert.match(html, /480 resources are banked/);
     assert.doesNotMatch(html, /fieldsCap/);
+  });
+
+  it("displays effective post-reduction build, upgrade, and research times on cards", () => {
+    // 1. Building row reductions: Rig Foundry L1 = 0.85x, Player Level 21 = 0.7x build time
+    const rigPlanet = {
+      ...planet(),
+      buildings: { rigFoundry: 1 },
+    } as PlayerView["planet"];
+    const lvlPlayer = {
+      ...player(),
+      level: 21,
+    } as PlayerView["player"];
+
+    // Base metalMine L1 upgrade seconds = 100h = 360,000s
+    // With Rig Foundry L1 (0.85x) and Level 21 (0.7x):
+    // 360,000 * 0.85 * 0.7 = 214,200s (2d 11h 30m)
+    const expectedBuildingSecs = Math.ceil(
+      buildingUpgradeSeconds("metalMine", 0, 0, 1) *
+        levelBonuses(21).buildTime,
+    );
+    const bHtml = buildingRow(
+      "metalMine",
+      rigPlanet,
+      lvlPlayer,
+      1,
+      1_700_000_000_000,
+      false,
+    );
+    assert.match(bHtml, new RegExp(`Next: .*· ${fmtEta(expectedBuildingSecs)}`));
+
+    // 2. Research row reductions: Player researchTimeMult from level/class/astrolabe/relic/boosts
+    const rView = {
+      now: 1_700_000_000_000,
+      player: lvlPlayer,
+      planet: planet(),
+      ownedPlanets: [{ id: "pl1", researchLab: 1 }],
+      universe: { speed: 1 },
+      researchTimeMult: 0.5,
+    } as unknown as PlayerView;
+    const expectedResearchSecs = Math.ceil(
+      researchUpgradeSeconds("energyTech", 0, 1) * 0.5,
+    );
+    const rHtml = researchRow("energyTech", rView, false);
+    assert.match(rHtml, new RegExp(`Next: .*· ${fmtEta(expectedResearchSecs)}`));
+
+    // 3. Ship row reductions and per-unit time display in meta and costTooltip
+    const facPlanet = {
+      ...planet(),
+      buildings: { shipyard: 1, chronoLathe: 1, rigFoundry: 1, anomalyForge: 1 },
+    } as PlayerView["planet"];
+    // shipUnitBuildSeconds("scout", 1, 1, 1, 1) = 60 * 0.1 * 0.85 * 0.9 = 4.59s
+    // With timeMult 0.8 -> 3.672s -> ceil 4s
+    const expectedShipSecs = Math.max(
+      1,
+      Math.ceil(shipUnitBuildSeconds("scout", 1, 1, 1, 1) * 0.8),
+    );
+    const sHtml = shipRow("scout", facPlanet, false, 1, 0.8, 1);
+    assert.match(sHtml, new RegExp(`each · ${fmtEta(expectedShipSecs)} · yard`));
+
+    // 4. Defense row reductions and per-unit time display in meta and costTooltip
+    const expectedDefSecs = Math.max(
+      1,
+      Math.ceil(defenseUnitBuildSeconds("laserBattery", 1, 1, 1) * 0.8),
+    );
+    const dHtml = defenseRow("laserBattery", facPlanet, false, 0.8, 1);
+    assert.match(dHtml, new RegExp(`each · ${fmtEta(expectedDefSecs)} · yard`));
   });
 
   it("drops developer copy and the auth form after signup", () => {

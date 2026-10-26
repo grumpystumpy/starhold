@@ -10,6 +10,7 @@ import {
   STARSHARDS_HIGHSCORE_TOP3,
 } from "./catalog.js";
 import {
+  astrolabeResearchTimeMult,
   classBonuses,
   allianceBonusesForPlayer,
   empireExpeditionCap,
@@ -64,7 +65,7 @@ import { stampQueueView } from "./world-queue-manage.js";
 import { inSensorPhalanxRange, ownedPlanetCount } from "./world-moons.js";
 import { goalsView } from "./world-goals.js";
 import { occupationForPlanet } from "./world-occupation.js";
-import { empireDriftBeaconCount, playerKnowsMini } from "./world-mini.js";
+import { empireDriftBeaconCount, empireRelicResearchTimeFactor, playerKnowsMini } from "./world-mini.js";
 import { seasonLeaderboardView } from "./world-seasons.js";
 import { SHOP_ITEMS } from "./world-shop-items.js";
 import { getDebris } from "./world-tick.js";
@@ -347,8 +348,14 @@ export function playerView(
   universe.planets[planet.id] = planet;
   universe.players[player.id] = player;
   const boosts = playerBoosts(player, now);
+  const lb = levelBonuses(player.level ?? 1);
   const cls = classBonuses(player.playerClass?.classId);
   const ally = allianceBonusesForPlayer(universe, player.id);
+  const astrolabe = astrolabeResearchTimeMult(universe, player.id);
+  const relic = empireRelicResearchTimeFactor(universe, player.id);
+  const researchTimeMult =
+    (lb.researchTime * cls.researchTime * astrolabe * relic) /
+    Math.max(0.01, boosts.researchSpeed);
   const fieldMods = {
     homePlanetId: player.homePlanetId,
     colonyFields: cls.colonyFields,
@@ -532,6 +539,7 @@ export function playerView(
     skillLevels: { ...(player.skillLevels ?? {}) },
     officerLevels: { ...(player.officerLevels ?? {}) },
     officerRenewals: { ...(player.officerRenewals ?? {}) },
+    researchTimeMult,
     officerCatalog: OFFICER_ORDER.map((id) => OFFICERS[id]),
     skillCatalog: SKILL_ORDER.map((id) => SKILLS[id]),
     dailyLoginAvailable: canClaimDailyLogin(player, now),

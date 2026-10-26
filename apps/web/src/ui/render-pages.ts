@@ -13,6 +13,7 @@ import {
   SHIPS,
   allianceClassBonuses,
   classBonuses,
+  levelBonuses,
   shipClassAllowed,
   fortressRelocateDeutCost,
   fortressRelocateLandingWindow,
@@ -273,6 +274,7 @@ function compareDefensesWeakestFirst(a: DefenseId, b: DefenseId): number {
 }
 
 function viewClassMods(view: PlayerView) {
+  const lb = levelBonuses(view.player.level ?? 1);
   const cls = classBonuses(view.player.playerClass?.classId);
   const ally = allianceClassBonuses(view.alliance?.allianceClass ?? null);
   return {
@@ -286,6 +288,8 @@ function viewClassMods(view: PlayerView) {
       },
     },
     shipCostMult: ally.shipCost,
+    shipTimeMult: lb.shipBuild * cls.shipBuildTime * ally.shipTime,
+    defenseTimeMult: lb.shipBuild * cls.defenseBuildTime,
   };
 }
 
@@ -304,6 +308,7 @@ export function shipyardPage(view: PlayerView, busy: boolean): string {
     shipClassAllowed(id, classId),
   );
   const hangarEmpty = SHIP_ORDER.every((id) => (planet.ships[id] ?? 0) <= 0);
+  const mods = viewClassMods(view);
   return `
     <section class="panel" data-testid="hull-bay-panel">
       <h2>Shipyard</h2>
@@ -312,7 +317,7 @@ export function shipyardPage(view: PlayerView, busy: boolean): string {
           ? `<p class="hint" data-testid="shipyard-need-class">Choose a class on Overview to unlock class-exclusive hulls.</p>`
           : ""
       }
-      ${buildable.map((id) => shipRow(id, planet, busy, viewClassMods(view).shipCostMult)).join("")}
+      ${buildable.map((id) => shipRow(id, planet, busy, mods.shipCostMult, mods.shipTimeMult, view.universe.speed)).join("")}
       ${
         shipQueueHtml(planet, now) ||
         `<p class="hint">Raise the Shipyard facility to unlock hulls.</p>`
@@ -344,10 +349,11 @@ export function shipyardPage(view: PlayerView, busy: boolean): string {
 
 export function defensesPage(view: PlayerView, busy: boolean): string {
   const { planet, now } = view;
+  const mods = viewClassMods(view);
   return `
     <section class="panel" data-testid="defenses-panel">
       <h2>Defenses</h2>
-      ${WEAKEST_FIRST_DEFENSES.map((id) => defenseRow(id, planet, busy)).join("")}
+      ${WEAKEST_FIRST_DEFENSES.map((id) => defenseRow(id, planet, busy, mods.defenseTimeMult, view.universe.speed)).join("")}
       ${
         defenseQueueHtml(planet, now) ||
         `<p class="hint">Static guns fight with your hangar on raids.</p>`
