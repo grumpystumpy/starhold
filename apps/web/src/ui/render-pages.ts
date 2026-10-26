@@ -22,7 +22,7 @@ import {
   type ShipId,
 } from "@starhold/game";
 import { SHIP_ART, UI_ART } from "./assets";
-import { fmt, fmtCompact, fmtCoords } from "./format";
+import { fmt, fmtCompact, fmtCoords, fmtCoordsLink } from "./format";
 import { planetDiscHtml } from "./planet-disc";
 import type { NavPage } from "./nav";
 import { classPanelHtml } from "./render-class";
@@ -126,7 +126,7 @@ function overviewPage(view: PlayerView, busy: boolean): string {
           <p class="overview-commander" data-testid="commander-name">${escapeHtml(view.player.name)}</p>
           <p class="active-title" data-testid="active-title"${title ? "" : " hidden"}>${escapeHtml(title)}</p>
           <p class="overview-name" data-testid="overview-planet-name">${escapeHtml(planet.name)}${planet.flags?.mini ? " · Mini" : planet.kind === "moon" ? " · Moon" : ""}</p>
-          <p class="coords">${fmtCoords(planet.coords)}</p>
+          <p class="coords">${fmtCoordsLink(planet.coords)}</p>
           <p class="hint" data-testid="planet-fields">Fields ${fmt(economy.fields.used)} / ${fmt(economy.fields.cap)} · ${fmt(economy.fields.remaining)} free${loomBonus > 0 ? ` · Mantle Loom +${fmt(loomBonus)}` : ""}</p>
           <p class="hint" data-testid="planet-temperature">Temp ${fmt(tempK)} K · solar ×${solarTemp.toFixed(2)}${helio > 0 ? ` · Helio Buoy +${fmt(helio)}` : ""}</p>
         </div>
@@ -393,7 +393,7 @@ function highscorePage(view: PlayerView): string {
         ${(view.highscores ?? [])
           .map(
             (h) =>
-              `<li data-testid="highscore-${h.rank}" data-player-id="${escapeAttr(h.playerId)}" data-home-planet="${escapeAttr(h.homePlanetId)}"><span class="row-with-thumb"><span class="hs-rank">#${fmt(h.rank)}</span>${planetDiscHtml({ src: h.artThumbUrl, artId: h.artId, size: 32 })}${h.allianceTag ? `[${escapeHtml(h.allianceTag)}] ` : ""}${escapeHtml(h.name)}${h.playerId === view.player.id ? " (you)" : ""}</span><span>Home ${escapeHtml(h.planetName || "world")} · ${fmtCoords(h.coords)} · ${fmtCompact(h.points)} pts · Lv ${fmt(h.level ?? 1)} · ${fmt(h.xpTotal ?? 0)} XP</span></li>`,
+              `<li data-testid="highscore-${h.rank}" data-player-id="${escapeAttr(h.playerId)}" data-home-planet="${escapeAttr(h.homePlanetId)}"><span class="row-with-thumb"><span class="hs-rank">#${fmt(h.rank)}</span>${planetDiscHtml({ src: h.artThumbUrl, artId: h.artId, size: 32 })}${h.allianceTag ? `[${escapeHtml(h.allianceTag)}] ` : ""}${escapeHtml(h.name)}${h.playerId === view.player.id ? " (you)" : ""}</span><span>Home ${escapeHtml(h.planetName || "world")} · ${fmtCoordsLink(h.coords)} · ${fmtCompact(h.points)} pts · Lv ${fmt(h.level ?? 1)} · ${fmt(h.xpTotal ?? 0)} XP</span></li>`,
           )
           .join("")}
       </ol>
@@ -405,7 +405,7 @@ function highscorePage(view: PlayerView): string {
         ${view.roster
           .map(
             (r) =>
-              `<li data-home-planet="${escapeAttr(r.planetId)}"><span class="row-with-thumb">${planetDiscHtml({ src: r.artThumbUrl, artId: r.artId, size: 32 })}${r.allianceTag ? `[${escapeHtml(r.allianceTag)}] ` : ""}${escapeHtml(r.name)}${r.id === view.player.id ? " (you)" : ""}</span><span>Home ${escapeHtml(r.planetName || "world")} · ${fmtCoords(r.coords)} · ${fmtCompact(r.pointsHint)} pts</span></li>`,
+              `<li data-home-planet="${escapeAttr(r.planetId)}"><span class="row-with-thumb">${planetDiscHtml({ src: r.artThumbUrl, artId: r.artId, size: 32 })}${r.allianceTag ? `[${escapeHtml(r.allianceTag)}] ` : ""}${escapeHtml(r.name)}${r.id === view.player.id ? " (you)" : ""}</span><span>Home ${escapeHtml(r.planetName || "world")} · ${fmtCoordsLink(r.coords)} · ${fmtCompact(r.pointsHint)} pts</span></li>`,
           )
           .join("")}
       </ul>

@@ -217,7 +217,7 @@ describe("fleet send two-step", () => {
     assert.match(step2, /data-testid="fleet-ship-summary"/);
     assert.match(step2, /3× Scout Skiff/);
     assert.match(step2, /data-testid="fleet-coords"/);
-    assert.match(step2, /Coords 1:1:1 · planet/);
+    assert.match(step2, /Coords .*1:1:1.* · planet/);
     assert.match(step2, /name="fleet-mission"/);
     assert.match(step2, /data-testid="mission-raid"[^>]*checked/);
     assert.match(buttonTag(step2, "fleet-back"), /type="button"/);

@@ -10,7 +10,7 @@ import {
   type AllianceRole,
   type PlayerView,
 } from "@starhold/game";
-import { fmt, fmtCompact, fmtCoords } from "./format";
+import { fmt, fmtCompact, fmtCoords, fmtCoordsLink } from "./format";
 import { escapeAttr, escapeHtml } from "./render-escape";
 
 function canModerate(role: AllianceRole): boolean {
@@ -80,7 +80,7 @@ function intelSection(view: PlayerView, busy: boolean): string {
               stamp.sharedByPlayerId === view.player.id ||
               canModerate(alliance.myRole);
             return `<li class="alliance-member" data-testid="alliance-intel-${escapeAttr(stamp.id)}">
-              <span><strong>${escapeHtml(stamp.targetLabel)}</strong> @ ${fmtCoords(stamp.targetCoords)} · ${escapeHtml(stamp.sharedByName)}</span>
+              <span><strong>${escapeHtml(stamp.targetLabel)}</strong> @ ${fmtCoordsLink(stamp.targetCoords)} · ${escapeHtml(stamp.sharedByName)}</span>
               <details>
                 <summary data-testid="alliance-intel-open-${escapeAttr(stamp.id)}">Open</summary>
                 <p class="meta">${escapeHtml(intelSnapshotText(stamp))}</p>
@@ -127,7 +127,7 @@ function markersSection(view: PlayerView, busy: boolean): string {
               ? `<button type="button" data-alliance-marker-remove="${escapeAttr(marker.id)}" data-testid="alliance-marker-remove-${escapeAttr(marker.id)}" ${busy ? "disabled" : ""}>Remove</button>`
               : "";
             return `<li class="alliance-member" data-testid="alliance-marker-${escapeAttr(marker.id)}">
-              <span>${fmtCoords(marker.coords)}${note} · ${escapeHtml(marker.createdByName)}</span>
+              <span>${fmtCoordsLink(marker.coords)}${note} · ${escapeHtml(marker.createdByName)}</span>
               ${remove}
             </li>`;
           })

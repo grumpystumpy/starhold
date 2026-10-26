@@ -77,9 +77,10 @@ describe("galaxy jump controls", () => {
     } as unknown as PlayerView;
     const html = galaxyPanel(view, false);
     assert.match(html, /<form data-galaxy-jump-form>/);
-    assert.match(html, /inputmode="decimal" enterkeyhint="go" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/);
-    assert.match(html, /data-galaxy-galaxy-nav="next"[^>]*>Galaxy ▶/);
-    assert.match(html, /data-galaxy-galaxy-nav="prev"[^>]*>◀ Galaxy/);
+    assert.match(html, /inputmode="text" enterkeyhint="go" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/);
+    assert.match(html, /data-testid="galaxy-nav-row-galaxy"[^>]*>[\s\S]*?data-testid="galaxy-galaxy-prev"[\s\S]*?data-testid="galaxy-galaxy-next"/);
+    assert.match(html, /data-testid="galaxy-nav-row-coords"[^>]*>[\s\S]*?#galaxy-jump|id="galaxy-jump"/);
+    assert.match(html, /data-testid="galaxy-nav-row-system"[^>]*>[\s\S]*?data-testid="galaxy-prev"[\s\S]*?data-testid="galaxy-next"/);
   });
 
   it("renders spy and attack only for foreign planets and colonize only for empty slots 1–15", () => {
