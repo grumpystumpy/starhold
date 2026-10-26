@@ -88,6 +88,15 @@ afterEach(() => {
   restoreInputs = undefined;
 });
 
+let restoreInputs: (() => void) | undefined;
+beforeEach(() => {
+  restoreInputs = installDeterministicInputs(0x50495241, 1_700_000_000_000);
+});
+afterEach(() => {
+  restoreInputs?.();
+  restoreInputs = undefined;
+});
+
 describe("pirate balance helpers", () => {
   it("pays Starshards by tier on destroy", () => {
     assert.equal(pirateDestroyStarshards(0), PIRATE_DESTROY_STARSHARDS_BASE);
