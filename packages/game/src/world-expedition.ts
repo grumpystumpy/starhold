@@ -3,16 +3,21 @@ import {
   classBonuses,
   allianceBonusesForPlayer,
   destroyedShipResources,
+  emptyDefenses,
   emptyFleetShips,
+  effectiveCombatResearch,
   fleetCargoCapacity,
+  fleetShipCount,
   grantPlayerXp,
   normalizeFleetShips,
   vaultScoutExpeditionMult,
   xpForExpedition,
   xpForMiniPlanetDiscovery,
 } from "./formulas.js";
+import { resolveCombat } from "./formulas-combat.js";
 import { hashSeed } from "./formulas-position.js";
 import type {
+  CombatReport,
   Coordinates,
   ExpeditionKind,
   ExpeditionReport,
@@ -54,6 +59,24 @@ export const EXPEDITION_PIRATES_CHANCE = 0.223;
 export const EXPEDITION_PIRATES_ROLL_MAX = 100;
 export const EXPEDITION_NPC_BASE_TIER = 0;
 
+export const EXPEDITION_PVP_BASE_CHANCE = 0.001;
+
+export function expeditionPlayerEncounterChance(otherFleetCount: number): number {
+  if (otherFleetCount <= 0) return 0;
+  return Math.min(1, (1 + Math.floor(otherFleetCount)) * EXPEDITION_PVP_BASE_CHANCE);
+}
+
+export function expeditionPlayerEncounterRoll(
+  fleetId: string,
+  at: number,
+  otherFleetCount: number,
+): boolean {
+  if (otherFleetCount <= 0) return false;
+  const rollSpace = 1_000_000;
+  const threshold = Math.floor(expeditionPlayerEncounterChance(otherFleetCount) * rollSpace);
+  return (hashSeed(`pvpExped:${fleetId}:${at}`) % rollSpace) < threshold;
+}
+
 import { noteGoalMetric } from "./world-goals.js";
 import { addDebris } from "./world-tick.js";
 import {
@@ -62,9 +85,13 @@ import {
   pickOrSeedMiniForDiscovery,
 } from "./world-mini.js";
 import {
+  alienCombatResearchForOpponent,
+  alienShipsForTier,
   createAlienBase,
   createPirateBase,
   findFreeSlotInGalaxy,
+  pirateCombatResearchForOpponent,
+  pirateShipsForTier,
   tryAlienExpeditionFind,
 } from "./world-pirates.js";
 
@@ -116,12 +143,15 @@ export function expeditionKindForShift(
   return expeditionKindFromRoll(roll - s);
 }
 
-function scaleShipsKeep(ships: FleetShips, keepRatio: number): FleetShips {
+function scaleAmbushFleet(base: FleetShips, isAlien: boolean): FleetShips {
+  const template = isAlien ? alienShipsForTier(0) : pirateShipsForTier(0);
   const out = emptyFleetShips();
-  const ratio = Math.min(1, Math.max(0, keepRatio));
   for (const id of SHIP_ORDER) {
-    out[id] = Math.floor((ships[id] ?? 0) * ratio);
+    if ((template[id] ?? 0) > 0) {
+      out[id] = Math.floor((base[id] ?? 0) * 0.35);
+    }
   }
+  out.scout = Math.max(1, out.scout ?? 0);
   return normalizeFleetShips(out);
 }
 
@@ -229,9 +259,113 @@ export function resolveExpeditionArrival(
   now: number,
 ): void {
   if (!universe.expeditionReports) universe.expeditionReports = {};
-  const isBlackHole = expeditionBlackHoleRoll(fleet.id, fleet.arrivesAt);
-  const roll = expeditionRoll(fleet.id, fleet.arrivesAt);
   const ownerForYield = universe.players[fleet.ownerPlayerId];
+  const isBlackHole = expeditionBlackHoleRoll(fleet.id, fleet.arrivesAt);
+
+  if (!isBlackHole) {
+    const otherExpeditionFleets = Object.values(universe.fleets).filter(
+      (f) =>
+        f.id !== fleet.id &&
+        f.ownerPlayerId !== fleet.ownerPlayerId &&
+        f.mission === "expedition" &&
+        f.phase === "outbound" &&
+        f.targetCoords.galaxy === fleet.targetCoords.galaxy &&
+        f.targetCoords.system === fleet.targetCoords.system,
+    );
+    if (
+      otherExpeditionFleets.length > 0 &&
+      expeditionPlayerEncounterRoll(fleet.id, fleet.arrivesAt, otherExpeditionFleets.length)
+    ) {
+      const before = normalizeFleetShips(fleet.ships);
+      const targetIndex =
+        hashSeed(`pvpTarget:${fleet.id}:${fleet.arrivesAt}`) % otherExpeditionFleets.length;
+      const rivalFleet = otherExpeditionFleets[targetIndex]!;
+      const rivalBefore = normalizeFleetShips(rivalFleet.ships);
+      const rivalOwner = universe.players[rivalFleet.ownerPlayerId];
+
+      const combat = resolveCombat(
+        before,
+        rivalBefore,
+        emptyDefenses(),
+        effectiveCombatResearch(ownerForYield),
+        effectiveCombatResearch(rivalOwner),
+      );
+
+      fleet.ships = combat.attackerAfter;
+      rivalFleet.ships = combat.defenderAfter;
+
+      if (fleetShipCount(rivalFleet.ships) < 1) {
+        delete universe.fleets[rivalFleet.id];
+      }
+
+      const shipsDelta: Partial<FleetShips> = {};
+      for (const id of SHIP_ORDER) {
+        const delta = (combat.attackerAfter[id] ?? 0) - (before[id] ?? 0);
+        if (delta !== 0) shipsDelta[id as ShipId] = delta;
+      }
+
+      const attackerLost = destroyedShipResources(before, combat.attackerAfter);
+      const defenderLost = destroyedShipResources(rivalBefore, combat.defenderAfter);
+      const debrisCreated: Resources = {
+        metal: Math.floor((attackerLost.metal + defenderLost.metal) * EXPEDITION_AMBUSH_DEBRIS_RATE),
+        crystal: Math.floor((attackerLost.crystal + defenderLost.crystal) * EXPEDITION_AMBUSH_DEBRIS_RATE),
+        deuterium: Math.floor((attackerLost.deuterium + defenderLost.deuterium) * EXPEDITION_AMBUSH_DEBRIS_RATE),
+      };
+
+      addDebris(universe, {
+        galaxy: fleet.targetCoords.galaxy,
+        system: fleet.targetCoords.system,
+        slot: EXPEDITION_SLOT,
+      }, debrisCreated);
+
+      const combatReportId = `combat_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+      const combatReport: CombatReport = {
+        id: combatReportId,
+        at: now,
+        missionId: fleet.id,
+        attackerPlayerId: fleet.ownerPlayerId,
+        defenderPlayerId: rivalFleet.ownerPlayerId,
+        attackerName: ownerForYield?.name ?? "Commander",
+        defenderName: rivalOwner?.name ?? "Commander",
+        targetCoords: { ...fleet.targetCoords },
+        attackerBefore: before,
+        attackerAfter: combat.attackerAfter,
+        defenderBefore: rivalBefore,
+        defenderAfter: combat.defenderAfter,
+        defensesBefore: emptyDefenses(),
+        defensesAfter: emptyDefenses(),
+        loot: { metal: 0, crystal: 0, deuterium: 0 },
+        debrisCreated,
+        outcome: combat.outcome,
+        rounds: combat.rounds,
+        summary: `Expedition fleet encounter — battle fought between ${ownerForYield?.name ?? "Commander"} and ${rivalOwner?.name ?? "Commander"}.`,
+        roundLog: combat.roundLog,
+      };
+      if (!universe.reports) universe.reports = {};
+      universe.reports[combatReportId] = combatReport;
+
+      const summary = `Encountered rival expedition fleet (${rivalOwner?.name ?? "Commander"}) in deep space — battle fought.`;
+
+      const reportId = `xpd_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+      const report: ExpeditionReport = {
+        id: reportId,
+        at: now,
+        missionId: fleet.id,
+        playerId: fleet.ownerPlayerId,
+        targetCoords: { ...fleet.targetCoords },
+        kind: "nothing",
+        cargoGained: { metal: 0, crystal: 0, deuterium: 0 },
+        shipsDelta,
+        debrisCreated,
+        summary,
+      };
+      universe.expeditionReports[reportId] = report;
+      fleet.reportId = reportId;
+      return;
+    }
+  }
+
+  const roll = expeditionRoll(fleet.id, fleet.arrivesAt);
   const ally = allianceBonusesForPlayer(universe, fleet.ownerPlayerId);
   const kind = isBlackHole
     ? "blackHole"
@@ -254,35 +388,74 @@ export function resolveExpeditionArrival(
     empireRelicExpeditionFindMult(universe, fleet.ownerPlayerId);
   const amountMult = yieldMult * ally.expeditionAmount;
 
-  const applyPirateAmbush = () => {
-    const after = scaleShipsKeep(before, 0.7);
+  const resolveNpcAmbush = (isAlien: boolean) => {
+    const enemyShips = scaleAmbushFleet(before, isAlien);
+    const attackerResearch = effectiveCombatResearch(ownerForYield);
+    const defenderResearch = isAlien
+      ? alienCombatResearchForOpponent(attackerResearch)
+      : pirateCombatResearchForOpponent(attackerResearch);
+
+    const combat = resolveCombat(
+      before,
+      enemyShips,
+      emptyDefenses(),
+      attackerResearch,
+      defenderResearch,
+      { seed: `${fleet.id}:ambush:${fleet.arrivesAt}` },
+    );
+
+    fleet.ships = combat.attackerAfter;
+
     for (const id of SHIP_ORDER) {
-      const delta = (after[id] ?? 0) - (before[id] ?? 0);
+      const delta = (combat.attackerAfter[id] ?? 0) - (before[id] ?? 0);
       if (delta !== 0) shipsDelta[id as ShipId] = delta;
     }
-    fleet.ships = after;
-    const lost = destroyedShipResources(before, after);
+
+    const attackerLost = destroyedShipResources(before, combat.attackerAfter);
+    const defenderLost = destroyedShipResources(enemyShips, combat.defenderAfter);
     debrisCreated = {
-      metal: Math.floor(lost.metal * EXPEDITION_AMBUSH_DEBRIS_RATE),
-      crystal: Math.floor(lost.crystal * EXPEDITION_AMBUSH_DEBRIS_RATE),
-      deuterium: 0,
+      metal: Math.floor((attackerLost.metal + defenderLost.metal) * EXPEDITION_AMBUSH_DEBRIS_RATE),
+      crystal: Math.floor((attackerLost.crystal + defenderLost.crystal) * EXPEDITION_AMBUSH_DEBRIS_RATE),
+      deuterium: Math.floor((attackerLost.deuterium + defenderLost.deuterium) * EXPEDITION_AMBUSH_DEBRIS_RATE),
     };
+
     addDebris(universe, {
       galaxy: fleet.targetCoords.galaxy,
       system: fleet.targetCoords.system,
       slot: EXPEDITION_SLOT,
     }, debrisCreated);
-    const crumb = Math.min(
-      40,
-      fleetCargoCapacity(after, ownerForYield?.research?.cargoHoldTech ?? 0),
-    );
-    cargoGained = {
-      metal: Math.floor(crumb * 0.5),
-      crystal: Math.floor(crumb * 0.3),
-      deuterium: Math.max(0, crumb - Math.floor(crumb * 0.5) - Math.floor(crumb * 0.3)),
+
+    const reportId = `combat_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+    const combatReport: CombatReport = {
+      id: reportId,
+      at: now,
+      missionId: fleet.id,
+      attackerPlayerId: fleet.ownerPlayerId,
+      defenderPlayerId: isAlien ? "npc_aliens" : "npc_pirates",
+      attackerName: ownerForYield?.name ?? "Commander",
+      defenderName: isAlien ? "Alien Expedition Patrol" : "Pirate Ambush Fleet",
+      targetCoords: { ...fleet.targetCoords },
+      attackerBefore: before,
+      attackerAfter: combat.attackerAfter,
+      defenderBefore: enemyShips,
+      defenderAfter: combat.defenderAfter,
+      defensesBefore: emptyDefenses(),
+      defensesAfter: emptyDefenses(),
+      loot: { metal: 0, crystal: 0, deuterium: 0 },
+      debrisCreated,
+      outcome: combat.outcome,
+      rounds: combat.rounds,
+      summary: isAlien
+        ? `Alien ambush battle — ${combat.outcome}.`
+        : `Pirate ambush battle — ${combat.outcome}.`,
+      roundLog: combat.roundLog,
     };
-    fleet.cargo = { ...cargoGained };
-    summary = `Pirate ambush — ~30% hulls lost. Scrap salvage ${cargoGained.metal}m/${cargoGained.crystal}c/${cargoGained.deuterium}d.`;
+    if (!universe.reports) universe.reports = {};
+    universe.reports[reportId] = combatReport;
+
+    summary = isAlien
+      ? `Alien ambush battle — ${combat.outcome}.`
+      : `Pirate ambush battle — ${combat.outcome}.`;
   };
 
   switch (kind) {
@@ -337,7 +510,7 @@ export function resolveExpeditionArrival(
       break;
     }
     case "pirates": {
-      applyPirateAmbush();
+      resolveNpcAmbush(false);
       break;
     }
     case "newPirateBase": {
@@ -362,7 +535,7 @@ export function resolveExpeditionArrival(
         newBaseCoords = { ...base.coords };
         summary = `New pirate base ${base.name} spawned at ${site.galaxy}:${site.system}:${site.slot}.`;
       } else {
-        applyPirateAmbush();
+        resolveNpcAmbush(false);
       }
       break;
     }
@@ -389,7 +562,7 @@ export function resolveExpeditionArrival(
         newBaseCoords = { ...base.coords };
         summary = `New alien base ${base.name} spawned at ${site.galaxy}:${site.system}:${site.slot}.`;
       } else {
-        applyPirateAmbush();
+        resolveNpcAmbush(true);
       }
       break;
     }
