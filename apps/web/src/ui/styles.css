@@ -81,3 +81,13 @@
   padding-top: 1rem;
   margin-top: 1rem;
 }
+
+.combat-report-win {
+  background: color-mix(in srgb, var(--ok, #4ade80) 16%, var(--panel-bg, #181c24));
+  border-color: var(--ok, #4ade80);
+}
+
+.combat-report-loss {
+  background: color-mix(in srgb, var(--bad, #f87171) 16%, var(--panel-bg, #181c24));
+  border-color: var(--bad, #f87171);
+}

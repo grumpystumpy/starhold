@@ -230,10 +230,12 @@ function scheduleQueueCompletionRefresh(): void {
 
   const now = Date.now();
   const finishAt = [
-    ...view.planet.buildQueue,
-    ...view.player.researchQueue,
-    ...view.planet.shipQueue,
-    ...(view.planet.defenseQueue ?? []),
+    ...view.planet.buildQueue.map((item) => ({ completesAt: item.completesAt, tag: `build:${item.id}:${item.completesAt}` })),
+    ...view.player.researchQueue.map((item) => ({ completesAt: item.completesAt, tag: `research:${item.id}:${item.completesAt}` })),
+    ...view.planet.shipQueue.map((item) => ({ completesAt: item.completesAt, tag: `ship:${item.id}:${item.completesAt}` })),
+    ...(view.planet.defenseQueue ?? []).map((item) => ({ completesAt: item.completesAt, tag: `defense:${item.id}:${item.completesAt}` })),
+    ...(view.fleets ?? []).map((f) => ({ completesAt: f.arrivesAt, tag: `fleet:${f.id}:${f.phase}:${f.arrivesAt}` })),
+    ...(view.hostileInbound ?? []).map((f) => ({ completesAt: f.arrivesAt, tag: `hostile:${f.id}:${f.arrivesAt}` })),
   ]
     .map((item) => item.completesAt)
     .filter(
@@ -251,6 +253,7 @@ function scheduleQueueCompletionRefresh(): void {
     queueCompletionTimer = undefined;
     if (session.view?.player.id !== playerId) return;
     completedQueueTimes.add(completionKey);
+    invalidateCachedState();
     void silentRefresh(playerId);
   }, Math.max(0, finishAt - now + QUEUE_COMPLETION_REFRESH_DELAY_MS));
 }
