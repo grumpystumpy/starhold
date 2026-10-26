@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { BUILDINGS } from "./catalog.js";
 import {
   advanceUniverse,
   createUniverse,
@@ -397,6 +398,101 @@ describe("Thread C moons", () => {
       ),
     );
     assert.equal(raid.universe.planets[raid.targetId], undefined);
+  });
+
+  it("System Scanner (sensorArray) excludes fleets targeting moons but detects planets and mini planets", () => {
+    assert.equal(BUILDINGS.sensorArray.name, "System Scanner");
+    const universe = createUniverse("System Scanner Test", 8);
+    const watcher = joinUniverse(universe, "Watcher", 170_000_000);
+    const raider = joinUniverse(universe, "Raider", 170_000_001);
+    const parent = universe.planets[watcher.planet.id];
+    const watcherMoon = tryFormMoon(
+      universe,
+      parent,
+      { metal: 5_000_000, crystal: 0, deuterium: 0 },
+      findSeedBelow(20),
+      170_000_100,
+    );
+    assert.ok(watcherMoon);
+    watcherMoon!.buildings.lunarBase = 1;
+    watcherMoon!.buildings.sensorArray = 2;
+    universe.players[watcher.player.id].activePlanetId = watcherMoon!.id;
+
+    const watcherMoon2 = tryFormMoon(
+      universe,
+      parent,
+      { metal: 5_000_000, crystal: 0, deuterium: 0 },
+      findSeedBelow(20),
+      170_000_105,
+    );
+    // Even if parent already has moonId, tryFormMoon or a created moon object on watcher's second world
+    const targetMoon = watcherMoon;
+
+    const miniId = "mini_test_target";
+    universe.planets[miniId] = {
+      id: miniId,
+      name: "Mini Target",
+      ownerPlayerId: watcher.player.id,
+      coords: {
+        galaxy: parent.coords.galaxy,
+        system: parent.coords.system,
+        slot: 21,
+      },
+      kind: "planet",
+      flags: { mini: true, miniKind: "standard" },
+      resources: { metal: 1000, crystal: 1000, deuterium: 1000 },
+      buildings: {},
+      ships: {},
+      defenses: {},
+      buildQueue: [],
+      shipQueue: [],
+      defenseQueue: [],
+      lastTickAt: 170_000_110,
+      moonId: null,
+      parentPlanetId: null,
+    };
+
+    universe.players[raider.player.id].research.computerTech = 5;
+    universe.planets[raider.planet.id].ships.scout = 10;
+    universe.planets[raider.planet.id].resources.deuterium = 50_000;
+    graduateNewbieProtection(universe, universe.players[watcher.player.id]!);
+    graduateNewbieProtection(universe, universe.players[raider.player.id]!);
+
+    const launchPlanet = launchFleet(universe, {
+      playerId: raider.player.id,
+      mission: "raid",
+      targetPlanetId: parent.id,
+      targetCoords: parent.coords,
+      ships: { scout: 1 },
+      now: 170_000_200,
+    });
+    assert.equal(launchPlanet.ok, true);
+
+    const launchMoon = launchFleet(universe, {
+      playerId: raider.player.id,
+      mission: "raid",
+      targetPlanetId: targetMoon!.id,
+      targetCoords: targetMoon!.coords,
+      ships: { scout: 1 },
+      now: 170_000_201,
+    });
+    assert.equal(launchMoon.ok, true);
+
+    const launchMini = launchFleet(universe, {
+      playerId: raider.player.id,
+      mission: "raid",
+      targetPlanetId: miniId,
+      targetCoords: universe.planets[miniId].coords,
+      ships: { scout: 1 },
+      now: 170_000_202,
+    });
+    assert.equal(launchMini.ok, true);
+
+    const view = playerView(universe, watcher.player.id, 170_000_250);
+    const targetPlanetIds = view.sensorContacts.map((c) => c.targetPlanetId);
+    assert.ok(targetPlanetIds.includes(parent.id));
+    assert.ok(targetPlanetIds.includes(miniId));
+    assert.equal(targetPlanetIds.includes(targetMoon!.id), false);
   });
 
   it("World Eaters and Void Titans cannot destroy a normal planet", () => {

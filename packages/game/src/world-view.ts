@@ -397,11 +397,13 @@ export function playerView(
   const sensorContacts =
     planet.kind === "moon" && sensorLevel >= 1
       ? Object.values(universe.fleets)
-          .filter(
-            (f) =>
-              f.phase === "outbound" &&
-              inSensorPhalanxRange(planet.coords, f.targetCoords, sensorLevel),
-          )
+          .filter((f) => {
+            if (f.phase !== "outbound") return false;
+            if (!inSensorPhalanxRange(planet.coords, f.targetCoords, sensorLevel)) return false;
+            const targetBody = f.targetPlanetId ? universe.planets[f.targetPlanetId] : null;
+            if (targetBody?.kind === "moon") return false;
+            return true;
+          })
           .sort((a, b) => a.arrivesAt - b.arrivesAt)
           .slice(0, 20)
       : [];

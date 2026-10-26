@@ -13,6 +13,7 @@ import {
   listFleetPresets,
   playerView,
   saveFleetPreset,
+  tryFormMoon,
 } from "./world.js";
 
 describe("fleet presets + batch galaxy actions", () => {
@@ -203,5 +204,92 @@ describe("fleet presets + batch galaxy actions", () => {
     }
     const view = playerView(universe, a.player.id, 150_400_000);
     assert.ok(view.spyReports.length >= 2);
+  });
+
+  it("batchScanSystem probes foreign planets and mini planets in the system while skipping foreign moons", () => {
+    const universe = createUniverse("Batch Scan Moon Exclusion", 8);
+    const a = joinUniverse(universe, "Scanner", 180_000_000);
+    const b = joinUniverse(universe, "TargetB", 180_000_100);
+
+    const home = universe.planets[a.planet.id];
+    const targetPlanet = universe.planets[b.planet.id];
+    targetPlanet.coords = {
+      galaxy: home.coords.galaxy,
+      system: home.coords.system,
+      slot: 2,
+    };
+
+    const targetMoon = tryFormMoon(
+      universe,
+      targetPlanet,
+      { metal: 5_000_000, crystal: 0, deuterium: 0 },
+      "seed_moon_scan",
+      180_000_150,
+    );
+    const moonId = targetMoon?.id ?? "b_moon_id";
+    if (!targetMoon) {
+      universe.planets[moonId] = {
+        id: moonId,
+        name: "B Moon",
+        ownerPlayerId: b.player.id,
+        coords: targetPlanet.coords,
+        kind: "moon",
+        parentPlanetId: targetPlanet.id,
+        resources: { metal: 0, crystal: 0, deuterium: 0 },
+        buildings: {},
+        ships: {},
+        defenses: {},
+        buildQueue: [],
+        shipQueue: [],
+        defenseQueue: [],
+        lastTickAt: 180_000_150,
+        moonId: null,
+      };
+      targetPlanet.moonId = moonId;
+      b.player.planetIds.push(moonId);
+    }
+
+    const miniId = "b_mini_id";
+    universe.planets[miniId] = {
+      id: miniId,
+      name: "B Mini",
+      ownerPlayerId: b.player.id,
+      coords: {
+        galaxy: home.coords.galaxy,
+        system: home.coords.system,
+        slot: 22,
+      },
+      kind: "planet",
+      flags: { mini: true, miniKind: "standard" },
+      resources: { metal: 0, crystal: 0, deuterium: 0 },
+      buildings: {},
+      ships: {},
+      defenses: {},
+      buildQueue: [],
+      shipQueue: [],
+      defenseQueue: [],
+      lastTickAt: 180_000_150,
+      moonId: null,
+      parentPlanetId: null,
+    };
+
+    universe.players[a.player.id].research.computerTech = 5;
+    universe.planets[a.planet.id].ships.probe = 10;
+    universe.planets[a.planet.id].resources.deuterium = 10_000;
+
+    const batch = batchScanSystem(universe, {
+      playerId: a.player.id,
+      galaxy: home.coords.galaxy,
+      system: home.coords.system,
+      now: 180_000_200,
+    });
+
+    assert.equal(batch.ok, true);
+    if (!batch.ok) return;
+    assert.equal(batch.launched.length, 2);
+    const scannedTargetIds = batch.launched.map((f) => f.targetPlanetId);
+    assert.ok(scannedTargetIds.includes(targetPlanet.id));
+    assert.ok(scannedTargetIds.includes(miniId));
+    assert.equal(scannedTargetIds.includes(moonId), false);
   });
 });

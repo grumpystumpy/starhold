@@ -264,7 +264,8 @@ export function batchScanSystem(
       p.coords.galaxy === galaxy &&
       p.coords.system === system &&
       p.ownerPlayerId &&
-      p.ownerPlayerId !== player.id,
+      p.ownerPlayerId !== player.id &&
+      p.kind !== "moon",
   );
 
   if (targets.length < 1) {
