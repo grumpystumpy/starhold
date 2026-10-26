@@ -91,6 +91,7 @@ import {
   createPirateBase,
   findFreeSlotInGalaxy,
   pirateCombatResearchForOpponent,
+  pirateEligibleShipIds,
   pirateShipsForTier,
   tryAlienExpeditionFind,
 } from "./world-pirates.js";
@@ -148,7 +149,7 @@ function scaleAmbushFleet(base: FleetShips, isAlien: boolean): FleetShips {
   const out = emptyFleetShips();
   for (const id of SHIP_ORDER) {
     if ((template[id] ?? 0) > 0) {
-      out[id] = Math.floor((base[id] ?? 0) * 0.35);
+      out[id] = Math.max(1, Math.floor((base[id] ?? 0) * 0.35));
     }
   }
   out.scout = Math.max(1, out.scout ?? 0);
@@ -416,7 +417,7 @@ export function resolveExpeditionArrival(
     debrisCreated = {
       metal: Math.floor((attackerLost.metal + defenderLost.metal) * EXPEDITION_AMBUSH_DEBRIS_RATE),
       crystal: Math.floor((attackerLost.crystal + defenderLost.crystal) * EXPEDITION_AMBUSH_DEBRIS_RATE),
-      deuterium: Math.floor((attackerLost.deuterium + defenderLost.deuterium) * EXPEDITION_AMBUSH_DEBRIS_RATE),
+      deuterium: 0,
     };
 
     addDebris(universe, {
