@@ -137,10 +137,17 @@
 
 .galaxy-nav {
   display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.galaxy-nav-row {
+  display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+  width: 100%;
 }
 
 .galaxy-nav button {
@@ -152,6 +159,21 @@
   min-height: 2.5rem;
   box-sizing: border-box;
   font-size: 16px;
+}
+
+#app:has([data-page="galaxy"]) {
+  max-width: 1520px;
+}
+
+[data-testid="galaxy-panel"] {
+  width: 100%;
+}
+
+.coord-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
 }
 
 .cargo-load {

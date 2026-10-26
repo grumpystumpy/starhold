@@ -241,6 +241,31 @@ it("replaces the completion timer when rendered state changes", async () => {
   }
 });
 
+it("schedules a completion timer when returning fleet arrivesAt completes", async () => {
+  reset();
+  const fetch = mockStateFetch();
+  try {
+    const fleetView = {
+      ...view(),
+      fleets: [
+        {
+          id: "f1",
+          ownerPlayerId: "p1",
+          phase: "returning",
+          arrivesAt: now + 1_000,
+        },
+      ],
+    };
+    setView(fleetView as unknown as PlayerView);
+    await advanceBy(1_249);
+    assert.equal(fetch.count(), 0);
+    await advanceBy(1);
+    assert.equal(fetch.count(), 1);
+  } finally {
+    fetch.restore();
+  }
+});
+
 it("does not schedule a completion timer when all queues are empty", () => {
   reset();
   setView(view());

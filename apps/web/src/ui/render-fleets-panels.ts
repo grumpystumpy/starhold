@@ -10,7 +10,7 @@ import {
   type FleetShips,
   type PlayerView,
 } from "@starhold/game";
-import { fmt, fmtCoords, fmtEta, remainingSeconds } from "./format";
+import { fmt, fmtCoords, fmtCoordsLink, fmtEta, remainingSeconds } from "./format";
 import { planetDiscHtml } from "./planet-disc";
 import { escapeAttr, escapeHtml } from "./render-escape";
 import { infoTooltip } from "./render-tooltips";
@@ -38,10 +38,10 @@ export function fleetsInFlight(
           let phase: string;
           switch (f.phase) {
             case "outbound":
-              phase = `→ ${escapeHtml(nameFor(f.targetPlayerId))} @ ${fmtCoords(f.targetCoords)} (${f.mission}${f.acsGroupId ? " · ACS" : ""})`;
+              phase = `→ ${escapeHtml(nameFor(f.targetPlayerId))} @ ${fmtCoordsLink(f.targetCoords)} (${f.mission}${f.acsGroupId ? " · ACS" : ""})`;
               break;
             case "holding":
-              phase = `◎ holding ACS @ ${fmtCoords(f.targetCoords)}`;
+              phase = `◎ holding ACS @ ${fmtCoordsLink(f.targetCoords)}`;
               break;
             case "returning":
               phase = `← returning home`;
@@ -178,7 +178,7 @@ export function reportsHtml(
               ? ` · share ${escapeHtml(r.shareCode)}`
               : "";
           return `<li data-testid="report-${r.id}" data-report-id="${escapeAttr(r.id)}">
-            <strong>${role}: ${escapeHtml(r.outcome)}</strong>${typeof r.rounds === "number" ? ` · ${fmt(r.rounds)}r` : ""} vs ${escapeHtml(r.attackerPlayerId === selfId ? r.defenderName : r.attackerName)} @ ${fmtCoords(r.targetCoords)}${loot}${debris}${moon}${xp}${share}
+            <strong>${role}: ${escapeHtml(r.outcome)}</strong>${typeof r.rounds === "number" ? ` · ${fmt(r.rounds)}r` : ""} vs ${escapeHtml(r.attackerPlayerId === selfId ? r.defenderName : r.attackerName)} @ ${fmtCoordsLink(r.targetCoords)}${loot}${debris}${moon}${xp}${share}
             <br/><span class="meta">${escapeHtml(r.summary)}</span>
             ${combatBattleExtrasHtml(r)}
           </li>`;
@@ -206,7 +206,7 @@ export function sensorContactsHtml(
           const ships = SHIP_ORDER.filter((id) => (f.ships[id] ?? 0) > 0)
             .map((id) => `${fmt(f.ships[id] ?? 0)}× ${SHIPS[id].name}`)
             .join(", ");
-          return `<li data-testid="sensor-${f.id}"><span>${escapeHtml(nameFor(f.ownerPlayerId))} ${escapeHtml(f.mission)} → ${fmtCoords(f.targetCoords)}<br/><span class="meta">${escapeHtml(ships)}</span></span><span>${fmtEta(remainingSeconds(f.arrivesAt, now))}</span></li>`;
+          return `<li data-testid="sensor-${f.id}"><span>${escapeHtml(nameFor(f.ownerPlayerId))} ${escapeHtml(f.mission)} → ${fmtCoordsLink(f.targetCoords)}<br/><span class="meta">${escapeHtml(ships)}</span></span><span>${fmtEta(remainingSeconds(f.arrivesAt, now))}</span></li>`;
         })
         .join("")}
     </ul>
@@ -231,7 +231,7 @@ export function hostileInboundHtml(
           const ships = SHIP_ORDER.filter((id) => (f.ships[id] ?? 0) > 0)
             .map((id) => `${fmt(f.ships[id] ?? 0)}× ${SHIPS[id].name}`)
             .join(", ");
-          return `<li data-testid="inbound-${f.id}"><span>${escapeHtml(nameFor(f.ownerPlayerId))} ${escapeHtml(f.mission)} → ${fmtCoords(f.targetCoords)}<br/><span class="meta">${escapeHtml(ships)}</span></span><span>${fmtEta(remainingSeconds(f.arrivesAt, now))}</span></li>`;
+          return `<li data-testid="inbound-${f.id}"><span>${escapeHtml(nameFor(f.ownerPlayerId))} ${escapeHtml(f.mission)} → ${fmtCoordsLink(f.targetCoords)}<br/><span class="meta">${escapeHtml(ships)}</span></span><span>${fmtEta(remainingSeconds(f.arrivesAt, now))}</span></li>`;
         })
         .join("")}
     </ul>
@@ -265,7 +265,7 @@ export function spyReportsHtml(
           const share = inAlliance
             ? `<button type="button" data-share-intel="${escapeAttr(r.id)}" data-testid="share-intel-${escapeAttr(r.id)}">Share with alliance</button>`
             : "";
-          return `<li data-testid="spy-${r.id}"><strong>Spy L${fmt(r.detail)}</strong> ${escapeHtml(r.targetName)} @ ${fmtCoords(r.targetCoords)}<br/><span class="meta">${escapeHtml(r.summary)}${bits.length ? ` · ${escapeHtml(bits.join(" · "))}` : ""}</span>${share ? `<span class="spy-share">&nbsp;${share}</span>` : ""}</li>`;
+          return `<li data-testid="spy-${r.id}"><strong>Spy L${fmt(r.detail)}</strong> ${escapeHtml(r.targetName)} @ ${fmtCoordsLink(r.targetCoords)}<br/><span class="meta">${escapeHtml(r.summary)}${bits.length ? ` · ${escapeHtml(bits.join(" · "))}` : ""}</span>${share ? `<span class="spy-share">&nbsp;${share}</span>` : ""}</li>`;
         })
         .join("")}
     </ul>
@@ -290,7 +290,7 @@ export function expeditionReportsHtml(
             0
               ? ` · ${fmt(r.cargoGained.metal)}/${fmt(r.cargoGained.crystal)}/${fmt(r.cargoGained.deuterium)}`
               : "";
-          return `<li data-testid="expedition-${r.id}"><strong>${escapeHtml(r.kind)}</strong> @ ${fmtCoords(r.targetCoords)}${cargo}<br/><span class="meta">${escapeHtml(r.summary)}</span></li>`;
+          return `<li data-testid="expedition-${r.id}"><strong>${escapeHtml(r.kind)}</strong> @ ${fmtCoordsLink(r.targetCoords)}${cargo}<br/><span class="meta">${escapeHtml(r.summary)}</span></li>`;
         })
         .join("")}
     </ul>
@@ -370,7 +370,7 @@ export function galaxyPanel(
           ? "galaxy-slot-occupied"
           : "galaxy-slot-empty";
 
-      return `<li class="galaxy-slot ${slotTypeClass}${marker ? " galaxy-slot-marked" : ""}" data-testid="galaxy-slot-${s.coords.slot}" data-art-id="${escapeAttr(s.artId)}"><span class="galaxy-slot-main">${pin}${disc}${moonDisc}<span class="galaxy-slot-label">${fmt(s.coords.slot)}. ${who}${debrisText}</span></span><span class="galaxy-slot-side"><span class="galaxy-slot-coords">${fmtCoords(s.coords)}</span>${actions}${fleetActions}</span></li>`;
+      return `<li class="galaxy-slot ${slotTypeClass}${marker ? " galaxy-slot-marked" : ""}" data-testid="galaxy-slot-${s.coords.slot}" data-art-id="${escapeAttr(s.artId)}"><span class="galaxy-slot-main">${pin}${disc}${moonDisc}<span class="galaxy-slot-label">${fmt(s.coords.slot)}. ${who}${debrisText}</span></span><span class="galaxy-slot-side"><span class="galaxy-slot-coords">${fmtCoordsLink(s.coords)}</span>${actions}${fleetActions}</span></li>`;
     })
     .join("");
 
@@ -389,15 +389,15 @@ export function galaxyPanel(
       : `<p class="hint" data-testid="galaxy-asteroids-empty">No asteroid fields in this system.</p>`;
 
   const pirate = galaxy.pirateBase
-    ? `<p class="hint pirate-row" data-testid="galaxy-pirate">${escapeHtml(galaxy.pirateBase.name)} · Lv ${fmt(galaxy.pirateBase.level ?? galaxy.pirateBase.tier)} · threat ${escapeHtml(galaxy.pirateBase.threatHint)} · ${fmtCoords(galaxy.pirateBase.coords)}</p>`
+    ? `<p class="hint pirate-row" data-testid="galaxy-pirate">${escapeHtml(galaxy.pirateBase.name)} · Lv ${fmt(galaxy.pirateBase.level ?? galaxy.pirateBase.tier)} · threat ${escapeHtml(galaxy.pirateBase.threatHint)} · ${fmtCoordsLink(galaxy.pirateBase.coords)}</p>`
     : `<p class="hint" data-testid="galaxy-pirate-empty">No pirate base reported.</p>`;
 
   const alien = galaxy.alienBase
-    ? `<p class="hint alien-row" data-testid="galaxy-alien">${escapeHtml(galaxy.alienBase.name)} · Aliens · Lv ${fmt(galaxy.alienBase.level ?? galaxy.alienBase.tier)} · threat ${escapeHtml(galaxy.alienBase.threatHint)}${galaxy.alienBase.active ? "" : " · buildup"} · ${fmtCoords(galaxy.alienBase.coords)}</p>`
+    ? `<p class="hint alien-row" data-testid="galaxy-alien">${escapeHtml(galaxy.alienBase.name)} · Aliens · Lv ${fmt(galaxy.alienBase.level ?? galaxy.alienBase.tier)} · threat ${escapeHtml(galaxy.alienBase.threatHint)}${galaxy.alienBase.active ? "" : " · buildup"} · ${fmtCoordsLink(galaxy.alienBase.coords)}</p>`
     : `<p class="hint" data-testid="galaxy-alien-empty">No alien base reported.</p>`;
 
   const deep = galaxy.deepSpace
-    ? `<p class="hint" data-testid="galaxy-deep-space">Deep space ${fmtCoords(galaxy.deepSpace.coords)} — expedition target.</p>`
+    ? `<p class="hint" data-testid="galaxy-deep-space">Deep space ${fmtCoordsLink(galaxy.deepSpace.coords)} — expedition target.</p>`
     : "";
 
   const maxTip = infoTooltip({
@@ -417,7 +417,7 @@ export function galaxyPanel(
   const scanTip = infoTooltip({
     title: "Scan system",
     lines: [
-      "Send Whisper Probes to every foreign-owned planet and moon in this system.",
+      "Send Whisper Probes to every foreign-owned planet and mini planet in this system.",
       "Consumes probes from ships in orbit on the selected colony.",
     ],
     requires: ["Whisper Probe in orbit"],
@@ -429,12 +429,18 @@ export function galaxyPanel(
       <h2>Galaxy Navigation</h2>
       <div class="galaxy-system-bar" data-testid="galaxy-system-bar">
         <div class="galaxy-nav">
-          <button type="button" data-galaxy-galaxy-nav="prev" data-testid="galaxy-galaxy-prev" ${busy ? "disabled" : ""}>◀ Galaxy</button>
-          <button type="button" data-galaxy-nav="prev" data-testid="galaxy-prev" ${busy ? "disabled" : ""}>◀ System</button>
-          <form data-galaxy-jump-form><input id="galaxy-jump" data-testid="galaxy-jump" type="text" inputmode="decimal" enterkeyhint="go" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="Galaxy and system" placeholder="9:143" /></form>
-          <span data-testid="galaxy-label">${galaxy.galaxy}:${galaxy.system} / ${MAP_SYSTEMS}</span>
-          <button type="button" data-galaxy-nav="next" data-testid="galaxy-next" ${busy ? "disabled" : ""}>System ▶</button>
-          <button type="button" data-galaxy-galaxy-nav="next" data-testid="galaxy-galaxy-next" ${busy ? "disabled" : ""}>Galaxy ▶</button>
+          <div class="galaxy-nav-row galaxy-nav-row-galaxy" data-testid="galaxy-nav-row-galaxy">
+            <button type="button" data-galaxy-galaxy-nav="prev" data-testid="galaxy-galaxy-prev" ${busy ? "disabled" : ""}>◀ Galaxy</button>
+            <button type="button" data-galaxy-galaxy-nav="next" data-testid="galaxy-galaxy-next" ${busy ? "disabled" : ""}>Galaxy ▶</button>
+          </div>
+          <div class="galaxy-nav-row galaxy-nav-row-coords" data-testid="galaxy-nav-row-coords">
+            <form data-galaxy-jump-form><input id="galaxy-jump" data-testid="galaxy-jump" type="text" inputmode="text" enterkeyhint="go" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="Galaxy and system" placeholder="9:143" /></form>
+            <span data-testid="galaxy-label">${galaxy.galaxy}:${galaxy.system} / ${MAP_SYSTEMS}</span>
+          </div>
+          <div class="galaxy-nav-row galaxy-nav-row-system" data-testid="galaxy-nav-row-system">
+            <button type="button" data-galaxy-nav="prev" data-testid="galaxy-prev" ${busy ? "disabled" : ""}>◀ System</button>
+            <button type="button" data-galaxy-nav="next" data-testid="galaxy-next" ${busy ? "disabled" : ""}>System ▶</button>
+          </div>
         </div>
         <div class="system-summary-chips">
           <span class="chip chip-planets">${fmt(occupiedCount)} / 15 Planets</span>
@@ -454,7 +460,7 @@ export function galaxyPanel(
           </span>
         </div>
       </div>
-      <p class="hint">Send max uses the Expedition preset and fills free expedition slots from ships in orbit on the selected colony. Scan probes every foreign-owned planet/moon in this system.</p>
+      <p class="hint">Send max uses the Expedition preset and fills free expedition slots from ships in orbit on the selected colony. Scan probes every foreign-owned planet and mini planet in this system.</p>
       ${markerTools}
       <ul class="roster galaxy-slots" data-testid="galaxy-slots">${rows}</ul>
       ${
@@ -471,7 +477,7 @@ export function galaxyPanel(
           const who = mini.playerName
             ? `${escapeHtml(mini.playerName)}${mini.isOwn ? " (you)" : ""}`
             : escapeHtml(mini.name);
-          return `<li data-testid="galaxy-mini-${escapeAttr(mini.planetId)}" data-art-id="${escapeAttr(mini.artId)}"><span class="galaxy-slot-main">${planetDiscHtml({ src: mini.artThumbUrl, artId: mini.artId, size: 40, testId: `galaxy-mini-art-${mini.planetId}` })}<span class="galaxy-slot-label">Mini ${fmt(mini.coords.slot)}. ${who}${debris}</span></span><span class="galaxy-slot-side"><span class="galaxy-slot-coords">${fmtCoords(mini.coords)}</span></span></li>`;
+          return `<li data-testid="galaxy-mini-${escapeAttr(mini.planetId)}" data-art-id="${escapeAttr(mini.artId)}"><span class="galaxy-slot-main">${planetDiscHtml({ src: mini.artThumbUrl, artId: mini.artId, size: 40, testId: `galaxy-mini-art-${mini.planetId}` })}<span class="galaxy-slot-label">Mini ${fmt(mini.coords.slot)}. ${who}${debris}</span></span><span class="galaxy-slot-side"><span class="galaxy-slot-coords">${fmtCoordsLink(mini.coords)}</span></span></li>`;
         })
         .join("")}</ul>`
           : ""

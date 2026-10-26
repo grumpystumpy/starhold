@@ -207,6 +207,21 @@ export function bindClickHandlers(): void {
         return;
       }
 
+      const coordLink = closestActionEl(target, "[data-galaxy-coords]");
+      if (coordLink) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const raw = coordLink.getAttribute("data-galaxy-coords") ?? "";
+        const [g, s] = raw.split(":").map((part) => Number(part));
+        if (g && s && Number.isInteger(g) && Number.isInteger(s)) {
+          session.galaxyGalaxy = g;
+          session.galaxySystem = s;
+          navigateTo("galaxy");
+          void doGalaxyJump(g, s);
+        }
+        return;
+      }
+
       const navBtn = closestActionEl(target, "[data-nav]");
       if (navBtn) {
         ev.preventDefault();
@@ -714,6 +729,10 @@ export function bindClickHandlers(): void {
     if (el instanceof HTMLSelectElement && el.matches("[data-nav-select]")) {
       const page = resolveNavPage(el.value);
       if (page) navigateTo(page);
+      return;
+    }
+    if (el instanceof HTMLSelectElement && el.matches("[data-planet-select]")) {
+      if (el.value) void doSelectPlanet(el.value);
       return;
     }
     if (

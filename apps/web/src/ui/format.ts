@@ -43,6 +43,15 @@ export function fmtCoords(c: { galaxy: number; system: number; slot: number }): 
   return `${c.galaxy}:${c.system}:${c.slot}`;
 }
 
+export function fmtCoordsLink(c: {
+  galaxy: number;
+  system: number;
+  slot: number;
+}): string {
+  const text = fmtCoords(c);
+  return `<a href="/galaxy?galaxy=${c.galaxy}&amp;system=${c.system}" class="coord-link" data-galaxy-coords="${text}" data-testid="coord-link-${c.galaxy}-${c.system}-${c.slot}">${text}</a>`;
+}
+
 export function remainingSeconds(completesAt: number, now: number): number {
   return Math.max(0, Math.ceil((completesAt - now) / 1000));
 }

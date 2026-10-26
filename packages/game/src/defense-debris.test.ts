@@ -387,12 +387,17 @@ describe("defense rebuild and battle debris", () => {
     };
     universe.fleets[fleet.id] = fleet;
     resolveExpeditionArrival(universe, fleet, stamp);
-    const lost = destroyedShipResources(ships, fleet.ships);
     const report = universe.expeditionReports?.[fleet.reportId ?? ""];
     assert.ok(report);
     assert.equal(report.kind, "pirates");
-    assert.equal(report.debrisCreated?.metal, Math.floor(lost.metal * 0.4));
-    assert.equal(report.debrisCreated?.crystal, Math.floor(lost.crystal * 0.4));
+    const combatReport = Object.values(universe.reports ?? {}).find((r) => r.missionId === fleet.id);
+    assert.ok(combatReport);
+    const attackerLost = destroyedShipResources(ships, combatReport.attackerAfter);
+    const defenderLost = destroyedShipResources(combatReport.defenderBefore, combatReport.defenderAfter);
+    const expectedMetal = Math.floor((attackerLost.metal + defenderLost.metal) * EXPEDITION_AMBUSH_DEBRIS_RATE);
+    const expectedCrystal = Math.floor((attackerLost.crystal + defenderLost.crystal) * EXPEDITION_AMBUSH_DEBRIS_RATE);
+    assert.equal(report.debrisCreated?.metal, expectedMetal);
+    assert.equal(report.debrisCreated?.crystal, expectedCrystal);
     assert.equal(report.debrisCreated?.deuterium, 0);
     assert.ok((report.debrisCreated?.metal ?? 0) > 0);
     const at = coordsKey({

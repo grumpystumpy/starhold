@@ -5,8 +5,11 @@ import {
   EXPEDITION_BLACK_HOLE_CHANCE,
   EXPEDITION_NEW_ALIEN_BASE_ROLL_COUNT,
   EXPEDITION_NEW_PIRATE_BASE_ROLL_COUNT,
+  EXPEDITION_PVP_BASE_CHANCE,
   expeditionBlackHoleRoll,
   expeditionKindFromRoll,
+  expeditionPlayerEncounterChance,
+  expeditionPlayerEncounterRoll,
   expeditionRoll,
   expeditionShipsFind,
   expeditionStarshardsFind,
@@ -700,5 +703,121 @@ describe("P2 expeditions", () => {
     assert.equal(loaded.planets[p.planet.id]!.buildings.metalMine, 12);
     assert.equal(loaded.planets[p.planet.id]!.ships.scout, 5);
     assert.ok(loaded.planets[p.planet.id]!.resources.metal >= 10_000);
+  });
+
+  it("resolves pirate and alien encounters via resolveCombat with CombatReport and non-30% summary", () => {
+    const universe = createUniverse("Ambush Combat Test", 8);
+    const p = joinUniverse(universe, "Warrior", 100_000);
+    const planet = universe.planets[p.planet.id]!;
+
+    // Find pirate outcome time
+    let timeP = 100_100;
+    const fleetIdP = "flt_pirate_ambush";
+    while (
+      expeditionBlackHoleRoll(fleetIdP, timeP) ||
+      expeditionKindFromRoll(expeditionRoll(fleetIdP, timeP)) !== "pirates"
+    ) {
+      timeP++;
+    }
+
+    universe.fleets[fleetIdP] = {
+      id: fleetIdP,
+      ownerPlayerId: p.player.id,
+      mission: "expedition",
+      originPlanetId: planet.id,
+      targetCoords: { galaxy: 1, system: 1, slot: EXPEDITION_SLOT },
+      ships: { cruiser: 10, scout: 10 },
+      cargo: { metal: 0, crystal: 0, deuterium: 0 },
+      arrivesAt: timeP,
+      returnsAt: timeP + 1000,
+      phase: "outbound",
+    };
+
+    advanceUniverse(universe, timeP);
+    const fP = universe.fleets[fleetIdP];
+    assert.ok(fP && fP.reportId);
+    const reportP = universe.expeditionReports[fP.reportId!];
+    assert.equal(reportP.kind, "pirates");
+    assert.match(reportP.summary, /Pirate ambush battle/);
+    assert.doesNotMatch(reportP.summary, /30%/);
+
+    // Verify CombatReport recorded in universe.reports
+    const combatReportsP = Object.values(universe.reports ?? {}).filter(
+      (r) => r.missionId === fleetIdP && r.defenderPlayerId === "npc_pirates",
+    );
+    assert.equal(combatReportsP.length, 1);
+    assert.equal(combatReportsP[0]!.defenderName, "Pirate Ambush Fleet");
+  });
+
+  it("calculates PvP expedition encounter chances and rolls correctly without counting own fleets", () => {
+    assert.equal(EXPEDITION_PVP_BASE_CHANCE, 0.001);
+    assert.equal(expeditionPlayerEncounterChance(0), 0);
+    assert.equal(expeditionPlayerEncounterChance(1), 0.002);
+    assert.equal(expeditionPlayerEncounterChance(9), 0.01);
+
+    assert.equal(expeditionPlayerEncounterRoll("flt_test", 100, 0), false);
+  });
+
+  it("resolves PvP encounter in resolveExpeditionArrival between rival fleets", () => {
+    const universe = createUniverse("PvP Expedition Test", 8);
+    const p1 = joinUniverse(universe, "Commander1", 100_000);
+    const p2 = joinUniverse(universe, "Commander2", 100_000);
+
+    const targetCoords = { galaxy: 1, system: 10, slot: EXPEDITION_SLOT };
+
+    // Find a fleetId + arrival time where expeditionPlayerEncounterRoll triggers for 1 rival fleet
+    let time = 200_000;
+    const fleetId1 = "flt_pvp_1";
+    while (!expeditionPlayerEncounterRoll(fleetId1, time, 1) || expeditionBlackHoleRoll(fleetId1, time)) {
+      time++;
+    }
+
+    universe.planets[p1.planet.id]!.ships = { cruiser: 5, scout: 5 };
+    universe.planets[p1.planet.id]!.resources.deuterium = 10_000;
+    universe.planets[p2.planet.id]!.ships = { cruiser: 5, scout: 5 };
+    universe.planets[p2.planet.id]!.resources.deuterium = 10_000;
+
+    const launch2 = launchFleet(universe, {
+      playerId: p2.player.id,
+      mission: "expedition",
+      targetCoords: { ...targetCoords },
+      ships: { cruiser: 5, scout: 5 },
+      now: 100_000,
+    });
+    assert.ok(launch2.ok);
+    if (!launch2.ok) return;
+
+    // Set launch2 fleet to be outbound at time + 500
+    launch2.fleet.arrivesAt = time + 500;
+    launch2.fleet.phase = "outbound";
+
+    const launch1 = launchFleet(universe, {
+      playerId: p1.player.id,
+      mission: "expedition",
+      targetCoords: { ...targetCoords },
+      ships: { cruiser: 5, scout: 5 },
+      now: 100_000,
+    });
+    assert.ok(launch1.ok);
+    if (!launch1.ok) return;
+
+    delete universe.fleets[launch1.fleet.id];
+    launch1.fleet.id = fleetId1;
+    launch1.fleet.arrivesAt = time;
+    launch1.fleet.phase = "outbound";
+    universe.fleets[fleetId1] = launch1.fleet;
+
+    resolveExpeditionArrival(universe, launch1.fleet, time);
+
+    const f1 = universe.fleets[fleetId1];
+    assert.ok(f1 && f1.reportId);
+    const report1 = universe.expeditionReports[f1.reportId!];
+    assert.match(report1.summary, /Encountered rival expedition fleet \(Commander2\) in deep space — battle fought\./);
+
+    // Verify a CombatReport was created between p1 and p2
+    const pvpCombatReports = Object.values(universe.reports ?? {}).filter(
+      (r) => r.missionId === fleetId1 && r.defenderPlayerId === p2.player.id,
+    );
+    assert.equal(pvpCombatReports.length, 1);
   });
 });

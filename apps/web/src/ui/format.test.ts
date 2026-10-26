@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { fmt, fmtCompact, fmtLabel } from "./format";
+import { fmt, fmtCompact, fmtCoordsLink, fmtLabel } from "./format";
 
 describe("fmt", () => {
   it("uses compact notation for numbers >= 1000 with floored rounding", () => {
@@ -46,6 +46,16 @@ describe("fmtCompact", () => {
     assert.equal(fmtCompact(Number.NaN), "—");
     assert.equal(fmtCompact(Number.POSITIVE_INFINITY), "—");
     assert.equal(fmtCompact(Number.NEGATIVE_INFINITY), "—");
+  });
+});
+
+describe("fmtCoordsLink", () => {
+  it("formats coordinate link HTML string", () => {
+    const coords = { galaxy: 1, system: 2, slot: 3 };
+    assert.equal(
+      fmtCoordsLink(coords),
+      '<a href="/galaxy?galaxy=1&amp;system=2" class="coord-link" data-galaxy-coords="1:2:3" data-testid="coord-link-1-2-3">1:2:3</a>',
+    );
   });
 });
 
