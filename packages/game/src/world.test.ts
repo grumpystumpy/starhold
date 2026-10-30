@@ -2,7 +2,16 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { PRODUCTION_MULT } from "./catalog.js";
 import { productionPerHour } from "./formulas.js";
-import { createUniverse, joinUniverse, advancePlanet, advanceUniverse } from "./world.js";
+import {
+  createUniverse,
+  joinUniverse,
+  advancePlanet,
+  advanceUniverse,
+  cancelQueueItem,
+  queueBuildingUpgrade,
+} from "./world.js";
+import { addCargoToPlanet } from "./world-tick.js";
+import { storageForPlanet } from "./world-boosts.js";
 import { ensureUniverseShape } from "./world-bootstrap.js";
 
 describe("advancePlanet fractional accrual", () => {
@@ -159,5 +168,71 @@ describe("advancePlanet fractional accrual", () => {
 
     assert.ok(gainA > 1, `Alpha metal gain ${gainA}`);
     assert.ok(gainB > 1, `Bravo metal gain ${gainB}`);
+  });
+});
+
+describe("B7-05 Storage cap and cargo delivery rules", () => {
+  it("mine production stops at storage cap and does not cut over-cap stock", () => {
+    const universe = createUniverse("Cap Rules Prod", 8);
+    const joined = joinUniverse(universe, "Capper", 1_500_000);
+    const planet = universe.planets[joined.planet.id]!;
+    planet.buildings = { metalMine: 1, metalStorage: 1 };
+    const caps = storageForPlanet(universe, planet, 1_500_000);
+
+    // 1. Under cap: fills up to cap but no further.
+    planet.resources = { metal: caps.metal - 50, crystal: 0, deuterium: 0 };
+    planet.lastTickAt = 1_500_000;
+    const ticked = advancePlanet(planet, universe.speed, 1_500_000 + 3_600_000 * 10);
+    assert.equal(ticked.resources.metal, caps.metal);
+
+    // 2. Over cap: production adds nothing, and stock is preserved without cut.
+    planet.resources = { metal: caps.metal + 5000, crystal: 0, deuterium: 0 };
+    planet.lastTickAt = 1_500_000;
+    const overTicked = advancePlanet(planet, universe.speed, 1_500_000 + 3_600_000 * 10);
+    assert.equal(overTicked.resources.metal, caps.metal + 5000);
+  });
+
+  it("adds cargo deliveries in full, ignoring storage cap", () => {
+    const universe = createUniverse("Cap Rules Delivery", 8);
+    const joined = joinUniverse(universe, "Deliverer", 1_500_000);
+    const planet = universe.planets[joined.planet.id]!;
+    planet.buildings = { metalStorage: 1 };
+    const caps = storageForPlanet(universe, planet, 1_500_000);
+
+    planet.resources = { metal: caps.metal, crystal: 0, deuterium: 0 };
+    addCargoToPlanet(universe, planet, { metal: 20_000, crystal: 5_000, deuterium: 1_000 }, 1_500_000);
+    assert.equal(planet.resources.metal, caps.metal + 20_000);
+    assert.equal(planet.resources.crystal, 5_000);
+    assert.equal(planet.resources.deuterium, 1_000);
+  });
+
+  it("queue refund does not cut stock that was already above cap before refund", () => {
+    const universe = createUniverse("Cap Rules Refund", 1);
+    const joined = joinUniverse(universe, "Refunder", 1_500_000);
+    const player = universe.players[joined.player.id]!;
+    const planet = universe.planets[joined.planet.id]!;
+    planet.buildings = { metalStorage: 1, metalMine: 10 };
+    const caps = storageForPlanet(universe, planet, 1_500_000);
+
+    planet.resources = { metal: caps.metal + 50_000, crystal: 50_000, deuterium: 50_000 };
+    const queued = queueBuildingUpgrade(universe, player.id, "metalMine", 1_500_000);
+    assert.equal(queued.ok, true);
+    if (!queued.ok) return;
+
+    const targetPlanet = universe.planets[joined.planet.id]!;
+    assert.equal(targetPlanet.buildQueue.length, 1);
+    const itemId = targetPlanet.buildQueue[0]!.id;
+
+    // Set stock above cap right before refund
+    targetPlanet.resources.metal = caps.metal + 10_000;
+
+    const cancel = cancelQueueItem(
+      universe,
+      player.id,
+      { kind: "building", itemId, planetId: targetPlanet.id },
+      1_500_000,
+    );
+    assert.equal(cancel.ok, true);
+    assert.equal(targetPlanet.resources.metal, caps.metal + 10_000);
   });
 });
