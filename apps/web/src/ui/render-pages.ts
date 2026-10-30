@@ -11,6 +11,8 @@ import {
   RESEARCH_ORDER,
   SHIP_ORDER,
   SHIPS,
+  WEAKEST_FIRST_DEFENSES,
+  WEAKEST_FIRST_SHIPS,
   allianceClassBonuses,
   classBonuses,
   levelBonuses,
@@ -22,6 +24,8 @@ import {
   type PlayerView,
   type ShipId,
 } from "@starhold/game";
+
+export { WEAKEST_FIRST_DEFENSES, WEAKEST_FIRST_SHIPS };
 import { SHIP_ART, UI_ART } from "./assets";
 import { fmt, fmtCompact, fmtCoords, fmtCoordsLink } from "./format";
 import { planetDiscHtml } from "./planet-disc";
@@ -246,33 +250,6 @@ function researchPage(view: PlayerView, busy: boolean): string {
     </section>`;
 }
 
-function shipCombatStrength(id: ShipId): number {
-  const def = SHIPS[id];
-  return (def?.attack ?? 0) + (def?.shield ?? 0) + (def?.hull ?? 0);
-}
-
-function defenseCombatStrength(id: DefenseId): number {
-  const def = DEFENSES[id];
-  return (def?.attack ?? 0) + (def?.shield ?? 0) + (def?.hull ?? 0);
-}
-
-const SHIP_ORDER_INDEX = new Map(SHIP_ORDER.map((id, index) => [id, index]));
-const DEFENSE_ORDER_INDEX = new Map(
-  DEFENSE_ORDER.map((id, index) => [id, index]),
-);
-
-function compareShipsWeakestFirst(a: ShipId, b: ShipId): number {
-  const diff = shipCombatStrength(a) - shipCombatStrength(b);
-  if (diff !== 0) return diff;
-  return (SHIP_ORDER_INDEX.get(a) ?? 0) - (SHIP_ORDER_INDEX.get(b) ?? 0);
-}
-
-function compareDefensesWeakestFirst(a: DefenseId, b: DefenseId): number {
-  const diff = defenseCombatStrength(a) - defenseCombatStrength(b);
-  if (diff !== 0) return diff;
-  return (DEFENSE_ORDER_INDEX.get(a) ?? 0) - (DEFENSE_ORDER_INDEX.get(b) ?? 0);
-}
-
 function viewClassMods(view: PlayerView) {
   const lb = levelBonuses(view.player.level ?? 1);
   const cls = classBonuses(view.player.playerClass?.classId);
@@ -292,14 +269,6 @@ function viewClassMods(view: PlayerView) {
     defenseTimeMult: lb.shipBuild * cls.defenseBuildTime,
   };
 }
-
-export const WEAKEST_FIRST_SHIPS: ShipId[] = [...SHIP_ORDER].sort(
-  compareShipsWeakestFirst,
-);
-
-export const WEAKEST_FIRST_DEFENSES: DefenseId[] = [...DEFENSE_ORDER].sort(
-  compareDefensesWeakestFirst,
-);
 
 export function shipyardPage(view: PlayerView, busy: boolean): string {
   const { planet, now } = view;
@@ -329,7 +298,7 @@ export function shipyardPage(view: PlayerView, busy: boolean): string {
         hangarEmpty
           ? `<div class="empty-hangar" data-testid="hangar-empty"><img src="${UI_ART.emptyHangar}" alt="Empty hangar" width="128" height="96" /><p class="hint">No hulls docked — build above.</p></div>`
           : `<ul class="roster" data-testid="hangar">
-        ${SHIP_ORDER.map((id) => {
+        ${WEAKEST_FIRST_SHIPS.map((id) => {
           const def = SHIPS[id];
           const count = planet.ships[id] ?? 0;
           const tip = infoTooltip({
