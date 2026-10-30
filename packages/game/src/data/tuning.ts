@@ -798,7 +798,7 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
     baseCost: { metal: 60, crystal: 15, deuterium: 0 },
     costGrowth: 1.5,
     baseBuildSeconds: 8,
-    energyUsePerLevel: 10,
+    energyUsePerLevel: 20,
     produces: "metal",
   },
   crystalMine: {
@@ -808,7 +808,7 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
     baseCost: { metal: 48, crystal: 24, deuterium: 0 },
     costGrowth: 1.6,
     baseBuildSeconds: 10,
-    energyUsePerLevel: 12,
+    energyUsePerLevel: 24,
     produces: "crystal",
   },
   deutSynth: {
@@ -818,7 +818,7 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
     baseCost: { metal: 225, crystal: 75, deuterium: 0 },
     costGrowth: 1.5,
     baseBuildSeconds: 12,
-    energyUsePerLevel: 20,
+    energyUsePerLevel: 40,
     produces: "deuterium",
   },
   solarPlant: {
