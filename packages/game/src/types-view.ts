@@ -53,6 +53,8 @@ export interface CombatRoundLog {
   defenderLosses: CombatRoundLosses;
   /** Debris implied by ship losses this round (pre-skim; metal/crystal). */
   debrisThisRound: Resources;
+  /** Shield pool damage absorbed per side in this round. */
+  shieldsAbsorbed?: { attacker: number; defender: number };
 }
 
 export interface CombatReport {
