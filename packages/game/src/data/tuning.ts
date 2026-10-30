@@ -1604,6 +1604,11 @@ export const PIRATE_DESTROY_STARSHARDS_BASE = 40;
 export const PIRATE_DESTROY_STARSHARDS_PER_TIER = 5;
 export const PIRATE_DEFENSE_WIN_STARSHARDS = 10;
 
+/** Starshard reward multipliers (item B7-07). */
+export const PIRATE_STARSHARD_REWARD_MULT = 0.01;
+export const ALIEN_STARSHARD_REWARD_MULT = 0.02;
+export const EXPEDITION_STARSHARD_REWARD_MULT = 0.05;
+
 /**
  * Soft cap for NPC raid detachment vs small empires:
  * raid power ≤ defenderPower × factor + floor.

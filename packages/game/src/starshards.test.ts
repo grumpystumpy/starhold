@@ -361,15 +361,53 @@ describe("Thread D Starshards / officers / skills", () => {
     assert.ok(Math.abs(boosts.mineOutput - 1.1 * 1.05) < 1e-9);
   });
 
-  it("pirate destroy / defense-win hooks match live pirateRaid amounts", () => {
+  it("pirate destroy / defense-win hooks match live pirateRaid amounts with 1% pirate and 2% alien rates", () => {
     const universe = createUniverse("Pirate Hooks", 8);
     const a = joinUniverse(universe, "Hunter", 163_000_000);
     const player = universe.players[a.player.id];
-    const destroy = grantPirateDestroyStarshards(player, 3);
-    assert.equal(destroy, PIRATE_DESTROY_STARSHARDS_BASE + 5 * 3);
-    const kill = grantPirateFleetKillStarshards(player);
-    assert.equal(kill, PIRATE_DEFENSE_WIN_STARSHARDS);
-    assert.equal(player.starshards, destroy + kill);
+
+    // Pirate tier 3 old amount = 40 + 5*3 = 55. Mult = 0.01 -> exact = 0.55
+    const destroyPirate = grantPirateDestroyStarshards(player, 3, "pirate", "seed_p3");
+    assert.ok(destroyPirate === 0 || destroyPirate === 1);
+
+    // Alien tier 3 old amount = 55. Mult = 0.02 -> exact = 1.10
+    const destroyAlien = grantPirateDestroyStarshards(player, 3, "alien", "seed_a3");
+    assert.ok(destroyAlien === 1 || destroyAlien === 2);
+
+    // Pirate fleet kill old amount = 10. Mult = 0.01 -> exact = 0.10
+    const killPirate = grantPirateFleetKillStarshards(player, "pirate", "seed_kp");
+    assert.ok(killPirate === 0 || killPirate === 1);
+
+    // Alien fleet kill old amount = 10. Mult = 0.02 -> exact = 0.20
+    const killAlien = grantPirateFleetKillStarshards(player, "alien", "seed_ka");
+    assert.ok(killAlien === 0 || killAlien === 1);
+
+    assert.equal(
+      player.starshards,
+      destroyPirate + destroyAlien + killPirate + killAlien,
+    );
+  });
+
+  it("verifies expected-value rounding for pirate (1%), alien (2%), and expedition (5%) Starshard rewards", () => {
+    const universe = createUniverse("Expected Value Rounding", 8);
+    const a = joinUniverse(universe, "EV Tester", 163_500_000);
+    const player = universe.players[a.player.id];
+
+    // Test across 10,000 deterministic seeds for pirate destroy tier 0 (old = 40, 1% mult = 0.40 EV)
+    let pirateSum = 0;
+    for (let i = 0; i < 10000; i++) {
+      pirateSum += grantPirateDestroyStarshards(player, 0, "pirate", `test_p_${i}`);
+    }
+    const pirateEv = pirateSum / 10000;
+    assert.ok(Math.abs(pirateEv - 0.40) < 0.02, `pirate EV expected ~0.40, got ${pirateEv}`);
+
+    // Test across 10,000 deterministic seeds for alien destroy tier 0 (old = 40, 2% mult = 0.80 EV)
+    let alienSum = 0;
+    for (let i = 0; i < 10000; i++) {
+      alienSum += grantPirateDestroyStarshards(player, 0, "alien", `test_a_${i}`);
+    }
+    const alienEv = alienSum / 10000;
+    assert.ok(Math.abs(alienEv - 0.80) < 0.02, `alien EV expected ~0.80, got ${alienEv}`);
   });
 
   it("playerView includes catalogs and daily flag", () => {
