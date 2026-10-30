@@ -187,13 +187,14 @@ export function resourceFind(
     effectiveSp * EXPEDITION_RESOURCE_MULT * rollFactor;
   const budget = Math.min(cap, Math.floor(rawBudget));
 
-  const metal = Math.floor(budget * 0.55);
-  const crystal = Math.floor(budget * 0.3);
-  let deuterium = budget - metal - crystal;
-  if (deuterium < 0) deuterium = 0;
-  let total = metal + crystal + deuterium;
-  if (total > cap) deuterium = Math.max(0, deuterium - (total - cap));
-  return { metal, crystal, deuterium };
+  const resourceType = intRoll % 3;
+  if (resourceType === 0) {
+    return { metal: budget, crystal: 0, deuterium: 0 };
+  }
+  if (resourceType === 1) {
+    return { metal: 0, crystal: budget, deuterium: 0 };
+  }
+  return { metal: 0, crystal: 0, deuterium: budget };
 }
 
 export function expeditionStarshardsFind(

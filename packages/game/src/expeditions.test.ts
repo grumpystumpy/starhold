@@ -451,6 +451,18 @@ describe("P2 expeditions", () => {
     );
   });
 
+  it("awards at most one resource type per expedition result (B7-06)", () => {
+    const fleet = { hauler: 20 };
+    for (let roll = 0; roll < 40; roll++) {
+      const res = resourceFind(fleet, roll);
+      const positiveTypes = [res.metal, res.crystal, res.deuterium].filter((val) => val > 0);
+      assert.ok(
+        positiveTypes.length <= 1,
+        `Expected at most 1 resource type, got metal=${res.metal}, crystal=${res.crystal}, deuterium=${res.deuterium} for roll=${roll}`,
+      );
+    }
+  });
+
   it("scales resource finds linearly with fleet structural (hull) points below cap", () => {
     // Hauler hull = 60, cargo = 5000.
     // 10 Haulers -> hull = 600, cargo = 50,000.
