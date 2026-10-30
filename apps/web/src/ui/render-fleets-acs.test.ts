@@ -63,7 +63,7 @@ describe("Joint Strike fleet prefill", () => {
     });
     assert.equal(draft.step, 2);
     const html = fleetComposer(fleetView(), false, draft);
-    assert.match(html, /data-testid="mission-raid"[^>]*checked/);
+    assert.match(html, /data-testid="mission-raid"[^>]*selected/);
     assert.match(html, /value="coords:1:1:1" selected/);
     assert.match(html, /data-testid="fleet-open-acs"[^>]*checked/);
   });

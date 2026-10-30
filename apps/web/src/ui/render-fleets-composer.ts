@@ -386,15 +386,16 @@ export function fleetComposer(
       requires: ["Fold Bridge on both moons"],
     },
   };
-  const missionRadios = MISSIONS.map((m) => {
+  const selectedMeta = missionMeta[mission];
+  const selectedTip = infoTooltip({
+    title: selectedMeta.label,
+    lines: [selectedMeta.detail],
+    requires: selectedMeta.requires,
+    testId: `mission-tip-${mission}`,
+  });
+  const missionOptions = MISSIONS.map((m) => {
     const meta = missionMeta[m];
-    const tip = infoTooltip({
-      title: meta.label,
-      lines: [meta.detail],
-      requires: meta.requires,
-      testId: `mission-tip-${m}`,
-    });
-    return `<label><input type="radio" name="fleet-mission" value="${m}" data-testid="mission-${m}" ${mission === m ? "checked" : ""} ${busy ? "disabled" : ""} /> ${meta.label} ${tip.html}</label>`;
+    return `<option value="${m}" data-testid="mission-${m}" ${mission === m ? "selected" : ""}>${escapeHtml(meta.label)}</option>`;
   }).join("");
 
   const presets = view.player.fleetPresets ?? [];
@@ -489,10 +490,12 @@ export function fleetComposer(
       <p class="fleet-step-label" data-testid="fleet-step">Step 2 of 2 · Destination</p>
       <p class="hint" data-testid="fleet-slot-counters">Fleets ${fmt(fleetActive)}/${fmt(fleetCap)} · Expeditions ${fmt(expeditionActive)}/${fmt(expeditionCap)}</p>
       <p data-testid="fleet-coords">Coords ${destination ? fmtCoordsLink(destination) : "—"} · ${escapeHtml(kind)}</p>
-      <fieldset class="mission-pick">
-        <legend>Mission</legend>
-        ${missionRadios}
-      </fieldset>
+      <label class="mission-pick">
+        Mission ${selectedTip.html}
+        <select name="fleet-mission" id="fleet-mission" data-testid="fleet-mission" ${busy ? "disabled" : ""}>
+          ${missionOptions}
+        </select>
+      </label>
       <label>
         Target
         <select id="fleet-target" data-testid="fleet-target" ${launchBlocked ? "disabled" : ""}>

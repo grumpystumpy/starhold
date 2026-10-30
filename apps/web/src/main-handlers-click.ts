@@ -756,18 +756,11 @@ export function bindClickHandlers(): void {
       return;
     }
     if (
-      el instanceof HTMLInputElement &&
-      el.name === "fleet-mission" &&
-      el.type === "radio"
+      (el instanceof HTMLSelectElement || el instanceof HTMLInputElement) &&
+      (el.name === "fleet-mission" || el.id === "fleet-target" || el.hasAttribute("data-fleet-speed"))
     ) {
       schedulePaint();
       return;
-    }
-    if (
-      (el instanceof HTMLSelectElement || el instanceof HTMLInputElement) &&
-      (el.id === "fleet-target" || el.hasAttribute("data-fleet-speed"))
-    ) {
-      schedulePaint();
     }
   });
 

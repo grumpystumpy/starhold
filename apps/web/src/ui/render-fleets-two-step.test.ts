@@ -219,7 +219,7 @@ describe("fleet send two-step", () => {
     assert.match(step2, /data-testid="fleet-coords"/);
     assert.match(step2, /Coords .*1:1:1.* · planet/);
     assert.match(step2, /name="fleet-mission"/);
-    assert.match(step2, /data-testid="mission-raid"[^>]*checked/);
+    assert.match(step2, /data-testid="mission-raid"[^>]*selected/);
     assert.match(buttonTag(step2, "fleet-back"), /type="button"/);
     assert.match(buttonTag(step2, "launch-fleet"), /type="submit"/);
     assert.match(buttonTag(step2, "launch-fleet"), /data-fleet-action="send"/);
@@ -255,7 +255,7 @@ describe("fleet send two-step", () => {
 
   it("send payload matches the one-page form and ignores speed", () => {
     const mission = make(
-      { tag: "input", type: "radio", name: "fleet-mission", value: "raid", checked: "1" },
+      { tag: "select", name: "fleet-mission", value: "raid" },
     );
     mission.value = "raid";
     const target = make({ tag: "select", id: "fleet-target" });
@@ -306,10 +306,9 @@ describe("fleet send two-step", () => {
       [
         (() => {
           const radio = make({
-            tag: "input",
+            tag: "select",
             name: "fleet-mission",
             value: "raid",
-            checked: "1",
           });
           radio.value = "raid";
           return radio;
@@ -383,7 +382,7 @@ describe("fleet send two-step", () => {
     assert.equal(galaxy.counts.scout, 2);
     const html = fleetComposer(view(), false, galaxy);
     assert.match(html, /data-fleet-step="2"/);
-    assert.match(html, /data-testid="mission-raid"[^>]*checked/);
+    assert.match(html, /data-testid="mission-raid"[^>]*selected/);
     assert.match(html, /value="coords:9:4:16" selected/);
     assert.match(html, /2× Scout Skiff/);
     assert.match(html, /data-testid="fleet-open-acs"[^>]*checked/);
@@ -448,10 +447,9 @@ describe("fleet send result", () => {
         })(),
         (() => {
           const radio = make({
-            tag: "input",
+            tag: "select",
             name: "fleet-mission",
             value: "raid",
-            checked: "1",
           });
           radio.value = "raid";
           return radio;
