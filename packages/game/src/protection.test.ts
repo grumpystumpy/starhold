@@ -24,6 +24,7 @@ import {
   joinUniverse,
   newbieBonusRemainingMs,
   launchFleet,
+  deterredRaidChance,
   pirateRaidPickWeight,
   planetRaidDeterrence,
   planetStationedUnits,
@@ -399,60 +400,63 @@ describe("B7-04 raid deterrence", () => {
     const universe = createUniverse("Pirate Deterrence", 8);
     const { planet } = joinUniverse(universe, "Defender", 500_000_000);
     const body = universe.planets[planet.id]!;
+    const base = 0.10; // 10% base chance
 
-    // 0 units -> 1.0 (100%)
+    // 0 units = base
     body.ships = {};
     body.defenses = {};
-    assert.equal(planetRaidDeterrence(body, "pirate"), 1.0);
+    assert.equal(planetRaidDeterrence(body, "pirate", base), base);
+    assert.equal(deterredRaidChance(base, body, "pirate"), base);
 
-    // 1,499 units -> 1.0 (0 steps)
+    // 1,499 units = base (0 full steps)
     body.ships = { interceptor: 1499 };
-    assert.equal(planetRaidDeterrence(body, "pirate"), 1.0);
+    assert.equal(planetRaidDeterrence(body, "pirate", base), base);
 
-    // 1,500 units -> 0.995 (1 step)
+    // 1,500 units = base - 0.5 percentage points (1 step)
     body.ships = { interceptor: 1500 };
-    assert.equal(planetRaidDeterrence(body, "pirate"), 0.995);
+    assert.ok(Math.abs(planetRaidDeterrence(body, "pirate", base) - 0.095) < 1e-9);
 
-    // 3,000 units -> 0.990 (2 steps)
-    body.ships = { interceptor: 1500 };
-    body.defenses = { laserBattery: 1500 };
-    assert.equal(planetRaidDeterrence(body, "pirate"), 0.990);
+    // 4,500 units pirate: base 10% -> 8.5% (Micah example)
+    body.ships = { interceptor: 3000 };
+    body.defenses = { laserBattery: 1500 }; // 4500 ships+defenses summed
+    assert.ok(Math.abs(planetRaidDeterrence(body, "pirate", base) - 0.085) < 1e-9);
+    assert.ok(Math.abs(deterredRaidChance(base, body, "pirate") - 0.085) < 1e-9);
 
-    // 291,000 units -> 0.03 (194 steps: 1 - 194 * 0.005 = 0.03)
-    body.ships = { interceptor: 200_000 };
-    body.defenses = { laserBattery: 91_000 };
-    assert.ok(Math.abs(planetRaidDeterrence(body, "pirate") - 0.03) < 1e-9);
-
-    // 300,000 units -> floor 0.03 (3%)
+    // Huge count clamps to 3% floor
     body.ships = { interceptor: 300_000 };
-    assert.equal(planetRaidDeterrence(body, "pirate"), 0.03);
+    assert.equal(planetRaidDeterrence(body, "pirate", base), 0.03);
+
+    // Base already below 3% remains unchanged
+    assert.equal(planetRaidDeterrence(body, "pirate", 0.02), 0.02);
   });
 
   it("calculates alien raid deterrence steps and floor 3%", () => {
     const universe = createUniverse("Alien Deterrence", 8);
     const { planet } = joinUniverse(universe, "Defender", 500_000_000);
     const body = universe.planets[planet.id]!;
+    const base = 0.10; // 10% base chance
 
-    // 0 units -> 1.0 (100%)
+    // 0 units = base
     body.ships = {};
     body.defenses = {};
-    assert.equal(planetRaidDeterrence(body, "alien"), 1.0);
+    assert.equal(planetRaidDeterrence(body, "alien", base), base);
+    assert.equal(deterredRaidChance(base, body, "alien"), base);
 
-    // 2,999 units -> 1.0 (0 steps)
+    // 2,999 units alien = base (0 full steps)
     body.ships = { interceptor: 2999 };
-    assert.equal(planetRaidDeterrence(body, "alien"), 1.0);
+    assert.equal(planetRaidDeterrence(body, "alien", base), base);
 
-    // 3,000 units -> 0.995 (1 step)
-    body.ships = { interceptor: 3000 };
-    assert.equal(planetRaidDeterrence(body, "alien"), 0.995);
+    // 3,000 units alien = base - 0.5 percentage points (1 step, Micah example)
+    body.ships = { interceptor: 1500 };
+    body.defenses = { laserBattery: 1500 }; // 3000 ships+defenses summed
+    assert.ok(Math.abs(planetRaidDeterrence(body, "alien", base) - 0.095) < 1e-9);
+    assert.ok(Math.abs(deterredRaidChance(base, body, "alien") - 0.095) < 1e-9);
 
-    // 6,000 units -> 0.990 (2 steps)
-    body.ships = { interceptor: 3000 };
-    body.defenses = { laserBattery: 3000 };
-    assert.equal(planetRaidDeterrence(body, "alien"), 0.990);
-
-    // 600,000 units -> floor 0.03 (3%)
+    // Huge count clamps to 3% floor
     body.ships = { interceptor: 600_000 };
-    assert.equal(planetRaidDeterrence(body, "alien"), 0.03);
+    assert.equal(planetRaidDeterrence(body, "alien", base), 0.03);
+
+    // Base already below 3% remains unchanged
+    assert.equal(planetRaidDeterrence(body, "alien", 0.015), 0.015);
   });
 });

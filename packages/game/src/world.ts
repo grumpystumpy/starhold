@@ -128,6 +128,7 @@ export {
   isNewbieBonusActive,
   isNewbieProtected,
   newbieBonusRemainingMs,
+  deterredRaidChance,
   pirateRaidPickWeight,
   planetRaidDeterrence,
   planetStationedUnits,

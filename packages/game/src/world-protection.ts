@@ -31,14 +31,40 @@ export function planetStationedUnits(planet: PlanetState): number {
 }
 
 /**
- * Deterrence factor for NPC raids on a planet:
- * drops by 0.5% per full 1,500 ships+defenses for pirates,
- * 0.5% per full 3,000 ships+defenses for aliens; floor 3%.
+ * Deterred raid chance for NPC raids on a planet:
+ * subtracts 0.5 percentage points for every full 1,500 ships+defenses on target (pirates)
+ * or every full 3,000 (aliens), floored at 3% (never below 3%; if base is already
+ * below 3%, keep it unchanged).
  */
 export function planetRaidDeterrence(
   planet: PlanetState,
   faction: "pirate" | "alien",
+  baseChance?: number,
+): number;
+export function planetRaidDeterrence(
+  baseChance: number,
+  planet: PlanetState,
+  faction: "pirate" | "alien",
+): number;
+export function planetRaidDeterrence(
+  arg1: PlanetState | number,
+  arg2: "pirate" | "alien" | PlanetState,
+  arg3?: number | "pirate" | "alien",
 ): number {
+  let planet: PlanetState;
+  let faction: "pirate" | "alien";
+  let baseChance: number;
+
+  if (typeof arg1 === "number") {
+    baseChance = arg1;
+    planet = arg2 as PlanetState;
+    faction = arg3 as "pirate" | "alien";
+  } else {
+    planet = arg1;
+    faction = arg2 as "pirate" | "alien";
+    baseChance = typeof arg3 === "number" ? arg3 : 1.0;
+  }
+
   const units = planetStationedUnits(planet);
   const stepUnits =
     faction === "pirate"
@@ -49,7 +75,19 @@ export function planetRaidDeterrence(
       ? PIRATE_RAID_DETERRENCE_PENALTY
       : ALIEN_RAID_DETERRENCE_PENALTY;
   const fullSteps = Math.floor(units / stepUnits);
-  return Math.max(NPC_RAID_DETERRENCE_FLOOR, 1.0 - fullSteps * penalty);
+
+  if (baseChance <= NPC_RAID_DETERRENCE_FLOOR) {
+    return baseChance;
+  }
+  return Math.max(NPC_RAID_DETERRENCE_FLOOR, baseChance - fullSteps * penalty);
+}
+
+export function deterredRaidChance(
+  baseChance: number,
+  planet: PlanetState,
+  faction: "pirate" | "alien",
+): number {
+  return planetRaidDeterrence(baseChance, planet, faction);
 }
 
 /** Pirates ignore a new player until 48 hours after creation. */

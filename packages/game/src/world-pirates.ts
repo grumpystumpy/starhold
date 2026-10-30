@@ -1383,8 +1383,8 @@ export function isRelicWorldPlanet(planet: PlanetState): boolean {
 }
 
 /**
- * Pirate raids multiply relic weight by fairness (newbies weigh 0) and deterrence.
- * Alien raids keep relic weight and deterrence — fairness does not apply.
+ * Pirate raids subtract deterrence from fairness-adjusted weight (newbies weigh 0).
+ * Alien raids subtract deterrence from relic weight — fairness does not apply.
  */
 function npcPlanetPickWeight(
   universe: UniverseState,
@@ -1393,11 +1393,12 @@ function npcPlanetPickWeight(
   faction: "pirate" | "alien",
 ): number {
   const relic = planetRaidWeight(planet);
-  const deterrence = planetRaidDeterrence(planet, faction);
-  if (faction !== "pirate") return relic * deterrence;
+  if (faction !== "pirate") return planetRaidDeterrence(planet, faction, relic);
   const owner = universe.players[planet.ownerPlayerId];
   if (!owner) return 0;
-  return relic * pirateRaidPickWeight(universe, owner, now) * deterrence;
+  const baseWeight = relic * pirateRaidPickWeight(universe, owner, now);
+  if (baseWeight <= 0) return 0;
+  return planetRaidDeterrence(planet, faction, baseWeight);
 }
 
 function pickWeightedPlayerPlanet(
@@ -1423,8 +1424,7 @@ function pickWeightedPlayerPlanet(
     const baseW = baseWeights[i]!;
     if (baseW <= 0) continue;
     if (slot < baseW) {
-      const deterrence = planetRaidDeterrence(planets[i]!, faction);
-      const effectiveW = baseW * deterrence;
+      const effectiveW = planetRaidDeterrence(planets[i]!, faction, baseW);
       if (slot < effectiveW) {
         return planets[i]!;
       }
