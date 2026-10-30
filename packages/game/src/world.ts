@@ -191,6 +191,8 @@ export {
   pirateFreeSpawnShips,
   pirateRespawnAt,
   pirateShipsForTier,
+  pirateFatigueMult,
+  recordPirateHit,
   pirateTechsForLevel,
   pickRaidTarget,
   resolveAlienRaidArrival,
