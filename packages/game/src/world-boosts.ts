@@ -2,10 +2,13 @@ import { OFFICERS } from "./catalog-officers.js";
 import { SKILLS } from "./catalog-skills.js";
 import { scaleEffect } from "./formulas-levels.js";
 import {
+  ALIEN_STARSHARD_REWARD_MULT,
   PIRATE_DEFENSE_WIN_STARSHARDS,
   PIRATE_DESTROY_STARSHARDS_BASE,
   PIRATE_DESTROY_STARSHARDS_PER_TIER,
+  PIRATE_STARSHARD_REWARD_MULT,
 } from "./catalog.js";
+import { hashSeed } from "./formulas-position.js";
 import type {
   OfficerEffect,
   OfficerState,
@@ -161,28 +164,62 @@ export function canClaimDailyLogin(
   return player.lastDailyLoginUtc !== utcDayKey(now);
 }
 
+export function applyStarshardMultiplier(
+  oldAmount: number,
+  mult: number,
+  seed?: string,
+): number {
+  const exact = oldAmount * mult;
+  const base = Math.floor(exact);
+  const remainder = exact - base;
+  if (remainder <= 1e-9) return base;
+  const s = seed ?? `starshard:${oldAmount}:${mult}`;
+  const roll = (hashSeed(s) % 1_000_000) / 1_000_000;
+  return roll < remainder ? base + 1 : base;
+}
+
 /**
- * Grant Starshards when a pirate base is destroyed (live `pirateRaid` win).
- * Amount matches `pirateDestroyStarshards(tier)` / contract v1.
+ * Grant Starshards when a pirate or alien base is destroyed.
+ * Pirates give 1% of old amount, aliens give 2%.
  */
 export function grantPirateDestroyStarshards(
   player: PlayerState,
   tier: number,
+  faction: "pirate" | "alien" = "pirate",
+  seed?: string,
 ): number {
   const t = Math.max(0, Math.floor(tier));
-  const amount =
+  const oldAmount =
     PIRATE_DESTROY_STARSHARDS_BASE + PIRATE_DESTROY_STARSHARDS_PER_TIER * t;
+  const mult =
+    faction === "alien"
+      ? ALIEN_STARSHARD_REWARD_MULT
+      : PIRATE_STARSHARD_REWARD_MULT;
+  const amount = applyStarshardMultiplier(oldAmount, mult, seed);
   grantStarshards(player, amount);
   return amount;
 }
 
 /**
- * Grant Starshards when the player wins defense vs an NPC pirate raid
- * (`PIRATE_DEFENSE_WIN_STARSHARDS`, contract pirate fleet kill).
+ * Grant Starshards when the player wins defense vs an NPC pirate/alien raid.
+ * Pirates give 1% of old amount (10), aliens give 2%.
  */
-export function grantPirateFleetKillStarshards(player: PlayerState): number {
-  grantStarshards(player, PIRATE_DEFENSE_WIN_STARSHARDS);
-  return PIRATE_DEFENSE_WIN_STARSHARDS;
+export function grantPirateFleetKillStarshards(
+  player: PlayerState,
+  faction: "pirate" | "alien" = "pirate",
+  seed?: string,
+): number {
+  const mult =
+    faction === "alien"
+      ? ALIEN_STARSHARD_REWARD_MULT
+      : PIRATE_STARSHARD_REWARD_MULT;
+  const amount = applyStarshardMultiplier(
+    PIRATE_DEFENSE_WIN_STARSHARDS,
+    mult,
+    seed,
+  );
+  grantStarshards(player, amount);
+  return amount;
 }
 
 /** Deterministic Starshard find amount 5..25 from expedition roll. */

@@ -11,6 +11,7 @@ import {
   ALIEN_FREE_SPAWN_INTERVAL_MS,
   ALIEN_INITIAL_BASE_COUNT,
   ALIEN_LEVEL_DEFENSE_BASE,
+  ALIEN_STARSHARD_REWARD_MULT,
   ALIEN_LEVEL_DEFENSE_COMPOSITION,
   ALIEN_LEVEL_DEFENSE_PER_LEVEL,
   ALIEN_MAX_BASE_COUNT,
@@ -53,6 +54,7 @@ import {
   PIRATE_SPLIT_CHILD_LEVEL,
   PIRATE_SPLIT_LEVEL,
   PIRATE_SPLIT_NEARBY_SYSTEM_RADIUS,
+  PIRATE_STARSHARD_REWARD_MULT,
   PIRATE_TARGET_BASE_COUNT,
   PIRATE_VS_PIRATE_RAID_PERIOD_MULT,
   SHIPS,
@@ -109,6 +111,7 @@ import type {
   UniverseState,
 } from "./types.js";
 import {
+  applyStarshardMultiplier,
   grantPirateDestroyStarshards,
   grantPirateFleetKillStarshards,
   utcDayKey,
@@ -417,11 +420,19 @@ export function alienBaseId(galaxy: number, system: number, slot: number): strin
   return `aln:${galaxy}:${system}:${slot}`;
 }
 
-export function pirateDestroyStarshards(tier: number): number {
-  return (
+export function pirateDestroyStarshards(
+  tier: number,
+  faction: "pirate" | "alien" = "pirate",
+  seed?: string,
+): number {
+  const oldAmount =
     PIRATE_DESTROY_STARSHARDS_BASE +
-    PIRATE_DESTROY_STARSHARDS_PER_TIER * Math.max(0, Math.floor(tier))
-  );
+    PIRATE_DESTROY_STARSHARDS_PER_TIER * Math.max(0, Math.floor(tier));
+  const mult =
+    faction === "alien"
+      ? ALIEN_STARSHARD_REWARD_MULT
+      : PIRATE_STARSHARD_REWARD_MULT;
+  return applyStarshardMultiplier(oldAmount, mult, seed);
 }
 
 function rollInRange(seed: string, min: number, max: number): number {
@@ -1603,7 +1614,11 @@ export function applyNpcRaidOnPlanet(
     grantPlayerXp(owner, xpForCombatLose());
   } else if (combat.outcome === "defender_win") {
     awardSeasonPveWin(universe, owner, now);
-    grantPirateFleetKillStarshards(owner);
+    grantPirateFleetKillStarshards(
+      owner,
+      faction,
+      `${base.id}:kill_shards:${now}`,
+    );
     if (faction === "pirate") noteGoalMetric(owner, "pirateWin", 1, now);
     const killed = resourcesCostTotal(
       destroyedShipResources(raidFleet, combat.attackerAfter),
@@ -1937,6 +1952,7 @@ function resolveNpcRaidArrival(
   );
   let loot = emptyCargo();
   let attackerXp = 0;
+  let starshardsGained = 0;
   if (combat.outcome === "attacker_win") {
     loot = computeRaidLoot(base.resources, combat.attackerAfter);
     base.resources = {
@@ -1956,7 +1972,12 @@ function resolveNpcRaidArrival(
     if (owner) {
       awardSeasonPveWin(universe, owner, now);
       awardSeasonPirateKill(universe, owner, now);
-      grantPirateDestroyStarshards(owner, tierAtFight);
+      starshardsGained = grantPirateDestroyStarshards(
+        owner,
+        tierAtFight,
+        kind,
+        `${fleet.id}:destroy_shards:${now}`,
+      );
       if (kind === "pirate") noteGoalMetric(owner, "pirateWin", 1, now);
       attackerXp =
         xpForCombatWin(killed) +
@@ -1999,7 +2020,7 @@ function resolveNpcRaidArrival(
     rounds: combat.rounds,
     summary:
       combat.outcome === "attacker_win"
-        ? `${combat.summary} ${label} base destroyed (+${pirateDestroyStarshards(tierAtFight)} Starshards).`
+        ? `${combat.summary} ${label} base destroyed (+${starshardsGained} Starshards).`
         : combat.summary,
     moonFormed: false,
     roundLog: combat.roundLog.length ? combat.roundLog : undefined,
