@@ -7,6 +7,7 @@ import {
   fuelCostOneWay,
   flightSecondsOneWay,
   normalizeFleetShips,
+  validateSwarmCarry,
   type Coordinates,
   type MissionType,
   type PlayerView,
@@ -267,6 +268,15 @@ export function fleetComposer(
         </div>`
       : "";
 
+  const draftShips = normalizeFleetShips(draft?.counts ?? {});
+  const swarmCheck = validateSwarmCarry(
+    draftShips,
+    view.player.research.swarmHold ?? 0,
+  );
+  const swarmHint = !swarmCheck.ok
+    ? `<p class="hint" data-testid="fleet-need-mothership">${escapeHtml(swarmCheck.error)}</p>`
+    : "";
+
   const expeditionCap = view.expeditionSlotCap;
   const fleetCap = view.fleetSlotCap;
   const fleetActive = view.fleets.length;
@@ -303,7 +313,8 @@ export function fleetComposer(
   const launchBlocked =
     busy ||
     options.length === 0 ||
-    (mission === "expedition" && expeditionActive >= expeditionCap);
+    (mission === "expedition" && expeditionActive >= expeditionCap) ||
+    !swarmCheck.ok;
 
   const sampleShips = normalizeFleetShips({ scout: 1 });
   const sampleTarget = rivals[0]?.coords ?? view.planet.coords;
@@ -328,7 +339,8 @@ export function fleetComposer(
     const raw = draft?.counts[id] ?? 0;
     return sum + Math.min(have, Math.max(0, Math.floor(raw)));
   }, 0);
-  const nextDisabled = busy || orbitShipIds.length === 0 || selectedShips < 1;
+  const nextDisabled =
+    busy || orbitShipIds.length === 0 || selectedShips < 1 || !swarmCheck.ok;
 
   const missionMeta: Record<
     MissionType,
@@ -447,6 +459,7 @@ export function fleetComposer(
       ${presetPanel}
       <div class="fleet-ships" data-testid="fleet-orbit-ships">${shipInputs}</div>
       <p class="hint">Ships shown are in orbit on the selected colony. Example one-way ETA ~${fmtEta(sampleEta)} · fuel ~${fmt(sampleFuel)} deut (1 scout).</p>
+      ${swarmHint}
       <button type="submit" data-fleet-action="next" data-testid="fleet-next" ${nextDisabled ? "disabled" : ""}>Next</button>
     </form>
   `;
@@ -514,6 +527,7 @@ export function fleetComposer(
         <p data-testid="fleet-flight">${flightLine}</p>
       </div>
       ${needHint}
+      ${swarmHint}
       ${
         showNewbieProtectionWarning
           ? `<p class="hint" data-testid="fleet-newbie-protection-warning">Launching this attack ends your newbie protection.</p>`
