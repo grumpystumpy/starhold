@@ -174,6 +174,7 @@ describe("Round 2 multi-item queues", () => {
     const universe = createUniverse("Cancel Drift", 8);
     const { player, planet } = joinUniverse(universe, "Canceller", 302_000_000);
     const p = universe.planets[planet.id];
+    p.buildings.metalStorage = 3;
     p.resources = { metal: 50_000, crystal: 50_000, deuterium: 50_000 };
     const t0 = 302_000_100;
     assert.ok(queueBuildingUpgrade(universe, player.id, "shipyard", t0).ok);
