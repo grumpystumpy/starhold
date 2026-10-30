@@ -306,8 +306,8 @@ async function runViewport(browser, viewport, ids) {
     const fleetUrl = `${WEB}/fleet?playerId=${encodeURIComponent(ids.spy.player.id)}`;
     await page.goto(fleetUrl, { waitUntil: "domcontentloaded" });
     await fleetToStep2(page, { probe: 1 });
-    await page.waitForSelector('[data-testid="mission-espionage"]');
-    await page.click('[data-testid="mission-espionage"]');
+    await page.waitForSelector('[data-testid="fleet-mission"]');
+    await page.selectOption('[data-testid="fleet-mission"]', "espionage");
     await page.waitForFunction(() =>
       [...document.querySelectorAll("#fleet-target option")].some((o) =>
         (o.textContent ?? "").startsWith("Spy "),
@@ -322,7 +322,7 @@ async function runViewport(browser, viewport, ids) {
       !spyOptions.some((t) => t.includes("Attack")),
       `${tag} spy list says Attack: ${spyOptions.join(" | ")}`,
     );
-    await page.click('[data-testid="mission-raid"]');
+    await page.selectOption('[data-testid="fleet-mission"]', "raid");
     await page.waitForSelector('[data-testid="fleet-targets-protected"]');
     const protectedText = await page.locator('[data-testid="fleet-targets-protected"]').innerText();
     assert(protectedText.includes("2.5k"), `${tag} protection copy: ${protectedText}`);
@@ -409,8 +409,8 @@ async function expectGraduatedTarget(browser, viewport, ids) {
     const fleetUrl = `${WEB}/fleet?playerId=${encodeURIComponent(ids.spy.player.id)}`;
     await page.goto(fleetUrl, { waitUntil: "domcontentloaded" });
     await fleetToStep2(page, { probe: 1 });
-    await page.waitForSelector('[data-testid="mission-raid"]');
-    await page.click('[data-testid="mission-raid"]');
+    await page.waitForSelector('[data-testid="fleet-mission"]');
+    await page.selectOption('[data-testid="fleet-mission"]', "raid");
     await page.waitForFunction(
       (name) =>
         [...document.querySelectorAll("#fleet-target option")].some((o) =>
@@ -429,7 +429,7 @@ async function expectGraduatedTarget(browser, viewport, ids) {
         `${tag} still lists protected ${other.player.name}`,
       );
     }
-    await page.click('[data-testid="mission-espionage"]');
+    await page.selectOption('[data-testid="fleet-mission"]', "espionage");
     await page.waitForFunction(
       (name) =>
         [...document.querySelectorAll("#fleet-target option")].some((o) =>

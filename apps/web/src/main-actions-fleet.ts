@@ -161,10 +161,10 @@ export function doApplyFleetPreset(): void {
   }
 
   const mission = intentMission(preset.intent);
-  const radio = form.querySelector<HTMLInputElement>(
-    `input[name="fleet-mission"][value="${mission}"]`,
+  const selectEl = form.querySelector<HTMLSelectElement | HTMLInputElement>(
+    '[name="fleet-mission"]',
   );
-  if (radio) radio.checked = true;
+  if (selectEl) selectEl.value = mission;
 
   for (const id of SHIP_ORDER) {
     const input = form.querySelector<HTMLInputElement>(
