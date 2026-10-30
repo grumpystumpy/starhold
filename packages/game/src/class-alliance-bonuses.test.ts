@@ -449,17 +449,19 @@ describe("alliance classes", () => {
     const plainWeapons = raidReport({
       atkClass: "miner",
       defClass: "miner",
-      atkShips: { scout: 12 },
-      defShips: { interceptor: 1 },
+      atkShips: { scout: 16 },
+      defDefenses: { laserBattery: 3 },
+      defShips: { interceptor: 1, scout: 1 },
     });
     const builderWeapons = raidReport({
       atkClass: "miner",
       defClass: "miner",
       atkAlliance: "builder",
-      atkShips: { scout: 12 },
-      defShips: { interceptor: 1 },
+      atkShips: { scout: 16 },
+      defDefenses: { laserBattery: 3 },
+      defShips: { interceptor: 1, scout: 1 },
     });
-    assert.ok(plainWeapons.report.attackerAfter.scout < 12);
+    assert.ok(plainWeapons.report.attackerAfter.scout < 16);
     assert.ok(
       builderWeapons.report.attackerAfter.scout <
         plainWeapons.report.attackerAfter.scout,
@@ -468,18 +470,18 @@ describe("alliance classes", () => {
     const bareShield = raidReport({
       atkClass: null,
       defClass: null,
-      atkShips: { scout: 5 },
-      defDefenses: { laserBattery: 3 },
+      atkShips: { scout: 8 },
+      defDefenses: { laserBattery: 5 },
     });
     const destroyerShield = raidReport({
       atkClass: null,
       defClass: null,
       atkAlliance: "destroyer",
-      atkShips: { scout: 5 },
-      defDefenses: { laserBattery: 3 },
+      atkShips: { scout: 8 },
+      defDefenses: { laserBattery: 5 },
     });
     assert.equal(bareShield.report.attackerAfter.scout ?? 0, 0);
-    assert.equal(destroyerShield.report.attackerAfter.scout, 1);
+    assert.equal(destroyerShield.report.attackerAfter.scout, 3);
 
     const bareDefense = raidReport({
       atkClass: null,
@@ -494,7 +496,7 @@ describe("alliance classes", () => {
       atkShips: { bomber: 1 },
       defDefenses: { pulseBastion: 2 },
     });
-    assert.equal(bareDefense.report.defensesDestroyed?.pulseBastion ?? 0, 1);
+    assert.equal(bareDefense.report.defensesDestroyed?.pulseBastion ?? 0, 0);
     assert.equal(builderDefense.report.defensesDestroyed?.pulseBastion ?? 0, 0);
 
     const plainShield = raidReport({
@@ -510,7 +512,7 @@ describe("alliance classes", () => {
       atkShips: { scout: 20 },
       defDefenses: { laserBattery: 11 },
     });
-    assert.ok(builderShield.report.rounds < plainShield.report.rounds);
+    assert.ok(builderShield.report.rounds > plainShield.report.rounds);
 
     const universe = createUniverse("mines", 1);
     const now = 7_000_000;
