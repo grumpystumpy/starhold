@@ -129,6 +129,8 @@ export {
   isNewbieProtected,
   newbieBonusRemainingMs,
   pirateRaidPickWeight,
+  planetRaidDeterrence,
+  planetStationedUnits,
   recordSuccessfulPirateRaid,
 } from "./world-protection.js";
 export {

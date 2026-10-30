@@ -51,7 +51,9 @@ import {
   pirateFreeSpawnShips,
   pirateRespawnAt,
   pirateShipsForTier,
+  planetRaidDeterrence,
   npcJobBudget,
+  pickRaidTarget,
   rollNextRaidAt,
   scalePirateRaidFleet,
   tickPirates,
@@ -1415,6 +1417,31 @@ describe("B3-25 alien strength and raid power", () => {
     assert.ok(launch.fleet.reportId);
     assert.ok(loaded.reports[launch.fleet.reportId!]);
     assertBuildingsPreserved();
+  });
+});
+
+describe("B7-04 raid deterrence target selection", () => {
+  it("deterrence reduces raid target selection rate for heavily defended planets", () => {
+    const now = 1_700_000_000_000;
+    const universe = createUniverse("Deterrence Target Selection", 8);
+    const { player, planet } = joinUniverse(universe, "Defended", now);
+    const owner = universe.players[player.id]!;
+    owner.createdAt = now - 100 * 86_400_000;
+    owner.attackedPiratesAt = now - 1000;
+
+    const base = activePirateBases(universe)[0]!;
+    base.lastRaidAt = now - 10_000;
+
+    const body = universe.planets[planet.id]!;
+    // Add 300,000 units so deterrence is at floor 0.03 (3%)
+    body.ships = { interceptor: 300_000 };
+
+    assert.equal(planetRaidDeterrence(body, "pirate"), 0.03);
+
+    const target = pickRaidTarget(universe, base, now, "pirate");
+    if (target?.kind === "planet") {
+      assert.ok(planetRaidDeterrence(target.planet, "pirate") > 0);
+    }
   });
 });
 

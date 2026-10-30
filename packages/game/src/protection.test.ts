@@ -1,12 +1,17 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  ALIEN_RAID_DETERRENCE_PENALTY,
+  ALIEN_RAID_DETERRENCE_STEP_UNITS,
   NEWBIE_BONUS_DURATION_MS,
   NEWBIE_DEFENSE_MULT,
   NEWBIE_PRODUCTION_MULT,
   NEWBIE_PROTECTION_POINTS,
+  NPC_RAID_DETERRENCE_FLOOR,
   PIRATE_FAIRNESS_PENALTY_PER_RAID,
   PIRATE_FAIRNESS_POINTS_MAX,
+  PIRATE_RAID_DETERRENCE_PENALTY,
+  PIRATE_RAID_DETERRENCE_STEP_UNITS,
   SHIPS,
 } from "./catalog.js";
 import {
@@ -20,6 +25,8 @@ import {
   newbieBonusRemainingMs,
   launchFleet,
   pirateRaidPickWeight,
+  planetRaidDeterrence,
+  planetStationedUnits,
   playerView,
   recordSuccessfulPirateRaid,
   utcDayKey,
@@ -367,5 +374,85 @@ describe("pirate raid newcomer protection", () => {
       ),
       0,
     );
+  });
+});
+
+describe("B7-04 raid deterrence", () => {
+  it("exports tuning constants", () => {
+    assert.equal(PIRATE_RAID_DETERRENCE_STEP_UNITS, 1500);
+    assert.equal(PIRATE_RAID_DETERRENCE_PENALTY, 0.005);
+    assert.equal(ALIEN_RAID_DETERRENCE_STEP_UNITS, 3000);
+    assert.equal(ALIEN_RAID_DETERRENCE_PENALTY, 0.005);
+    assert.equal(NPC_RAID_DETERRENCE_FLOOR, 0.03);
+  });
+
+  it("planetStationedUnits sums stationed ships and defense units", () => {
+    const universe = createUniverse("Stationed Units", 8);
+    const { planet } = joinUniverse(universe, "Defender", 500_000_000);
+    const body = universe.planets[planet.id]!;
+    body.ships = { interceptor: 100, hauler: 50 };
+    body.defenses = { laserBattery: 200, needleTurret: 300 };
+    assert.equal(planetStationedUnits(body), 650);
+  });
+
+  it("calculates pirate raid deterrence steps and floor 3%", () => {
+    const universe = createUniverse("Pirate Deterrence", 8);
+    const { planet } = joinUniverse(universe, "Defender", 500_000_000);
+    const body = universe.planets[planet.id]!;
+
+    // 0 units -> 1.0 (100%)
+    body.ships = {};
+    body.defenses = {};
+    assert.equal(planetRaidDeterrence(body, "pirate"), 1.0);
+
+    // 1,499 units -> 1.0 (0 steps)
+    body.ships = { interceptor: 1499 };
+    assert.equal(planetRaidDeterrence(body, "pirate"), 1.0);
+
+    // 1,500 units -> 0.995 (1 step)
+    body.ships = { interceptor: 1500 };
+    assert.equal(planetRaidDeterrence(body, "pirate"), 0.995);
+
+    // 3,000 units -> 0.990 (2 steps)
+    body.ships = { interceptor: 1500 };
+    body.defenses = { laserBattery: 1500 };
+    assert.equal(planetRaidDeterrence(body, "pirate"), 0.990);
+
+    // 291,000 units -> 0.03 (194 steps: 1 - 194 * 0.005 = 0.03)
+    body.ships = { interceptor: 200_000 };
+    body.defenses = { laserBattery: 91_000 };
+    assert.ok(Math.abs(planetRaidDeterrence(body, "pirate") - 0.03) < 1e-9);
+
+    // 300,000 units -> floor 0.03 (3%)
+    body.ships = { interceptor: 300_000 };
+    assert.equal(planetRaidDeterrence(body, "pirate"), 0.03);
+  });
+
+  it("calculates alien raid deterrence steps and floor 3%", () => {
+    const universe = createUniverse("Alien Deterrence", 8);
+    const { planet } = joinUniverse(universe, "Defender", 500_000_000);
+    const body = universe.planets[planet.id]!;
+
+    // 0 units -> 1.0 (100%)
+    body.ships = {};
+    body.defenses = {};
+    assert.equal(planetRaidDeterrence(body, "alien"), 1.0);
+
+    // 2,999 units -> 1.0 (0 steps)
+    body.ships = { interceptor: 2999 };
+    assert.equal(planetRaidDeterrence(body, "alien"), 1.0);
+
+    // 3,000 units -> 0.995 (1 step)
+    body.ships = { interceptor: 3000 };
+    assert.equal(planetRaidDeterrence(body, "alien"), 0.995);
+
+    // 6,000 units -> 0.990 (2 steps)
+    body.ships = { interceptor: 3000 };
+    body.defenses = { laserBattery: 3000 };
+    assert.equal(planetRaidDeterrence(body, "alien"), 0.990);
+
+    // 600,000 units -> floor 0.03 (3%)
+    body.ships = { interceptor: 600_000 };
+    assert.equal(planetRaidDeterrence(body, "alien"), 0.03);
   });
 });

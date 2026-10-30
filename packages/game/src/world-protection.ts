@@ -1,11 +1,56 @@
 import {
+  ALIEN_RAID_DETERRENCE_PENALTY,
+  ALIEN_RAID_DETERRENCE_STEP_UNITS,
+  DEFENSE_ORDER,
   NEWBIE_PROTECTION_POINTS,
+  NPC_RAID_DETERRENCE_FLOOR,
   PIRATE_FAIRNESS_PENALTY_PER_RAID,
   PIRATE_FAIRNESS_POINTS_MAX,
+  PIRATE_RAID_DETERRENCE_PENALTY,
+  PIRATE_RAID_DETERRENCE_STEP_UNITS,
+  SHIP_ORDER,
 } from "./catalog.js";
 import { empirePoints } from "./formulas.js";
-import type { PlayerState, UniverseState } from "./types.js";
+import type { PlanetState, PlayerState, UniverseState } from "./types.js";
 import { utcDayKey } from "./world-boosts.js";
+
+/** Count stationed ships plus defense units on a planet. */
+export function planetStationedUnits(planet: PlanetState): number {
+  let count = 0;
+  if (planet.ships) {
+    for (const id of SHIP_ORDER) {
+      count += Math.max(0, Math.floor(planet.ships[id] ?? 0));
+    }
+  }
+  if (planet.defenses) {
+    for (const id of DEFENSE_ORDER) {
+      count += Math.max(0, Math.floor(planet.defenses[id] ?? 0));
+    }
+  }
+  return count;
+}
+
+/**
+ * Deterrence factor for NPC raids on a planet:
+ * drops by 0.5% per full 1,500 ships+defenses for pirates,
+ * 0.5% per full 3,000 ships+defenses for aliens; floor 3%.
+ */
+export function planetRaidDeterrence(
+  planet: PlanetState,
+  faction: "pirate" | "alien",
+): number {
+  const units = planetStationedUnits(planet);
+  const stepUnits =
+    faction === "pirate"
+      ? PIRATE_RAID_DETERRENCE_STEP_UNITS
+      : ALIEN_RAID_DETERRENCE_STEP_UNITS;
+  const penalty =
+    faction === "pirate"
+      ? PIRATE_RAID_DETERRENCE_PENALTY
+      : ALIEN_RAID_DETERRENCE_PENALTY;
+  const fullSteps = Math.floor(units / stepUnits);
+  return Math.max(NPC_RAID_DETERRENCE_FLOOR, 1.0 - fullSteps * penalty);
+}
 
 /** Pirates ignore a new player until 48 hours after creation. */
 export const PIRATE_NEW_PLAYER_PROTECTION_MS = 48 * 60 * 60 * 1000;
