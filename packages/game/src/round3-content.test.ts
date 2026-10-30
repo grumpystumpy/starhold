@@ -17,6 +17,7 @@ import {
   classChangeCost,
   createUniverse,
   economySnapshot,
+  energyUsed,
   helioBuoyEnergy,
   joinUniverse,
   launchFleet,
@@ -369,5 +370,25 @@ describe("Round 3 content + engine (11–19)", () => {
     assert.equal(PLAYER_CLASS_BONUSES.fleeter.attack, 1.08);
     assert.equal(PLAYER_CLASS_BONUSES.expansionist.colonySlots, 2);
     assert.equal(PLAYER_CLASS_BONUSES.expansionist.jumpGateCooldown, 0.85);
+  });
+
+  it("Ore Extractor, Crystal Lattice and Deut Still have 100% increased energy consumption formulas", () => {
+    assert.equal(BUILDINGS.metalMine.name, "Ore Extractor");
+    assert.equal(BUILDINGS.metalMine.energyUsePerLevel, 20);
+
+    assert.equal(BUILDINGS.crystalMine.name, "Crystal Lattice");
+    assert.equal(BUILDINGS.crystalMine.energyUsePerLevel, 24);
+
+    assert.equal(BUILDINGS.deutSynth.name, "Deut Still");
+    assert.equal(BUILDINGS.deutSynth.energyUsePerLevel, 40);
+
+    const universe = createUniverse("Energy Test", 1);
+    const { planet } = joinUniverse(universe, "Energy Tester", 100_000);
+    planet.buildings.metalMine = 2;
+    planet.buildings.crystalMine = 3;
+    planet.buildings.deutSynth = 1;
+
+    // 20*2 + 24*3 + 40*1 = 40 + 72 + 40 = 152
+    assert.equal(energyUsed(planet), 152);
   });
 });
