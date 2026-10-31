@@ -1535,6 +1535,10 @@ export const PIRATE_TARGET_BASE_COUNT = 200;
 
 /** Once per 90 minutes; each base rolls nextRaidAt = periodStart + offset. */
 export const PIRATE_RAID_PERIOD_MS = 90 * 60 * 1000;
+export const PIRATE_FATIGUE_WINDOW_MS = 2 * 60 * 60 * 1000;
+export const PIRATE_FATIGUE_FIRST_HITS = 5;
+export const PIRATE_FATIGUE_EXTRA_HITS = 3;
+export const PIRATE_FATIGUE_MULT = 0.5;
 /** Stretch / skip factor so pirate-vs-pirate is slightly less often. */
 export const PIRATE_VS_PIRATE_RAID_PERIOD_MULT = 1.25;
 /** @deprecated Prefer PIRATE_RAID_PERIOD_MS. */
