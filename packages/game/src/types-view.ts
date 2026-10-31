@@ -187,6 +187,8 @@ export interface PlanetState {
   lastDriftAt?: number;
   /** First successful colonize time — drives 8h galaxy-wide visibility. */
   colonizedAt?: number;
+  /** Timestamps (ms) of recent NPC pirate raid hits on this planet within rolling window. */
+  pirateHitHistory?: number[];
 }
 
 export type AllianceRole = "founder" | "officer" | "member";
