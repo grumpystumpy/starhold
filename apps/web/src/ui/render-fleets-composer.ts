@@ -293,7 +293,7 @@ export function fleetComposer(
         ? mission === "transport"
           ? `<p class="hint" data-testid="fleet-need-colony">Need a second world: research Stellar Cartography, build a Colonizer, colonize an empty galaxy slot — then transport cargo there.</p>`
           : mission === "jump"
-            ? `<p class="hint" data-testid="fleet-need-jump-moon">Need another of your moons with a Fold Bridge (form moons from large debris, then build Crater Hab + Fold Bridge on both).</p>`
+            ? `<p class="hint" data-testid="fleet-need-jump-moon">Need another of your moons with a Moon Bridge (form moons from large debris, then build Lunar Habitat + Moon Bridge on both).</p>`
             : mission === "deploy"
               ? `<p class="hint" data-testid="fleet-need-deploy-target">Colonize for park targets, or join a second commander for attacking another rival.</p>`
               : mission === "colonize"
@@ -351,9 +351,9 @@ export function fleetComposer(
       detail: "Combat mission against a rival — winners leave debris.",
     },
     espionage: {
-      label: "Spy (Whisper Probe)",
+      label: "Spy (Spy Satellite)",
       detail: "Probe a foreign world for fleet, defense, and resource intel.",
-      requires: ["Whisper Probe in orbit"],
+      requires: ["Spy Satellite in orbit"],
     },
     transport: {
       label: "Transport cargo (own worlds)",
@@ -371,9 +371,9 @@ export function fleetComposer(
       requires: ["Recycler / harvester hull"],
     },
     harvestAsteroid: {
-      label: "Harvest asteroid (Salvage Trawler)",
+      label: "Harvest asteroid (Recovery Vessel)",
       detail: "Mine an asteroid field for resources.",
-      requires: ["Salvage Trawler"],
+      requires: ["Recovery Vessel"],
     },
     expedition: {
       label: "Expedition (deep space)",
@@ -389,9 +389,9 @@ export function fleetComposer(
       detail: "Strike the system alien base while it is active.",
     },
     jump: {
-      label: "Fold Bridge (moon → moon)",
-      detail: "Instant transfer between your moons with Fold Bridges.",
-      requires: ["Fold Bridge on both moons"],
+      label: "Moon Bridge (moon → moon)",
+      detail: "Instant transfer between your moons with Moon Bridges.",
+      requires: ["Moon Bridge on both moons"],
     },
     occupy: {
       label: "Occupation (Mothership)",

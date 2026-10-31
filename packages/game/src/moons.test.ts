@@ -394,7 +394,7 @@ describe("Thread C moons", () => {
     assert.ok((raid.report.moonKillChancePct ?? 0) > 0);
     assert.ok(
       raid.report.summary.includes(
-        `Void Titans shattered the moon (${raid.report.moonKillChancePct}% chance).`,
+        `Dreadnoughts shattered the moon (${raid.report.moonKillChancePct}% chance).`,
       ),
     );
     assert.equal(raid.universe.planets[raid.targetId], undefined);

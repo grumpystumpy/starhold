@@ -23,7 +23,7 @@ function classBlurb(id: PlayerClassId): string {
     case "fleeter":
       return `Attack ×${b.attack.toFixed(2)} · fleet speed ×${b.fleetSpeed.toFixed(2)} · ship build ×${b.shipBuildTime.toFixed(2)} · +${fmt(b.fleetSlots)} fleet slots`;
     case "expansionist":
-      return `+${fmt(b.colonySlots)} colony slots · colonizer speed ×${b.colonyShipSpeed.toFixed(2)} · building ×${b.buildingBuildTime.toFixed(2)} · Fold Bridge CD ×${b.jumpGateCooldown.toFixed(2)} · +${fmt(b.colonyFields)} colony fields · own-world speed ×${b.ownWorldFleetSpeed.toFixed(2)}`;
+      return `+${fmt(b.colonySlots)} colony slots · colonizer speed ×${b.colonyShipSpeed.toFixed(2)} · building ×${b.buildingBuildTime.toFixed(2)} · Moon Bridge CD ×${b.jumpGateCooldown.toFixed(2)} · +${fmt(b.colonyFields)} colony fields · own-world speed ×${b.ownWorldFleetSpeed.toFixed(2)}`;
     default: {
       const _exhaustive: never = id;
       return _exhaustive;
