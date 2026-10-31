@@ -417,10 +417,10 @@ export function galaxyPanel(
   const scanTip = infoTooltip({
     title: "Scan system",
     lines: [
-      "Send Whisper Probes to every foreign-owned planet and mini planet in this system.",
+      "Send Spy Satellites to every foreign-owned planet and mini planet in this system.",
       "Consumes probes from ships in orbit on the selected colony.",
     ],
-    requires: ["Whisper Probe in orbit"],
+    requires: ["Spy Satellite in orbit"],
     testId: "galaxy-scan-tip",
   });
 
@@ -429,17 +429,17 @@ export function galaxyPanel(
       <h2>Galaxy Navigation</h2>
       <div class="galaxy-system-bar" data-testid="galaxy-system-bar">
         <div class="galaxy-nav">
-          <div class="galaxy-nav-row galaxy-nav-row-galaxy" data-testid="galaxy-nav-row-galaxy">
-            <button type="button" data-galaxy-galaxy-nav="prev" data-testid="galaxy-galaxy-prev" ${busy ? "disabled" : ""}>◀ Galaxy</button>
-            <button type="button" data-galaxy-galaxy-nav="next" data-testid="galaxy-galaxy-next" ${busy ? "disabled" : ""}>Galaxy ▶</button>
-          </div>
-          <div class="galaxy-nav-row galaxy-nav-row-coords" data-testid="galaxy-nav-row-coords">
-            <form data-galaxy-jump-form><input id="galaxy-jump" data-testid="galaxy-jump" type="text" inputmode="text" enterkeyhint="go" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="Galaxy and system" placeholder="9:143" /></form>
-            <span data-testid="galaxy-label">${galaxy.galaxy}:${galaxy.system} / ${MAP_SYSTEMS}</span>
-          </div>
           <div class="galaxy-nav-row galaxy-nav-row-system" data-testid="galaxy-nav-row-system">
             <button type="button" data-galaxy-nav="prev" data-testid="galaxy-prev" ${busy ? "disabled" : ""}>◀ System</button>
             <button type="button" data-galaxy-nav="next" data-testid="galaxy-next" ${busy ? "disabled" : ""}>System ▶</button>
+          </div>
+          <div class="galaxy-nav-row galaxy-nav-row-coords" data-testid="galaxy-nav-row-coords">
+            <form data-galaxy-jump-form><input id="galaxy-jump" data-testid="galaxy-jump" type="text" inputmode="text" enterkeyhint="go" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="Galaxy and system" placeholder="x:xxx" /></form>
+            <span data-testid="galaxy-label">${galaxy.galaxy}:${galaxy.system} / ${MAP_SYSTEMS}</span>
+          </div>
+          <div class="galaxy-nav-row galaxy-nav-row-galaxy" data-testid="galaxy-nav-row-galaxy">
+            <button type="button" data-galaxy-galaxy-nav="prev" data-testid="galaxy-galaxy-prev" ${busy ? "disabled" : ""}>◀ Galaxy</button>
+            <button type="button" data-galaxy-galaxy-nav="next" data-testid="galaxy-galaxy-next" ${busy ? "disabled" : ""}>Galaxy ▶</button>
           </div>
         </div>
         <div class="system-summary-chips">

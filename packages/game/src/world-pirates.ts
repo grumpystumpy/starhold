@@ -11,6 +11,7 @@ import {
   ALIEN_FREE_SPAWN_INTERVAL_MS,
   ALIEN_INITIAL_BASE_COUNT,
   ALIEN_LEVEL_DEFENSE_BASE,
+  ALIEN_STARSHARD_REWARD_MULT,
   ALIEN_LEVEL_DEFENSE_COMPOSITION,
   ALIEN_LEVEL_DEFENSE_PER_LEVEL,
   ALIEN_MAX_BASE_COUNT,
@@ -43,6 +44,10 @@ import {
   PIRATE_LEVEL_DEFENSE_COMPOSITION,
   PIRATE_LEVEL_DEFENSE_PER_LEVEL,
   PIRATE_LEVEL_GROWTH_INTERVAL_MS,
+  PIRATE_FATIGUE_EXTRA_HITS,
+  PIRATE_FATIGUE_FIRST_HITS,
+  PIRATE_FATIGUE_MULT,
+  PIRATE_FATIGUE_WINDOW_MS,
   PIRATE_MAX_LEVEL,
   PIRATE_RAID_PERIOD_MS,
   PIRATE_RAID_POWER_FACTOR,
@@ -53,6 +58,7 @@ import {
   PIRATE_SPLIT_CHILD_LEVEL,
   PIRATE_SPLIT_LEVEL,
   PIRATE_SPLIT_NEARBY_SYSTEM_RADIUS,
+  PIRATE_STARSHARD_REWARD_MULT,
   PIRATE_TARGET_BASE_COUNT,
   PIRATE_VS_PIRATE_RAID_PERIOD_MULT,
   SHIPS,
@@ -109,6 +115,7 @@ import type {
   UniverseState,
 } from "./types.js";
 import {
+  applyStarshardMultiplier,
   grantPirateDestroyStarshards,
   grantPirateFleetKillStarshards,
   utcDayKey,
@@ -122,6 +129,7 @@ import {
   isNewbieBonusActive,
   NEWBIE_DEFENSE_MULT,
   pirateRaidPickWeight,
+  planetRaidDeterrence,
   recordSuccessfulPirateRaid,
 } from "./world-protection.js";
 import { addDebris, subtractCargo } from "./world-tick.js";
@@ -417,11 +425,19 @@ export function alienBaseId(galaxy: number, system: number, slot: number): strin
   return `aln:${galaxy}:${system}:${slot}`;
 }
 
-export function pirateDestroyStarshards(tier: number): number {
-  return (
+export function pirateDestroyStarshards(
+  tier: number,
+  faction: "pirate" | "alien" = "pirate",
+  seed?: string,
+): number {
+  const oldAmount =
     PIRATE_DESTROY_STARSHARDS_BASE +
-    PIRATE_DESTROY_STARSHARDS_PER_TIER * Math.max(0, Math.floor(tier))
-  );
+    PIRATE_DESTROY_STARSHARDS_PER_TIER * Math.max(0, Math.floor(tier));
+  const mult =
+    faction === "alien"
+      ? ALIEN_STARSHARD_REWARD_MULT
+      : PIRATE_STARSHARD_REWARD_MULT;
+  return applyStarshardMultiplier(oldAmount, mult, seed);
 }
 
 function rollInRange(seed: string, min: number, max: number): number {
@@ -1382,8 +1398,42 @@ export function isRelicWorldPlanet(planet: PlanetState): boolean {
 }
 
 /**
- * Pirate raids multiply relic weight by fairness (newbies weigh 0).
- * Alien raids keep relic weight only — fairness does not apply.
+ * Rolling 2-hour pirate attack fatigue multiplier.
+ * 0-4 hits = x1, 5-7 hits = x0.5, 8+ hits = x0.25 (0.5 * 0.5).
+ */
+export function pirateFatigueMult(planet: PlanetState, now: number): number {
+  if (!planet.pirateHitHistory || planet.pirateHitHistory.length === 0) {
+    return 1;
+  }
+  const cutoff = now - PIRATE_FATIGUE_WINDOW_MS;
+  let hits = 0;
+  for (const ts of planet.pirateHitHistory) {
+    if (ts >= cutoff) {
+      hits++;
+    }
+  }
+  if (hits >= PIRATE_FATIGUE_FIRST_HITS + PIRATE_FATIGUE_EXTRA_HITS) {
+    return PIRATE_FATIGUE_MULT * PIRATE_FATIGUE_MULT;
+  }
+  if (hits >= PIRATE_FATIGUE_FIRST_HITS) {
+    return PIRATE_FATIGUE_MULT;
+  }
+  return 1;
+}
+
+/**
+ * Record a pirate raid hit timestamp on a planet and prune entries older than 2h.
+ */
+export function recordPirateHit(planet: PlanetState, now: number): void {
+  const cutoff = now - PIRATE_FATIGUE_WINDOW_MS;
+  const history = (planet.pirateHitHistory ?? []).filter((ts) => ts >= cutoff);
+  history.push(now);
+  planet.pirateHitHistory = history;
+}
+
+/**
+ * Pirate raids multiply relic weight by fairness (newbies weigh 0) and fatigue, then subtract deterrence.
+ * Alien raids keep relic weight and subtract deterrence — fairness and fatigue do not apply.
  */
 function npcPlanetPickWeight(
   universe: UniverseState,
@@ -1392,10 +1442,13 @@ function npcPlanetPickWeight(
   faction: "pirate" | "alien",
 ): number {
   const relic = planetRaidWeight(planet);
-  if (faction !== "pirate") return relic;
+  if (faction !== "pirate") return planetRaidDeterrence(planet, faction, relic);
   const owner = universe.players[planet.ownerPlayerId];
   if (!owner) return 0;
-  return relic * pirateRaidPickWeight(universe, owner, now);
+  const baseWeight =
+    relic * pirateRaidPickWeight(universe, owner, now) * pirateFatigueMult(planet, now);
+  if (baseWeight <= 0) return 0;
+  return planetRaidDeterrence(planet, faction, baseWeight);
 }
 
 function pickWeightedPlayerPlanet(
@@ -1405,16 +1458,33 @@ function pickWeightedPlayerPlanet(
   now: number,
   faction: "pirate" | "alien",
 ): PlanetState | null {
-  const weights = planets.map((p) => npcPlanetPickWeight(universe, p, now, faction));
-  let total = 0;
-  for (const w of weights) total += w;
-  if (total <= 0) return null;
-  let slot = ((roll % 1_000_000) / 1_000_000) * total;
+  const baseWeights = planets.map((p) => {
+    const relic = planetRaidWeight(p);
+    if (faction !== "pirate") return relic;
+    const owner = universe.players[p.ownerPlayerId];
+    if (!owner) return 0;
+    return (
+      relic * pirateRaidPickWeight(universe, owner, now) * pirateFatigueMult(p, now)
+    );
+  });
+  let baseTotal = 0;
+  for (const w of baseWeights) baseTotal += w;
+  if (baseTotal <= 0) return null;
+
+  let slot = ((roll % 1_000_000) / 1_000_000) * baseTotal;
   for (let i = 0; i < planets.length; i++) {
-    slot -= weights[i]!;
-    if (slot <= 0) return planets[i]!;
+    const baseW = baseWeights[i]!;
+    if (baseW <= 0) continue;
+    if (slot < baseW) {
+      const effectiveW = planetRaidDeterrence(planets[i]!, faction, baseW);
+      if (slot < effectiveW) {
+        return planets[i]!;
+      }
+      return null;
+    }
+    slot -= baseW;
   }
-  return planets[planets.length - 1]!;
+  return null;
 }
 
 export function planetRaidWeight(planet: PlanetState): number {
@@ -1514,6 +1584,9 @@ export function applyNpcRaidOnPlanet(
           `${base.id}:alien-raid:${now}`,
         );
   if (fleetShipCount(raidFleet) < 1) return;
+  if (faction === "pirate") {
+    recordPirateHit(planet, now);
+  }
   const defenderBefore = { ...planet.ships };
   const defensesBefore = planet.defenses ?? emptyDefenses();
   const combat = resolveCombat(
@@ -1603,7 +1676,11 @@ export function applyNpcRaidOnPlanet(
     grantPlayerXp(owner, xpForCombatLose());
   } else if (combat.outcome === "defender_win") {
     awardSeasonPveWin(universe, owner, now);
-    grantPirateFleetKillStarshards(owner);
+    grantPirateFleetKillStarshards(
+      owner,
+      faction,
+      `${base.id}:kill_shards:${now}`,
+    );
     if (faction === "pirate") noteGoalMetric(owner, "pirateWin", 1, now);
     const killed = resourcesCostTotal(
       destroyedShipResources(raidFleet, combat.attackerAfter),
@@ -1937,6 +2014,7 @@ function resolveNpcRaidArrival(
   );
   let loot = emptyCargo();
   let attackerXp = 0;
+  let starshardsGained = 0;
   if (combat.outcome === "attacker_win") {
     loot = computeRaidLoot(base.resources, combat.attackerAfter);
     base.resources = {
@@ -1956,7 +2034,12 @@ function resolveNpcRaidArrival(
     if (owner) {
       awardSeasonPveWin(universe, owner, now);
       awardSeasonPirateKill(universe, owner, now);
-      grantPirateDestroyStarshards(owner, tierAtFight);
+      starshardsGained = grantPirateDestroyStarshards(
+        owner,
+        tierAtFight,
+        kind,
+        `${fleet.id}:destroy_shards:${now}`,
+      );
       if (kind === "pirate") noteGoalMetric(owner, "pirateWin", 1, now);
       attackerXp =
         xpForCombatWin(killed) +
@@ -1999,7 +2082,7 @@ function resolveNpcRaidArrival(
     rounds: combat.rounds,
     summary:
       combat.outcome === "attacker_win"
-        ? `${combat.summary} ${label} base destroyed (+${pirateDestroyStarshards(tierAtFight)} Starshards).`
+        ? `${combat.summary} ${label} base destroyed (+${starshardsGained} Starshards).`
         : combat.summary,
     moonFormed: false,
     roundLog: combat.roundLog.length ? combat.roundLog : undefined,

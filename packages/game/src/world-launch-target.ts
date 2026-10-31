@@ -159,7 +159,7 @@ export function resolveLaunchTarget(
       return { ok: false, error: "Asteroid field not found." };
     }
     if ((ships.recycler ?? 0) < 1) {
-      return { ok: false, error: "Asteroid harvest requires a Salvage Trawler." };
+      return { ok: false, error: "Asteroid harvest requires a Recovery Vessel." };
     }
     targetAsteroidId = asteroidId;
     targetCoords = { ...field.coords };
@@ -217,7 +217,7 @@ export function resolveLaunchTarget(
       if (!hasCradle && !hasArk) {
         return {
           ok: false,
-          error: "Colonize requires a Colonizer or Foundation Ark.",
+          error: "Colonize requires a Colonizer or Outpost Carrier.",
         };
       }
       if (targetPlanet && isMiniPlanet(targetPlanet)) {
@@ -253,7 +253,7 @@ export function resolveLaunchTarget(
       if (!canCollectDebris(ships)) {
         return {
           ok: false,
-          error: "Harvest requires a Salvage Trawler or Mothership.",
+          error: "Harvest requires a Recovery Vessel or Mothership.",
         };
       }
     }
@@ -300,26 +300,36 @@ export function resolveLaunchTarget(
         return { ok: false, error: "Cannot spy on yourself." };
       }
       if ((ships.probe ?? 0) < 1) {
-        return { ok: false, error: "Espionage requires a Whisper Probe." };
+        return { ok: false, error: "Espionage requires a Spy Satellite." };
       }
     } else if (mission === "jump") {
       if (origin.kind !== "moon") {
-        return { ok: false, error: "Fold Bridge hops must start from a moon." };
+        return { ok: false, error: "Moon Bridge hops must start from a moon." };
       }
       if ((origin.buildings.jumpGate ?? 0) < 1) {
-        return { ok: false, error: "Origin moon needs Fold Bridge level 1." };
+        return { ok: false, error: "Origin moon needs Moon Bridge level 1." };
       }
       if (targetPlanet.kind !== "moon") {
-        return { ok: false, error: "Fold Bridge hops must target a moon." };
+        return { ok: false, error: "Moon Bridge hops must target a moon." };
       }
       if (targetPlanet.ownerPlayerId !== player.id) {
-        return { ok: false, error: "Fold Bridge only links your own moons." };
+        return { ok: false, error: "Moon Bridge only links your own moons." };
       }
       if (targetPlanet.id === origin.id) {
         return { ok: false, error: "Cannot jump to the same moon." };
       }
       if ((targetPlanet.buildings.jumpGate ?? 0) < 1) {
-        return { ok: false, error: "Target moon needs Fold Bridge level 1." };
+        return { ok: false, error: "Target moon needs Moon Bridge level 1." };
+      }
+    } else if (mission === "occupy") {
+      if (!isMiniPlanet(targetPlanet)) {
+        return { ok: false, error: "Occupation targets must be mini planets." };
+      }
+      if ((ships.swarmMothership ?? 0) < 1) {
+        return { ok: false, error: "Occupation requires a Mothership." };
+      }
+      if (targetPlanet.ownerPlayerId === player.id) {
+        return { ok: false, error: "Cannot occupy your own body." };
       }
     }
   }

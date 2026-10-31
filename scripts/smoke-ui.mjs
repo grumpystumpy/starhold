@@ -757,7 +757,7 @@ async function uiSmoke() {
   await fleetToStep2(page, { scout: 1 });
   logs.push("fleet-form-and-art");
 
-  await page.click('[data-testid="mission-raid"]');
+  await page.selectOption('[data-testid="fleet-mission"]', "raid");
   // Default target is roster[0] (often another newbie). Aim at the graduated rival.
   await page.waitForFunction(
     (planetId) => {

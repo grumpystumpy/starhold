@@ -3,10 +3,12 @@ import {
   NEWBIE_PROTECTION_POINTS,
   SHIP_ORDER,
   SHIPS,
+  WEAKEST_FIRST_SHIPS,
   fleetCargoCapacity,
   fuelCostOneWay,
   flightSecondsOneWay,
   normalizeFleetShips,
+  validateSwarmCarry,
   type Coordinates,
   type MissionType,
   type PlayerView,
@@ -28,7 +30,11 @@ export function fleetComposer(
   busy: boolean,
   draft: FleetDraft | null,
 ): string {
-  const mission = draft?.mission ?? "deploy";
+  const hasMothership = (draft?.counts.swarmMothership ?? 0) >= 1;
+  const draftMission = draft?.mission ?? "deploy";
+  const mission = draftMission === "occupy" && !hasMothership
+    ? "deploy"
+    : draftMission;
   const rivals = view.roster.filter((r) => r.id !== view.player.id);
   const attackableRivals = rivals.filter(
     (r) => r.pointsHint >= NEWBIE_PROTECTION_POINTS,
@@ -127,6 +133,14 @@ export function fleetComposer(
       options.push(
         `<option value="alien:${escapeAttr(alien.id)}">${escapeHtml(alien.name)} · Aliens · Lv ${fmt(alien.level ?? alien.tier)} · ${alien.threatHint} · ${fmtCoords(alien.coords)}</option>`,
       );
+    }
+  } else if (mission === "occupy") {
+    for (const m of view.galaxy.minis ?? []) {
+      if (!m.isOwn) {
+        options.push(
+          `<option value="planet:${escapeAttr(m.planetId)}">Occupy ${escapeHtml(m.name)} · ${fmtCoords(m.coords)}</option>`,
+        );
+      }
     }
   } else if (mission === "espionage") {
     for (const r of rivals) {
@@ -230,7 +244,7 @@ export function fleetComposer(
     .map((html) => markSelectedOption(html, selected))
     .join("");
 
-  const orbitShipIds = SHIP_ORDER.filter(
+  const orbitShipIds = WEAKEST_FIRST_SHIPS.filter(
     (id) => (view.planet.ships[id] ?? 0) > 0 && !SHIPS[id].stationary,
   );
   const shipInputs = orbitShipIds.length
@@ -267,6 +281,15 @@ export function fleetComposer(
         </div>`
       : "";
 
+  const draftShips = normalizeFleetShips(draft?.counts ?? {});
+  const swarmCheck = validateSwarmCarry(
+    draftShips,
+    view.player.research.swarmHold ?? 0,
+  );
+  const swarmHint = !swarmCheck.ok
+    ? `<p class="hint" data-testid="fleet-need-mothership">${escapeHtml(swarmCheck.error)}</p>`
+    : "";
+
   const expeditionCap = view.expeditionSlotCap;
   const fleetCap = view.fleetSlotCap;
   const fleetActive = view.fleets.length;
@@ -285,7 +308,7 @@ export function fleetComposer(
         ? mission === "transport"
           ? `<p class="hint" data-testid="fleet-need-colony">Need a second world: research Stellar Cartography, build a Colonizer, colonize an empty galaxy slot — then transport cargo there.</p>`
           : mission === "jump"
-            ? `<p class="hint" data-testid="fleet-need-jump-moon">Need another of your moons with a Fold Bridge (form moons from large debris, then build Crater Hab + Fold Bridge on both).</p>`
+            ? `<p class="hint" data-testid="fleet-need-jump-moon">Need another of your moons with a Moon Bridge (form moons from large debris, then build Lunar Habitat + Moon Bridge on both).</p>`
             : mission === "deploy"
               ? `<p class="hint" data-testid="fleet-need-deploy-target">Colonize for park targets, or join a second commander for attacking another rival.</p>`
               : mission === "colonize"
@@ -303,7 +326,8 @@ export function fleetComposer(
   const launchBlocked =
     busy ||
     options.length === 0 ||
-    (mission === "expedition" && expeditionActive >= expeditionCap);
+    (mission === "expedition" && expeditionActive >= expeditionCap) ||
+    !swarmCheck.ok;
 
   const sampleShips = normalizeFleetShips({ scout: 1 });
   const sampleTarget = rivals[0]?.coords ?? view.planet.coords;
@@ -328,7 +352,8 @@ export function fleetComposer(
     const raw = draft?.counts[id] ?? 0;
     return sum + Math.min(have, Math.max(0, Math.floor(raw)));
   }, 0);
-  const nextDisabled = busy || orbitShipIds.length === 0 || selectedShips < 1;
+  const nextDisabled =
+    busy || orbitShipIds.length === 0 || selectedShips < 1 || !swarmCheck.ok;
 
   const missionMeta: Record<
     MissionType,
@@ -343,9 +368,9 @@ export function fleetComposer(
       detail: "Combat mission against a rival — winners leave debris.",
     },
     espionage: {
-      label: "Spy (Whisper Probe)",
+      label: "Spy (Spy Satellite)",
       detail: "Probe a foreign world for fleet, defense, and resource intel.",
-      requires: ["Whisper Probe in orbit"],
+      requires: ["Spy Satellite in orbit"],
     },
     transport: {
       label: "Transport cargo (own worlds)",
@@ -363,9 +388,9 @@ export function fleetComposer(
       requires: ["Recycler / harvester hull"],
     },
     harvestAsteroid: {
-      label: "Harvest asteroid (Salvage Trawler)",
+      label: "Harvest asteroid (Recovery Vessel)",
       detail: "Mine an asteroid field for resources.",
-      requires: ["Salvage Trawler"],
+      requires: ["Recovery Vessel"],
     },
     expedition: {
       label: "Expedition (deep space)",
@@ -381,20 +406,27 @@ export function fleetComposer(
       detail: "Strike the system alien base while it is active.",
     },
     jump: {
-      label: "Fold Bridge (moon → moon)",
-      detail: "Instant transfer between your moons with Fold Bridges.",
-      requires: ["Fold Bridge on both moons"],
+      label: "Moon Bridge (moon → moon)",
+      detail: "Instant transfer between your moons with Moon Bridges.",
+      requires: ["Moon Bridge on both moons"],
+    },
+    occupy: {
+      label: "Occupation (Mothership)",
+      detail: "Capture and occupy mini planets.",
+      requires: ["Mothership in fleet"],
     },
   };
-  const missionRadios = MISSIONS.map((m) => {
+  const selectedMeta = missionMeta[mission];
+  const selectedTip = infoTooltip({
+    title: selectedMeta.label,
+    lines: [selectedMeta.detail],
+    requires: selectedMeta.requires,
+    testId: `mission-tip-${mission}`,
+  });
+  const missionOptions = MISSIONS.filter((m) => m !== "occupy" || hasMothership).map((m) => {
     const meta = missionMeta[m];
-    const tip = infoTooltip({
-      title: meta.label,
-      lines: [meta.detail],
-      requires: meta.requires,
-      testId: `mission-tip-${m}`,
-    });
-    return `<label><input type="radio" name="fleet-mission" value="${m}" data-testid="mission-${m}" ${mission === m ? "checked" : ""} ${busy ? "disabled" : ""} /> ${meta.label} ${tip.html}</label>`;
+    const cls = m === "occupy" ? ' class="mission-occupy"' : "";
+    return `<option value="${m}" data-testid="mission-${m}"${cls} ${mission === m ? "selected" : ""}>${escapeHtml(meta.label)}</option>`;
   }).join("");
 
   const presets = view.player.fleetPresets ?? [];
@@ -447,6 +479,7 @@ export function fleetComposer(
       ${presetPanel}
       <div class="fleet-ships" data-testid="fleet-orbit-ships">${shipInputs}</div>
       <p class="hint">Ships shown are in orbit on the selected colony. Example one-way ETA ~${fmtEta(sampleEta)} · fuel ~${fmt(sampleFuel)} deut (1 scout).</p>
+      ${swarmHint}
       <button type="submit" data-fleet-action="next" data-testid="fleet-next" ${nextDisabled ? "disabled" : ""}>Next</button>
     </form>
   `;
@@ -455,7 +488,7 @@ export function fleetComposer(
   const destination = coordsFromTarget(view, selected);
   const kind = targetKind(mission, selected, selectedOptionLabel(optionHtml, selected));
   const preview = flightPreview(view, held.counts, destination, speedPercent);
-  const summaryRows = SHIP_ORDER.filter((id) => {
+  const summaryRows = WEAKEST_FIRST_SHIPS.filter((id) => {
     const have = view.planet.ships[id] ?? 0;
     const raw = held.counts[id] ?? 0;
     return Math.min(have, Math.max(0, Math.floor(raw))) > 0 && !SHIPS[id].stationary;
@@ -489,10 +522,12 @@ export function fleetComposer(
       <p class="fleet-step-label" data-testid="fleet-step">Step 2 of 2 · Destination</p>
       <p class="hint" data-testid="fleet-slot-counters">Fleets ${fmt(fleetActive)}/${fmt(fleetCap)} · Expeditions ${fmt(expeditionActive)}/${fmt(expeditionCap)}</p>
       <p data-testid="fleet-coords">Coords ${destination ? fmtCoordsLink(destination) : "—"} · ${escapeHtml(kind)}</p>
-      <fieldset class="mission-pick">
-        <legend>Mission</legend>
-        ${missionRadios}
-      </fieldset>
+      <label class="mission-pick">
+        Mission ${selectedTip.html}
+        <select name="fleet-mission" id="fleet-mission" data-testid="fleet-mission" ${busy ? "disabled" : ""}>
+          ${missionOptions}
+        </select>
+      </label>
       <label>
         Target
         <select id="fleet-target" data-testid="fleet-target" ${launchBlocked ? "disabled" : ""}>
@@ -514,6 +549,7 @@ export function fleetComposer(
         <p data-testid="fleet-flight">${flightLine}</p>
       </div>
       ${needHint}
+      ${swarmHint}
       ${
         showNewbieProtectionWarning
           ? `<p class="hint" data-testid="fleet-newbie-protection-warning">Launching this attack ends your newbie protection.</p>`
@@ -553,6 +589,11 @@ function coordsFromTarget(view: PlayerView, selected: string): Coordinates | nul
     if (rock && "coords" in rock) return rock.coords;
     return null;
   }
+  if (selected.startsWith("planet:")) {
+    const id = selected.slice("planet:".length);
+    const mini = (view.galaxy.minis ?? []).find((m) => m.planetId === id);
+    if (mini) return mini.coords;
+  }
   if (selected.startsWith("pirate:")) return view.galaxy.pirateBase?.coords ?? null;
   if (selected.startsWith("alien:")) return view.galaxy.alienBase?.coords ?? null;
   return null;
@@ -574,6 +615,7 @@ function targetKind(mission: MissionType, selected: string, label: string): stri
   if (mission === "harvestAsteroid" || selected.startsWith("asteroid:")) return "asteroid";
   if (selected.startsWith("pirate:")) return "pirate base";
   if (selected.startsWith("alien:")) return "alien base";
+  if (mission === "occupy") return "mini planet";
   if (/moon/i.test(label)) return "moon";
   if (selected.startsWith("planet:")) return "planet";
   return "coordinates";

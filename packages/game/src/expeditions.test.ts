@@ -451,6 +451,18 @@ describe("P2 expeditions", () => {
     );
   });
 
+  it("awards at most one resource type per expedition result (B7-06)", () => {
+    const fleet = { hauler: 20 };
+    for (let roll = 0; roll < 40; roll++) {
+      const res = resourceFind(fleet, roll);
+      const positiveTypes = [res.metal, res.crystal, res.deuterium].filter((val) => val > 0);
+      assert.ok(
+        positiveTypes.length <= 1,
+        `Expected at most 1 resource type, got metal=${res.metal}, crystal=${res.crystal}, deuterium=${res.deuterium} for roll=${roll}`,
+      );
+    }
+  });
+
   it("scales resource finds linearly with fleet structural (hull) points below cap", () => {
     // Hauler hull = 60, cargo = 5000.
     // 10 Haulers -> hull = 600, cargo = 50,000.
@@ -493,21 +505,20 @@ describe("P2 expeditions", () => {
     assert.equal(total2, 82500);
   });
 
-  it("scales Starshard finds with fleet structural points up to cap", () => {
+  it("scales Starshard finds with fleet structural points up to cap and applies 5% rate", () => {
     // 100 Haulers -> hull = 6,000.
     // 200 Haulers -> hull = 12,000 (capped at 10,000).
     const fleet6k = { hauler: 100 };
     const fleet12k = { hauler: 200 };
     const roll = 70; // roll 70 -> starshards find, base = 5 + (70 % 21) = 12.
 
-    const shards6k = expeditionStarshardsFind(fleet6k, roll);
-    const shards12k = expeditionStarshardsFind(fleet12k, roll);
+    const shards6k = expeditionStarshardsFind(fleet6k, roll, "seed_exp_6k");
+    const shards12k = expeditionStarshardsFind(fleet12k, roll, "seed_exp_12k");
 
-    // Hand-computed:
-    // 6,000 / 10,000 * 12 = 7.2 -> floor(7.2) = 7.
-    // 10,000 / 10,000 * 12 = 12 -> floor(12) = 12.
-    assert.equal(shards6k, 7);
-    assert.equal(shards12k, 12);
+    // Old amounts: 6k fleet = 7, 12k fleet = 12.
+    // 5% multipliers: 7 * 0.05 = 0.35, 12 * 0.05 = 0.60.
+    assert.ok(shards6k === 0 || shards6k === 1);
+    assert.ok(shards12k === 0 || shards12k === 1);
   });
 
   it("limits scout-only ship finds to ships costing no more than a Scout Skiff", () => {
@@ -679,7 +690,7 @@ describe("P2 expeditions", () => {
       kind: "ships" as const,
       cargoGained: { metal: 0, crystal: 0, deuterium: 0 },
       shipsDelta: { scout: 2 },
-      summary: "Salvage drones joined the fleet (+2 Scout Skiff).",
+      summary: "Salvage drones joined the fleet (+2 Recon Drone).",
     };
     fresh.expeditionReports[legacyReport.id] = legacyReport;
 

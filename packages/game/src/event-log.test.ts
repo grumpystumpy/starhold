@@ -87,7 +87,7 @@ describe("event log", () => {
     assert.equal(universe.planets[planet.id].buildings.metalMine, 2);
     const afterBuild = universe.players[player.id].eventLog ?? [];
     assert.equal(
-      afterBuild.some((entry) => entry.title === "Ore Extractor → level 2"),
+      afterBuild.some((entry) => entry.title === "Ore Mine → level 2"),
       false,
     );
     const kept = afterBuild.find((entry) => entry.id === saved.id);
@@ -111,7 +111,7 @@ describe("event log", () => {
     assert.ok(
       (universe.players[player.id].eventLog ?? []).some(
         (entry) =>
-          entry.kind === "buildComplete" && entry.title === "Scout Skiff × 2",
+          entry.kind === "buildComplete" && entry.title === "Recon Drone × 2",
       ),
     );
 
@@ -134,10 +134,10 @@ describe("event log", () => {
     const view = playerView(universe, player.id, researchDone + 1);
     const titles = (view.player.eventLog ?? []).map((entry) => entry.title);
     assert.ok(titles.includes("Solar Array → level 3"));
-    assert.ok(titles.includes("Scout Skiff × 2"));
+    assert.ok(titles.includes("Recon Drone × 2"));
     assert.ok(titles.includes("Power Discipline → level 1"));
     assert.equal(
-      titles.includes("Ore Extractor → level 2"),
+      titles.includes("Ore Mine → level 2"),
       false,
     );
     assert.ok(unreadEventCount(view.player) >= 2);
@@ -157,7 +157,7 @@ describe("event log", () => {
     assert.equal(universe.planets[planet.id].ships.scout, 1);
     assert.equal(
       (universe.players[player.id].eventLog ?? []).some(
-        (entry) => entry.title === "Scout Skiff × 2",
+        (entry) => entry.title === "Recon Drone × 2",
       ),
       false,
     );
@@ -166,7 +166,7 @@ describe("event log", () => {
     const titles = (universe.players[player.id].eventLog ?? [])
       .filter((entry) => entry.kind === "buildComplete")
       .map((entry) => entry.title);
-    assert.deepEqual(titles, ["Scout Skiff × 2"]);
+    assert.deepEqual(titles, ["Recon Drone × 2"]);
   });
 
   it("alerts the defender on a hostile raid and the owner when the fleet returns", () => {

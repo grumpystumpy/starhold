@@ -62,8 +62,14 @@ function applyRefundToPlanet(
   fraction: number,
   now: number,
 ): void {
-  const refunded = refundResources(planet.resources, cost, fraction);
-  planet.resources = clampToStorage(refunded, storageForPlanet(universe, planet, now));
+  const cur = planet.resources;
+  const refunded = refundResources(cur, cost, fraction);
+  const clamped = clampToStorage(refunded, storageForPlanet(universe, planet, now));
+  planet.resources = {
+    metal: Math.max(cur.metal, clamped.metal),
+    crystal: Math.max(cur.crystal, clamped.crystal),
+    deuterium: Math.max(cur.deuterium, clamped.deuterium),
+  };
 }
 
 /**

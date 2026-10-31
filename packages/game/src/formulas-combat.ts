@@ -328,6 +328,8 @@ type UnitDamageState = {
 type SidePools = {
   ships: FleetShips;
   defenses: DefenseStock;
+  /** Fleet-wide pooled shields for current round. */
+  shieldPool?: number;
   /** Damage state for front unit per CombatUnitId. */
   unitDamage?: Partial<Record<CombatUnitId, UnitDamageState>>;
   residual?: Partial<Record<CombatUnitId, number>>;
@@ -609,6 +611,29 @@ export function fireGroupShots(
   }
 }
 
+export function calculateSideShieldPool(
+  side: SidePools,
+  research: ResearchLevels | undefined,
+  battlefield?: BattlefieldMods,
+): number {
+  let pool = 0;
+  for (const id of SHIP_ORDER) {
+    const count = side.ships[id] ?? 0;
+    if (count > 0) {
+      const stats = getUnitStats(id, research, battlefield, side);
+      pool += count * stats.maxS;
+    }
+  }
+  for (const id of DEFENSE_ORDER) {
+    const count = side.defenses[id] ?? 0;
+    if (count > 0) {
+      const stats = getUnitStats(id, research, battlefield, side);
+      pool += count * stats.maxS;
+    }
+  }
+  return pool;
+}
+
 function applyGravitationalDamageToGroup(
   side: SidePools,
   id: CombatUnitId,
@@ -622,7 +647,6 @@ function applyGravitationalDamageToGroup(
 
   if (!side.unitDamage) side.unitDamage = {};
   const stats = getUnitStats(id, research, battlefield, side);
-  const maxS = stats.maxS;
   const maxA = stats.maxA;
   const maxH = stats.maxH;
 
@@ -633,17 +657,16 @@ function applyGravitationalDamageToGroup(
   };
   let remainingRaw = rawDamage;
 
-  while (remainingRaw > 0 && count > 0) {
-    // 1. Shield layer (mult 0.7)
-    const curS = Math.max(0, maxS - unitDmg.frontShieldDmg);
-    if (curS > 0) {
-      const rawNeededForShield = curS / 0.7;
-      const rawToShield = Math.min(remainingRaw, rawNeededForShield);
-      const sAbs = rawToShield * 0.7;
-      unitDmg.frontShieldDmg += sAbs;
-      remainingRaw -= rawToShield;
-    }
+  // 1. Shield layer (mult 0.7) - pooled across fleet
+  if (side.shieldPool !== undefined && side.shieldPool > 0) {
+    const rawNeededForShield = side.shieldPool / 0.7;
+    const rawToShield = Math.min(remainingRaw, rawNeededForShield);
+    const sAbs = rawToShield * 0.7;
+    side.shieldPool -= sAbs;
+    remainingRaw -= rawToShield;
+  }
 
+  while (remainingRaw > 0 && count > 0) {
     // 2. Armor layer (mult 1.4)
     if (remainingRaw > 0) {
       const curA = Math.max(0, maxA - unitDmg.frontArmorDmg);
@@ -865,7 +888,6 @@ function applyDamageToTarget(
   if (!side.unitDamage) side.unitDamage = {};
 
   const stats = getUnitStats(id, research, battlefield, side);
-  const maxS = stats.maxS;
   const maxA = stats.maxA;
   const maxH = stats.maxH;
 
@@ -876,14 +898,10 @@ function applyDamageToTarget(
   };
   let remainingDamage = damage;
 
-  while (remainingDamage > 0 && count > 0) {
-    const curS = Math.max(0, maxS - unitDmg.frontShieldDmg);
-    const curA = Math.max(0, maxA - unitDmg.frontArmorDmg);
-    const curH = Math.max(0, maxH - unitDmg.frontHullDmg);
-
-    // Layer 1: Shield
-    const sAbs = Math.min(remainingDamage, curS);
-    unitDmg.frontShieldDmg += sAbs;
+  // Layer 1: Fleet-wide pooled shield
+  if (side.shieldPool !== undefined && side.shieldPool > 0) {
+    const sAbs = Math.min(remainingDamage, side.shieldPool);
+    side.shieldPool -= sAbs;
     remainingDamage -= sAbs;
 
     if (sAbs > 0 && ionShareOfFirer > 0) {
@@ -892,6 +910,11 @@ function applyDamageToTarget(
       }
       side.tookIonShieldDmgThisRound[id] = true;
     }
+  }
+
+  while (remainingDamage > 0 && count > 0) {
+    const curA = Math.max(0, maxA - unitDmg.frontArmorDmg);
+    const curH = Math.max(0, maxH - unitDmg.frontHullDmg);
 
     // Layer 2: Armor
     if (remainingDamage > 0) {
@@ -1158,6 +1181,20 @@ export function resolveCombat(
       side.ionArmorDmgThisRound = {};
       side.totalArmorDmgThisRound = {};
     }
+
+    // Initialize / reset pooled shields for living units at start of round
+    atkSide.shieldPool = calculateSideShieldPool(
+      atkSide,
+      attackerResearch,
+      battlefield,
+    );
+    defSide.shieldPool = calculateSideShieldPool(
+      defSide,
+      defenderResearch,
+      battlefield,
+    );
+    const atkInitialShieldPool = atkSide.shieldPool;
+    const defInitialShieldPool = defSide.shieldPool;
 
     // 2. Apply pending gravitational damage (queued from previous round)
     for (const [side, research] of [
@@ -1469,6 +1506,10 @@ export function resolveCombat(
         attackerLosses.ships,
         defenderLosses.ships,
       ),
+      shieldsAbsorbed: {
+        attacker: Math.max(0, atkInitialShieldPool - (atkSide.shieldPool ?? 0)),
+        defender: Math.max(0, defInitialShieldPool - (defSide.shieldPool ?? 0)),
+      },
     });
 
     const atkAlive = shipCount(atkSide.ships) > 0;

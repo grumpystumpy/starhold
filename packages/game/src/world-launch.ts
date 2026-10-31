@@ -14,6 +14,7 @@ import {
   recyclerHullScale,
   spend,
   travelBonusMult,
+  validateSwarmCarry,
 } from "./formulas.js";
 import type {
   Coordinates,
@@ -44,6 +45,7 @@ const MISSIONS: MissionType[] = [
   "pirateRaid",
   "alienRaid",
   "jump",
+  "occupy",
 ];
 
 export interface LaunchFleetOpts {
@@ -114,6 +116,11 @@ export function launchFleet(
         error: `${SHIPS[id].name} cannot join fleets (stationary).`,
       };
     }
+  }
+
+  const swarmCheck = validateSwarmCarry(ships, player.research.swarmHold ?? 0);
+  if (!swarmCheck.ok) {
+    return swarmCheck;
   }
 
   advanceUniverse(universe, now);
@@ -219,7 +226,7 @@ export function launchFleet(
       const wait = Math.ceil(((origin.jumpReadyAt ?? 0) - now) / 1000);
       return {
         ok: false,
-        error: `Fold Bridge cooling down (${wait}s remaining).`,
+        error: `Moon Bridge cooling down (${wait}s remaining).`,
       };
     }
   }

@@ -18,13 +18,13 @@ export function recommendedNext(view: PlayerView): string {
     const sensor = planet.buildings.sensorArray ?? 0;
     const gate = planet.buildings.jumpGate ?? 0;
     if (lunar < 1) {
-      return "Recommended next: raise the Crater Hab to expand moon fields.";
+      return "Recommended next: raise the Lunar Habitat to expand moon fields.";
     }
     if (sensor < 1) {
       return "Recommended next: build a System Scanner to scan inbound fleets.";
     }
     if (gate < 1) {
-      return "Recommended next: raise a Fold Bridge to hop fleets between moons.";
+      return "Recommended next: raise a Moon Bridge to hop fleets between moons.";
     }
     return "Recommended next: park fleets here, jump to another moon, or watch System Scanner contacts.";
   }
@@ -38,13 +38,13 @@ export function recommendedNext(view: PlayerView): string {
       return "Recommended next: raise a Rift Siphon to boost this mini's output.";
     }
     if (vault < 1) {
-      return "Recommended next: raise an Echo Vault for storage headroom.";
+      return "Recommended next: raise a Data Archive for storage headroom.";
     }
     if (forge < 1) {
-      return "Recommended next: raise an Anomaly Forge to speed ship builds here.";
+      return "Recommended next: raise an Anomaly Lab to speed ship builds here.";
     }
     if (beacon < 1) {
-      return "Recommended next: raise a Drift Beacon for +1 fleet slot and +1 expedition slot.";
+      return "Recommended next: raise a Fleet Command Post for +1 fleet slot and +1 expedition slot.";
     }
     if (yard < 1) {
       return "Recommended next: raise the Shipyard on this mini colony.";
@@ -61,7 +61,7 @@ export function recommendedNext(view: PlayerView): string {
     return "Recommended next: raise the Shipyard (then bank a Scout / Probe).";
   }
   if (scouts < 1 && (planet.ships.probe ?? 0) < 1 && !(planet.shipQueue?.length ?? 0)) {
-    return "Recommended next: build a Scout or Whisper Probe, then open Fleets.";
+    return "Recommended next: build a Scout or Spy Satellite, then open Fleets.";
   }
   return "Recommended next: browse Galaxy, spy or raid a rival, or colonize an empty slot.";
 }

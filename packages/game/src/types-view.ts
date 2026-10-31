@@ -53,6 +53,8 @@ export interface CombatRoundLog {
   defenderLosses: CombatRoundLosses;
   /** Debris implied by ship losses this round (pre-skim; metal/crystal). */
   debrisThisRound: Resources;
+  /** Shield pool damage absorbed per side in this round. */
+  shieldsAbsorbed?: { attacker: number; defender: number };
 }
 
 export interface CombatReport {
@@ -187,6 +189,8 @@ export interface PlanetState {
   lastDriftAt?: number;
   /** First successful colonize time — drives 8h galaxy-wide visibility. */
   colonizedAt?: number;
+  /** Timestamps (ms) of recent NPC pirate raid hits on this planet within rolling window. */
+  pirateHitHistory?: number[];
 }
 
 export type AllianceRole = "founder" | "officer" | "member";

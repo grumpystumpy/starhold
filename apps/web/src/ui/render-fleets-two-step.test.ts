@@ -215,11 +215,11 @@ describe("fleet send two-step", () => {
     const step2 = fleetComposer(view(), false, next);
     assert.match(step2, /data-fleet-step="2"/);
     assert.match(step2, /data-testid="fleet-ship-summary"/);
-    assert.match(step2, /3× Scout Skiff/);
+    assert.match(step2, /3× Recon Drone/);
     assert.match(step2, /data-testid="fleet-coords"/);
     assert.match(step2, /Coords .*1:1:1.* · planet/);
     assert.match(step2, /name="fleet-mission"/);
-    assert.match(step2, /data-testid="mission-raid"[^>]*checked/);
+    assert.match(step2, /data-testid="mission-raid"[^>]*selected/);
     assert.match(buttonTag(step2, "fleet-back"), /type="button"/);
     assert.match(buttonTag(step2, "launch-fleet"), /type="submit"/);
     assert.match(buttonTag(step2, "launch-fleet"), /data-fleet-action="send"/);
@@ -255,7 +255,7 @@ describe("fleet send two-step", () => {
 
   it("send payload matches the one-page form and ignores speed", () => {
     const mission = make(
-      { tag: "input", type: "radio", name: "fleet-mission", value: "raid", checked: "1" },
+      { tag: "select", name: "fleet-mission", value: "raid" },
     );
     mission.value = "raid";
     const target = make({ tag: "select", id: "fleet-target" });
@@ -306,10 +306,9 @@ describe("fleet send two-step", () => {
       [
         (() => {
           const radio = make({
-            tag: "input",
+            tag: "select",
             name: "fleet-mission",
             value: "raid",
-            checked: "1",
           });
           radio.value = "raid";
           return radio;
@@ -353,7 +352,7 @@ describe("fleet send two-step", () => {
     assert.match(html, /value="4"/);
     assert.match(html, /value="40" selected/);
     assert.match(html, /data-testid="fleet-open-acs"[^>]*checked/);
-    assert.match(html, /4× Scout Skiff/);
+    assert.match(html, /4× Recon Drone/);
     const fuel = Math.max(
       1,
       Math.ceil(
@@ -383,9 +382,9 @@ describe("fleet send two-step", () => {
     assert.equal(galaxy.counts.scout, 2);
     const html = fleetComposer(view(), false, galaxy);
     assert.match(html, /data-fleet-step="2"/);
-    assert.match(html, /data-testid="mission-raid"[^>]*checked/);
+    assert.match(html, /data-testid="mission-raid"[^>]*selected/);
     assert.match(html, /value="coords:9:4:16" selected/);
-    assert.match(html, /2× Scout Skiff/);
+    assert.match(html, /2× Recon Drone/);
     assert.match(html, /data-testid="fleet-open-acs"[^>]*checked/);
 
     const bare = fleetDraftWithAcsPrefill(null, {
@@ -407,7 +406,61 @@ describe("fleet send two-step", () => {
     assert.equal(preset.mission, "raid");
     assert.deepEqual(preset.targetCoords, { galaxy: 2, system: 3, slot: 4 });
     assert.match(fleetComposer(view(), false, preset), /data-fleet-step="2"/);
-    assert.match(fleetComposer(view(), false, preset), /2× Scout Skiff/);
+    assert.match(fleetComposer(view(), false, preset), /2× Recon Drone/);
+  });
+
+  it("disables launch and shows error hint when swarm units are selected without a Mothership", () => {
+    const customView: PlayerView = {
+      ...view(),
+      planet: {
+        ...view().planet,
+        ships: { swarmDrone: 10, swarmMothership: 1, scout: 5 },
+      },
+    };
+
+    const step1WithoutMS = fleetComposer(
+      customView,
+      false,
+      draft({ step: 1, counts: { swarmDrone: 5 } }),
+    );
+    assert.match(buttonTag(step1WithoutMS, "fleet-next"), /disabled/);
+    assert.match(step1WithoutMS, /data-testid="fleet-need-mothership"/);
+    assert.match(step1WithoutMS, /Swarm drones\/harvesters must ride a Mothership/);
+
+    const step1WithMS = fleetComposer(
+      customView,
+      false,
+      draft({ step: 1, counts: { swarmDrone: 5, swarmMothership: 1 } }),
+    );
+    assert.doesNotMatch(buttonTag(step1WithMS, "fleet-next"), /disabled/);
+    assert.doesNotMatch(step1WithMS, /data-testid="fleet-need-mothership"/);
+
+    const step2WithoutMS = fleetComposer(
+      customView,
+      false,
+      draft({
+        step: 2,
+        counts: { swarmDrone: 5 },
+        targetPlanetId: "pl2",
+        mission: "raid",
+      }),
+    );
+    assert.match(buttonTag(step2WithoutMS, "launch-fleet"), /disabled/);
+    assert.match(step2WithoutMS, /data-testid="fleet-need-mothership"/);
+    assert.match(step2WithoutMS, /Swarm drones\/harvesters must ride a Mothership/);
+
+    const step2WithMS = fleetComposer(
+      customView,
+      false,
+      draft({
+        step: 2,
+        counts: { swarmDrone: 5, swarmMothership: 1 },
+        targetPlanetId: "pl2",
+        mission: "raid",
+      }),
+    );
+    assert.doesNotMatch(buttonTag(step2WithMS, "launch-fleet"), /disabled/);
+    assert.doesNotMatch(step2WithMS, /data-testid="fleet-need-mothership"/);
   });
 });
 
@@ -448,10 +501,9 @@ describe("fleet send result", () => {
         })(),
         (() => {
           const radio = make({
-            tag: "input",
+            tag: "select",
             name: "fleet-mission",
             value: "raid",
-            checked: "1",
           });
           radio.value = "raid";
           return radio;
@@ -607,7 +659,7 @@ describe("galaxy fleet actions", () => {
 
     try {
       await doGalaxySpy({ galaxy: 2, system: 9, slot: 4 });
-      assert.equal(session.error, "No Whisper Probes in orbit.");
+      assert.equal(session.error, "No Spy Satellites in orbit.");
       assert.equal(requests, 0);
     } finally {
       globalThis.fetch = originalFetch;

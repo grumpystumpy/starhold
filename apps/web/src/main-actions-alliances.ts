@@ -33,10 +33,10 @@ export function wireJointStrikeForm(prefill: AcsPrefill): boolean {
   const open = root.querySelector<HTMLInputElement>("#fleet-open-acs");
   const target = root.querySelector<HTMLSelectElement>("#fleet-target");
   if (!open || !target) return false;
-  const mission = root.querySelector<HTMLInputElement>(
-    `input[name="fleet-mission"][value="${prefill.mission}"]`,
+  const mission = root.querySelector<HTMLSelectElement | HTMLInputElement>(
+    '[name="fleet-mission"]',
   );
-  if (mission) mission.checked = true;
+  if (mission) mission.value = prefill.mission;
   open.checked = true;
   const key = `${prefill.coords.galaxy}:${prefill.coords.system}:${prefill.coords.slot}`;
   const value = `coords:${key}`;
@@ -583,8 +583,8 @@ export function fleetStrikeTarget(): {
   const raw = target?.value ?? "";
   const coords = coordsFromFleetTarget(view, raw);
   if (!coords) return null;
-  const selected = form.querySelector<HTMLInputElement>(
-    'input[name="fleet-mission"]:checked',
+  const selected = form.querySelector<HTMLSelectElement | HTMLInputElement>(
+    '[name="fleet-mission"]',
   );
   const mission = selected?.value === "pirateRaid" ? "pirateRaid" : "raid";
   return { coords, mission };

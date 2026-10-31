@@ -81,6 +81,32 @@ describe("galaxy jump controls", () => {
     assert.match(html, /data-testid="galaxy-nav-row-galaxy"[^>]*>[\s\S]*?data-testid="galaxy-galaxy-prev"[\s\S]*?data-testid="galaxy-galaxy-next"/);
     assert.match(html, /data-testid="galaxy-nav-row-coords"[^>]*>[\s\S]*?#galaxy-jump|id="galaxy-jump"/);
     assert.match(html, /data-testid="galaxy-nav-row-system"[^>]*>[\s\S]*?data-testid="galaxy-prev"[\s\S]*?data-testid="galaxy-next"/);
+
+    // Assert System row is on TOP, Coords in MIDDLE, Galaxy row BELOW
+    assert.match(
+      html,
+      /data-testid="galaxy-nav-row-system"[\s\S]*?data-testid="galaxy-nav-row-coords"[\s\S]*?data-testid="galaxy-nav-row-galaxy"/,
+    );
+    // Assert placeholder is x:xxx and maintains type=text and inputmode=text
+    assert.match(html, /placeholder="x:xxx"/);
+    assert.match(html, /type="text"/);
+    assert.match(html, /inputmode="text"/);
+  });
+
+  it("handles jump form submit with valid 9:143 coordinates and invalid ab:cd input", async () => {
+    const { parseGalaxyCoords } = await import("../galaxy-coords");
+
+    // Valid coordinates typing 9:143
+    const validResult = parseGalaxyCoords("9:143", 1);
+    assert.deepEqual(validResult, { galaxy: 9, system: 143 });
+
+    // Invalid coordinates typing ab:cd
+    const invalidResult = parseGalaxyCoords("ab:cd", 1);
+    assert.ok("error" in invalidResult);
+    assert.equal(
+      invalidResult.error,
+      "Use galaxy:system, like 9:143 (galaxy 1–10, system 1–399)",
+    );
   });
 
   it("renders spy and attack only for foreign planets and colonize only for empty slots 1–15", () => {

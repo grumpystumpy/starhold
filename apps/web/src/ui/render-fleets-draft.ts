@@ -19,6 +19,7 @@ export const MISSIONS: MissionType[] = [
   "pirateRaid",
   "alienRaid",
   "jump",
+  "occupy",
 ];
 
 export type FleetStep = 1 | 2;
@@ -214,8 +215,8 @@ export function salvageFleetForm(root: HTMLElement): FleetDraft | null {
     }
   }
 
-  const missionEl = form.querySelector<HTMLInputElement>(
-    'input[name="fleet-mission"]:checked',
+  const missionEl = form.querySelector<HTMLInputElement | HTMLSelectElement>(
+    '[name="fleet-mission"]',
   );
   const mission = missionEl ? parseMission(missionEl.value) : prior.mission;
 

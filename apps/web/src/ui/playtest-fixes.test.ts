@@ -167,7 +167,7 @@ describe("playtest fixes", () => {
     assert.match(metRow, />Research</);
 
     const cryRow = researchRow("crystalizerTech", base, false);
-    assert.match(cryRow, /Crystalizer/);
+    assert.match(cryRow, /Crystal Refining/);
     assert.match(cryRow, /\+5% crystal mine output per level/);
     assert.match(cryRow, />Research</);
 

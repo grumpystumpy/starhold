@@ -21,7 +21,7 @@ async function logFleetLaunchFailure(page, error) {
       const state = window.starhold?.getState?.();
       return {
         fleetStep: form?.getAttribute("data-fleet-step") ?? "missing",
-        checkedMission: form?.querySelector('input[name="fleet-mission"]:checked')?.value ?? "missing",
+        checkedMission: form?.querySelector('[name="fleet-mission"]')?.value ?? "missing",
         shipCounts: [...(form?.querySelectorAll("[data-fleet-count]") ?? [])].map((input) => ({
           type: input.getAttribute("data-fleet-count"),
           value: input.value,
@@ -123,11 +123,10 @@ async function runViewport(width, height) {
     await page.click('[data-testid="nav-fleet"]');
     await page.waitForSelector('[data-testid="fleet-form"]', { timeout: 15_000 });
     await fleetToStep2(page, { scout: 1 });
-    const expedition = page.locator('[data-testid="mission-expedition"]');
-    await expedition.waitFor({ timeout: 10_000 });
-    await expedition.click();
+    await page.waitForSelector('[data-testid="fleet-mission"]', { timeout: 10_000 });
+    await page.selectOption('[data-testid="fleet-mission"]', "expedition");
     await page.waitForFunction(
-      () => document.querySelector('input[name="fleet-mission"]:checked')?.value === "expedition",
+      () => document.querySelector('[name="fleet-mission"]')?.value === "expedition",
       null,
       { timeout: 10_000 },
     );

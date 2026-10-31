@@ -92,7 +92,7 @@ describe("messages inbox", () => {
             kind: "buildComplete",
             createdAt: 250,
             readAt: null,
-            title: "Ore Extractor → level 12",
+            title: "Ore Mine → level 12",
             body: "Finished on Home.",
           },
           {
@@ -101,7 +101,7 @@ describe("messages inbox", () => {
             createdAt: 50,
             readAt: 400,
             title: "Fleet returned to Home",
-            body: "deploy · 2× Scout Skiff",
+            body: "deploy · 2× Recon Drone",
           },
         ],
       } as PlayerView["player"],
@@ -252,9 +252,9 @@ describe("messages inbox", () => {
       }),
     );
     assert.match(combat, /1\.2k metal, 800 crystal/);
-    assert.match(combat, /Defenses destroyed: 10× Light Laser/);
-    assert.match(combat, /Rebuilt: 7× Light Laser/);
-    assert.match(combat, /Permanently lost: 3× Light Laser/);
+    assert.match(combat, /Defenses destroyed: 10× Light Laser Turret/);
+    assert.match(combat, /Rebuilt: 7× Light Laser Turret/);
+    assert.match(combat, /Permanently lost: 3× Light Laser Turret/);
     assert.match(combat, /400 metal, 80 crystal at 1:4:16/);
 
     const legacy = messagesPageHtml(

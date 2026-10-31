@@ -247,7 +247,7 @@ async function main() {
 
   await buildProbe(pageA);
   await fleetToStep2(pageA, { probe: 1 });
-  await pageA.click('[data-testid="mission-espionage"]');
+  await pageA.selectOption('[data-testid="fleet-mission"]', "espionage");
   await pageA.waitForTimeout(300);
   const target = pageA.getByTestId("fleet-target");
   await target.waitFor({ timeout: 10_000 });
@@ -362,8 +362,8 @@ async function main() {
   if (!(await openAcs.isChecked())) {
     throw new Error("Joint Strike deep-link did not arm Open ACS");
   }
-  const mission = pageA.locator('input[name="fleet-mission"]:checked');
-  if ((await mission.getAttribute("value")) !== "raid") {
+  const mission = pageA.locator('[name="fleet-mission"]');
+  if ((await mission.inputValue()) !== "raid") {
     throw new Error("Joint Strike prefill did not retain raid mission");
   }
   const strikeTarget = await pageA.locator("#fleet-target").inputValue();

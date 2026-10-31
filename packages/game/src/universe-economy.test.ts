@@ -335,7 +335,7 @@ describe("position production multipliers", () => {
         metalMine: 1,
         crystalMine: 1,
         deutSynth: 1,
-        solarPlant: 5,
+        solarPlant: 10,
       },
     };
     const b = {

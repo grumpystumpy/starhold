@@ -46,7 +46,7 @@ import { addDebris } from "./world-tick.js";
 describe("Round 2 ship catalog fixtures (Micah amendments)", () => {
   it("Void Titan (3rd largest) moon-killer stats", () => {
     const s = SHIPS.voidforgeTitan;
-    assert.equal(s.name, "Void Titan");
+    assert.equal(s.name, "Dreadnought");
     assert.match(s.description, /Can destroy moons\./);
     assert.equal(s.cost.metal, 1_500_000);
     assert.equal(s.cost.crystal, 1_200_000);
@@ -212,6 +212,70 @@ describe("Swarm Hold capacity base 2000", () => {
     );
     assert.equal(over.ok, false);
   });
+
+  it("rejects fleet launch with swarm units unless a Mothership is present", () => {
+    const universe = createUniverse("Swarm Launch Drift", 8);
+    const a = joinUniverse(universe, "SwarmLauncher", 250_000_000);
+    a.player.research.computerTech = 5;
+    const target = universe.planets[universe.miniPlanetIds![0]!];
+    target.ownerPlayerId = a.player.id;
+    a.player.planetIds.push(target.id);
+    const origin = universe.planets[a.planet.id];
+    origin.ships.swarmDrone = 10;
+    origin.ships.swarmHarvester = 5;
+    origin.ships.swarmMothership = 1;
+    origin.ships.scout = 5;
+    origin.resources.deuterium = 50_000;
+
+    const noMothershipDrone = launchFleet(universe, {
+      playerId: a.player.id,
+      mission: "transport",
+      targetPlanetId: target.id,
+      ships: { swarmDrone: 5 },
+      cargo: { metal: 10 },
+      now: 250_000_100,
+    });
+    assert.equal(noMothershipDrone.ok, false);
+    if (!noMothershipDrone.ok) {
+      assert.equal(noMothershipDrone.error, "Swarm drones/harvesters must ride a Mothership.");
+    }
+
+    const noMothershipHarvester = launchFleet(universe, {
+      playerId: a.player.id,
+      mission: "transport",
+      targetPlanetId: target.id,
+      ships: { swarmHarvester: 2 },
+      cargo: { metal: 10 },
+      now: 250_000_100,
+    });
+    assert.equal(noMothershipHarvester.ok, false);
+    if (!noMothershipHarvester.ok) {
+      assert.equal(
+        noMothershipHarvester.error,
+        "Swarm drones/harvesters must ride a Mothership.",
+      );
+    }
+
+    const withMothership = launchFleet(universe, {
+      playerId: a.player.id,
+      mission: "transport",
+      targetPlanetId: target.id,
+      ships: { swarmMothership: 1, swarmDrone: 5, swarmHarvester: 2 },
+      cargo: { metal: 10 },
+      now: 250_000_100,
+    });
+    assert.equal(withMothership.ok, true, withMothership.ok ? "" : withMothership.error);
+
+    const normalShipsOnly = launchFleet(universe, {
+      playerId: a.player.id,
+      mission: "transport",
+      targetPlanetId: target.id,
+      ships: { scout: 2 },
+      cargo: { metal: 10 },
+      now: 250_000_200,
+    });
+    assert.equal(normalShipsOnly.ok, true, normalShipsOnly.ok ? "" : normalShipsOnly.error);
+  });
 });
 
 describe("Swarm cargo capacity", () => {
@@ -235,6 +299,7 @@ describe("Swarm cargo capacity", () => {
     target.ownerPlayerId = a.player.id;
     a.player.planetIds.push(target.id);
     const origin = universe.planets[a.planet.id];
+    origin.ships.swarmMothership = 1;
     origin.ships.swarmDrone = 1;
     origin.ships.swarmHarvester = 1;
     origin.resources = { metal: 520, crystal: 0, deuterium: 10_000 };
@@ -243,7 +308,7 @@ describe("Swarm cargo capacity", () => {
       playerId: a.player.id,
       mission: "transport",
       targetPlanetId: target.id,
-      ships: { swarmDrone: 1, swarmHarvester: 1 },
+      ships: { swarmMothership: 1, swarmDrone: 1, swarmHarvester: 1 },
       cargo: { metal: 520 },
       now: 240_000_100,
     });
@@ -304,7 +369,7 @@ describe("Swarm combat intercept + kamikaze", () => {
 
 describe("Chrono Lathe + batch production", () => {
   it("Chrono Lathe exists with late-game gate constant", () => {
-    assert.equal(BUILDINGS.chronoLathe.name, "Chrono Lathe");
+    assert.equal(BUILDINGS.chronoLathe.name, "Nano Production");
     assert.equal(CHRONO_LATHE_SHIPYARD_REQ, 10);
     assert.equal(chronoLatheTimeFactor(0), 1);
     assert.equal(chronoLatheTimeFactor(1), 0.1);

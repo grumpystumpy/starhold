@@ -17,6 +17,7 @@ import {
   classChangeCost,
   createUniverse,
   economySnapshot,
+  energyUsed,
   helioBuoyEnergy,
   joinUniverse,
   launchFleet,
@@ -52,7 +53,7 @@ const R3_DEFENSE_IDS = [
   "voidWard",
 ] as const;
 
-const MISSILE_NAMES = /missile|anti.?ballistic|interplanetary/i;
+const MISSILE_NAMES = /missile.?silo|anti.?ballistic|interplanetary/i;
 
 describe("Round 3 content + engine (11–19)", () => {
   it("schema version is 5", () => {
@@ -75,7 +76,7 @@ describe("Round 3 content + engine (11–19)", () => {
   it("Prism Laser tuning and old-save defense default", () => {
     assert.deepEqual(DEFENSES.prismLaser, {
       id: "prismLaser",
-      name: "Prism Laser",
+      name: "Directed-Energy Turret",
       description: "Crystal-focused prism emitter.",
       cost: { metal: 60, crystal: 200, deuterium: 0 },
       buildSeconds: 9,
@@ -145,8 +146,8 @@ describe("Round 3 content + engine (11–19)", () => {
   });
 
   it("Mantle Loom + Rig Foundry + Well Binding in catalogs", () => {
-    assert.equal(BUILDINGS.mantleLoom.name, "Mantle Loom");
-    assert.equal(BUILDINGS.rigFoundry.name, "Rig Foundry");
+    assert.equal(BUILDINGS.mantleLoom.name, "Land Reclamation");
+    assert.equal(BUILDINGS.rigFoundry.name, "Manufacture Line");
     assert.equal(RESEARCH.gravityWell.name, "Well Binding");
     assert.equal(CHRONO_LATHE_SHIPYARD_REQ, 10);
     assert.equal(CHRONO_LATHE_RIG_FOUNDRY_REQ, 10);
@@ -369,5 +370,25 @@ describe("Round 3 content + engine (11–19)", () => {
     assert.equal(PLAYER_CLASS_BONUSES.fleeter.attack, 1.08);
     assert.equal(PLAYER_CLASS_BONUSES.expansionist.colonySlots, 2);
     assert.equal(PLAYER_CLASS_BONUSES.expansionist.jumpGateCooldown, 0.85);
+  });
+
+  it("Ore Mine, Crystalizer and Deuterium Extractor have 100% increased energy consumption formulas", () => {
+    assert.equal(BUILDINGS.metalMine.name, "Ore Mine");
+    assert.equal(BUILDINGS.metalMine.energyUsePerLevel, 20);
+
+    assert.equal(BUILDINGS.crystalMine.name, "Crystalizer");
+    assert.equal(BUILDINGS.crystalMine.energyUsePerLevel, 24);
+
+    assert.equal(BUILDINGS.deutSynth.name, "Deuterium Extractor");
+    assert.equal(BUILDINGS.deutSynth.energyUsePerLevel, 40);
+
+    const universe = createUniverse("Energy Test", 1);
+    const { planet } = joinUniverse(universe, "Energy Tester", 100_000);
+    planet.buildings.metalMine = 2;
+    planet.buildings.crystalMine = 3;
+    planet.buildings.deutSynth = 1;
+
+    // 20*2 + 24*3 + 40*1 = 40 + 72 + 40 = 152
+    assert.equal(energyUsed(planet), 152);
   });
 });
