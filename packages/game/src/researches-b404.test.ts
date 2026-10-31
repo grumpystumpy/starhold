@@ -157,7 +157,7 @@ describe("B4-04 Metallurgist / Crystalizer / Deut Synthesis Researches", () => {
     assert.ok(RESEARCH_ORDER.includes("crystalizerTech"));
     assert.ok(RESEARCH_ORDER.includes("deutSynthesisTech"));
     assert.equal(RESEARCH.metallurgistTech.name, "Metallurgist");
-    assert.equal(RESEARCH.crystalizerTech.name, "Crystalizer");
+    assert.equal(RESEARCH.crystalizerTech.name, "Crystal Refining");
     assert.equal(RESEARCH.deutSynthesisTech.name, "Deut Synthesis");
   });
 });

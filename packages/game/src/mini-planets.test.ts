@@ -97,9 +97,9 @@ describe("mini planets (Micah revision)", () => {
 
   it("special buildings exist; mines allowed on minis", () => {
     assert.equal(BUILDINGS.riftSiphon.name, "Rift Siphon");
-    assert.equal(BUILDINGS.echoVault.name, "Echo Vault");
-    assert.equal(BUILDINGS.anomalyForge.name, "Anomaly Forge");
-    assert.equal(BUILDINGS.driftBeacon.name, "Drift Beacon");
+    assert.equal(BUILDINGS.echoVault.name, "Data Archive");
+    assert.equal(BUILDINGS.anomalyForge.name, "Anomaly Lab");
+    assert.equal(BUILDINGS.driftBeacon.name, "Fleet Command Post");
     assert.ok(MINI_BUILDING_ORDER.includes("riftSiphon"));
     assert.ok(MINI_BUILDING_ORDER.includes("metalMine"));
     assert.ok(MINI_BUILDING_ORDER.includes("researchLab"));

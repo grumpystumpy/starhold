@@ -283,8 +283,8 @@ export function batchScanSystem(
     const target = targets[i]!;
     if (!hangarHasComposition(origin.ships, ships)) {
       stoppedReason = launched.length
-        ? "Out of Whisper Probes in orbit."
-        : "Need Whisper Probes in orbit to scan.";
+        ? "Out of Spy Satellites in orbit."
+        : "Need Spy Satellites in orbit to scan.";
       break;
     }
     const result = launchFleet(universe, {
