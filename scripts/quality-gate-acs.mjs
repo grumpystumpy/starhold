@@ -83,7 +83,7 @@ async function main() {
 
   await page2.getByTestId("nav-fleet").click();
   await page2.getByTestId("fleet-form").waitFor({ timeout: 10_000 });
-  await page2.getByTestId("mission-raid").click();
+  await page2.selectOption('[data-testid="fleet-mission"]', "raid");
   await page2.getByTestId("acs-pick").waitFor({ timeout: 5_000 });
   await page2.getByTestId("fleet-open-acs").waitFor({ timeout: 5_000 });
   logs.push("acs_ui_visible");

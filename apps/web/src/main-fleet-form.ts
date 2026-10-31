@@ -27,8 +27,8 @@ export function readFleetFormIn(scope: ParentNode): ReturnType<typeof readFleetF
   const form = scope.querySelector<HTMLFormElement>("#fleet-form");
   if (!form) return null;
   const target = form.querySelector<HTMLSelectElement>("#fleet-target");
-  const missionEl = form.querySelector<HTMLInputElement>(
-    'input[name="fleet-mission"]:checked',
+  const missionEl = form.querySelector<HTMLInputElement | HTMLSelectElement>(
+    '[name="fleet-mission"]',
   );
   if (!target?.value) return null;
   const ships: Partial<FleetShips> = {};
