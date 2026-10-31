@@ -60,6 +60,10 @@
   font-variant-numeric: tabular-nums;
 }
 
+.mission-occupy {
+  color: var(--bad, #f87171);
+}
+
 .defense-row {
   display: flex;
   flex-direction: column;

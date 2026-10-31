@@ -30,7 +30,7 @@ export const BASE_INCOME_PER_HOUR = {
 export const SHIPS: Record<ShipId, ShipDef> = {
   scout: {
     id: "scout",
-    name: "Scout Skiff",
+    name: "Recon Drone",
     description: "Fast recon hull. Light guns, tiny cargo.",
     cost: { metal: 220, crystal: 80, deuterium: 0 },
     buildSeconds: 15,
@@ -46,7 +46,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
   },
   hauler: {
     id: "hauler",
-    name: "Ore Hauler",
+    name: "Mining Freighter",
     description: "Bulk cargo for loot and transport runs.",
     cost: { metal: 480, crystal: 480, deuterium: 0 },
     buildSeconds: 25,
@@ -62,7 +62,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
   },
   fastCargo: {
     id: "fastCargo",
-    name: "Fast Cargo",
+    name: "Light Transport",
     description: "Fast light freighter with a weak combat profile.",
     cost: { metal: 900, crystal: 900, deuterium: 0 },
     buildSeconds: 45,
@@ -78,7 +78,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
   },
   bulkCargo: {
     id: "bulkCargo",
-    name: "Bulk Cargo",
+    name: "Heavy Transport",
     description: "Slow heavy freighter built around a reinforced hull.",
     cost: { metal: 1_800, crystal: 1_200, deuterium: 0 },
     buildSeconds: 90,
@@ -94,7 +94,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
   },
   interceptor: {
     id: "interceptor",
-    name: "Interceptor",
+    name: "Strike Fighter",
     description: "Light combat hull — main raid striker.",
     cost: { metal: 900, crystal: 250, deuterium: 0 },
     buildSeconds: 40,
@@ -110,7 +110,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
   },
   cruiser: {
     id: "cruiser",
-    name: "Aegis Cruiser",
+    name: "Guided-Missile Cruiser",
     description: "Mid-weight combat hull — tougher line ship for contested raids.",
     cost: { metal: 2400, crystal: 1000, deuterium: 200 },
     buildSeconds: 70,
@@ -126,7 +126,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
   },
   bomber: {
     id: "bomber",
-    name: "Breach Bomber",
+    name: "Stealth Bomber",
     description: "Heavy gunship — high attack, slow cruise, deut-hungry.",
     cost: { metal: 3200, crystal: 1800, deuterium: 400 },
     buildSeconds: 95,
@@ -142,7 +142,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
   },
   probe: {
     id: "probe",
-    name: "Whisper Probe",
+    name: "Spy Satellite",
     description: "Disposable sensor drone for espionage missions.",
     cost: { metal: 0, crystal: 100, deuterium: 0 },
     buildSeconds: 8,
@@ -158,7 +158,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
   },
   recycler: {
     id: "recycler",
-    name: "Salvage Trawler",
+    name: "Recovery Vessel",
     description: "Harvests metal and crystal from debris fields.",
     cost: { metal: 400, crystal: 200, deuterium: 100 },
     buildSeconds: 30,
@@ -190,7 +190,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
   },
   voidforgeTitan: {
     id: "voidforgeTitan",
-    name: "Void Titan",
+    name: "Dreadnought",
     description:
       "3rd-largest hull — a bit faster than World Eater; very high attack and armor, low shields, large cargo. Can destroy moons.",
     cost: { metal: 1_500_000, crystal: 1_200_000, deuterium: 400_000 },
@@ -295,7 +295,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
   },
   helioBuoy: {
     id: "helioBuoy",
-    name: "Helio Buoy",
+    name: "Solar Relay Satellite",
     description:
       "Orbital energy platform. Parks in hangar; does not fly missions. Energy scales with planet temperature.",
     cost: { metal: 0, crystal: 2000, deuterium: 500 },
@@ -315,7 +315,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
   },
   keelSovereign: {
     id: "keelSovereign",
-    name: "Keel Sovereign",
+    name: "Supercarrier",
     description: "Fleet backbone — heavy line ship above Aegis Cruiser.",
     cost: { metal: 40_000, crystal: 20_000, deuterium: 10_000 },
     buildSeconds: 1800,
@@ -337,7 +337,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
   },
   rakeCorsair: {
     id: "rakeCorsair",
-    name: "Rake Corsair",
+    name: "Frigate",
     description: "Fleet hunter — rapid fire vs light hulls.",
     cost: { metal: 30_000, crystal: 40_000, deuterium: 15_000 },
     buildSeconds: 1600,
@@ -359,7 +359,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
   },
   anvilDread: {
     id: "anvilDread",
-    name: "Anvil Dread",
+    name: "Heavy Battlecruiser",
     description: "Mobile battle platform — heavy shields and hull.",
     cost: { metal: 60_000, crystal: 25_000, deuterium: 20_000 },
     buildSeconds: 2200,
@@ -381,7 +381,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
   },
   wardbreaker: {
     id: "wardbreaker",
-    name: "Wardbreaker",
+    name: "Siege Destroyer",
     description: "Anti-defense strike hull — shreds static guns.",
     cost: { metal: 50_000, crystal: 35_000, deuterium: 20_000 },
     buildSeconds: 2000,
@@ -403,7 +403,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
   },
   vaultScout: {
     id: "vaultScout",
-    name: "Vault Scout",
+    name: "Reconnaissance Corvette",
     description: "Explorer exclusive — boosts expedition yield when in the fleet.",
     cost: { metal: 2000, crystal: 4000, deuterium: 1000 },
     buildSeconds: 120,
@@ -420,7 +420,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
   },
   astrolabeWing: {
     id: "astrolabeWing",
-    name: "Astrolabe Wing",
+    name: "Pathfinder Wing",
     description:
       "Explorer exclusive — parked: −8% empire research time; spy escort +1 detail.",
     cost: { metal: 3000, crystal: 5000, deuterium: 1500 },
@@ -438,7 +438,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
   },
   spoilSkimmer: {
     id: "spoilSkimmer",
-    name: "Spoil Skimmer",
+    name: "Battle Harvester",
     description:
       "Fleeter exclusive — on attacker victory, skims 15% of the debris field into cargo.",
     cost: { metal: 4000, crystal: 2000, deuterium: 2000 },
@@ -456,7 +456,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
   },
   lineDrummer: {
     id: "lineDrummer",
-    name: "Line Drummer",
+    name: "Escort Destroyer",
     description:
       "Fleeter exclusive — fleet-speed aura (+2%/hull, cap +20%) and light RF support.",
     cost: { metal: 5000, crystal: 4000, deuterium: 1000 },
@@ -474,7 +474,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
   },
   veinAnchor: {
     id: "veinAnchor",
-    name: "Vein Anchor",
+    name: "Mining Platform",
     description:
       "Miner exclusive — stationary mine booster (+3%/hull on that planet, cap +30%).",
     cost: { metal: 5000, crystal: 2500, deuterium: 0 },
@@ -493,7 +493,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
   },
   gridStake: {
     id: "gridStake",
-    name: "Grid Stake",
+    name: "Power Relay Platform",
     description:
       "Miner exclusive — stationary energy booster (+4%/hull, cap +40%) and light defense.",
     cost: { metal: 4000, crystal: 4000, deuterium: 500 },
@@ -512,7 +512,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
   },
   foundationArk: {
     id: "foundationArk",
-    name: "Foundation Ark",
+    name: "Outpost Carrier",
     description:
       "Expansionist exclusive — colonizer that bootstraps starting buildings (consumed on landing).",
     cost: { metal: 10_000, crystal: 10_000, deuterium: 5000 },
@@ -530,9 +530,9 @@ export const SHIPS: Record<ShipId, ShipDef> = {
   },
   frontierBeacon: {
     id: "frontierBeacon",
-    name: "Frontier Beacon",
+    name: "Forward Operating Beacon",
     description:
-      "Expansionist exclusive — +1 colony slot empire-wide; Fold Bridge cooldown ×0.75.",
+      "Expansionist exclusive — +1 colony slot empire-wide; Moon Bridge cooldown ×0.75.",
     cost: { metal: 8000, crystal: 6000, deuterium: 4000 },
     buildSeconds: 400,
     shipyardLevel: 6,
@@ -552,7 +552,7 @@ export const SHIPS: Record<ShipId, ShipDef> = {
 export const DEFENSES: Record<DefenseId, DefenseDef> = {
   laserBattery: {
     id: "laserBattery",
-    name: "Light Laser",
+    name: "Light Laser Turret",
     description: "Static guns that fight with the hangar on raids.",
     cost: { metal: 150, crystal: 50, deuterium: 0 },
     buildSeconds: 10,
@@ -565,7 +565,7 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   shieldDome: {
     id: "shieldDome",
-    name: "Small Shield Dome",
+    name: "Small Shield Generator",
     description: "Planetary shield — soaks fire, low attack.",
     cost: { metal: 500, crystal: 300, deuterium: 0 },
     buildSeconds: 25,
@@ -578,7 +578,7 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   needleTurret: {
     id: "needleTurret",
-    name: "Rocket Launcher",
+    name: "Missile Battery",
     description: "Cheap metal-only rocket battery. Weak alone, strong in numbers.",
     cost: { metal: 200, crystal: 0, deuterium: 0 },
     buildSeconds: 8,
@@ -591,7 +591,7 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   prismLaser: {
     id: "prismLaser",
-    name: "Prism Laser",
+    name: "Directed-Energy Turret",
     description: "Crystal-focused prism emitter.",
     cost: { metal: 60, crystal: 200, deuterium: 0 },
     buildSeconds: 9,
@@ -604,7 +604,7 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   arcLattice: {
     id: "arcLattice",
-    name: "Laser Lattice",
+    name: "Laser Defense Grid",
     description: "Light beam lattice.",
     cost: { metal: 150, crystal: 50, deuterium: 0 },
     buildSeconds: 10,
@@ -617,7 +617,7 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   pulseBastion: {
     id: "pulseBastion",
-    name: "Heavy Laser",
+    name: "Heavy Laser Turret",
     description: "Mid-weight beam bastion.",
     cost: { metal: 600, crystal: 200, deuterium: 0 },
     buildSeconds: 25,
@@ -630,7 +630,7 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   gaussRail: {
     id: "gaussRail",
-    name: "Gauss Cannon",
+    name: "Railgun Battery",
     description: "Crystal-heavy pierce rail.",
     cost: { metal: 2000, crystal: 1500, deuterium: 0 },
     buildSeconds: 50,
@@ -656,7 +656,7 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   plasmaSpire: {
     id: "plasmaSpire",
-    name: "Plasma Turret",
+    name: "Plasma Cannon",
     description: "Late heavy DPS spire.",
     cost: { metal: 5000, crystal: 3000, deuterium: 1000 },
     buildSeconds: 90,
@@ -669,7 +669,7 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   flakCurtain: {
     id: "flakCurtain",
-    name: "Flak Cannon",
+    name: "Anti-Air Flak Battery",
     description: "Anti-fighter flak with rapid fire vs light hulls.",
     cost: { metal: 400, crystal: 200, deuterium: 50 },
     buildSeconds: 18,
@@ -682,7 +682,7 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   kineticFence: {
     id: "kineticFence",
-    name: "Mass Driver Fence",
+    name: "Coilgun Perimeter",
     description: "Cheap hull wall.",
     cost: { metal: 400, crystal: 100, deuterium: 0 },
     buildSeconds: 12,
@@ -695,7 +695,7 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   emberMortar: {
     id: "emberMortar",
-    name: "Plasma Mortar",
+    name: "Plasma Artillery",
     description: "Deut-hungry punch mortar.",
     cost: { metal: 800, crystal: 400, deuterium: 400 },
     buildSeconds: 35,
@@ -708,7 +708,7 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   rippleArray: {
     id: "rippleArray",
-    name: "Ion Shield Array",
+    name: "Ion Shield Generator",
     description: "Mid soak shield array.",
     cost: { metal: 800, crystal: 600, deuterium: 0 },
     buildSeconds: 30,
@@ -721,7 +721,7 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   haloProjector: {
     id: "haloProjector",
-    name: "Halo Shield Projector",
+    name: "Planetary Shield Projector",
     description: "Small shield dome — soft-cap 1 per planet.",
     cost: { metal: 6000, crystal: 4000, deuterium: 0 },
     buildSeconds: 120,
@@ -735,7 +735,7 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   crownAegis: {
     id: "crownAegis",
-    name: "Large Shield Dome",
+    name: "Large Shield Generator",
     description: "Large shield dome — soft-cap 1 per planet.",
     cost: { metal: 50_000, crystal: 40_000, deuterium: 10_000 },
     buildSeconds: 600,
@@ -749,7 +749,7 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   siegeBlockade: {
     id: "siegeBlockade",
-    name: "Ion Siege Bastion",
+    name: "Ion Fortress",
     description: "Anti-capital soak wall.",
     cost: { metal: 3000, crystal: 2000, deuterium: 500 },
     buildSeconds: 70,
@@ -762,7 +762,7 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   frostLance: {
     id: "frostLance",
-    name: "Cryo Ion Lance",
+    name: "Cryo Ion Cannon",
     description: "Cold-slot preferential (+10% attack on slots 12–15).",
     cost: { metal: 900, crystal: 300, deuterium: 300 },
     buildSeconds: 40,
@@ -776,7 +776,7 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
   },
   voidWard: {
     id: "voidWard",
-    name: "Graviton Ward",
+    name: "Graviton Barrier",
     description: "Elite late defense.",
     cost: { metal: 20_000, crystal: 15_000, deuterium: 5000 },
     buildSeconds: 300,
@@ -793,7 +793,7 @@ export const DEFENSES: Record<DefenseId, DefenseDef> = {
 export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   metalMine: {
     id: "metalMine",
-    name: "Ore Extractor",
+    name: "Ore Mine",
     description: "Pulls metal from the crust. Needs energy.",
     baseCost: { metal: 60, crystal: 15, deuterium: 0 },
     costGrowth: 1.5,
@@ -803,7 +803,7 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   },
   crystalMine: {
     id: "crystalMine",
-    name: "Crystal Lattice",
+    name: "Crystalizer",
     description: "Grows crystal veins. Needs energy.",
     baseCost: { metal: 48, crystal: 24, deuterium: 0 },
     costGrowth: 1.6,
@@ -813,7 +813,7 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   },
   deutSynth: {
     id: "deutSynth",
-    name: "Deut Still",
+    name: "Deuterium Extractor",
     description: "Condenses deuterium from the atmosphere. Needs energy.",
     baseCost: { metal: 225, crystal: 75, deuterium: 0 },
     costGrowth: 1.5,
@@ -877,7 +877,7 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   },
   lunarBase: {
     id: "lunarBase",
-    name: "Crater Hab",
+    name: "Lunar Habitat",
     description: "Expands moon fields so more lunar structures can be built.",
     baseCost: { metal: 2000, crystal: 4000, deuterium: 0 },
     costGrowth: 2,
@@ -894,16 +894,16 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   },
   jumpGate: {
     id: "jumpGate",
-    name: "Fold Bridge",
+    name: "Moon Bridge",
     description:
-      "Links your moons for near-instant fleet hops. Both moons need a Fold Bridge (moon only).",
+      "Links your moons for near-instant fleet hops. Both moons need a Moon Bridge (moon only).",
     baseCost: { metal: 8000, crystal: 16_000, deuterium: 8000 },
     costGrowth: 2,
     baseBuildSeconds: 60,
   },
   chronoLathe: {
     id: "chronoLathe",
-    name: "Chrono Lathe",
+    name: "Nano Production",
     description:
       "Late-game assembler. Each level multiplies building, ship, and defense build times by 0.1^level. Does not affect research.",
     baseCost: { metal: 1_000_000, crystal: 500_000, deuterium: 200_000 },
@@ -912,7 +912,7 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   },
   mantleLoom: {
     id: "mantleLoom",
-    name: "Mantle Loom",
+    name: "Land Reclamation",
     description:
       "Field expansion — occupies 1 field and adds 5 fields per level. Very high energy use. Planet only.",
     baseCost: { metal: 50_000, crystal: 100_000, deuterium: 30_000 },
@@ -922,9 +922,9 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   },
   rigFoundry: {
     id: "rigFoundry",
-    name: "Rig Foundry",
+    name: "Manufacture Line",
     description:
-      "Construction plant — −15% build time per level for buildings/ships/defenses (floor ×0.10). Required for Chrono Lathe.",
+      "Construction plant — −15% build time per level for buildings/ships/defenses (floor ×0.10). Required for Nano Production.",
     baseCost: { metal: 400, crystal: 200, deuterium: 100 },
     costGrowth: 2.0,
     baseBuildSeconds: 40,
@@ -943,7 +943,7 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   },
   echoVault: {
     id: "echoVault",
-    name: "Echo Vault",
+    name: "Data Archive",
     description:
       "Mini-planet special — +25% storage caps per level (max 5).",
     baseCost: { metal: 1200, crystal: 800, deuterium: 0 },
@@ -953,7 +953,7 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   },
   anomalyForge: {
     id: "anomalyForge",
-    name: "Anomaly Forge",
+    name: "Anomaly Lab",
     description:
       "Mini-planet special — −8% ship build time per level (max 5).",
     baseCost: { metal: 1000, crystal: 1000, deuterium: 400 },
@@ -964,7 +964,7 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   },
   driftBeacon: {
     id: "driftBeacon",
-    name: "Drift Beacon",
+    name: "Fleet Command Post",
     description:
       "Mini-planet special — +1 fleet slot and +1 expedition slot at level 1 (higher levels reserved).",
     baseCost: { metal: 2000, crystal: 1500, deuterium: 1000 },
@@ -1082,7 +1082,7 @@ export const RESEARCH: Record<ResearchId, ResearchDef> = {
     id: "gravityWell",
     name: "Well Binding",
     description:
-      "Gravity doctrine — required for Void Titan, Mothership, and World Eater.",
+      "Gravity doctrine — required for Dreadnought, Mothership, and World Eater.",
     baseCost: { metal: 0, crystal: 4000, deuterium: 2000 },
     costGrowth: 2.5,
     baseResearchSeconds: 240,
@@ -1101,7 +1101,7 @@ export const RESEARCH: Record<ResearchId, ResearchDef> = {
   },
   crystalizerTech: {
     id: "crystalizerTech",
-    name: "Crystalizer",
+    name: "Crystal Refining",
     description: "+5% crystal mine output per level.",
     baseCost: { metal: 40, crystal: 80, deuterium: 20 },
     costGrowth: 2.5,

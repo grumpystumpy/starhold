@@ -690,7 +690,7 @@ describe("P2 expeditions", () => {
       kind: "ships" as const,
       cargoGained: { metal: 0, crystal: 0, deuterium: 0 },
       shipsDelta: { scout: 2 },
-      summary: "Salvage drones joined the fleet (+2 Scout Skiff).",
+      summary: "Salvage drones joined the fleet (+2 Recon Drone).",
     };
     fresh.expeditionReports[legacyReport.id] = legacyReport;
 

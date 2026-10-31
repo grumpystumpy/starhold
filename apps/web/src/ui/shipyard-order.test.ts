@@ -184,10 +184,10 @@ describe("Shipyard and Defenses owned count and weakest-first ordering", () => {
       } as Partial<Record<DefenseId, number>>;
 
       const html = defenseRow("needleTurret", pl, false);
-      assert.match(html, /Rocket Launcher/);
+      assert.match(html, /Missile Battery/);
       assert.match(html, /Owned 42/);
       assert.equal(pl.defenses.needleTurret, countN);
-      assert.equal(DEFENSES.needleTurret.name, "Rocket Launcher");
+      assert.equal(DEFENSES.needleTurret.name, "Missile Battery");
     });
 
     it("handles missing defenses map gracefully", () => {

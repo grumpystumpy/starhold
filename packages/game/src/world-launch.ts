@@ -45,6 +45,7 @@ const MISSIONS: MissionType[] = [
   "pirateRaid",
   "alienRaid",
   "jump",
+  "occupy",
 ];
 
 export interface LaunchFleetOpts {
@@ -225,7 +226,7 @@ export function launchFleet(
       const wait = Math.ceil(((origin.jumpReadyAt ?? 0) - now) / 1000);
       return {
         ok: false,
-        error: `Fold Bridge cooling down (${wait}s remaining).`,
+        error: `Moon Bridge cooling down (${wait}s remaining).`,
       };
     }
   }

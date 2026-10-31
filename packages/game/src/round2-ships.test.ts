@@ -46,7 +46,7 @@ import { addDebris } from "./world-tick.js";
 describe("Round 2 ship catalog fixtures (Micah amendments)", () => {
   it("Void Titan (3rd largest) moon-killer stats", () => {
     const s = SHIPS.voidforgeTitan;
-    assert.equal(s.name, "Void Titan");
+    assert.equal(s.name, "Dreadnought");
     assert.match(s.description, /Can destroy moons\./);
     assert.equal(s.cost.metal, 1_500_000);
     assert.equal(s.cost.crystal, 1_200_000);
@@ -369,7 +369,7 @@ describe("Swarm combat intercept + kamikaze", () => {
 
 describe("Chrono Lathe + batch production", () => {
   it("Chrono Lathe exists with late-game gate constant", () => {
-    assert.equal(BUILDINGS.chronoLathe.name, "Chrono Lathe");
+    assert.equal(BUILDINGS.chronoLathe.name, "Nano Production");
     assert.equal(CHRONO_LATHE_SHIPYARD_REQ, 10);
     assert.equal(chronoLatheTimeFactor(0), 1);
     assert.equal(chronoLatheTimeFactor(1), 0.1);

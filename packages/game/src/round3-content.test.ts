@@ -53,7 +53,7 @@ const R3_DEFENSE_IDS = [
   "voidWard",
 ] as const;
 
-const MISSILE_NAMES = /missile|anti.?ballistic|interplanetary/i;
+const MISSILE_NAMES = /missile.?silo|anti.?ballistic|interplanetary/i;
 
 describe("Round 3 content + engine (11–19)", () => {
   it("schema version is 5", () => {
@@ -76,7 +76,7 @@ describe("Round 3 content + engine (11–19)", () => {
   it("Prism Laser tuning and old-save defense default", () => {
     assert.deepEqual(DEFENSES.prismLaser, {
       id: "prismLaser",
-      name: "Prism Laser",
+      name: "Directed-Energy Turret",
       description: "Crystal-focused prism emitter.",
       cost: { metal: 60, crystal: 200, deuterium: 0 },
       buildSeconds: 9,
@@ -146,8 +146,8 @@ describe("Round 3 content + engine (11–19)", () => {
   });
 
   it("Mantle Loom + Rig Foundry + Well Binding in catalogs", () => {
-    assert.equal(BUILDINGS.mantleLoom.name, "Mantle Loom");
-    assert.equal(BUILDINGS.rigFoundry.name, "Rig Foundry");
+    assert.equal(BUILDINGS.mantleLoom.name, "Land Reclamation");
+    assert.equal(BUILDINGS.rigFoundry.name, "Manufacture Line");
     assert.equal(RESEARCH.gravityWell.name, "Well Binding");
     assert.equal(CHRONO_LATHE_SHIPYARD_REQ, 10);
     assert.equal(CHRONO_LATHE_RIG_FOUNDRY_REQ, 10);

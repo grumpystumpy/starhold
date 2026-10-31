@@ -202,9 +202,9 @@ async function runViewport(browser, viewport, ids) {
     await page.waitForTimeout(300);
     assert(upgradePosts === 0, `${tag} disabled upgrade still posted`);
     const buildingsText = await page.locator('[data-testid="building-mantleLoom"]').innerText();
-    assert(!buildingsText.includes("fieldsCap"), `${tag} fieldsCap in Mantle Loom`);
+    assert(!buildingsText.includes("fieldsCap"), `${tag} fieldsCap in Land Reclamation`);
     assert(buildingsText.includes("5 fields per level"), `${tag} mantle copy`);
-    assert(!buildingsText.includes("_"), `${tag} underscore in Mantle Loom`);
+    assert(!buildingsText.includes("_"), `${tag} underscore in Land Reclamation`);
     await noOverflow(page, `${tag} buildings`);
 
     const researchUrl = `${WEB}/research?playerId=${encodeURIComponent(ids.lab.player.id)}`;

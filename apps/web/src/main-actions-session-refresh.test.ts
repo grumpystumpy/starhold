@@ -182,11 +182,11 @@ it("shows exact completion notices when research, ship, and defense items finish
 
     // Advance to ship completion
     await advanceBy(1_000);
-    assert.equal(session.notice, "Shipyard: Interceptor × 10 finished");
+    assert.equal(session.notice, "Shipyard: Strike Fighter × 10 finished");
 
     // Advance to defense completion
     await advanceBy(1_000);
-    assert.equal(session.notice, "Defense: Light Laser × 4 finished");
+    assert.equal(session.notice, "Defense: Light Laser Turret × 4 finished");
   } finally {
     globalThis.fetch = originalFetch;
   }

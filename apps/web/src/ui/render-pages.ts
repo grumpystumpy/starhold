@@ -132,8 +132,8 @@ function overviewPage(view: PlayerView, busy: boolean): string {
           <p class="active-title" data-testid="active-title"${title ? "" : " hidden"}>${escapeHtml(title)}</p>
           <p class="overview-name" data-testid="overview-planet-name">${escapeHtml(planet.name)}${planet.flags?.mini ? " · Mini" : planet.kind === "moon" ? " · Moon" : ""}</p>
           <p class="coords">${fmtCoordsLink(planet.coords)}</p>
-          <p class="hint" data-testid="planet-fields">Fields ${fmt(economy.fields.used)} / ${fmt(economy.fields.cap)} · ${fmt(economy.fields.remaining)} free${loomBonus > 0 ? ` · Mantle Loom +${fmt(loomBonus)}` : ""}</p>
-          <p class="hint" data-testid="planet-temperature">Temp ${fmt(tempK)} K · solar ×${solarTemp.toFixed(2)}${helio > 0 ? ` · Helio Buoy +${fmt(helio)}` : ""}</p>
+          <p class="hint" data-testid="planet-fields">Fields ${fmt(economy.fields.used)} / ${fmt(economy.fields.cap)} · ${fmt(economy.fields.remaining)} free${loomBonus > 0 ? ` · Land Reclamation +${fmt(loomBonus)}` : ""}</p>
+          <p class="hint" data-testid="planet-temperature">Temp ${fmt(tempK)} K · solar ×${solarTemp.toFixed(2)}${helio > 0 ? ` · Solar Relay Satellite +${fmt(helio)}` : ""}</p>
         </div>
       </div>
       <form class="planet-rename" id="planet-rename-form" data-testid="planet-rename-form">
@@ -198,7 +198,7 @@ function buildingsPage(view: PlayerView, busy: boolean): string {
       ${
         buildQueueHtml(planet, now) ||
         (isMini
-          ? `<p class="hint">Minis allow normal buildings plus Rift Siphon, Echo Vault, Anomaly Forge, and Drift Beacon (+1 fleet slot and +1 expedition slot per owned mini with a beacon).</p>`
+          ? `<p class="hint">Minis allow normal buildings plus Rift Siphon, Data Archive, Anomaly Lab, and Fleet Command Post (+1 fleet slot and +1 expedition slot per owned mini with a beacon).</p>`
           : planet.kind === "moon"
           ? `<p class="hint">Moons have no mines — expand crater structures on the moon.</p>`
           : `<p class="hint">One construction at a time. Upgrade the Solar Array if mines stall.</p>`)

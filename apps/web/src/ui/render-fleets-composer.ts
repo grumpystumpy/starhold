@@ -130,6 +130,14 @@ export function fleetComposer(
         `<option value="alien:${escapeAttr(alien.id)}">${escapeHtml(alien.name)} · Aliens · Lv ${fmt(alien.level ?? alien.tier)} · ${alien.threatHint} · ${fmtCoords(alien.coords)}</option>`,
       );
     }
+  } else if (mission === "occupy") {
+    for (const m of view.galaxy.minis ?? []) {
+      if (!m.isOwn) {
+        options.push(
+          `<option value="planet:${escapeAttr(m.planetId)}">Occupy ${escapeHtml(m.name)} · ${fmtCoords(m.coords)}</option>`,
+        );
+      }
+    }
   } else if (mission === "espionage") {
     for (const r of rivals) {
       options.push(
@@ -296,7 +304,7 @@ export function fleetComposer(
         ? mission === "transport"
           ? `<p class="hint" data-testid="fleet-need-colony">Need a second world: research Stellar Cartography, build a Colonizer, colonize an empty galaxy slot — then transport cargo there.</p>`
           : mission === "jump"
-            ? `<p class="hint" data-testid="fleet-need-jump-moon">Need another of your moons with a Fold Bridge (form moons from large debris, then build Crater Hab + Fold Bridge on both).</p>`
+            ? `<p class="hint" data-testid="fleet-need-jump-moon">Need another of your moons with a Moon Bridge (form moons from large debris, then build Lunar Habitat + Moon Bridge on both).</p>`
             : mission === "deploy"
               ? `<p class="hint" data-testid="fleet-need-deploy-target">Colonize for park targets, or join a second commander for attacking another rival.</p>`
               : mission === "colonize"
@@ -356,9 +364,9 @@ export function fleetComposer(
       detail: "Combat mission against a rival — winners leave debris.",
     },
     espionage: {
-      label: "Spy (Whisper Probe)",
+      label: "Spy (Spy Satellite)",
       detail: "Probe a foreign world for fleet, defense, and resource intel.",
-      requires: ["Whisper Probe in orbit"],
+      requires: ["Spy Satellite in orbit"],
     },
     transport: {
       label: "Transport cargo (own worlds)",
@@ -376,9 +384,9 @@ export function fleetComposer(
       requires: ["Recycler / harvester hull"],
     },
     harvestAsteroid: {
-      label: "Harvest asteroid (Salvage Trawler)",
+      label: "Harvest asteroid (Recovery Vessel)",
       detail: "Mine an asteroid field for resources.",
-      requires: ["Salvage Trawler"],
+      requires: ["Recovery Vessel"],
     },
     expedition: {
       label: "Expedition (deep space)",
@@ -394,9 +402,14 @@ export function fleetComposer(
       detail: "Strike the system alien base while it is active.",
     },
     jump: {
-      label: "Fold Bridge (moon → moon)",
-      detail: "Instant transfer between your moons with Fold Bridges.",
-      requires: ["Fold Bridge on both moons"],
+      label: "Moon Bridge (moon → moon)",
+      detail: "Instant transfer between your moons with Moon Bridges.",
+      requires: ["Moon Bridge on both moons"],
+    },
+    occupy: {
+      label: "Occupation (Mothership)",
+      detail: "Capture and occupy mini planets.",
+      requires: ["Mothership in fleet"],
     },
   };
   const selectedMeta = missionMeta[mission];
@@ -406,9 +419,11 @@ export function fleetComposer(
     requires: selectedMeta.requires,
     testId: `mission-tip-${mission}`,
   });
-  const missionOptions = MISSIONS.map((m) => {
+  const hasMothership = (draft?.counts.swarmMothership ?? 0) >= 1;
+  const missionOptions = MISSIONS.filter((m) => m !== "occupy" || hasMothership).map((m) => {
     const meta = missionMeta[m];
-    return `<option value="${m}" data-testid="mission-${m}" ${mission === m ? "selected" : ""}>${escapeHtml(meta.label)}</option>`;
+    const cls = m === "occupy" ? ' class="mission-occupy"' : "";
+    return `<option value="${m}" data-testid="mission-${m}"${cls} ${mission === m ? "selected" : ""}>${escapeHtml(meta.label)}</option>`;
   }).join("");
 
   const presets = view.player.fleetPresets ?? [];
@@ -571,6 +586,11 @@ function coordsFromTarget(view: PlayerView, selected: string): Coordinates | nul
     if (rock && "coords" in rock) return rock.coords;
     return null;
   }
+  if (selected.startsWith("planet:")) {
+    const id = selected.slice("planet:".length);
+    const mini = (view.galaxy.minis ?? []).find((m) => m.planetId === id);
+    if (mini) return mini.coords;
+  }
   if (selected.startsWith("pirate:")) return view.galaxy.pirateBase?.coords ?? null;
   if (selected.startsWith("alien:")) return view.galaxy.alienBase?.coords ?? null;
   return null;
@@ -592,6 +612,7 @@ function targetKind(mission: MissionType, selected: string, label: string): stri
   if (mission === "harvestAsteroid" || selected.startsWith("asteroid:")) return "asteroid";
   if (selected.startsWith("pirate:")) return "pirate base";
   if (selected.startsWith("alien:")) return "alien base";
+  if (mission === "occupy") return "mini planet";
   if (/moon/i.test(label)) return "moon";
   if (selected.startsWith("planet:")) return "planet";
   return "coordinates";
