@@ -372,14 +372,14 @@ describe("Round 3 content + engine (11–19)", () => {
     assert.equal(PLAYER_CLASS_BONUSES.expansionist.jumpGateCooldown, 0.85);
   });
 
-  it("Ore Extractor, Crystal Lattice and Deut Still have 100% increased energy consumption formulas", () => {
-    assert.equal(BUILDINGS.metalMine.name, "Ore Extractor");
+  it("Ore Mine, Crystalizer and Deuterium Extractor have 100% increased energy consumption formulas", () => {
+    assert.equal(BUILDINGS.metalMine.name, "Ore Mine");
     assert.equal(BUILDINGS.metalMine.energyUsePerLevel, 20);
 
-    assert.equal(BUILDINGS.crystalMine.name, "Crystal Lattice");
+    assert.equal(BUILDINGS.crystalMine.name, "Crystalizer");
     assert.equal(BUILDINGS.crystalMine.energyUsePerLevel, 24);
 
-    assert.equal(BUILDINGS.deutSynth.name, "Deut Still");
+    assert.equal(BUILDINGS.deutSynth.name, "Deuterium Extractor");
     assert.equal(BUILDINGS.deutSynth.energyUsePerLevel, 40);
 
     const universe = createUniverse("Energy Test", 1);
