@@ -408,6 +408,60 @@ describe("fleet send two-step", () => {
     assert.match(fleetComposer(view(), false, preset), /data-fleet-step="2"/);
     assert.match(fleetComposer(view(), false, preset), /2× Scout Skiff/);
   });
+
+  it("disables launch and shows error hint when swarm units are selected without a Mothership", () => {
+    const customView: PlayerView = {
+      ...view(),
+      planet: {
+        ...view().planet,
+        ships: { swarmDrone: 10, swarmMothership: 1, scout: 5 },
+      },
+    };
+
+    const step1WithoutMS = fleetComposer(
+      customView,
+      false,
+      draft({ step: 1, counts: { swarmDrone: 5 } }),
+    );
+    assert.match(buttonTag(step1WithoutMS, "fleet-next"), /disabled/);
+    assert.match(step1WithoutMS, /data-testid="fleet-need-mothership"/);
+    assert.match(step1WithoutMS, /Swarm drones\/harvesters must ride a Mothership/);
+
+    const step1WithMS = fleetComposer(
+      customView,
+      false,
+      draft({ step: 1, counts: { swarmDrone: 5, swarmMothership: 1 } }),
+    );
+    assert.doesNotMatch(buttonTag(step1WithMS, "fleet-next"), /disabled/);
+    assert.doesNotMatch(step1WithMS, /data-testid="fleet-need-mothership"/);
+
+    const step2WithoutMS = fleetComposer(
+      customView,
+      false,
+      draft({
+        step: 2,
+        counts: { swarmDrone: 5 },
+        targetPlanetId: "pl2",
+        mission: "raid",
+      }),
+    );
+    assert.match(buttonTag(step2WithoutMS, "launch-fleet"), /disabled/);
+    assert.match(step2WithoutMS, /data-testid="fleet-need-mothership"/);
+    assert.match(step2WithoutMS, /Swarm drones\/harvesters must ride a Mothership/);
+
+    const step2WithMS = fleetComposer(
+      customView,
+      false,
+      draft({
+        step: 2,
+        counts: { swarmDrone: 5, swarmMothership: 1 },
+        targetPlanetId: "pl2",
+        mission: "raid",
+      }),
+    );
+    assert.doesNotMatch(buttonTag(step2WithMS, "launch-fleet"), /disabled/);
+    assert.doesNotMatch(step2WithMS, /data-testid="fleet-need-mothership"/);
+  });
 });
 
 describe("fleet send result", () => {

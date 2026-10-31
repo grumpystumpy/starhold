@@ -14,6 +14,7 @@ import {
   recyclerHullScale,
   spend,
   travelBonusMult,
+  validateSwarmCarry,
 } from "./formulas.js";
 import type {
   Coordinates,
@@ -114,6 +115,11 @@ export function launchFleet(
         error: `${SHIPS[id].name} cannot join fleets (stationary).`,
       };
     }
+  }
+
+  const swarmCheck = validateSwarmCarry(ships, player.research.swarmHold ?? 0);
+  if (!swarmCheck.ok) {
+    return swarmCheck;
   }
 
   advanceUniverse(universe, now);

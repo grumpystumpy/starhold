@@ -771,17 +771,11 @@ export function bindClickHandlers(): void {
     }
     const form = el.closest("form");
     if (!form || form.id !== "fleet-form") return;
-    const next = form.querySelector<HTMLButtonElement>(
-      "[data-testid='fleet-next']",
-    );
-    if (!next) return;
-    let total = 0;
-    for (const input of form.querySelectorAll<HTMLInputElement>(
-      "[data-fleet-count]",
-    )) {
-      total += Math.max(0, Math.floor(Number(input.value) || 0));
+    const salvaged = salvageFleetForm(root);
+    if (salvaged) {
+      rememberFleetDraft(salvaged);
+      schedulePaint();
     }
-    next.disabled = total < 1 || session.busy;
   });
 
   root.addEventListener("submit", (ev) => {
