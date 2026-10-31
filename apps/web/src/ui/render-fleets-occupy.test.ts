@@ -202,6 +202,20 @@ describe("Occupation UI rendering (B7-12)", () => {
     assert.doesNotMatch(html, /data-testid="mission-occupy"/);
   });
 
+  it("falls back to Deploy when Occupation is selected without a Mothership", () => {
+    const view = mockPlayerView();
+    const draft = {
+      ...blankFleetDraft(),
+      mission: "occupy" as const,
+      step: 2 as const,
+      counts: { scout: 5, swarmMothership: 0 },
+    };
+    const html = fleetComposer(view, false, draft);
+    assert.doesNotMatch(html, /data-testid="mission-occupy"/);
+    assert.doesNotMatch(html, /mission-tip-occupy/);
+    assert.match(html, /<option value="deploy"[^>]*selected/);
+  });
+
   it("shows Occupation mission option with red class when Mothership is selected", () => {
     const view = mockPlayerView();
     const draft = {

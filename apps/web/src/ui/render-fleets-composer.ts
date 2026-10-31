@@ -30,7 +30,11 @@ export function fleetComposer(
   busy: boolean,
   draft: FleetDraft | null,
 ): string {
-  const mission = draft?.mission ?? "deploy";
+  const hasMothership = (draft?.counts.swarmMothership ?? 0) >= 1;
+  const draftMission = draft?.mission ?? "deploy";
+  const mission = draftMission === "occupy" && !hasMothership
+    ? "deploy"
+    : draftMission;
   const rivals = view.roster.filter((r) => r.id !== view.player.id);
   const attackableRivals = rivals.filter(
     (r) => r.pointsHint >= NEWBIE_PROTECTION_POINTS,
@@ -419,7 +423,6 @@ export function fleetComposer(
     requires: selectedMeta.requires,
     testId: `mission-tip-${mission}`,
   });
-  const hasMothership = (draft?.counts.swarmMothership ?? 0) >= 1;
   const missionOptions = MISSIONS.filter((m) => m !== "occupy" || hasMothership).map((m) => {
     const meta = missionMeta[m];
     const cls = m === "occupy" ? ' class="mission-occupy"' : "";
