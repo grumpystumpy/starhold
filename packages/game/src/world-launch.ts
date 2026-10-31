@@ -44,6 +44,7 @@ const MISSIONS: MissionType[] = [
   "pirateRaid",
   "alienRaid",
   "jump",
+  "occupy",
 ];
 
 export interface LaunchFleetOpts {

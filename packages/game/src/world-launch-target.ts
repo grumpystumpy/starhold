@@ -321,6 +321,16 @@ export function resolveLaunchTarget(
       if ((targetPlanet.buildings.jumpGate ?? 0) < 1) {
         return { ok: false, error: "Target moon needs Fold Bridge level 1." };
       }
+    } else if (mission === "occupy") {
+      if (!isMiniPlanet(targetPlanet)) {
+        return { ok: false, error: "Occupation targets must be mini planets." };
+      }
+      if ((ships.swarmMothership ?? 0) < 1) {
+        return { ok: false, error: "Occupation requires a Mothership." };
+      }
+      if (targetPlanet.ownerPlayerId === player.id) {
+        return { ok: false, error: "Cannot occupy your own body." };
+      }
     }
   }
 

@@ -128,6 +128,14 @@ export function fleetComposer(
         `<option value="alien:${escapeAttr(alien.id)}">${escapeHtml(alien.name)} · Aliens · Lv ${fmt(alien.level ?? alien.tier)} · ${alien.threatHint} · ${fmtCoords(alien.coords)}</option>`,
       );
     }
+  } else if (mission === "occupy") {
+    for (const m of view.galaxy.minis ?? []) {
+      if (!m.isOwn) {
+        options.push(
+          `<option value="planet:${escapeAttr(m.planetId)}">Occupy ${escapeHtml(m.name)} · ${fmtCoords(m.coords)}</option>`,
+        );
+      }
+    }
   } else if (mission === "espionage") {
     for (const r of rivals) {
       options.push(
@@ -385,8 +393,14 @@ export function fleetComposer(
       detail: "Instant transfer between your moons with Fold Bridges.",
       requires: ["Fold Bridge on both moons"],
     },
+    occupy: {
+      label: "Occupation (Mothership)",
+      detail: "Capture and occupy mini planets.",
+      requires: ["Mothership in fleet"],
+    },
   };
-  const missionRadios = MISSIONS.map((m) => {
+  const hasMothership = (draft?.counts.swarmMothership ?? 0) >= 1;
+  const missionRadios = MISSIONS.filter((m) => m !== "occupy" || hasMothership).map((m) => {
     const meta = missionMeta[m];
     const tip = infoTooltip({
       title: meta.label,
@@ -394,7 +408,8 @@ export function fleetComposer(
       requires: meta.requires,
       testId: `mission-tip-${m}`,
     });
-    return `<label><input type="radio" name="fleet-mission" value="${m}" data-testid="mission-${m}" ${mission === m ? "checked" : ""} ${busy ? "disabled" : ""} /> ${meta.label} ${tip.html}</label>`;
+    const cls = m === "occupy" ? ' class="mission-occupy"' : "";
+    return `<label${cls}><input type="radio" name="fleet-mission" value="${m}" data-testid="mission-${m}" ${mission === m ? "checked" : ""} ${busy ? "disabled" : ""} /> ${meta.label} ${tip.html}</label>`;
   }).join("");
 
   const presets = view.player.fleetPresets ?? [];
@@ -553,6 +568,11 @@ function coordsFromTarget(view: PlayerView, selected: string): Coordinates | nul
     if (rock && "coords" in rock) return rock.coords;
     return null;
   }
+  if (selected.startsWith("planet:")) {
+    const id = selected.slice("planet:".length);
+    const mini = (view.galaxy.minis ?? []).find((m) => m.planetId === id);
+    if (mini) return mini.coords;
+  }
   if (selected.startsWith("pirate:")) return view.galaxy.pirateBase?.coords ?? null;
   if (selected.startsWith("alien:")) return view.galaxy.alienBase?.coords ?? null;
   return null;
@@ -574,6 +594,7 @@ function targetKind(mission: MissionType, selected: string, label: string): stri
   if (mission === "harvestAsteroid" || selected.startsWith("asteroid:")) return "asteroid";
   if (selected.startsWith("pirate:")) return "pirate base";
   if (selected.startsWith("alien:")) return "alien base";
+  if (mission === "occupy") return "mini planet";
   if (/moon/i.test(label)) return "moon";
   if (selected.startsWith("planet:")) return "planet";
   return "coordinates";
