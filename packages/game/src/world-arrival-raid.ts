@@ -232,7 +232,7 @@ export function resolveRaidArrival(
     if (kill.chancePct > 0) moonKillChancePct = kill.chancePct;
     if (kill.destroyed) {
       moonDestroyed = true;
-      summary = `${combat.summary} Void Titans shattered the moon (${kill.chancePct}% chance).`;
+      summary = `${combat.summary} Dreadnoughts shattered the moon (${kill.chancePct}% chance).`;
     }
   } else {
     const moon = tryFormMoon(universe, target, debrisCreated, `${fleet.id}:${fleet.arrivesAt}`, now);

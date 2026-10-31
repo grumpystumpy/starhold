@@ -417,10 +417,10 @@ export function galaxyPanel(
   const scanTip = infoTooltip({
     title: "Scan system",
     lines: [
-      "Send Whisper Probes to every foreign-owned planet and mini planet in this system.",
+      "Send Spy Satellites to every foreign-owned planet and mini planet in this system.",
       "Consumes probes from ships in orbit on the selected colony.",
     ],
-    requires: ["Whisper Probe in orbit"],
+    requires: ["Spy Satellite in orbit"],
     testId: "galaxy-scan-tip",
   });
 
