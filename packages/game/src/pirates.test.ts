@@ -1433,10 +1433,17 @@ describe("B7-04 raid deterrence target selection", () => {
     base.lastRaidAt = now - 10_000;
 
     const body = universe.planets[planet.id]!;
-    // Add 300,000 units so deterrence is at floor 0.03 (3%)
-    body.ships = { interceptor: 300_000 };
 
-    assert.equal(planetRaidDeterrence(body, "pirate"), 0.03);
+    // Non-qualifying planet has unchanged chance
+    body.ships = { interceptor: 1499 };
+    assert.equal(planetRaidDeterrence(body, "pirate", 1.0), 1.0);
+    assert.equal(planetRaidDeterrence(body, "pirate", 0.10), 0.10);
+
+    // Qualifying planet (>= 1500 units) has raid chance reduced by exactly 0.5 percentage points (-0.005)
+    body.ships = { interceptor: 300_000 };
+    assert.ok(Math.abs(planetRaidDeterrence(body, "pirate", 1.0) - 0.995) < 1e-9);
+    assert.ok(Math.abs(planetRaidDeterrence(body, "pirate", 0.10) - 0.095) < 1e-9);
+    assert.equal(planetRaidDeterrence(body, "pirate"), 0.995);
 
     const target = pickRaidTarget(universe, base, now, "pirate");
     if (target?.kind === "planet") {
