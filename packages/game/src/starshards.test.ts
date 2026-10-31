@@ -75,11 +75,15 @@ describe("Thread D Starshards / officers / skills", () => {
     const produced = advancePlanet(planet, universe.speed, 159_900_001 + 3_600_000, 0, undefined, player);
     assert.deepEqual(produced.resources, boosted);
     const unboostedTick = advancePlanet(planet, universe.speed, 159_900_001 + 3_600_000, 0);
-    assert.deepEqual(unboostedTick.resources, base);
+    assert.deepEqual(unboostedTick.resources, boosted);
 
     planet.resources = { metal: base.metal, crystal: base.crystal, deuterium: base.deuterium };
     addCargoToPlanet(universe, planet, { metal: 100_000, crystal: 100_000, deuterium: 100_000 }, 159_900_002);
-    assert.deepEqual(planet.resources, boosted);
+    assert.deepEqual(planet.resources, {
+      metal: base.metal + 100_000,
+      crystal: base.crystal + 100_000,
+      deuterium: base.deuterium + 100_000,
+    });
 
     const npc = structuredClone(planet);
     npc.id = "npc-planet";

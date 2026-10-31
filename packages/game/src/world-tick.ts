@@ -195,14 +195,24 @@ export function advancePlanet(
     );
     const hours = elapsedMs / 3_600_000;
     const caps = storageForPlanet(owner, state, now);
-    state.resources = clampToStorage(
-      {
-        metal: state.resources.metal + rates.metal * hours,
-        crystal: state.resources.crystal + rates.crystal * hours,
-        deuterium: state.resources.deuterium + rates.deuterium * hours,
-      },
-      caps,
-    );
+    const cur = state.resources;
+    const metalProd = rates.metal * hours;
+    const crystalProd = rates.crystal * hours;
+    const deutProd = rates.deuterium * hours;
+    state.resources = {
+      metal:
+        cur.metal >= caps.metal
+          ? cur.metal
+          : Math.min(caps.metal, cur.metal + metalProd),
+      crystal:
+        cur.crystal >= caps.crystal
+          ? cur.crystal
+          : Math.min(caps.crystal, cur.crystal + crystalProd),
+      deuterium:
+        cur.deuterium >= caps.deuterium
+          ? cur.deuterium
+          : Math.min(caps.deuterium, cur.deuterium + deutProd),
+    };
     state.lastTickAt = now;
   }
 
@@ -304,15 +314,11 @@ export function addCargoToPlanet(
   cargo: Resources,
   now: number,
 ): void {
-  const caps = storageForPlanet(universe, planet, now);
-  planet.resources = clampToStorage(
-    {
-      metal: planet.resources.metal + cargo.metal,
-      crystal: planet.resources.crystal + cargo.crystal,
-      deuterium: planet.resources.deuterium + cargo.deuterium,
-    },
-    caps,
-  );
+  planet.resources = {
+    metal: planet.resources.metal + cargo.metal,
+    crystal: planet.resources.crystal + cargo.crystal,
+    deuterium: planet.resources.deuterium + cargo.deuterium,
+  };
 }
 
 export function subtractCargo(planet: PlanetState, cargo: Resources): void {
