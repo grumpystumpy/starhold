@@ -98,7 +98,7 @@ export function startOccupation(
   }
   const planet = universe.planets[planetId];
   if (!planet) return { ok: false, error: "Planet missing." };
-  if (planet.ownerPlayerId === playerId) {
+  if (planet.ownerPlayerId === playerId && !planet.flags?.mini) {
     return { ok: false, error: "Cannot occupy your own body." };
   }
   if (!defensesCleared(planet)) {

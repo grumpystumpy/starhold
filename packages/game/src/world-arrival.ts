@@ -41,6 +41,8 @@ import {
 import { resolveEspionage } from "./world-espionage.js";
 import { resolveExpeditionArrival } from "./world-expedition.js";
 import {
+  captureMiniPlanet,
+  isMiniPlanet,
   isUnclaimedMini,
   miniKindOf,
   playerKnowsMini,
@@ -61,6 +63,7 @@ import {
   occupationForPlanet,
   occupationMineShares,
   pruneExpiredOccupations,
+  startOccupation,
 } from "./world-occupation.js";
 import { formatEventCount, pushEventLog } from "./world-event-log.js";
 import { resolveMiniPlanetChoice } from "./world-round2.js";
@@ -141,6 +144,28 @@ export function resolveFleetArrival(
         return;
       }
       resolveRaidArrival(universe, fleet, target, now);
+    } else if (fleet.mission === "occupy") {
+      const target = fleet.targetPlanetId
+        ? universe.planets[fleet.targetPlanetId]
+        : null;
+      if (!target || !isMiniPlanet(target)) {
+        delete universe.fleets[fleet.id];
+        return;
+      }
+      let won = false;
+      if (target.ownerPlayerId && target.ownerPlayerId !== fleet.ownerPlayerId) {
+        resolveRaidArrival(universe, fleet, target, now);
+        const report = fleet.reportId ? universe.reports[fleet.reportId] : null;
+        won = report?.outcome === "attacker_win";
+      } else if (!target.ownerPlayerId) {
+        won = true;
+      }
+      if (won && (fleet.ships.swarmMothership ?? 0) >= 1) {
+        const cap = captureMiniPlanet(universe, fleet.ownerPlayerId, target);
+        if (cap.ok) {
+          startOccupation(universe, fleet.ownerPlayerId, fleet.id, now);
+        }
+      }
     } else if (fleet.mission === "espionage") {
       const target = fleet.targetPlanetId
         ? universe.planets[fleet.targetPlanetId]

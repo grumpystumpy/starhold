@@ -144,7 +144,8 @@ export type MissionType =
   | "expedition"
   | "pirateRaid"
   | "alienRaid"
-  | "jump";
+  | "jump"
+  | "occupy";
 
 export type FleetPhase = "outbound" | "holding" | "returning";
 

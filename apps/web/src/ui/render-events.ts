@@ -23,6 +23,7 @@ export function formatEventCountdown(arrivesAt: number, now: number): string {
 }
 
 function missionLabel(mission: string): string {
+  if (mission === "occupy") return "Occupation";
   return mission
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .replaceAll("_", " ")
@@ -83,8 +84,9 @@ export function eventsBannerHtml(view: PlayerView, now = Date.now()): string {
     const id = escapeHtml(`${hostile ? "hostile-" : ""}${fleet.id}`);
     const testid = isSoonest ? ' data-testid="event-soonest"' : "";
     const tag = isSoonest ? "div" : "li";
+    const missionCls = fleet.mission === "occupy" ? " mission-occupy" : "";
 
-    return `<${tag} class="event-row ${presentation.className}" data-event-id="${id}" data-event-arrives-at="${fleet.arrivesAt}"${testid}><span class="event-kind">${presentation.label}</span><span class="event-route">${escapeHtml(missionLabel(fleet.mission))} · ${routeFrom} → ${routeTo}</span><span class="event-arrival"><time>${escapeHtml(arrival)}</time> · <span data-event-countdown>${formatEventCountdown(fleet.arrivesAt, now)}</span></span></${tag}>`;
+    return `<${tag} class="event-row ${presentation.className}${missionCls}" data-event-id="${id}" data-event-arrives-at="${fleet.arrivesAt}"${testid}><span class="event-kind">${presentation.label}</span><span class="event-route"><span class="${fleet.mission === "occupy" ? "mission-occupy" : ""}">${escapeHtml(missionLabel(fleet.mission))}</span> · ${routeFrom} → ${routeTo}</span><span class="event-arrival"><time>${escapeHtml(arrival)}</time> · <span data-event-countdown>${formatEventCountdown(fleet.arrivesAt, now)}</span></span></${tag}>`;
   };
 
   const soonestHtml = renderRow(rows[0]!, true);

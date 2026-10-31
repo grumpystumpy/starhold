@@ -19,6 +19,7 @@ export const MISSIONS: MissionType[] = [
   "pirateRaid",
   "alienRaid",
   "jump",
+  "occupy",
 ];
 
 export type FleetStep = 1 | 2;
