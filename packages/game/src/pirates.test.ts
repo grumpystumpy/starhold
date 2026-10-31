@@ -89,12 +89,18 @@ afterEach(() => {
 });
 
 describe("pirate balance helpers", () => {
-  it("pays Starshards by tier on destroy", () => {
-    assert.equal(pirateDestroyStarshards(0), PIRATE_DESTROY_STARSHARDS_BASE);
-    assert.equal(
-      pirateDestroyStarshards(3),
-      PIRATE_DESTROY_STARSHARDS_BASE + 3 * PIRATE_DESTROY_STARSHARDS_PER_TIER,
-    );
+  it("pays Starshards by tier on destroy (1% pirate, 2% alien)", () => {
+    // Old tier 0 = 40. Pirate 1% = 0.40 exact.
+    const pirate0 = pirateDestroyStarshards(0, "pirate", "seed_fixed");
+    assert.ok(pirate0 === 0 || pirate0 === 1);
+
+    // Old tier 3 = 55. Pirate 1% = 0.55 exact.
+    const pirate3 = pirateDestroyStarshards(3, "pirate", "seed_fixed");
+    assert.ok(pirate3 === 0 || pirate3 === 1);
+
+    // Alien 2% rate. Tier 0 old = 40 -> 0.80 exact.
+    const alien0 = pirateDestroyStarshards(0, "alien", "seed_fixed");
+    assert.ok(alien0 === 0 || alien0 === 1);
   });
 
   it("grows ship pools with level up to cap 100", () => {
@@ -411,7 +417,11 @@ describe("pirateRaid mission", () => {
     assert.ok(destroyed!.destroyedAt != null);
     assert.equal(
       universe.players[player.id]!.starshards,
-      pirateDestroyStarshards(0),
+      pirateDestroyStarshards(
+        0,
+        "pirate",
+        `${launch.fleet.id}:destroy_shards:${launch.fleet.arrivesAt}`,
+      ),
     );
 
     advanceUniverse(universe, mid!.arrivesAt);

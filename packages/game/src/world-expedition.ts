@@ -1,4 +1,10 @@
-import { EXPEDITION_AMBUSH_DEBRIS_RATE, EXPEDITION_SLOT, SHIPS, SHIP_ORDER } from "./catalog.js";
+import {
+  EXPEDITION_AMBUSH_DEBRIS_RATE,
+  EXPEDITION_SLOT,
+  EXPEDITION_STARSHARD_REWARD_MULT,
+  SHIPS,
+  SHIP_ORDER,
+} from "./catalog.js";
 import {
   classBonuses,
   allianceBonusesForPlayer,
@@ -28,6 +34,7 @@ import type {
   UniverseState,
 } from "./types.js";
 import {
+  applyStarshardMultiplier,
   grantStarshards,
 } from "./world-boosts.js";
 
@@ -200,6 +207,7 @@ export function resourceFind(
 export function expeditionStarshardsFind(
   ships: FleetShips,
   roll: number,
+  seed?: string,
 ): number {
   const intRoll = Math.floor(roll);
   const sp = fleetStructurePoints(ships);
@@ -207,7 +215,12 @@ export function expeditionStarshardsFind(
   const range = EXPEDITION_STARSHARDS_MAX - EXPEDITION_STARSHARDS_MIN + 1;
   const base = EXPEDITION_STARSHARDS_MIN + (intRoll % range);
   const scaled = (base * effectiveSp) / EXPEDITION_STRUCTURAL_CAP;
-  return Math.max(1, Math.floor(scaled));
+  const oldAmount = Math.max(1, Math.floor(scaled));
+  return applyStarshardMultiplier(
+    oldAmount,
+    EXPEDITION_STARSHARD_REWARD_MULT,
+    seed,
+  );
 }
 
 function shipUnitCost(shipId: ShipId): number {
@@ -499,9 +512,17 @@ export function resolveExpeditionArrival(
     }
     case "starshards": {
       fleet.cargo = { metal: 0, crystal: 0, deuterium: 0 };
-      starshardsGained = Math.max(
-        1,
-        Math.floor(expeditionStarshardsFind(before, roll) * amountMult),
+      const intRoll = Math.floor(roll);
+      const sp = fleetStructurePoints(before);
+      const effectiveSp = Math.min(sp, EXPEDITION_STRUCTURAL_CAP);
+      const range = EXPEDITION_STARSHARDS_MAX - EXPEDITION_STARSHARDS_MIN + 1;
+      const baseFind = EXPEDITION_STARSHARDS_MIN + (intRoll % range);
+      const scaled = (baseFind * effectiveSp) / EXPEDITION_STRUCTURAL_CAP;
+      const oldAmount = Math.max(1, Math.floor(scaled)) * amountMult;
+      starshardsGained = applyStarshardMultiplier(
+        oldAmount,
+        EXPEDITION_STARSHARD_REWARD_MULT,
+        `${fleet.id}:starshards:${fleet.arrivesAt}`,
       );
       const owner = universe.players[fleet.ownerPlayerId];
       if (owner) {
