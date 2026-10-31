@@ -245,6 +245,57 @@ export const RESEARCH_ORDER: ResearchId[] = [
   "fleetSpeedTech",
 ];
 
+import { SHIPS, DEFENSES } from "./catalog-units.js";
+
+function shipCombatStrength(id: ShipId): number {
+  const def = SHIPS[id];
+  return (def?.attack ?? 0) + (def?.shield ?? 0) + (def?.hull ?? 0);
+}
+
+function defenseCombatStrength(id: DefenseId): number {
+  const def = DEFENSES[id];
+  return (def?.attack ?? 0) + (def?.shield ?? 0) + (def?.hull ?? 0);
+}
+
+function shipTotalCost(id: ShipId): number {
+  const c = SHIPS[id]?.cost;
+  return (c?.metal ?? 0) + (c?.crystal ?? 0) + (c?.deuterium ?? 0);
+}
+
+function defenseTotalCost(id: DefenseId): number {
+  const c = DEFENSES[id]?.cost;
+  return (c?.metal ?? 0) + (c?.crystal ?? 0) + (c?.deuterium ?? 0);
+}
+
+const SHIP_ORDER_INDEX = new Map(SHIP_ORDER.map((id, index) => [id, index]));
+const DEFENSE_ORDER_INDEX = new Map(
+  DEFENSE_ORDER.map((id, index) => [id, index]),
+);
+
+function compareShipsWeakestFirst(a: ShipId, b: ShipId): number {
+  const diff = shipCombatStrength(a) - shipCombatStrength(b);
+  if (diff !== 0) return diff;
+  const costDiff = shipTotalCost(a) - shipTotalCost(b);
+  if (costDiff !== 0) return costDiff;
+  return (SHIP_ORDER_INDEX.get(a) ?? 0) - (SHIP_ORDER_INDEX.get(b) ?? 0);
+}
+
+function compareDefensesWeakestFirst(a: DefenseId, b: DefenseId): number {
+  const diff = defenseCombatStrength(a) - defenseCombatStrength(b);
+  if (diff !== 0) return diff;
+  const costDiff = defenseTotalCost(a) - defenseTotalCost(b);
+  if (costDiff !== 0) return costDiff;
+  return (DEFENSE_ORDER_INDEX.get(a) ?? 0) - (DEFENSE_ORDER_INDEX.get(b) ?? 0);
+}
+
+export const WEAKEST_FIRST_SHIPS: ShipId[] = [...SHIP_ORDER].sort(
+  compareShipsWeakestFirst,
+);
+
+export const WEAKEST_FIRST_DEFENSES: DefenseId[] = [...DEFENSE_ORDER].sort(
+  compareDefensesWeakestFirst,
+);
+
 /** Hard cap per queue kind (Round 2 contract v1). */
 export const QUEUE_HARD_CAP = 8;
 

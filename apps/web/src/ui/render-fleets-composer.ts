@@ -3,6 +3,7 @@ import {
   NEWBIE_PROTECTION_POINTS,
   SHIP_ORDER,
   SHIPS,
+  WEAKEST_FIRST_SHIPS,
   fleetCargoCapacity,
   fuelCostOneWay,
   flightSecondsOneWay,
@@ -231,7 +232,7 @@ export function fleetComposer(
     .map((html) => markSelectedOption(html, selected))
     .join("");
 
-  const orbitShipIds = SHIP_ORDER.filter(
+  const orbitShipIds = WEAKEST_FIRST_SHIPS.filter(
     (id) => (view.planet.ships[id] ?? 0) > 0 && !SHIPS[id].stationary,
   );
   const shipInputs = orbitShipIds.length
@@ -469,7 +470,7 @@ export function fleetComposer(
   const destination = coordsFromTarget(view, selected);
   const kind = targetKind(mission, selected, selectedOptionLabel(optionHtml, selected));
   const preview = flightPreview(view, held.counts, destination, speedPercent);
-  const summaryRows = SHIP_ORDER.filter((id) => {
+  const summaryRows = WEAKEST_FIRST_SHIPS.filter((id) => {
     const have = view.planet.ships[id] ?? 0;
     const raw = held.counts[id] ?? 0;
     return Math.min(have, Math.max(0, Math.floor(raw))) > 0 && !SHIPS[id].stationary;

@@ -19,6 +19,7 @@ import {
   WEAKEST_FIRST_DEFENSES,
   WEAKEST_FIRST_SHIPS,
   defensesPage,
+  pageHtml,
   shipyardPage,
 } from "./render-pages";
 
@@ -209,15 +210,6 @@ describe("Shipyard and Defenses owned count and weakest-first ordering", () => {
           strA <= strB,
           `Ship ${a} (${strA}) should not be stronger than ship ${b} (${strB})`,
         );
-        if (strA === strB) {
-          // Verify stable sort: preserves relative index in SHIP_ORDER
-          const idxA = SHIP_ORDER.indexOf(a);
-          const idxB = SHIP_ORDER.indexOf(b);
-          assert.ok(
-            idxA < idxB,
-            `Tied ships ${a} and ${b} should preserve SHIP_ORDER (${idxA} < ${idxB})`,
-          );
-        }
       }
 
       // First should be Whisper Probe (5) and last World Eater (3,100,000)
@@ -226,14 +218,25 @@ describe("Shipyard and Defenses owned count and weakest-first ordering", () => {
         WEAKEST_FIRST_SHIPS[WEAKEST_FIRST_SHIPS.length - 1],
         "worldEater",
       );
+    });
 
-      // Known tie: cruiser (90+50+180=320) and lineDrummer (80+40+200=320)
-      const cruiserIdx = WEAKEST_FIRST_SHIPS.indexOf("cruiser");
-      const drummerIdx = WEAKEST_FIRST_SHIPS.indexOf("lineDrummer");
-      assert.ok(
-        cruiserIdx < drummerIdx,
-        "Cruiser should precede Line Drummer on tie because of SHIP_ORDER",
-      );
+    it("tie-breaks equal combat strength units by total cost (cheapest to most expensive)", () => {
+      for (let i = 0; i < WEAKEST_FIRST_SHIPS.length - 1; i++) {
+        const idA = WEAKEST_FIRST_SHIPS[i];
+        const idB = WEAKEST_FIRST_SHIPS[i + 1];
+        const a = SHIPS[idA];
+        const b = SHIPS[idB];
+        const strA = combatStrength(a);
+        const strB = combatStrength(b);
+        if (strA === strB) {
+          const costA = (a.cost?.metal ?? 0) + (a.cost?.crystal ?? 0) + (a.cost?.deuterium ?? 0);
+          const costB = (b.cost?.metal ?? 0) + (b.cost?.crystal ?? 0) + (b.cost?.deuterium ?? 0);
+          assert.ok(
+            costA <= costB,
+            `Ship ${idA} cost (${costA}) should come before or equal to ${idB} (${costB}) when combat strength is equal`,
+          );
+        }
+      }
     });
 
     it("sorts defenses by combat strength (attack + shield + hull) with stable tie-breaking", () => {
@@ -306,6 +309,46 @@ describe("Shipyard and Defenses owned count and weakest-first ordering", () => {
       );
       assert.deepEqual(matches, expected);
       assert.ok(matches.includes("rakeCorsair"));
+    });
+
+    it("renders Hangar roster in weakest-first order in HTML", () => {
+      const pl = dummyPlanet();
+      pl.ships = { scout: 5, probe: 10, hauler: 2, cruiser: 1 };
+      const view = dummyView(pl, null);
+      const html = shipyardPage(view, false);
+
+      const indices = WEAKEST_FIRST_SHIPS.map((id) =>
+        html.indexOf(`data-testid="hangar-${id}"`),
+      ).filter((idx) => idx !== -1);
+      assert.ok(indices.length > 1, "Should find multiple hangar rows in HTML");
+      for (let i = 0; i < indices.length - 1; i++) {
+        assert.ok(
+          indices[i] < indices[i + 1],
+          `Hangar row at index ${i} should appear before index ${i + 1} in HTML`,
+        );
+      }
+    });
+
+    it("renders Fleet tab ship picker in weakest-first order in HTML", () => {
+      const pl = dummyPlanet();
+      pl.ships = { scout: 5, probe: 10, hauler: 2, cruiser: 1 };
+      const view = dummyView(pl, null);
+      view.fleets = [];
+      view.roster = [];
+      view.ownedPlanets = [];
+      view.galaxy = { slots: [], system: 1, galaxy: 1 } as unknown as PlayerView["galaxy"];
+      const html = pageHtml("fleet", view, false, null);
+
+      const indices = WEAKEST_FIRST_SHIPS.map((id) =>
+        html.indexOf(`data-testid="fleet-count-${id}"`),
+      ).filter((idx) => idx !== -1);
+      assert.ok(indices.length > 1, "Should find multiple fleet ship inputs in HTML");
+      for (let i = 0; i < indices.length - 1; i++) {
+        assert.ok(
+          indices[i] < indices[i + 1],
+          `Fleet ship count at index ${i} should appear before index ${i + 1} in HTML`,
+        );
+      }
     });
   });
 });
