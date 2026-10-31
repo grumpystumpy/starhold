@@ -1535,6 +1535,10 @@ export const PIRATE_TARGET_BASE_COUNT = 200;
 
 /** Once per 90 minutes; each base rolls nextRaidAt = periodStart + offset. */
 export const PIRATE_RAID_PERIOD_MS = 90 * 60 * 1000;
+export const PIRATE_FATIGUE_WINDOW_MS = 2 * 60 * 60 * 1000;
+export const PIRATE_FATIGUE_FIRST_HITS = 5;
+export const PIRATE_FATIGUE_EXTRA_HITS = 3;
+export const PIRATE_FATIGUE_MULT = 0.5;
 /** Stretch / skip factor so pirate-vs-pirate is slightly less often. */
 export const PIRATE_VS_PIRATE_RAID_PERIOD_MULT = 1.25;
 /** @deprecated Prefer PIRATE_RAID_PERIOD_MS. */
@@ -1765,6 +1769,17 @@ export const NEWBIE_PROTECTION_POINTS = 2500;
 export const PIRATE_FAIRNESS_POINTS_MAX = 100_000;
 /** Additive penalty per successful pirate raid that day (1% of original). */
 export const PIRATE_FAIRNESS_PENALTY_PER_RAID = 0.01;
+
+/**
+ * Raid deterrence (Micah B7-04): NPC pirate raid chance drops by 0.5 percentage points
+ * per full 1,500 ships+defenses on that planet; alien drops by 0.5 percentage points
+ * per full 3,000 ships+defenses. Floor 3%.
+ */
+export const PIRATE_RAID_DETERRENCE_STEP_UNITS = 1500;
+export const PIRATE_RAID_DETERRENCE_PENALTY = 0.005;
+export const ALIEN_RAID_DETERRENCE_STEP_UNITS = 3000;
+export const ALIEN_RAID_DETERRENCE_PENALTY = 0.005;
+export const NPC_RAID_DETERRENCE_FLOOR = 0.03;
 /** ACS / Joint Strike (backlog #8) — same-alliance synced raids. */
 export const ACS_MAX_FLEETS = 8;
 export const ACS_JOIN_WINDOW_MS = 15 * 60 * 1000;

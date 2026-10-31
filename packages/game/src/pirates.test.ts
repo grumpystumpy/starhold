@@ -14,6 +14,10 @@ import {
   PIRATE_DESTROY_STARSHARDS_PER_TIER,
   PIRATE_EXCLUDED_SHIP_IDS,
   PIRATE_FREE_SPAWN_INTERVAL_MS,
+  PIRATE_FATIGUE_EXTRA_HITS,
+  PIRATE_FATIGUE_FIRST_HITS,
+  PIRATE_FATIGUE_MULT,
+  PIRATE_FATIGUE_WINDOW_MS,
   PIRATE_LEVEL_GROWTH_INTERVAL_MS,
   PIRATE_MAX_LEVEL,
   PIRATE_RAID_PERIOD_MS,
@@ -51,7 +55,9 @@ import {
   pirateFreeSpawnShips,
   pirateRespawnAt,
   pirateShipsForTier,
+  planetRaidDeterrence,
   npcJobBudget,
+  pickRaidTarget,
   rollNextRaidAt,
   scalePirateRaidFleet,
   tickPirates,
@@ -74,6 +80,8 @@ import {
   createPirateBase,
   findNearestOpenSlot1,
   resolveAlienRaidArrival,
+  pirateFatigueMult,
+  recordPirateHit,
   pirateCombatResearch,
   pirateCombatResearchForOpponent,
   scaleAlienRaidFleet,
@@ -1425,6 +1433,183 @@ describe("B3-25 alien strength and raid power", () => {
     assert.ok(launch.fleet.reportId);
     assert.ok(loaded.reports[launch.fleet.reportId!]);
     assertBuildingsPreserved();
+  });
+});
+
+describe("B7-04 raid deterrence target selection", () => {
+  it("deterrence reduces raid target selection rate for heavily defended planets", () => {
+    const now = 1_700_000_000_000;
+    const universe = createUniverse("Deterrence Target Selection", 8);
+    const { player, planet } = joinUniverse(universe, "Defended", now);
+    const owner = universe.players[player.id]!;
+    owner.createdAt = now - 100 * 86_400_000;
+    owner.attackedPiratesAt = now - 1000;
+
+    const base = activePirateBases(universe)[0]!;
+    base.lastRaidAt = now - 10_000;
+
+    const body = universe.planets[planet.id]!;
+
+    // Non-qualifying planet has unchanged chance
+    body.ships = { interceptor: 1499 };
+    assert.equal(planetRaidDeterrence(body, "pirate", 1.0), 1.0);
+    assert.equal(planetRaidDeterrence(body, "pirate", 0.10), 0.10);
+
+    // Qualifying planet (>= 1500 units) has raid chance reduced by exactly 0.5 percentage points (-0.005)
+    body.ships = { interceptor: 300_000 };
+    assert.ok(Math.abs(planetRaidDeterrence(body, "pirate", 1.0) - 0.995) < 1e-9);
+    assert.ok(Math.abs(planetRaidDeterrence(body, "pirate", 0.10) - 0.095) < 1e-9);
+    assert.equal(planetRaidDeterrence(body, "pirate"), 0.995);
+
+    const target = pickRaidTarget(universe, base, now, "pirate");
+    if (target?.kind === "planet") {
+      assert.ok(planetRaidDeterrence(target.planet, "pirate") > 0);
+    }
+  });
+});
+
+describe("pirate attack fatigue (B7-09)", () => {
+  it("multipliers: 0-4 hits = x1, 5-7 hits = x0.5, 8+ = x0.25", () => {
+    const now = 10_000_000;
+    const universe = createUniverse("Fatigue Test", 1, 1);
+    const joined = joinUniverse(universe, "Cmdr Test");
+    const planet = universe.planets[joined.player.homePlanetId]!;
+
+    // 0 hits
+    assert.equal(pirateFatigueMult(planet, now), 1);
+
+    // 1-4 hits
+    for (let i = 1; i <= 4; i++) {
+      recordPirateHit(planet, now + i * 1000);
+      assert.equal(pirateFatigueMult(planet, now + i * 1000), 1);
+    }
+
+    // 5th hit -> 5 hits in last 2h -> x0.5
+    recordPirateHit(planet, now + 5000);
+    assert.equal(pirateFatigueMult(planet, now + 5000), 0.5);
+
+    // 6th and 7th hits -> x0.5
+    recordPirateHit(planet, now + 6000);
+    assert.equal(pirateFatigueMult(planet, now + 6000), 0.5);
+    recordPirateHit(planet, now + 7000);
+    assert.equal(pirateFatigueMult(planet, now + 7000), 0.5);
+
+    // 8th hit -> 8 hits in last 2h -> x0.25
+    recordPirateHit(planet, now + 8000);
+    assert.equal(pirateFatigueMult(planet, now + 8000), 0.25);
+
+    // 9th hit -> still x0.25
+    recordPirateHit(planet, now + 9000);
+    assert.equal(pirateFatigueMult(planet, now + 9000), 0.25);
+  });
+
+  it("hits older than 2h expire and multiplier recovers", () => {
+    const t0 = 10_000_000;
+    const universe = createUniverse("Expire Test", 1, 1);
+    const joined = joinUniverse(universe, "Cmdr Test");
+    const planet = universe.planets[joined.player.homePlanetId]!;
+
+    // Record 8 hits at t0
+    for (let i = 0; i < 8; i++) {
+      recordPirateHit(planet, t0 + i * 100);
+    }
+    assert.equal(pirateFatigueMult(planet, t0 + 1000), 0.25);
+
+    // At t0 + 1 hour, hits are still within 2h window
+    const t1h = t0 + 60 * 60 * 1000;
+    assert.equal(pirateFatigueMult(planet, t1h), 0.25);
+
+    // At t0 + 2 hours + 2000 ms, all original hits have expired (> 2h old)
+    const tExpired = t0 + PIRATE_FATIGUE_WINDOW_MS + 2000;
+    assert.equal(pirateFatigueMult(planet, tExpired), 1);
+  });
+
+  it("aliens are unaffected by pirate fatigue and do not record pirate hits", () => {
+    const now = 10_000_000;
+    const universe = createUniverse("Alien Fatigue Test", 1, 1);
+    const joined = joinUniverse(universe, "Cmdr Test");
+    const planet = universe.planets[joined.player.homePlanetId]!;
+
+    // Fill planet with 8 pirate hits
+    for (let i = 0; i < 8; i++) {
+      recordPirateHit(planet, now + i * 100);
+    }
+    assert.equal(pirateFatigueMult(planet, now + 1000), 0.25);
+
+    // Apply alien raid on planet
+    const alien = createAlienBase(universe, planet.coords.galaxy, planet.coords.system + 1, 1, now, joined.player.id, 3);
+    alien.ships = { ...emptyFleetShips(), interceptor: 20 };
+    const hitsBefore = planet.pirateHitHistory?.length ?? 0;
+
+    applyNpcRaidOnPlanet(universe, alien, planet, now + 2000, "alien", () => {});
+
+    // Pirate hit history count unchanged by alien raid
+    assert.equal(planet.pirateHitHistory?.length, hitsBefore);
+  });
+
+  it("an old save without pirateHitHistory loads with x1", () => {
+    const now = 10_000_000;
+    const universe = createUniverse("Old Save Test", 1, 1);
+    const joined = joinUniverse(universe, "Cmdr Test");
+    const planet = universe.planets[joined.player.homePlanetId]!;
+
+    // Simulate old save object without pirateHitHistory
+    delete planet.pirateHitHistory;
+
+    // Direct fatigue check returns 1
+    assert.equal(pirateFatigueMult(planet, now), 1);
+
+    // migrateOrResetUniverse loads and ensures shape without errors
+    const reloaded = migrateOrResetUniverse(JSON.parse(JSON.stringify(universe))).universe;
+    const reloadedPlanet = reloaded.planets[planet.id]!;
+    assert.equal(pirateFatigueMult(reloadedPlanet, now), 1);
+  });
+
+  it("applyNpcRaidOnPlanet records pirate hit and applies fatigue", () => {
+    const now = 10_000_000;
+    const universe = createUniverse("Raid Hit Test", 1, 1);
+    const joined = joinUniverse(universe, "Cmdr Test");
+    const planet = universe.planets[joined.player.homePlanetId]!;
+
+    const pirate = createPirateBase(universe, planet.coords.galaxy, planet.coords.system + 1, 1, now);
+    pirate.ships = { ...emptyFleetShips(), interceptor: 20 };
+
+    assert.equal(planet.pirateHitHistory?.length ?? 0, 0);
+
+    for (let i = 1; i <= 5; i++) {
+      applyNpcRaidOnPlanet(universe, pirate, planet, now + i * 1000, "pirate", () => {});
+    }
+
+    assert.equal(planet.pirateHitHistory?.length, 5);
+    assert.equal(pirateFatigueMult(planet, now + 6000), 0.5);
+  });
+
+  it("combines pirate attack fatigue with B7-04 deterrence", () => {
+    const now = 1_700_000_000_000;
+    const universe = createUniverse("Fatigue Deterrence Test", 1, 1);
+    const joined = joinUniverse(universe, "Cmdr Combined", now);
+    const planet = universe.planets[joined.player.homePlanetId]!;
+    const owner = universe.players[joined.player.id]!;
+    owner.createdAt = now - 100 * 86_400_000;
+    owner.attackedPiratesAt = now - 1000;
+
+    // Give planet qualifying units for B7-04 deterrence (>= 1500)
+    planet.ships = { interceptor: 1500 };
+
+    // Record 5 pirate hits on planet -> fatigue multiplier 0.5
+    for (let i = 1; i <= 5; i++) {
+      recordPirateHit(planet, now - (10 - i) * 1000);
+    }
+    assert.equal(pirateFatigueMult(planet, now), 0.5);
+
+    // Base pick weight without deterrence would be 1.0 * fairness(1.0) * fatigue(0.5) = 0.5
+    // Deterrence reduces this by flat 0.005 -> 0.495
+    const effectiveWeight = planetRaidDeterrence(
+      planet,
+      "pirate",
+      1.0 * pirateFatigueMult(planet, now),
+    );
+    assert.ok(Math.abs(effectiveWeight - 0.495) < 1e-9);
   });
 });
 
