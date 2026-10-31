@@ -148,7 +148,7 @@ async function main() {
         (entry) =>
           entry.kind === "buildComplete" &&
           typeof entry.title === "string" &&
-          entry.title.includes("Ore Extractor"),
+          entry.title.includes("Ore Mine"),
       ),
   );
   if (buildingMail) {

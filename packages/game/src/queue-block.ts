@@ -82,33 +82,33 @@ export function previewBuildingUpgrade(
     return fail(`${def.name} is maxed at level ${def.maxLevel}.`);
   }
   if (buildingId === "sensorArray" && (planet.buildings.lunarBase ?? 0) < 1) {
-    return fail("System Scanner needs Crater Hab level 1.");
+    return fail("System Scanner needs Lunar Habitat level 1.");
   }
   if (buildingId === "jumpGate" && (planet.buildings.lunarBase ?? 0) < 1) {
-    return fail("Fold Bridge needs Crater Hab level 1.");
+    return fail("Moon Bridge needs Lunar Habitat level 1.");
   }
   if (buildingId === "rigFoundry") {
     const yard = planet.buildings.shipyard ?? 0;
     if (yard < RIG_FOUNDRY_SHIPYARD_REQ) {
       return fail(
-        `Rig Foundry needs Shipyard level ${RIG_FOUNDRY_SHIPYARD_REQ} (you have ${yard}).`,
+        `Manufacture Line needs Shipyard level ${RIG_FOUNDRY_SHIPYARD_REQ} (you have ${yard}).`,
       );
     }
   }
   if (buildingId === "mantleLoom") {
     if (planet.kind === "moon") {
-      return fail("Mantle Loom cannot be built on moons.");
+      return fail("Land Reclamation cannot be built on moons.");
     }
     const solar = planet.buildings.solarPlant ?? 0;
     const lab = planet.buildings.researchLab ?? 0;
     if (solar < MANTLE_LOOM_SOLAR_REQ) {
       return fail(
-        `Mantle Loom needs Solar Array level ${MANTLE_LOOM_SOLAR_REQ} (you have ${solar}).`,
+        `Land Reclamation needs Solar Array level ${MANTLE_LOOM_SOLAR_REQ} (you have ${solar}).`,
       );
     }
     if (lab < MANTLE_LOOM_LAB_REQ) {
       return fail(
-        `Mantle Loom needs Research Lab level ${MANTLE_LOOM_LAB_REQ} (you have ${lab}).`,
+        `Land Reclamation needs Research Lab level ${MANTLE_LOOM_LAB_REQ} (you have ${lab}).`,
       );
     }
   }
@@ -117,12 +117,12 @@ export function previewBuildingUpgrade(
     const foundry = planet.buildings.rigFoundry ?? 0;
     if (yard < CHRONO_LATHE_SHIPYARD_REQ) {
       return fail(
-        `Chrono Lathe needs Shipyard level ${CHRONO_LATHE_SHIPYARD_REQ} (you have ${yard}).`,
+        `Nano Production needs Shipyard level ${CHRONO_LATHE_SHIPYARD_REQ} (you have ${yard}).`,
       );
     }
     if (foundry < CHRONO_LATHE_RIG_FOUNDRY_REQ) {
       return fail(
-        `Chrono Lathe needs Rig Foundry level ${CHRONO_LATHE_RIG_FOUNDRY_REQ} (you have ${foundry}).`,
+        `Nano Production needs Manufacture Line level ${CHRONO_LATHE_RIG_FOUNDRY_REQ} (you have ${foundry}).`,
       );
     }
   }

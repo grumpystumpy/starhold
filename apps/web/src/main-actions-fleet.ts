@@ -74,7 +74,7 @@ function scanNotice(view: NonNullable<typeof session.view>, before: number): str
     view.fleets.filter((f) => f.mission === "espionage").length - before,
   );
   return launched > 0
-    ? `Scanning ${fmt(launched)} owned planet${launched === 1 ? "" : "s"} with Whisper Probes.`
+    ? `Scanning ${fmt(launched)} owned planet${launched === 1 ? "" : "s"} with Spy Satellites.`
     : "No scans launched.";
 }
 
@@ -122,7 +122,7 @@ export async function doLaunchFleet(opts: {
 export async function doGalaxySpy(coords: Coordinates): Promise<void> {
   if (!session.view) return;
   if ((session.view.planet.ships.probe ?? 0) < GALAXY_SPY_PROBES) {
-    setFlash("error", "No Whisper Probes in orbit.");
+    setFlash("error", "No Spy Satellites in orbit.");
     schedulePaint();
     return;
   }

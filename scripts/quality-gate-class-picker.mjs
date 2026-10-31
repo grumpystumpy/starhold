@@ -129,14 +129,14 @@ async function main() {
     .isVisible()
     .catch(() => false);
   if (vaultVisible) {
-    throw new Error("Explorer-only Vault Scout visible while Miner class");
+    throw new Error("Explorer-only Reconnaissance Corvette visible while Miner class");
   }
   const veinVisible = await loginPage
     .getByTestId("ship-veinAnchor")
     .isVisible()
     .catch(() => false);
   if (!veinVisible) {
-    throw new Error("Miner Vein Anchor missing from shipyard");
+    throw new Error("Miner Mining Platform missing from shipyard");
   }
   logs.push("shipyard_class_filter_ok");
 
