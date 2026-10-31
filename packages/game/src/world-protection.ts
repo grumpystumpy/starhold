@@ -31,10 +31,11 @@ export function planetStationedUnits(planet: PlanetState): number {
 }
 
 /**
- * Deterred raid chance for NPC raids on a planet:
- * subtracts 0.5 percentage points for every full 1,500 ships+defenses on target (pirates)
- * or every full 3,000 (aliens), floored at 3% (never below 3%; if base is already
- * below 3%, keep it unchanged).
+ * Deterred raid chance for NPC raids on a planet (Micah spec B7-04 rework):
+ * a qualifying planet (meets deterrence threshold: 1,500 ships+defenses for pirates,
+ * 3,000 for aliens) has its raid chance reduced by exactly 0.5 percentage points (0.005)
+ * of the normal base raid chance (chance = base - 0.005; clamp at 0).
+ * Non-qualifying planets keep base chance unchanged.
  */
 export function planetRaidDeterrence(
   planet: PlanetState,
@@ -74,12 +75,11 @@ export function planetRaidDeterrence(
     faction === "pirate"
       ? PIRATE_RAID_DETERRENCE_PENALTY
       : ALIEN_RAID_DETERRENCE_PENALTY;
-  const fullSteps = Math.floor(units / stepUnits);
 
-  if (baseChance <= NPC_RAID_DETERRENCE_FLOOR) {
-    return baseChance;
+  if (units >= stepUnits) {
+    return Math.max(0, baseChance - penalty);
   }
-  return Math.max(NPC_RAID_DETERRENCE_FLOOR, baseChance - fullSteps * penalty);
+  return baseChance;
 }
 
 export function deterredRaidChance(

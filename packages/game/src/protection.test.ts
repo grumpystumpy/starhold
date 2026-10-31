@@ -408,26 +408,26 @@ describe("B7-04 raid deterrence", () => {
     assert.equal(planetRaidDeterrence(body, "pirate", base), base);
     assert.equal(deterredRaidChance(base, body, "pirate"), base);
 
-    // 1,499 units = base (0 full steps)
+    // 1,499 units = base (non-qualifying planet)
     body.ships = { interceptor: 1499 };
     assert.equal(planetRaidDeterrence(body, "pirate", base), base);
 
-    // 1,500 units = base - 0.5 percentage points (1 step)
+    // 1,500 units = base - 0.5 percentage points (-0.005)
     body.ships = { interceptor: 1500 };
     assert.ok(Math.abs(planetRaidDeterrence(body, "pirate", base) - 0.095) < 1e-9);
 
-    // 4,500 units pirate: base 10% -> 8.5% (Micah example)
+    // 4,500 units pirate: flat -0.005 reduction (chance = base - 0.005 = 0.095)
     body.ships = { interceptor: 3000 };
     body.defenses = { laserBattery: 1500 }; // 4500 ships+defenses summed
-    assert.ok(Math.abs(planetRaidDeterrence(body, "pirate", base) - 0.085) < 1e-9);
-    assert.ok(Math.abs(deterredRaidChance(base, body, "pirate") - 0.085) < 1e-9);
+    assert.ok(Math.abs(planetRaidDeterrence(body, "pirate", base) - 0.095) < 1e-9);
+    assert.ok(Math.abs(deterredRaidChance(base, body, "pirate") - 0.095) < 1e-9);
 
-    // Huge count clamps to 3% floor
+    // Huge count still reduces by exactly 0.005 (not clamped to 3% floor)
     body.ships = { interceptor: 300_000 };
-    assert.equal(planetRaidDeterrence(body, "pirate", base), 0.03);
+    assert.ok(Math.abs(planetRaidDeterrence(body, "pirate", base) - 0.095) < 1e-9);
 
-    // Base already below 3% remains unchanged
-    assert.equal(planetRaidDeterrence(body, "pirate", 0.02), 0.02);
+    // Small base chance clamps at 0 (base 0.002 - 0.005 -> 0)
+    assert.equal(planetRaidDeterrence(body, "pirate", 0.002), 0);
   });
 
   it("calculates alien raid deterrence steps and floor 3%", () => {
@@ -442,21 +442,21 @@ describe("B7-04 raid deterrence", () => {
     assert.equal(planetRaidDeterrence(body, "alien", base), base);
     assert.equal(deterredRaidChance(base, body, "alien"), base);
 
-    // 2,999 units alien = base (0 full steps)
+    // 2,999 units alien = base (non-qualifying planet)
     body.ships = { interceptor: 2999 };
     assert.equal(planetRaidDeterrence(body, "alien", base), base);
 
-    // 3,000 units alien = base - 0.5 percentage points (1 step, Micah example)
+    // 3,000 units alien = base - 0.5 percentage points (-0.005)
     body.ships = { interceptor: 1500 };
     body.defenses = { laserBattery: 1500 }; // 3000 ships+defenses summed
     assert.ok(Math.abs(planetRaidDeterrence(body, "alien", base) - 0.095) < 1e-9);
     assert.ok(Math.abs(deterredRaidChance(base, body, "alien") - 0.095) < 1e-9);
 
-    // Huge count clamps to 3% floor
+    // Huge count still reduces by exactly 0.005 (not clamped to 3% floor)
     body.ships = { interceptor: 600_000 };
-    assert.equal(planetRaidDeterrence(body, "alien", base), 0.03);
+    assert.ok(Math.abs(planetRaidDeterrence(body, "alien", base) - 0.095) < 1e-9);
 
-    // Base already below 3% remains unchanged
-    assert.equal(planetRaidDeterrence(body, "alien", 0.015), 0.015);
+    // Small base chance clamps at 0 (base 0.001 - 0.005 -> 0)
+    assert.equal(planetRaidDeterrence(body, "alien", 0.001), 0);
   });
 });
