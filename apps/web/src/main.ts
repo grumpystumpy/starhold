@@ -24,6 +24,7 @@ import { fetchState, selectPlanet, ApiError } from "./api";
 import { shouldClearSavedPlayer } from "./auth-resume";
 import {
   doBuild,
+  doUpsertAllianceMarker,
   doBuildDefense,
   doGalaxyNav,
   doJoin,
@@ -250,6 +251,7 @@ declare global {
         cargo?: Partial<import("@starhold/game").Resources>;
       }) => Promise<void>;
       refresh: () => Promise<void>;
+      upsertMarker?: (coords: Coordinates, note: string) => Promise<void>;
       poll: () => Promise<void>;
       pollIntervalMs: number;
       idlePauseMs: number;
@@ -284,6 +286,8 @@ window.starhold = {
     doLaunchFleet({ targetPlanetId, mission, ships }),
   launch: (opts) => doLaunchFleet(opts),
   refresh: () => doRefresh(),
+  upsertMarker: (coords: Coordinates, note: string) => doUpsertAllianceMarker(coords, note),
+
   poll: () =>
     session.view ? silentRefresh(session.view.player.id) : Promise.resolve(),
   pollIntervalMs: POLL_INTERVAL_MS,

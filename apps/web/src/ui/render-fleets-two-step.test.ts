@@ -18,6 +18,7 @@ import { readFleetFormIn } from "../main-fleet-form";
 import {
   doApplyFleetPreset,
   doGalaxyFleetAction,
+  doGalaxyFleetPreset,
   doGalaxySpy,
   doLaunchFleet,
   GALAXY_SPY_PROBES,
@@ -708,5 +709,60 @@ describe("galaxy fleet actions", () => {
     session.activePage = originalPage;
     session.pendingGalaxyFleetDraft = null;
     rememberFleetDraft(null);
+  });
+
+  it("doGalaxyFleetPreset loads preset ships clamped to orbit and sets pendingGalaxyFleetDraft", () => {
+    const originalView = session.view;
+    const originalPage = session.activePage;
+
+    session.view = {
+      now: Date.now(),
+      player: {
+        id: "p1",
+        fleetPresets: [
+          {
+            id: "moonDestruction",
+            name: "Moon Destruction",
+            intent: "moonDestruction",
+            builtIn: true,
+            ships: { voidforgeTitan: 5 },
+          },
+          {
+            id: "miniPlanetCapture",
+            name: "Mini Planet Capture",
+            intent: "miniCapture",
+            builtIn: true,
+            ships: { swarmMothership: 2, cruiser: 10 },
+          },
+        ],
+      },
+      planet: {
+        id: "pl1",
+        coords: { galaxy: 1, system: 2, slot: 3 },
+        ships: { voidforgeTitan: 2, swarmMothership: 1, cruiser: 5 },
+      },
+      fleets: [],
+      openAcsGroups: [],
+    } as unknown as any;
+
+    session.activePage = "galaxy";
+    doGalaxyFleetPreset({ galaxy: 1, system: 2, slot: 4 }, "moonDestruction");
+    assert.equal(session.activePage, "fleet");
+    assert.deepEqual(session.pendingGalaxyFleetDraft?.targetCoords, { galaxy: 1, system: 2, slot: 4 });
+    assert.equal(session.pendingGalaxyFleetDraft?.mission, "raid");
+    assert.deepEqual(session.pendingGalaxyFleetDraft?.counts, { voidforgeTitan: 2 });
+    assert.equal(session.pendingGalaxyFleetDraft?.step, 2);
+
+    // Test miniPlanetCapture with mothership -> mission occupy
+    session.activePage = "galaxy";
+    doGalaxyFleetPreset({ galaxy: 1, system: 2, slot: 17 }, "miniPlanetCapture");
+    assert.equal(session.activePage, "fleet");
+    assert.deepEqual(session.pendingGalaxyFleetDraft?.targetCoords, { galaxy: 1, system: 2, slot: 17 });
+    assert.equal(session.pendingGalaxyFleetDraft?.mission, "occupy");
+    assert.deepEqual(session.pendingGalaxyFleetDraft?.counts, { swarmMothership: 1, cruiser: 5 });
+
+    session.view = originalView;
+    session.activePage = originalPage;
+    session.pendingGalaxyFleetDraft = null;
   });
 });
