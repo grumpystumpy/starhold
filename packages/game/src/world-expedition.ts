@@ -2,6 +2,7 @@ import {
   EXPEDITION_AMBUSH_DEBRIS_RATE,
   EXPEDITION_SLOT,
   EXPEDITION_STARSHARD_REWARD_MULT,
+  MAX_COMBAT_ROUNDS,
   SHIPS,
   SHIP_ORDER,
 } from "./catalog.js";
@@ -33,6 +34,7 @@ import type {
   ShipId,
   UniverseState,
 } from "./types.js";
+import type { CombatOutcome } from "./types-view.js";
 import {
   applyStarshardMultiplier,
   grantStarshards,
@@ -67,6 +69,20 @@ export const EXPEDITION_PIRATES_ROLL_MAX = 100;
 export const EXPEDITION_NPC_BASE_TIER = 0;
 
 export const EXPEDITION_PVP_BASE_CHANCE = 0.001;
+
+export function expeditionAmbushLossFraction(
+  outcome: CombatOutcome,
+  rounds: number,
+): number {
+  const r = Math.max(1, Math.min(rounds, MAX_COMBAT_ROUNDS));
+  if (outcome === "attacker_win") {
+    return (r - 1) / (2 * MAX_COMBAT_ROUNDS);
+  }
+  if (outcome === "draw") {
+    return 0.5;
+  }
+  return 1 - (r - 1) / (2 * MAX_COMBAT_ROUNDS);
+}
 
 export function expeditionPlayerEncounterChance(otherFleetCount: number): number {
   if (otherFleetCount <= 0) return 0;
@@ -419,14 +435,30 @@ export function resolveExpeditionArrival(
       { seed: `${fleet.id}:ambush:${fleet.arrivesAt}` },
     );
 
-    fleet.ships = combat.attackerAfter;
+    let attackerSurvivingShips: FleetShips;
+    if (isAlien) {
+      attackerSurvivingShips = combat.attackerAfter;
+    } else {
+      const lossFraction = expeditionAmbushLossFraction(combat.outcome, combat.rounds);
+      attackerSurvivingShips = emptyFleetShips();
+      for (const id of SHIP_ORDER) {
+        const count = before[id] ?? 0;
+        if (count > 0) {
+          const survivors = lossFraction === 1 ? 0 : count - Math.floor(count * lossFraction);
+          if (survivors > 0) attackerSurvivingShips[id] = survivors;
+        }
+      }
+      attackerSurvivingShips = normalizeFleetShips(attackerSurvivingShips);
+    }
+
+    fleet.ships = attackerSurvivingShips;
 
     for (const id of SHIP_ORDER) {
-      const delta = (combat.attackerAfter[id] ?? 0) - (before[id] ?? 0);
+      const delta = (attackerSurvivingShips[id] ?? 0) - (before[id] ?? 0);
       if (delta !== 0) shipsDelta[id as ShipId] = delta;
     }
 
-    const attackerLost = destroyedShipResources(before, combat.attackerAfter);
+    const attackerLost = destroyedShipResources(before, attackerSurvivingShips);
     const defenderLost = destroyedShipResources(enemyShips, combat.defenderAfter);
     debrisCreated = {
       metal: Math.floor((attackerLost.metal + defenderLost.metal) * EXPEDITION_AMBUSH_DEBRIS_RATE),
@@ -451,7 +483,7 @@ export function resolveExpeditionArrival(
       defenderName: isAlien ? "Alien Expedition Patrol" : "Pirate Ambush Fleet",
       targetCoords: { ...fleet.targetCoords },
       attackerBefore: before,
-      attackerAfter: combat.attackerAfter,
+      attackerAfter: attackerSurvivingShips,
       defenderBefore: enemyShips,
       defenderAfter: combat.defenderAfter,
       defensesBefore: emptyDefenses(),

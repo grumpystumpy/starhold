@@ -6,6 +6,7 @@ import {
   EXPEDITION_NEW_ALIEN_BASE_ROLL_COUNT,
   EXPEDITION_NEW_PIRATE_BASE_ROLL_COUNT,
   EXPEDITION_PVP_BASE_CHANCE,
+  expeditionAmbushLossFraction,
   expeditionBlackHoleRoll,
   expeditionKindFromRoll,
   expeditionPlayerEncounterChance,
@@ -758,6 +759,118 @@ describe("P2 expeditions", () => {
     );
     assert.equal(combatReportsP.length, 1);
     assert.equal(combatReportsP[0]!.defenderName, "Pirate Ambush Fleet");
+    const crP = combatReportsP[0]!;
+
+    // Assert fleet ships after arrival equal the floor-based survivors for report outcome/rounds
+    const expectedLossFrac = expeditionAmbushLossFraction(crP.outcome, crP.rounds);
+    const expectedScout =
+      expectedLossFrac === 1 ? 0 : 10 - Math.floor(10 * expectedLossFrac);
+    const expectedCruiser =
+      expectedLossFrac === 1 ? 0 : 10 - Math.floor(10 * expectedLossFrac);
+    assert.equal(fP.ships.scout, expectedScout);
+    assert.equal(fP.ships.cruiser, expectedCruiser);
+    // Assert CombatReport attackerAfter matches fleet.ships
+    assert.deepEqual(crP.attackerAfter, fP.ships);
+  });
+
+  it("calculates expeditionAmbushLossFraction accurately and monotonically", () => {
+    // Exact endpoints and draw
+    assert.equal(expeditionAmbushLossFraction("attacker_win", 1), 0);
+    assert.equal(expeditionAmbushLossFraction("defender_win", 1), 1);
+    assert.equal(expeditionAmbushLossFraction("draw", 1), 0.5);
+    assert.equal(expeditionAmbushLossFraction("draw", 4), 0.5);
+    assert.equal(expeditionAmbushLossFraction("draw", 8), 0.5);
+
+    // 8-round bounds: attacker_win r=8 < 0.5 < defender_win r=8
+    const win8 = expeditionAmbushLossFraction("attacker_win", 8);
+    const loss8 = expeditionAmbushLossFraction("defender_win", 8);
+    assert.equal(win8, 7 / 16); // 0.4375
+    assert.equal(loss8, 9 / 16); // 0.5625
+    assert.ok(win8 < 0.5);
+    assert.ok(0.5 < loss8);
+
+    // Clamping outside 1..8
+    assert.equal(expeditionAmbushLossFraction("attacker_win", 0), 0);
+    assert.equal(expeditionAmbushLossFraction("attacker_win", 10), 7 / 16);
+    assert.equal(expeditionAmbushLossFraction("defender_win", 0), 1);
+    assert.equal(expeditionAmbushLossFraction("defender_win", 10), 9 / 16);
+
+    // Monotonicity across r=1..8
+    for (let r = 1; r < 8; r++) {
+      const currentWin = expeditionAmbushLossFraction("attacker_win", r);
+      const nextWin = expeditionAmbushLossFraction("attacker_win", r + 1);
+      assert.ok(
+        currentWin < nextWin,
+        `attacker_win loss must strictly increase with rounds: r=${r} (${currentWin}) < r=${r + 1} (${nextWin})`,
+      );
+
+      const currentLoss = expeditionAmbushLossFraction("defender_win", r);
+      const nextLoss = expeditionAmbushLossFraction("defender_win", r + 1);
+      assert.ok(
+        currentLoss > nextLoss,
+        `defender_win loss must strictly decrease with rounds: r=${r} (${currentLoss}) > r=${r + 1} (${nextLoss})`,
+      );
+    }
+  });
+
+  it("leaves alien ambush behavior unchanged (fleet.ships matches combat.attackerAfter)", () => {
+    const universe = createUniverse("Alien Ambush Test", 8);
+    const p = joinUniverse(universe, "Warrior", 100_000);
+    const planet = universe.planets[p.planet.id]!;
+
+    // Block galaxy 9 so newAlienBase falls back to resolveNpcAmbush(true)
+    for (let s = 1; s <= 399; s++) {
+      for (let sl = 1; sl <= 15; sl++) {
+        const pid = `p_block_9_${s}_${sl}`;
+        universe.planets[pid] = {
+          id: pid,
+          ownerPlayerId: p.player.id,
+          name: "BlockPlanet",
+          coords: { galaxy: 9, system: s, slot: sl },
+          resources: { metal: 0, crystal: 0, deuterium: 0 },
+          buildings: {} as any,
+          ships: {},
+          defenses: {},
+          lastResourceUpdate: 100_000,
+        };
+      }
+    }
+
+    let timeA = 100_100;
+    const fleetIdA = "flt_alien_ambush_test";
+    while (
+      expeditionBlackHoleRoll(fleetIdA, timeA) ||
+      expeditionKindFromRoll(expeditionRoll(fleetIdA, timeA)) !== "newAlienBase"
+    ) {
+      timeA++;
+    }
+
+    universe.fleets[fleetIdA] = {
+      id: fleetIdA,
+      ownerPlayerId: p.player.id,
+      mission: "expedition",
+      originPlanetId: planet.id,
+      targetCoords: { galaxy: 9, system: 1, slot: EXPEDITION_SLOT },
+      ships: { cruiser: 10, scout: 10 },
+      cargo: { metal: 0, crystal: 0, deuterium: 0 },
+      arrivesAt: timeA,
+      returnsAt: timeA + 1000,
+      phase: "outbound",
+    };
+
+    advanceUniverse(universe, timeA);
+    const fA = universe.fleets[fleetIdA];
+    assert.ok(fA && fA.reportId);
+    const reportA = universe.expeditionReports[fA.reportId!];
+    assert.match(reportA.summary, /Alien ambush battle/);
+
+    const combatReportsA = Object.values(universe.reports ?? {}).filter(
+      (r) => r.missionId === fleetIdA && r.defenderPlayerId === "npc_aliens",
+    );
+    assert.equal(combatReportsA.length, 1);
+    const crA = combatReportsA[0]!;
+    assert.equal(crA.defenderName, "Alien Expedition Patrol");
+    assert.deepEqual(fA.ships, crA.attackerAfter);
   });
 
   it("calculates PvP expedition encounter chances and rolls correctly without counting own fleets", () => {
