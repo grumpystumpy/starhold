@@ -547,7 +547,7 @@ export async function doProposeJointStrike(
       );
       return;
     }
-    setFlash("notice", `Proposed Joint Strike on ${label}.`);
+    setFlash("notice", `Joint Strike on ${label}.`);
   } catch (err) {
     const beforeAcsIds = new Set(
       (session.view?.openAcsGroups ?? []).map((g) => g.id),
@@ -564,7 +564,7 @@ export async function doProposeJointStrike(
             g.targetCoords.system === coords.system &&
             g.targetCoords.slot === coords.slot,
         ),
-      successNotice: () => `Proposed Joint Strike on ${label}.`,
+      successNotice: () => `Joint Strike on ${label}.`,
     });
   } finally {
     session.busy = false;

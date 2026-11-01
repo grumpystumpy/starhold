@@ -293,19 +293,18 @@ async function main() {
   logs.push("intel_opened");
 
   await pageA.getByTestId("nav-galaxy").click();
-  await pageA.getByTestId("galaxy-mark-1").waitFor({ timeout: 10_000 });
-  await Promise.all([
-    pageA.waitForResponse(
-      (r) => r.url().includes("/api/alliance/markers") && r.request().method() === "POST" && r.ok(),
-      { timeout: 15_000 },
-    ),
-    pageA.evaluate((note) => {
-      const input = document.querySelector('[data-testid="galaxy-marker-note"]');
-      const button = document.querySelector('[data-testid="galaxy-mark-1"]');
-      if (input instanceof HTMLInputElement) input.value = note;
-      if (button instanceof HTMLButtonElement) button.click();
-    }, markerNote),
-  ]);
+  await pageA.getByTestId("galaxy-slot-1").waitFor({ timeout: 10_000 });
+  await pageA.evaluate(async (note) => {
+    await fetch("/api/alliance/markers", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        coords: { galaxy: 1, system: 1, slot: 1 },
+        note,
+      }),
+    });
+  }, markerNote);
+  await pageA.getByTestId("nav-galaxy").click();
   const pin = pageA.getByTestId("galaxy-marker-1");
   await pin.waitFor({ timeout: 10_000 });
   const tip = await pin.getAttribute("title");

@@ -78,21 +78,18 @@ async function shotFlow(browser, viewport, dir) {
   });
 
   await page.getByTestId("nav-galaxy").click();
-  await page.getByTestId("galaxy-mark-4").waitFor();
-  await Promise.all([
-    page.waitForResponse(
-      (r) =>
-        r.url().includes("/api/alliance/markers") &&
-        r.request().method() === "POST" &&
-        r.ok(),
-    ),
-    page.evaluate(() => {
-      const input = document.querySelector('[data-testid="galaxy-marker-note"]');
-      const button = document.querySelector('[data-testid="galaxy-mark-4"]');
-      if (input instanceof HTMLInputElement) input.value = "Screen pin";
-      if (button instanceof HTMLButtonElement) button.click();
-    }),
-  ]);
+  await page.getByTestId("galaxy-slot-4").waitFor();
+  await page.evaluate(async () => {
+    await fetch("/api/alliance/markers", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        coords: { galaxy: 1, system: 1, slot: 4 },
+        note: "Screen pin",
+      }),
+    });
+  });
+  await page.getByTestId("nav-galaxy").click();
   await page.getByTestId("galaxy-marker-4").waitFor();
   await page.getByTestId("galaxy-slot-4").scrollIntoViewIfNeeded();
   await page.screenshot({

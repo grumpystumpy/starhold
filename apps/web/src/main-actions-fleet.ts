@@ -1,11 +1,12 @@
 import type {
+  BuiltinPresetId,
   Coordinates,
   FleetPresetIntent,
   FleetShips,
   MissionType,
   Resources,
 } from "@starhold/game";
-import { SHIP_ORDER } from "@starhold/game";
+import { SHIP_ORDER, getFleetPreset } from "@starhold/game";
 import {
   deleteFleetPresetRequest,
   launchFleetMission,
@@ -141,6 +142,39 @@ export function doGalaxyFleetAction(
   session.pendingGalaxyFleetDraft = { ...next, targetCoords: coords };
   navigateTo("fleet");
 }
+
+export function doGalaxyFleetPreset(
+  coords: Coordinates,
+  presetId: BuiltinPresetId,
+): void {
+  if (!session.view) return;
+  const player = session.view.player;
+  const preset =
+    player.fleetPresets?.find((p) => p.id === presetId) ??
+    getFleetPreset(player as any, presetId);
+  if (!preset) return;
+
+  const orbit = session.view.planet.ships;
+  const clamped: Partial<FleetShips> = {};
+  for (const id of SHIP_ORDER) {
+    const want = Math.max(0, Math.floor(preset.ships[id] ?? 0));
+    const have = Math.max(0, Math.floor(orbit[id] ?? 0));
+    const n = Math.min(want, have);
+    if (n > 0) clamped[id] = n;
+  }
+
+  let mission: MissionType;
+  if (presetId === "miniPlanetCapture" && (clamped.swarmMothership ?? 0) > 0) {
+    mission = "occupy";
+  } else {
+    mission = intentMission(preset.intent);
+  }
+
+  const next = fleetDraftAfterPreset(null, mission, clamped);
+  session.pendingGalaxyFleetDraft = { ...next, targetCoords: coords };
+  navigateTo("fleet");
+}
+
 
 export function doApplyFleetPreset(): void {
   if (!session.view) return;

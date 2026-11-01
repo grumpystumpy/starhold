@@ -337,16 +337,22 @@ export function galaxyPanel(
         ? `<span class="galaxy-marker-pin" data-testid="galaxy-marker-${s.coords.slot}" title="${escapeAttr(tip)}">◆</span>`
         : "";
       const actions = inAlliance
-        ? `<span class="galaxy-slot-actions"><button type="button" data-galaxy-mark="${s.coords.slot}" data-testid="galaxy-mark-${s.coords.slot}" ${busy ? "disabled" : ""}>Mark</button><button type="button" data-galaxy-propose="${s.coords.slot}" data-testid="galaxy-propose-${s.coords.slot}" ${busy ? "disabled" : ""}>Propose Joint Strike</button></span>`
+        ? `<span class="galaxy-slot-actions"><button type="button" data-galaxy-propose="${s.coords.slot}" data-testid="galaxy-propose-${s.coords.slot}" ${busy ? "disabled" : ""}>Joint Strike</button></span>`
         : "";
       const foreignPlanet = Boolean(s.planetId && s.playerId && !s.isOwn);
       const colonizableSlot =
         !s.planetId && s.coords.slot >= 1 && s.coords.slot <= 15;
+      const hasForeignMoon = Boolean(s.hasMoon && !s.isOwn);
+      const moonDestroyBtn = hasForeignMoon
+        ? `<button type="button" data-galaxy-moon-destroy="${s.coords.slot}" data-testid="galaxy-preset-moonDestruction-${s.coords.slot}" title="Destroy moon" aria-label="Destroy moon" ${busy ? "disabled" : ""}>💥</button>`
+        : "";
       const fleetActions = foreignPlanet
-        ? `<span class="galaxy-slot-actions"><button type="button" data-galaxy-spy="${s.coords.slot}" data-testid="galaxy-spy-${s.coords.slot}" ${busy ? "disabled" : ""}>Spy</button><button type="button" data-galaxy-attack="${s.coords.slot}" data-testid="galaxy-attack-${s.coords.slot}" ${busy ? "disabled" : ""}>Attack</button></span>`
+        ? `<span class="galaxy-slot-actions"><button type="button" data-galaxy-spy="${s.coords.slot}" data-testid="galaxy-spy-${s.coords.slot}" title="Spy" aria-label="Spy" ${busy ? "disabled" : ""}>👁️</button><button type="button" data-galaxy-attack="${s.coords.slot}" data-testid="galaxy-attack-${s.coords.slot}" data-galaxy-preset="raid" ${busy ? "disabled" : ""} title="Attack" aria-label="Attack"><span data-testid="galaxy-preset-raid-${s.coords.slot}">⚔️</span></button>${moonDestroyBtn}</span>`
         : colonizableSlot
-          ? `<span class="galaxy-slot-actions"><button type="button" data-galaxy-colonize="${s.coords.slot}" data-testid="galaxy-colonize-${s.coords.slot}" ${busy ? "disabled" : ""}>Colonize</button></span>`
-          : "";
+          ? `<span class="galaxy-slot-actions"><button type="button" data-galaxy-colonize="${s.coords.slot}" data-testid="galaxy-colonize-${s.coords.slot}" title="Colonize" aria-label="Colonize" ${busy ? "disabled" : ""}>🚀</button>${moonDestroyBtn}</span>`
+          : moonDestroyBtn
+            ? `<span class="galaxy-slot-actions">${moonDestroyBtn}</span>`
+            : "";
       const disc = planetDiscHtml({
         src: s.artThumbUrl,
         artId: s.artId,
@@ -370,7 +376,8 @@ export function galaxyPanel(
           ? "galaxy-slot-occupied"
           : "galaxy-slot-empty";
 
-      return `<li class="galaxy-slot ${slotTypeClass}${marker ? " galaxy-slot-marked" : ""}" data-testid="galaxy-slot-${s.coords.slot}" data-art-id="${escapeAttr(s.artId)}"><span class="galaxy-slot-main">${pin}${disc}${moonDisc}<span class="galaxy-slot-label">${fmt(s.coords.slot)}. ${who}${debrisText}</span></span><span class="galaxy-slot-side"><span class="galaxy-slot-coords">${fmtCoordsLink(s.coords)}</span>${actions}${fleetActions}</span></li>`;
+      const slotNum = `<span class="galaxy-slot-num" data-testid="galaxy-slot-num-${s.coords.slot}">${fmt(s.coords.slot)}</span>`;
+      return `<li class="galaxy-slot ${slotTypeClass}${marker ? " galaxy-slot-marked" : ""}" data-testid="galaxy-slot-${s.coords.slot}" data-art-id="${escapeAttr(s.artId)}"><span class="galaxy-slot-main">${slotNum}${pin}${disc}${moonDisc}<span class="galaxy-slot-label">${who}${debrisText}</span></span><span class="galaxy-slot-side">${actions}${fleetActions}</span></li>`;
     })
     .join("");
 
@@ -477,7 +484,27 @@ export function galaxyPanel(
           const who = mini.playerName
             ? `${escapeHtml(mini.playerName)}${mini.isOwn ? " (you)" : ""}`
             : escapeHtml(mini.name);
-          return `<li data-testid="galaxy-mini-${escapeAttr(mini.planetId)}" data-art-id="${escapeAttr(mini.artId)}"><span class="galaxy-slot-main">${planetDiscHtml({ src: mini.artThumbUrl, artId: mini.artId, size: 40, testId: `galaxy-mini-art-${mini.planetId}` })}<span class="galaxy-slot-label">Mini ${fmt(mini.coords.slot)}. ${who}${debris}</span></span><span class="galaxy-slot-side"><span class="galaxy-slot-coords">${fmtCoordsLink(mini.coords)}</span></span></li>`;
+          const slotNum = `<span class="galaxy-slot-num" data-testid="galaxy-mini-slot-num-${mini.coords.slot}">${fmt(mini.coords.slot)}</span>`;
+          let miniActions = "";
+          if (!mini.isOwn) {
+            const btns: string[] = [];
+            if (mini.playerName) {
+              btns.push(
+                `<button type="button" data-galaxy-mini-spy="${mini.coords.slot}" data-testid="galaxy-mini-spy-${escapeAttr(mini.planetId)}" title="Spy" aria-label="Spy" ${busy ? "disabled" : ""}>👁️</button>`,
+              );
+              btns.push(
+                `<button type="button" data-galaxy-mini-attack="${mini.coords.slot}" data-testid="galaxy-mini-preset-raid-${escapeAttr(mini.planetId)}" title="Attack" aria-label="Attack" ${busy ? "disabled" : ""}>⚔️</button>`,
+              );
+            }
+            btns.push(
+              `<button type="button" data-galaxy-mini-claim="${mini.coords.slot}" data-testid="galaxy-mini-preset-miniPlanetCapture-${escapeAttr(mini.planetId)}" title="Claim mini" aria-label="Claim mini" ${busy ? "disabled" : ""}>🚩</button>`,
+            );
+            btns.push(
+              `<button type="button" data-galaxy-mini-destroy="${mini.coords.slot}" data-testid="galaxy-mini-preset-miniPlanetDestruction-${escapeAttr(mini.planetId)}" title="Destroy mini" aria-label="Destroy mini" ${busy ? "disabled" : ""}>💥</button>`,
+            );
+            miniActions = `<span class="galaxy-slot-actions">${btns.join("")}</span>`;
+          }
+          return `<li data-testid="galaxy-mini-${escapeAttr(mini.planetId)}" data-art-id="${escapeAttr(mini.artId)}"><span class="galaxy-slot-main">${slotNum}${planetDiscHtml({ src: mini.artThumbUrl, artId: mini.artId, size: 40, testId: `galaxy-mini-art-${mini.planetId}` })}<span class="galaxy-slot-label">Mini ${who}${debris}</span></span><span class="galaxy-slot-side">${miniActions}</span></li>`;
         })
         .join("")}</ul>`
           : ""
