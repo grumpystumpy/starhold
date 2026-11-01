@@ -295,16 +295,10 @@ async function main() {
   await pageA.getByTestId("nav-galaxy").click();
   await pageA.getByTestId("galaxy-slot-1").waitFor({ timeout: 10_000 });
   await pageA.evaluate(async (note) => {
-    await fetch("/api/alliance/markers", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        coords: { galaxy: 1, system: 1, slot: 1 },
-        note,
-      }),
-    });
+    if (window.starhold?.upsertMarker) {
+      await window.starhold.upsertMarker({ galaxy: 1, system: 1, slot: 1 }, note);
+    }
   }, markerNote);
-  await pageA.getByTestId("nav-galaxy").click();
   const pin = pageA.getByTestId("galaxy-marker-1");
   await pin.waitFor({ timeout: 10_000 });
   const tip = await pin.getAttribute("title");

@@ -80,16 +80,10 @@ async function shotFlow(browser, viewport, dir) {
   await page.getByTestId("nav-galaxy").click();
   await page.getByTestId("galaxy-slot-4").waitFor();
   await page.evaluate(async () => {
-    await fetch("/api/alliance/markers", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        coords: { galaxy: 1, system: 1, slot: 4 },
-        note: "Screen pin",
-      }),
-    });
+    if (window.starhold?.upsertMarker) {
+      await window.starhold.upsertMarker({ galaxy: 1, system: 1, slot: 4 }, "Screen pin");
+    }
   });
-  await page.getByTestId("nav-galaxy").click();
   await page.getByTestId("galaxy-marker-4").waitFor();
   await page.getByTestId("galaxy-slot-4").scrollIntoViewIfNeeded();
   await page.screenshot({
