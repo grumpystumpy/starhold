@@ -32,7 +32,7 @@ Seed = hash(`fleetId`, `arrivesAt`). Roll `0–99`:
 | 0–39 | `resources` | Fill cargo with metal/crystal/deut (scaled by cargo cap + light combat power). |
 | 40–54 | `ships` | Gain 1–3 Scouts **or** 1 Hauler (if cargo free enough conceptually — just add ships). |
 | 55–74 | `nothing` | Empty hold; ships intact. |
-| 75–99 | `pirates` | Lose ~30% of ships (floor); tiny consolation resources if any cargo left. |
+| 75–99 | `pirates` | Hull loss decided by battle outcome and rounds (0% for 1-round win up to 100% for 1-round loss: (r-1)/(2R) win, 50% draw, 1 - (r-1)/(2R) loss); tiny consolation resources if any cargo left. |
 
 No dark-matter currency. No ACS / pathfinder.
 
