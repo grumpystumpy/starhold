@@ -5,6 +5,7 @@ import {
   SHIP_ORDER,
 } from "./catalog.js";
 import {
+  capSwarmToCapacity,
   classBonuses,
   empireExpeditionCap,
   fleetShipCount,
@@ -80,14 +81,17 @@ export function launchMaxExpeditions(
   const launched: FleetMission[] = [];
   let stoppedReason: string | undefined;
 
+  const swarmHoldLevel = player.research.swarmHold ?? 0;
+
   if (opts.ships !== undefined) {
-    const ships = normalizeFleetShips(opts.ships);
-    if (fleetShipCount(ships) < 1) {
+    const rawShips = normalizeFleetShips(opts.ships);
+    const cappedShips = capSwarmToCapacity(rawShips, swarmHoldLevel);
+    if (fleetShipCount(cappedShips) < 1) {
       return { ok: false, error: "Expedition preset has no ships." };
     }
 
     for (let i = 0; i < 64; i++) {
-      if (!hangarHasComposition(origin.ships, ships)) {
+      if (!hangarHasComposition(origin.ships, cappedShips)) {
         stoppedReason = launched.length
           ? "Not enough ships in orbit for another expedition."
           : "Not enough ships in orbit for the Expedition preset.";
@@ -96,7 +100,7 @@ export function launchMaxExpeditions(
       const result = launchFleet(universe, {
         playerId: player.id,
         mission: "expedition",
-        ships,
+        ships: cappedShips,
         targetCoords: { galaxy, system, slot: EXPEDITION_SLOT },
         originPlanetId: origin.id,
         now: now + i,
@@ -187,14 +191,15 @@ export function launchMaxExpeditions(
       }
     }
 
-    if (fleetShipCount(slotShips) < 1) {
+    const finalSlotShips = capSwarmToCapacity(slotShips, swarmHoldLevel);
+    if (fleetShipCount(finalSlotShips) < 1) {
       continue;
     }
 
     const result = launchFleet(universe, {
       playerId: player.id,
       mission: "expedition",
-      ships: slotShips,
+      ships: finalSlotShips,
       targetCoords: { galaxy, system, slot: EXPEDITION_SLOT },
       originPlanetId: origin.id,
       now: now + i,

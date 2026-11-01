@@ -51,6 +51,42 @@ export function swarmCarriedCount(ships: FleetShips): number {
   return (ships.swarmDrone ?? 0) + (ships.swarmHarvester ?? 0);
 }
 
+/**
+ * Caps Swarm Drones and Swarm Harvesters to fleet mothership carry capacity.
+ * Drones are filled first, then Harvesters with remaining capacity.
+ * If there are no motherships, swarm units are capped to 0.
+ */
+export function capSwarmToCapacity<T extends Partial<FleetShips>>(
+  ships: T,
+  swarmHoldLevel: number,
+): T {
+  const motherships = ships.swarmMothership ?? 0;
+  const drones = Math.max(0, Math.floor(ships.swarmDrone ?? 0));
+  const harvesters = Math.max(0, Math.floor(ships.swarmHarvester ?? 0));
+
+  if (motherships <= 0 || (drones <= 0 && harvesters <= 0)) {
+    if (motherships <= 0 && (drones > 0 || harvesters > 0)) {
+      return {
+        ...ships,
+        swarmDrone: 0,
+        swarmHarvester: 0,
+      };
+    }
+    return { ...ships };
+  }
+
+  const capacity = swarmFleetCapacity(ships as FleetShips, swarmHoldLevel);
+  const cappedDrones = Math.min(drones, capacity);
+  const remainingCap = Math.max(0, capacity - cappedDrones);
+  const cappedHarvesters = Math.min(harvesters, remainingCap);
+
+  return {
+    ...ships,
+    swarmDrone: cappedDrones,
+    swarmHarvester: cappedHarvesters,
+  };
+}
+
 /** Attack multiplier for swarm drones when count ≥ threshold. */
 export function swarmDroneAttackMult(droneCount: number): number {
   const n = Math.max(0, Math.floor(droneCount));

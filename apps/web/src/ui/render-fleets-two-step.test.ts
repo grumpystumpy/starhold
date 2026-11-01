@@ -599,6 +599,92 @@ describe("fleet send result", () => {
     assert.deepEqual(kept?.targetCoords, { galaxy: 3, system: 3, slot: 3 });
     assert.match(session.notice ?? "", /Loaded preset/);
   });
+
+  it("loads a preset and caps swarm drones/harvesters to mothership capacity", () => {
+    const mothership = make({
+      tag: "input",
+      "data-fleet-count": "swarmMothership",
+      max: "1",
+    });
+    mothership.value = "0";
+    mothership.max = "1";
+
+    const drone = make({
+      tag: "input",
+      "data-fleet-count": "swarmDrone",
+      max: "50000",
+    });
+    drone.value = "0";
+    drone.max = "50000";
+
+    const harvester = make({
+      tag: "input",
+      "data-fleet-count": "swarmHarvester",
+      max: "5000",
+    });
+    harvester.value = "0";
+    harvester.max = "5000";
+
+    const preset = make({ tag: "select", id: "fleet-preset" });
+    preset.value = "preset-swarm";
+
+    const form = make(
+      { tag: "form", id: "fleet-form", "data-fleet-step": "1" },
+      [preset, mothership, drone, harvester],
+    );
+    install(form);
+
+    const baseView = view();
+    session.view = {
+      ...baseView,
+      player: {
+        ...baseView.player,
+        research: { swarmHold: 0 },
+        fleetPresets: [
+          {
+            id: "preset-swarm",
+            name: "Swarm Invasion",
+            intent: "raid",
+            builtIn: false,
+            ships: {
+              swarmMothership: 1,
+              swarmDrone: 10_000,
+              swarmHarvester: 2_000,
+            },
+          },
+        ],
+      },
+      planet: {
+        ...baseView.planet,
+        ships: {
+          swarmMothership: 1,
+          swarmDrone: 50_000,
+          swarmHarvester: 5_000,
+        },
+      },
+    };
+
+    session.error = null;
+    session.notice = null;
+    setPaintImpl(() => {
+      salvageFleetForm(root);
+    });
+
+    doApplyFleetPreset();
+
+    // 1 Mothership @ Swarm Hold 0 has 2,000 carry capacity.
+    // Drones take priority: 2,000 drones loaded, 0 harvesters loaded.
+    // Excess drones (48,000) and harvesters (5,000) stay on the planet.
+    assert.equal(mothership.value, "1");
+    assert.equal(drone.value, "2000");
+    assert.equal(harvester.value, "0");
+
+    const kept = salvageFleetForm(root);
+    assert.equal(kept?.step, 2);
+    assert.equal(kept?.counts.swarmMothership, 1);
+    assert.equal(kept?.counts.swarmDrone, 2000);
+    assert.equal(kept?.counts.swarmHarvester, 0);
+  });
 });
 
 describe("galaxy fleet actions", () => {
