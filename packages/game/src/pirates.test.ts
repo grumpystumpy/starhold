@@ -242,9 +242,62 @@ describe("pirate galaxy + raids", () => {
     assert.ok(at < periodStart + PIRATE_RAID_PERIOD_MS);
   });
 
-  it("raids pirates every 90 minutes and aliens every hour", () => {
-    assert.equal(PIRATE_RAID_PERIOD_MS, 90 * 60 * 1000);
+  it("raids pirates every 180 minutes and aliens every hour", () => {
+    assert.equal(PIRATE_RAID_PERIOD_MS, 180 * 60 * 1000);
     assert.equal(ALIEN_RAID_PERIOD_MS, 60 * 60 * 1000);
+  });
+
+  it("halves raid frequency over a 24h window compared to the 90-min period", () => {
+    const start = 1_700_000_000_000;
+    const windowMs = 24 * 60 * 60 * 1000;
+    const baseId = "pir:1:1:1";
+
+    const oldPeriodMs = 90 * 60 * 1000;
+    let atOld = rollNextRaidAt(baseId, start, oldPeriodMs);
+    let oldRaidCount = 0;
+    while (atOld <= start + windowMs) {
+      oldRaidCount++;
+      atOld = rollNextRaidAt(baseId, atOld, oldPeriodMs);
+    }
+
+    let atNew = rollNextRaidAt(baseId, start, PIRATE_RAID_PERIOD_MS);
+    let newRaidCount = 0;
+    while (atNew <= start + windowMs) {
+      newRaidCount++;
+      atNew = rollNextRaidAt(baseId, atNew, PIRATE_RAID_PERIOD_MS);
+    }
+
+    // 24h has 16 90-min periods and 8 180-min periods (allowing +/-1 for offset boundaries)
+    assert.ok(Math.abs(oldRaidCount - 16) <= 1, `old raid count expected ~16, got ${oldRaidCount}`);
+    assert.ok(Math.abs(newRaidCount - 8) <= 1, `new raid count expected ~8, got ${newRaidCount}`);
+    assert.ok(
+      Math.abs(newRaidCount - Math.round(oldRaidCount / 2)) <= 1,
+      `new raid count ${newRaidCount} should be half of old count ${oldRaidCount} within +/-1`,
+    );
+  });
+
+  it("preserves pre-change nextRaidAt, fires at that time, then reschedules within the 180-min period", () => {
+    const universe = createUniverse("Pre-change nextRaidAt", 8);
+    const base = activePirateBases(universe)[0]!;
+    const start = 1_700_000_000_000;
+    for (const b of activePirateBases(universe)) {
+      b.nextRaidAt = start + 48 * 60 * 60 * 1000;
+      b.lastGrewAt = start + 48 * 60 * 60 * 1000;
+      b.lastFreeSpawnAt = start + 48 * 60 * 60 * 1000;
+    }
+    const preChangeNextRaidAt = start + 45 * 60 * 1000;
+    base.nextRaidAt = preChangeNextRaidAt;
+
+    tickPirates(universe, preChangeNextRaidAt - 1000);
+    assert.equal(base.nextRaidAt, preChangeNextRaidAt);
+
+    tickPirates(universe, preChangeNextRaidAt);
+    assert.ok(base.nextRaidAt > preChangeNextRaidAt);
+    const periodStart = Math.floor(preChangeNextRaidAt / PIRATE_RAID_PERIOD_MS) * PIRATE_RAID_PERIOD_MS;
+    assert.ok(base.nextRaidAt >= periodStart);
+    assert.ok(base.nextRaidAt <= preChangeNextRaidAt + PIRATE_RAID_PERIOD_MS);
+    const rolledExpected = rollNextRaidAt(base.id, preChangeNextRaidAt, PIRATE_RAID_PERIOD_MS);
+    assert.equal(base.nextRaidAt, rolledExpected);
   });
 });
 

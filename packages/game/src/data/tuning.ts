@@ -1533,8 +1533,8 @@ export const PIRATE_GROWTH_INTERVAL_MS = PIRATE_LEVEL_GROWTH_INTERVAL_MS;
 
 export const PIRATE_TARGET_BASE_COUNT = 200;
 
-/** Once per 90 minutes; each base rolls nextRaidAt = periodStart + offset. */
-export const PIRATE_RAID_PERIOD_MS = 90 * 60 * 1000;
+/** Once per 180 minutes; each base rolls nextRaidAt = periodStart + offset. */
+export const PIRATE_RAID_PERIOD_MS = 180 * 60 * 1000;
 export const PIRATE_FATIGUE_WINDOW_MS = 2 * 60 * 60 * 1000;
 export const PIRATE_FATIGUE_FIRST_HITS = 5;
 export const PIRATE_FATIGUE_EXTRA_HITS = 3;
