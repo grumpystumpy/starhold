@@ -7,8 +7,11 @@ import {
   joinUniverse,
   advancePlanet,
   advanceUniverse,
+  bindTickBudget,
   cancelQueueItem,
+  launchFleet,
   queueBuildingUpgrade,
+  workersTickBudget,
 } from "./world.js";
 import { addCargoToPlanet } from "./world-tick.js";
 import { storageForPlanet } from "./world-boosts.js";
@@ -234,5 +237,81 @@ describe("B7-05 Storage cap and cargo delivery rules", () => {
     );
     assert.equal(cancel.ok, true);
     assert.equal(targetPlanet.resources.metal, caps.metal + 10_000);
+  });
+});
+
+describe("B7-24 Bounded catch-up simulation", () => {
+  it("bounds catch-up operations under workersTickBudget during long idle periods", () => {
+    const universe = createUniverse("BoundCatchup", 8);
+    const p1 = joinUniverse(universe, "Cmd1", 1_000_000);
+    const p2 = joinUniverse(universe, "Cmd2", 1_000_000);
+
+    universe.planets[p1.planet.id]!.resources.deuterium = 100_000;
+    p1.player.research.computerTech = 10;
+    // Launch multiple fleets arriving in the past
+    for (let i = 1; i <= 4; i++) {
+      universe.planets[p1.planet.id]!.ships.scout = 100;
+      universe.planets[p1.planet.id]!.resources.deuterium = 100_000;
+      p1.player.research.fleetSpeedTech = 10;
+      const launch = launchFleet(
+        universe,
+        p1.player.id,
+        p2.planet.id,
+        "deploy",
+        { scout: 1 },
+        1_000_000 + i * 10,
+      );
+      assert.ok(launch.ok, launch.ok ? undefined : launch.error);
+    }
+
+    const budget = workersTickBudget();
+    bindTickBudget(() => budget);
+    try {
+      // Long idle jump: 1 day later
+      const longIdleTime = 1_000_000 + 24 * 3600 * 1000;
+      advanceUniverse(universe, longIdleTime);
+
+      // Fleets budget cap was WORKERS_TICK_FLEET_BUDGET (2).
+      // So budget.fleets should reach 0, and exactly 2 arrivals resolved in this tick.
+      assert.equal(budget.fleets, 0);
+      assert.ok(Object.keys(universe.fleets).length >= 2);
+    } finally {
+      bindTickBudget(() => undefined);
+    }
+  });
+
+  it("produces identical final game state when catch-up is chunked vs one-shot", () => {
+    const start = 1_000_000;
+    const idleDuration = 3 * 24 * 3600 * 1000; // 3 days
+    const end = start + idleDuration;
+
+    const uOneShot = createUniverse("OneShot", 4);
+    const pOne = joinUniverse(uOneShot, "SoloCmd", start);
+    uOneShot.planets[pOne.planet.id]!.buildings.metalMine = 5;
+    uOneShot.planets[pOne.planet.id]!.buildings.crystalMine = 4;
+
+    const uChunked = createUniverse("OneShot", 4);
+    const pChunk = joinUniverse(uChunked, "SoloCmd", start);
+    uChunked.planets[pChunk.planet.id]!.buildings.metalMine = 5;
+    uChunked.planets[pChunk.planet.id]!.buildings.crystalMine = 4;
+
+    // Run one-shot catch-up
+    advanceUniverse(uOneShot, end);
+
+    // Run chunked catch-up (e.g. 1 hour increments)
+    const chunkMs = 3600 * 1000;
+    let t = start;
+    while (t < end) {
+      t = Math.min(t + chunkMs, end);
+      advanceUniverse(uChunked, t);
+    }
+
+    const pOnePlanet = uOneShot.planets[pOne.planet.id]!;
+    const pChunkPlanet = uChunked.planets[pChunk.planet.id]!;
+
+    assert.equal(pOnePlanet.resources.metal, pChunkPlanet.resources.metal);
+    assert.equal(pOnePlanet.resources.crystal, pChunkPlanet.resources.crystal);
+    assert.equal(pOnePlanet.resources.deuterium, pChunkPlanet.resources.deuterium);
+    assert.equal(pOnePlanet.lastTickAt, pChunkPlanet.lastTickAt);
   });
 });
