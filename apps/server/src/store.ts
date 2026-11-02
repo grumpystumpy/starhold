@@ -2,6 +2,7 @@ import { Redis } from "@upstash/redis";
 import {
   archiveUniverseKey,
   bindHighscoreSource,
+  bindTickBudget,
   createUniverse,
   ensureUniverseShape,
   migrateOrResetUniverse,
@@ -37,6 +38,8 @@ bindHighscoreSource(() => {
   if (scope.highscores === undefined) return undefined;
   return scope.highscores;
 });
+
+bindTickBudget(() => currentScope()?.budget);
 
 /**
  * Universe persistence.

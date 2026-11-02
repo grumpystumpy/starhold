@@ -1329,18 +1329,49 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
     await loadPlanetsAt(db, loaded, pairs);
     if (requestedIds.length) {
       const list = inList(requestedIds);
-      await loadFleets(
-        db,
-        loaded,
-        `WHERE owner_id IN (${list.clause}) OR target_owner_id IN (${list.clause})`,
-        [...list.values, ...list.values],
-      );
-      await loadMessages(
-        db,
-        loaded,
-        `WHERE owner_id IN (${list.clause}) OR defender_id IN (${list.clause})`,
-        [...list.values, ...list.values],
-      );
+      const fleetSql = `SELECT id, version, doc FROM save_fleets WHERE owner_id IN (${list.clause}) OR target_owner_id IN (${list.clause})`;
+      const msgSql = `SELECT id, version, kind, doc, owner_id FROM save_messages WHERE owner_id IN (${list.clause}) OR defender_id IN (${list.clause})`;
+      const [fleetRows, msgRows] = await Promise.all([
+        all<{ id: string; version: number; doc: string }>(
+          db,
+          fleetSql,
+          ...list.values,
+          ...list.values,
+        ),
+        all<{
+          id: string;
+          version: number;
+          kind: string;
+          doc: string;
+          owner_id: string;
+        }>(db, msgSql, ...list.values, ...list.values),
+      ]);
+      for (const row of fleetRows) {
+        const fleet = timedParse(row.doc) as FleetMission;
+        loaded.universe.fleets[fleet.id] = fleet;
+        loaded.fleetVersions.set(fleet.id, row.version);
+        loaded.fleetSnapshots.set(fleet.id, structuredClone(fleet));
+        loaded.fingerprints.set(`fleet:${fleet.id}`, stable(fleet));
+      }
+      for (const row of msgRows) {
+        loaded.messageVersions.set(row.id, row.version);
+        loaded.fingerprints.set(`message:${row.id}`, row.doc);
+        const doc = timedParse(row.doc) as { id: string };
+        if (row.kind === "report") loaded.universe.reports[doc.id] = doc as CombatReport;
+        else if (row.kind === "spy") loaded.universe.spyReports[doc.id] = doc as EspionageReport;
+        else if (row.kind === "expedition") {
+          loaded.universe.expeditionReports[doc.id] = doc as ExpeditionReport;
+        } else if (row.kind === "event") {
+          const player = loaded.universe.players[row.owner_id];
+          if (player) {
+            player.eventLog = player.eventLog ?? [];
+            player.eventLog.push(doc as EventLogEntry);
+          }
+        }
+      }
+      for (const player of Object.values(loaded.universe.players)) {
+        player.eventLog?.sort((a, b) => a.createdAt - b.createdAt);
+      }
     }
     await loadSystems(db, loaded, pairs);
   }
