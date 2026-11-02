@@ -30,6 +30,7 @@ export {
   doApplyFleetPreset,
   doDeleteFleetPreset,
   doGalaxyFleetAction,
+  doGalaxyFleetPreset,
   doGalaxySpy,
   doLaunchFleet,
   doLaunchMaxExpeditions,

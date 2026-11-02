@@ -9,7 +9,7 @@ const sourceDir = fileURLToPath(new URL(".", import.meta.url));
 
 // These exported actions only update local UI state or issue GET requests.
 const nonPostActions = new Set([
-  "doApplyFleetPreset", "doRefresh", "doGalaxyNav", "doGalaxyJump", "doGalaxyGalaxyNav", "doGalaxyFleetAction",
+  "doApplyFleetPreset", "doRefresh", "doGalaxyNav", "doGalaxyJump", "doGalaxyGalaxyNav", "doGalaxyFleetAction", "doGalaxyFleetPreset",
 ]);
 
 // These call another covered POST action that settles.

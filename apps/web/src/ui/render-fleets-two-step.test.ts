@@ -18,6 +18,7 @@ import { readFleetFormIn } from "../main-fleet-form";
 import {
   doApplyFleetPreset,
   doGalaxyFleetAction,
+  doGalaxyFleetPreset,
   doGalaxySpy,
   doLaunchFleet,
   GALAXY_SPY_PROBES,
@@ -599,6 +600,92 @@ describe("fleet send result", () => {
     assert.deepEqual(kept?.targetCoords, { galaxy: 3, system: 3, slot: 3 });
     assert.match(session.notice ?? "", /Loaded preset/);
   });
+
+  it("loads a preset and caps swarm drones/harvesters to mothership capacity", () => {
+    const mothership = make({
+      tag: "input",
+      "data-fleet-count": "swarmMothership",
+      max: "1",
+    });
+    mothership.value = "0";
+    mothership.max = "1";
+
+    const drone = make({
+      tag: "input",
+      "data-fleet-count": "swarmDrone",
+      max: "50000",
+    });
+    drone.value = "0";
+    drone.max = "50000";
+
+    const harvester = make({
+      tag: "input",
+      "data-fleet-count": "swarmHarvester",
+      max: "5000",
+    });
+    harvester.value = "0";
+    harvester.max = "5000";
+
+    const preset = make({ tag: "select", id: "fleet-preset" });
+    preset.value = "preset-swarm";
+
+    const form = make(
+      { tag: "form", id: "fleet-form", "data-fleet-step": "1" },
+      [preset, mothership, drone, harvester],
+    );
+    install(form);
+
+    const baseView = view();
+    session.view = {
+      ...baseView,
+      player: {
+        ...baseView.player,
+        research: { swarmHold: 0 },
+        fleetPresets: [
+          {
+            id: "preset-swarm",
+            name: "Swarm Invasion",
+            intent: "raid",
+            builtIn: false,
+            ships: {
+              swarmMothership: 1,
+              swarmDrone: 10_000,
+              swarmHarvester: 2_000,
+            },
+          },
+        ],
+      },
+      planet: {
+        ...baseView.planet,
+        ships: {
+          swarmMothership: 1,
+          swarmDrone: 50_000,
+          swarmHarvester: 5_000,
+        },
+      },
+    };
+
+    session.error = null;
+    session.notice = null;
+    setPaintImpl(() => {
+      salvageFleetForm(root);
+    });
+
+    doApplyFleetPreset();
+
+    // 1 Mothership @ Swarm Hold 0 has 2,000 carry capacity.
+    // Drones take priority: 2,000 drones loaded, 0 harvesters loaded.
+    // Excess drones (48,000) and harvesters (5,000) stay on the planet.
+    assert.equal(mothership.value, "1");
+    assert.equal(drone.value, "2000");
+    assert.equal(harvester.value, "0");
+
+    const kept = salvageFleetForm(root);
+    assert.equal(kept?.step, 2);
+    assert.equal(kept?.counts.swarmMothership, 1);
+    assert.equal(kept?.counts.swarmDrone, 2000);
+    assert.equal(kept?.counts.swarmHarvester, 0);
+  });
 });
 
 describe("galaxy fleet actions", () => {
@@ -708,5 +795,60 @@ describe("galaxy fleet actions", () => {
     session.activePage = originalPage;
     session.pendingGalaxyFleetDraft = null;
     rememberFleetDraft(null);
+  });
+
+  it("doGalaxyFleetPreset loads preset ships clamped to orbit and sets pendingGalaxyFleetDraft", () => {
+    const originalView = session.view;
+    const originalPage = session.activePage;
+
+    session.view = {
+      now: Date.now(),
+      player: {
+        id: "p1",
+        fleetPresets: [
+          {
+            id: "moonDestruction",
+            name: "Moon Destruction",
+            intent: "moonDestruction",
+            builtIn: true,
+            ships: { voidforgeTitan: 5 },
+          },
+          {
+            id: "miniPlanetCapture",
+            name: "Mini Planet Capture",
+            intent: "miniCapture",
+            builtIn: true,
+            ships: { swarmMothership: 2, cruiser: 10 },
+          },
+        ],
+      },
+      planet: {
+        id: "pl1",
+        coords: { galaxy: 1, system: 2, slot: 3 },
+        ships: { voidforgeTitan: 2, swarmMothership: 1, cruiser: 5 },
+      },
+      fleets: [],
+      openAcsGroups: [],
+    } as unknown as any;
+
+    session.activePage = "galaxy";
+    doGalaxyFleetPreset({ galaxy: 1, system: 2, slot: 4 }, "moonDestruction");
+    assert.equal(session.activePage, "fleet");
+    assert.deepEqual(session.pendingGalaxyFleetDraft?.targetCoords, { galaxy: 1, system: 2, slot: 4 });
+    assert.equal(session.pendingGalaxyFleetDraft?.mission, "raid");
+    assert.deepEqual(session.pendingGalaxyFleetDraft?.counts, { voidforgeTitan: 2 });
+    assert.equal(session.pendingGalaxyFleetDraft?.step, 2);
+
+    // Test miniPlanetCapture with mothership -> mission occupy
+    session.activePage = "galaxy";
+    doGalaxyFleetPreset({ galaxy: 1, system: 2, slot: 17 }, "miniPlanetCapture");
+    assert.equal(session.activePage, "fleet");
+    assert.deepEqual(session.pendingGalaxyFleetDraft?.targetCoords, { galaxy: 1, system: 2, slot: 17 });
+    assert.equal(session.pendingGalaxyFleetDraft?.mission, "occupy");
+    assert.deepEqual(session.pendingGalaxyFleetDraft?.counts, { swarmMothership: 1, cruiser: 5 });
+
+    session.view = originalView;
+    session.activePage = originalPage;
+    session.pendingGalaxyFleetDraft = null;
   });
 });

@@ -17,6 +17,7 @@ import {
   batchUnitsProduced,
   canCollectDebris,
   canResolveMiniPlanet,
+  capSwarmToCapacity,
   chronoLatheTimeFactor,
   computeRaidLoot,
   emptyDefenses,
@@ -37,6 +38,7 @@ import {
   createUniverse,
   joinUniverse,
   launchFleet,
+  launchMaxExpeditions,
   resolveMiniPlanetChoice,
   startOccupation,
   swarmProduce,
@@ -211,6 +213,84 @@ describe("Swarm Hold capacity base 2000", () => {
       0,
     );
     assert.equal(over.ok, false);
+  });
+
+  it("caps swarm to mothership capacity: drones first, then harvesters", () => {
+    // Zero motherships -> 0 swarm units
+    const noMS = capSwarmToCapacity({ swarmDrone: 50, swarmHarvester: 20 }, 0);
+    assert.equal(noMS.swarmDrone, 0);
+    assert.equal(noMS.swarmHarvester, 0);
+
+    // 10 Motherships, Swarm Hold 0 -> 20,000 capacity
+    // 200,000 drones on planet -> auto send includes 20,000 drones
+    const example = capSwarmToCapacity(
+      { swarmMothership: 10, swarmDrone: 200_000 },
+      0,
+    );
+    assert.equal(example.swarmDrone, 20_000);
+    assert.equal(example.swarmHarvester, 0);
+
+    // Both drones and harvesters exceed capacity -> fill drones first, then harvesters
+    // 1 Mothership @ Swarm Hold 0 = 2,000 capacity
+    // 1,500 drones and 1,000 harvesters -> 1,500 drones and 500 harvesters
+    const split = capSwarmToCapacity(
+      { swarmMothership: 1, swarmDrone: 1500, swarmHarvester: 1000 },
+      0,
+    );
+    assert.equal(split.swarmDrone, 1500);
+    assert.equal(split.swarmHarvester, 500);
+
+    // Drones alone exceed capacity -> 2,000 drones and 0 harvesters
+    const dronesExceed = capSwarmToCapacity(
+      { swarmMothership: 1, swarmDrone: 2500, swarmHarvester: 1000 },
+      0,
+    );
+    assert.equal(dronesExceed.swarmDrone, 2000);
+    assert.equal(dronesExceed.swarmHarvester, 0);
+
+    // Swarm Hold level 1 boosts capacity to 2,300 (+15%)
+    const boosted = capSwarmToCapacity(
+      { swarmMothership: 1, swarmDrone: 2000, swarmHarvester: 500 },
+      1,
+    );
+    assert.equal(boosted.swarmDrone, 2000);
+    assert.equal(boosted.swarmHarvester, 300);
+
+    // Hard cap 100,000 per mothership (even with very high swarmHoldLevel)
+    const hardCapped = capSwarmToCapacity(
+      { swarmMothership: 2, swarmDrone: 300_000 },
+      1000,
+    );
+    assert.equal(hardCapped.swarmDrone, 200_000); // 2 * 100,000 hard cap
+  });
+
+  it("launchMaxExpeditions auto send caps swarm units and leaves excess on planet", () => {
+    const universe = createUniverse("Max Expeditions Swarm", 8);
+    const a = joinUniverse(universe, "ExpeditionSwarm", 260_000_000);
+    a.player.research.astrophysics = 1; // 2 expedition slots
+    a.player.research.computerTech = 5;
+    const origin = universe.planets[a.planet.id];
+    origin.ships.swarmMothership = 2; // 2 motherships
+    origin.ships.swarmDrone = 50_000; // 50,000 drones (capacity is 2 * 2000 = 4000 total across 2 expeditions = 1 MS & 2000 drones each)
+    origin.resources.deuterium = 100_000;
+
+    const res = launchMaxExpeditions(universe, {
+      playerId: a.player.id,
+      now: 260_000_100,
+    });
+    assert.equal(res.ok, true);
+    if (!res.ok) return;
+    assert.equal(res.launched.length, 2);
+    // Each expedition should carry at most 1 mothership and 2000 drones
+    for (const fleet of res.launched) {
+      assert.equal(fleet.ships.swarmMothership, 1);
+      assert.equal(fleet.ships.swarmDrone, 2000);
+      assert.equal(fleet.ships.swarmHarvester, 0);
+    }
+    // Remaining on planet: 50,000 - 4,000 = 46,000 drones
+    const planetAfter = universe.planets[a.planet.id];
+    assert.equal(planetAfter.ships.swarmDrone, 46_000);
+    assert.equal(planetAfter.ships.swarmMothership, 0);
   });
 
   it("rejects fleet launch with swarm units unless a Mothership is present", () => {

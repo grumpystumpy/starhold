@@ -64,6 +64,7 @@ import {
   doDeleteMessages,
   doMarkEventsRead,
   doGalaxyFleetAction,
+  doGalaxyFleetPreset,
   doGalaxySpy,
   doSetAllianceJoinMode,
   doSetAllianceClass,
@@ -293,9 +294,80 @@ export function bindClickHandlers(): void {
         const slot = Number(attackSlot.getAttribute("data-galaxy-attack"));
         const galaxy = session.view?.galaxy;
         if (galaxy && Number.isInteger(slot)) {
-          doGalaxyFleetAction(
+          doGalaxyFleetPreset(
             { galaxy: galaxy.galaxy, system: galaxy.system, slot },
             "raid",
+          );
+        }
+        return;
+      }
+
+      const moonDestroySlot = closestActionEl(target, "[data-galaxy-moon-destroy]");
+      if (moonDestroySlot) {
+        ev.preventDefault();
+        const slot = Number(moonDestroySlot.getAttribute("data-galaxy-moon-destroy"));
+        const galaxy = session.view?.galaxy;
+        if (galaxy && Number.isInteger(slot)) {
+          doGalaxyFleetPreset(
+            { galaxy: galaxy.galaxy, system: galaxy.system, slot },
+            "moonDestruction",
+          );
+        }
+        return;
+      }
+
+      const miniSpySlot = closestActionEl(target, "[data-galaxy-mini-spy]");
+      if (miniSpySlot) {
+        ev.preventDefault();
+        const slot = Number(miniSpySlot.getAttribute("data-galaxy-mini-spy"));
+        const galaxy = session.view?.galaxy;
+        if (galaxy && Number.isInteger(slot)) {
+          void doGalaxySpy({
+            galaxy: galaxy.galaxy,
+            system: galaxy.system,
+            slot,
+          });
+        }
+        return;
+      }
+
+      const miniAttackSlot = closestActionEl(target, "[data-galaxy-mini-attack]");
+      if (miniAttackSlot) {
+        ev.preventDefault();
+        const slot = Number(miniAttackSlot.getAttribute("data-galaxy-mini-attack"));
+        const galaxy = session.view?.galaxy;
+        if (galaxy && Number.isInteger(slot)) {
+          doGalaxyFleetPreset(
+            { galaxy: galaxy.galaxy, system: galaxy.system, slot },
+            "raid",
+          );
+        }
+        return;
+      }
+
+      const miniClaimSlot = closestActionEl(target, "[data-galaxy-mini-claim]");
+      if (miniClaimSlot) {
+        ev.preventDefault();
+        const slot = Number(miniClaimSlot.getAttribute("data-galaxy-mini-claim"));
+        const galaxy = session.view?.galaxy;
+        if (galaxy && Number.isInteger(slot)) {
+          doGalaxyFleetPreset(
+            { galaxy: galaxy.galaxy, system: galaxy.system, slot },
+            "miniPlanetCapture",
+          );
+        }
+        return;
+      }
+
+      const miniDestroySlot = closestActionEl(target, "[data-galaxy-mini-destroy]");
+      if (miniDestroySlot) {
+        ev.preventDefault();
+        const slot = Number(miniDestroySlot.getAttribute("data-galaxy-mini-destroy"));
+        const galaxy = session.view?.galaxy;
+        if (galaxy && Number.isInteger(slot)) {
+          doGalaxyFleetPreset(
+            { galaxy: galaxy.galaxy, system: galaxy.system, slot },
+            "miniPlanetDestruction",
           );
         }
         return;
@@ -663,23 +735,6 @@ export function bindClickHandlers(): void {
         ev.preventDefault();
         const id = markerDelete.getAttribute("data-alliance-marker-remove");
         if (id) void doDeleteAllianceMarker(id);
-        return;
-      }
-
-      const markBtn = closestActionEl(target, "[data-galaxy-mark]");
-      if (markBtn) {
-        ev.preventDefault();
-        const slot = Number(markBtn.getAttribute("data-galaxy-mark"));
-        const galaxy = session.view?.galaxy;
-        if (galaxy && Number.isInteger(slot)) {
-          const note =
-            root.querySelector<HTMLInputElement>("#galaxy-marker-note")?.value ??
-            "";
-          void doUpsertAllianceMarker(
-            { galaxy: galaxy.galaxy, system: galaxy.system, slot },
-            note,
-          );
-        }
         return;
       }
 

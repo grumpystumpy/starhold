@@ -1,11 +1,12 @@
 import type {
+  BuiltinPresetId,
   Coordinates,
   FleetPresetIntent,
   FleetShips,
   MissionType,
   Resources,
 } from "@starhold/game";
-import { SHIP_ORDER } from "@starhold/game";
+import { capSwarmToCapacity, SHIP_ORDER, getFleetPreset } from "@starhold/game";
 import {
   deleteFleetPresetRequest,
   launchFleetMission,
@@ -142,6 +143,39 @@ export function doGalaxyFleetAction(
   navigateTo("fleet");
 }
 
+export function doGalaxyFleetPreset(
+  coords: Coordinates,
+  presetId: BuiltinPresetId,
+): void {
+  if (!session.view) return;
+  const player = session.view.player;
+  const preset =
+    player.fleetPresets?.find((p) => p.id === presetId) ??
+    getFleetPreset(player as any, presetId);
+  if (!preset) return;
+
+  const orbit = session.view.planet.ships;
+  const clamped: Partial<FleetShips> = {};
+  for (const id of SHIP_ORDER) {
+    const want = Math.max(0, Math.floor(preset.ships[id] ?? 0));
+    const have = Math.max(0, Math.floor(orbit[id] ?? 0));
+    const n = Math.min(want, have);
+    if (n > 0) clamped[id] = n;
+  }
+
+  let mission: MissionType;
+  if (presetId === "miniPlanetCapture" && (clamped.swarmMothership ?? 0) > 0) {
+    mission = "occupy";
+  } else {
+    mission = intentMission(preset.intent);
+  }
+
+  const next = fleetDraftAfterPreset(null, mission, clamped);
+  session.pendingGalaxyFleetDraft = { ...next, targetCoords: coords };
+  navigateTo("fleet");
+}
+
+
 export function doApplyFleetPreset(): void {
   if (!session.view) return;
   const form = root.querySelector<HTMLFormElement>("#fleet-form");
@@ -166,6 +200,7 @@ export function doApplyFleetPreset(): void {
   );
   if (selectEl) selectEl.value = mission;
 
+  const rawCounts: Partial<FleetShips> = {};
   for (const id of SHIP_ORDER) {
     const input = form.querySelector<HTMLInputElement>(
       `[data-fleet-count="${id}"]`,
@@ -173,7 +208,18 @@ export function doApplyFleetPreset(): void {
     if (!input) continue;
     const have = Math.max(0, Math.floor(Number(input.max) || 0));
     const want = Math.max(0, Math.floor(preset.ships[id] ?? 0));
-    input.value = String(Math.min(have, want));
+    rawCounts[id] = Math.min(have, want);
+  }
+
+  const swarmHoldLevel = session.view.player.research.swarmHold ?? 0;
+  const capped = capSwarmToCapacity(rawCounts, swarmHoldLevel);
+
+  for (const id of SHIP_ORDER) {
+    const input = form.querySelector<HTMLInputElement>(
+      `[data-fleet-count="${id}"]`,
+    );
+    if (!input) continue;
+    input.value = String(capped[id] ?? 0);
   }
 
   const nameInput = root.querySelector<HTMLInputElement>("#fleet-preset-name");

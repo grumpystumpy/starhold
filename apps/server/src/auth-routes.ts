@@ -244,16 +244,19 @@ export function mountAuthRoutes(app: Hono): void {
     let view = null;
     let playerId = account.playerId;
     try {
-      await withUniverseRead((universe) => {
-        ensureUniverseShape(universe);
-        if (!playerId) {
-          const linked = playerForAccount(universe, account.id);
-          if (linked) playerId = linked.id;
-        }
-        if (playerId && universe.players[playerId]) {
-          view = playerView(universe, playerId);
-        }
-      });
+      await withUniverseRead(
+        (universe) => {
+          ensureUniverseShape(universe);
+          if (!playerId) {
+            const linked = playerForAccount(universe, account.id);
+            if (linked) playerId = linked.id;
+          }
+          if (playerId && universe.players[playerId]) {
+            view = playerView(universe, playerId);
+          }
+        },
+        playerId ? { playerIds: [playerId] } : { catalog: true },
+      );
     } catch (err) {
       const message = err instanceof Error ? err.message : "State failed.";
       if (isUniverseBusy(err)) {

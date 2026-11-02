@@ -91,6 +91,23 @@ describe("galaxy page rendering", () => {
       alliance: { id: "a1", name: "Alliance", tag: "ACE" },
     } as unknown as PlayerView;
 
+    // Slot 4: foreign planet with moon to test moonDestruction icon
+    slots[3] = {
+      coords: { galaxy: 1, system: 5, slot: 4 },
+      planetId: "p4-pl",
+      playerId: "p4",
+      playerName: "EnemyWithMoon",
+      allianceTag: null,
+      empirePoints: 5000,
+      isOwn: false,
+      hasMoon: true,
+      moonId: "m4",
+      debris: null,
+      artId: "normal-4",
+      artThumbUrl: "/thumb.webp",
+      allianceMarker: null,
+    };
+
     const html = pageHtml("galaxy", view, false, null);
 
     assert.match(html, /data-testid="galaxy-system-bar"/);
@@ -104,9 +121,31 @@ describe("galaxy page rendering", () => {
     assert.match(html, /data-testid="galaxy-marker-2"/);
     assert.match(html, /data-testid="galaxy-spy-2"/);
     assert.match(html, /data-testid="galaxy-attack-2"/);
+    assert.match(html, /data-testid="galaxy-preset-raid-2"/);
     assert.match(html, /class="[^"]*galaxy-slot-empty[^"]*"[^>]*data-testid="galaxy-slot-3"/);
     assert.match(html, /data-testid="galaxy-colonize-3"/);
     assert.match(html, /3\.4k pts/);
+
+    // Spec B7-17: No Mark button in any slot row
+    assert.doesNotMatch(html, /data-testid="galaxy-mark-\d+"/);
+    // Spec B7-17: Visible label Joint Strike (not Propose Joint Strike)
+    assert.match(html, />Joint Strike<\/button>/);
+    assert.doesNotMatch(html, />Propose Joint Strike<\/button>/);
+    // Spec B7-17: Drop coordinate text from slot rows
+    assert.doesNotMatch(html, /class="galaxy-slot-coords"/);
+    // Spec B7-17: Slot number element precedes planet disc, label without "N. "
+    assert.match(html, /<span class="galaxy-slot-num" data-testid="galaxy-slot-num-1">1<\/span>/);
+    assert.match(html, /<span class="galaxy-slot-num" data-testid="galaxy-slot-num-2">2<\/span>/);
+    assert.match(html, /<span class="galaxy-slot-label">Alpha \[ACE\] \(you\)/);
+    assert.match(html, /<span class="galaxy-slot-label">Rival \[FOE\]/);
+    assert.match(html, /<span class="galaxy-slot-label">Empty<\/span>/);
+
+    // Spec B7-13: foreign moon has Destroy moon preset icon
+    assert.match(html, /data-testid="galaxy-preset-moonDestruction-4"/);
+    // Own planet has moon but no Destroy moon or fleet icons
+    assert.doesNotMatch(html, /data-testid="galaxy-preset-moonDestruction-1"/);
+    assert.doesNotMatch(html, /data-testid="galaxy-spy-1"/);
+    assert.doesNotMatch(html, /data-testid="galaxy-attack-1"/);
   });
 
   it("renders pirate base, alien base, asteroids, mini planets, and deep space cards with testids", () => {
@@ -126,6 +165,26 @@ describe("galaxy page rendering", () => {
             isOwn: false,
             debris: { metal: 100, crystal: 50 },
           },
+          {
+            planetId: "mini-own",
+            name: "Own Mini",
+            coords: { galaxy: 1, system: 5, slot: 18 },
+            artId: "mini-art-2",
+            artThumbUrl: "/mini2.webp",
+            playerName: "Alpha",
+            isOwn: true,
+            debris: null,
+          },
+          {
+            planetId: "mini-unclaimed",
+            name: "Unclaimed Mini",
+            coords: { galaxy: 1, system: 5, slot: 19 },
+            artId: "mini-art-3",
+            artThumbUrl: "/mini3.webp",
+            playerName: null,
+            isOwn: false,
+            debris: null,
+          },
         ],
         asteroids: [
           { id: "ast-1", richness: 3, metal: 5000, crystal: 2000, deuterium: 1000 },
@@ -134,14 +193,14 @@ describe("galaxy page rendering", () => {
           name: "Black Skull Den",
           tier: 2,
           threatHint: "Medium",
-          coords: { galaxy: 1, system: 5, slot: 18 },
+          coords: { galaxy: 1, system: 5, slot: 20 },
         },
         alienBase: {
           name: "Xeno Hive",
           tier: 3,
           threatHint: "High",
           active: true,
-          coords: { galaxy: 1, system: 5, slot: 19 },
+          coords: { galaxy: 1, system: 5, slot: 21 },
         },
         deepSpace: {
           coords: { galaxy: 1, system: 5, slot: 16 },
@@ -159,5 +218,26 @@ describe("galaxy page rendering", () => {
     assert.match(html, /5k\/2k\/1k/);
     assert.match(html, /data-testid="galaxy-pirate"/);
     assert.match(html, /data-testid="galaxy-alien"/);
+
+    // Spec B7-17: Mini planet row number precedes disc, no coords
+    assert.match(html, /<span class="galaxy-slot-num" data-testid="galaxy-mini-slot-num-17">17<\/span>/);
+    assert.match(html, /<span class="galaxy-slot-label">Mini Scout · debris 100\/50<\/span>/);
+
+    // Spec B7-13: Mini planet preset icons
+    // Foreign mini (Scout): spy, attack, claim, destroy
+    assert.match(html, /data-testid="galaxy-mini-spy-mini-1"/);
+    assert.match(html, /data-testid="galaxy-mini-preset-raid-mini-1"/);
+    assert.match(html, /data-testid="galaxy-mini-preset-miniPlanetCapture-mini-1"/);
+    assert.match(html, /data-testid="galaxy-mini-preset-miniPlanetDestruction-mini-1"/);
+
+    // Unclaimed mini: claim and destroy, but no spy or attack
+    assert.match(html, /data-testid="galaxy-mini-preset-miniPlanetCapture-mini-unclaimed"/);
+    assert.match(html, /data-testid="galaxy-mini-preset-miniPlanetDestruction-mini-unclaimed"/);
+    assert.doesNotMatch(html, /data-testid="galaxy-mini-spy-mini-unclaimed"/);
+    assert.doesNotMatch(html, /data-testid="galaxy-mini-preset-raid-mini-unclaimed"/);
+
+    // Own mini: no action icons
+    assert.doesNotMatch(html, /data-testid="galaxy-mini-preset-miniPlanetCapture-mini-own"/);
+    assert.doesNotMatch(html, /data-testid="galaxy-mini-preset-miniPlanetDestruction-mini-own"/);
   });
 });
