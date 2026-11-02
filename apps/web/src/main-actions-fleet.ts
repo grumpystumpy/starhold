@@ -5,7 +5,7 @@ import type {
   MissionType,
   Resources,
 } from "@starhold/game";
-import { SHIP_ORDER } from "@starhold/game";
+import { capSwarmToCapacity, SHIP_ORDER } from "@starhold/game";
 import {
   deleteFleetPresetRequest,
   launchFleetMission,
@@ -166,6 +166,7 @@ export function doApplyFleetPreset(): void {
   );
   if (selectEl) selectEl.value = mission;
 
+  const rawCounts: Partial<FleetShips> = {};
   for (const id of SHIP_ORDER) {
     const input = form.querySelector<HTMLInputElement>(
       `[data-fleet-count="${id}"]`,
@@ -173,7 +174,18 @@ export function doApplyFleetPreset(): void {
     if (!input) continue;
     const have = Math.max(0, Math.floor(Number(input.max) || 0));
     const want = Math.max(0, Math.floor(preset.ships[id] ?? 0));
-    input.value = String(Math.min(have, want));
+    rawCounts[id] = Math.min(have, want);
+  }
+
+  const swarmHoldLevel = session.view.player.research.swarmHold ?? 0;
+  const capped = capSwarmToCapacity(rawCounts, swarmHoldLevel);
+
+  for (const id of SHIP_ORDER) {
+    const input = form.querySelector<HTMLInputElement>(
+      `[data-fleet-count="${id}"]`,
+    );
+    if (!input) continue;
+    input.value = String(capped[id] ?? 0);
   }
 
   const nameInput = root.querySelector<HTMLInputElement>("#fleet-preset-name");
