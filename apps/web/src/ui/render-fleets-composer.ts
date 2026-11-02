@@ -562,7 +562,7 @@ export function fleetComposer(
       </div>
       ${
         view.alliance
-          ? `<button type="button" data-propose-strike data-testid="propose-joint-strike" ${busy ? "disabled" : ""}>Propose Joint Strike</button>`
+          ? `<button type="button" data-propose-strike data-testid="propose-joint-strike" ${busy ? "disabled" : ""}>Joint Strike</button>`
           : ""
       }
     </form>
