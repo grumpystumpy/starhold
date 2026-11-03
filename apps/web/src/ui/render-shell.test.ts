@@ -30,5 +30,7 @@ describe("planet dropdown and coords link", () => {
     assert.match(html, /data-testid="planet-dropdown-wrap"/);
     assert.match(html, /data-testid="planet-dropdown"/);
     assert.match(html, /class="coord-link"/);
+    assert.match(html, /Claim daily \+15 \+res/);
+    assert.match(html, /Daily login reward: \+15 Starshards, \+2k metal, \+1k crystal, \+500 deut/);
   });
 });

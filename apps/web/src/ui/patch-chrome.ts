@@ -1,5 +1,9 @@
 import {
+  DAILY_LOGIN_CRYSTAL,
+  DAILY_LOGIN_DEUTERIUM,
+  DAILY_LOGIN_METAL,
   PRODUCTION_MULT,
+  STARSHARDS_DAILY_LOGIN,
   unreadEventCount,
   type PlayerView,
 } from "@starhold/game";
@@ -162,8 +166,9 @@ export function patchLiveChrome(
   if (claim) {
     const canClaim = Boolean(view.dailyLoginAvailable) && !state.busy;
     claim.disabled = !canClaim;
+    claim.title = `Daily login reward: +${STARSHARDS_DAILY_LOGIN} Starshards, +${fmt(DAILY_LOGIN_METAL)} metal, +${fmt(DAILY_LOGIN_CRYSTAL)} crystal, +${fmt(DAILY_LOGIN_DEUTERIUM)} deut`;
     claim.textContent = view.dailyLoginAvailable
-      ? "Claim daily +15"
+      ? `Claim daily +${STARSHARDS_DAILY_LOGIN} +res`
       : "Daily claimed";
   }
 

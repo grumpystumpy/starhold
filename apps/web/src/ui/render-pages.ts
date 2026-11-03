@@ -107,9 +107,19 @@ function overviewPage(view: PlayerView, busy: boolean): string {
   const solarTemp = economy.energy.solarTempFactor ?? 1;
   const title = view.player.cosmetics?.activeTitle?.trim() ?? "";
   const skin = view.player.cosmetics?.activePlanetSkinId ?? "";
+  const readyDailyMissions = (view.goals ?? []).filter(
+    (g) => g.cadence === "daily" && !g.claimed && g.progress >= g.target,
+  ).length;
+  const goalsHref = hrefForPage("goals", {
+    playerId: view.player.id,
+    planetId: view.planet.id,
+  });
   return `
     <section class="panel" data-testid="overview-panel">
       <h2>Overview</h2>
+      <p class="hint" data-testid="overview-daily-missions-ready">
+        Daily missions ready to claim: <a href="${escapeAttr(goalsHref)}" data-nav="goals" data-testid="overview-goals-link"><strong>${fmt(readyDailyMissions)}</strong></a>
+      </p>
       <div class="overview-hero">
         <div class="planet-frame" data-testid="planet-skin-frame" data-planet-skin="${escapeAttr(skin)}">
           ${planetDiscHtml({

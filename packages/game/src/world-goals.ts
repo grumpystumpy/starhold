@@ -73,6 +73,12 @@ function sameMetric(goalMetric: GoalMetric, metric: GoalMetric): boolean {
       return goalMetric === "pirateWin";
     case "expedition":
       return goalMetric === "expedition";
+    case "buildingUpgrade":
+      return goalMetric === "buildingUpgrade";
+    case "researchComplete":
+      return goalMetric === "researchComplete";
+    case "shipBuild":
+      return goalMetric === "shipBuild";
     default: {
       const _exhaustive: never = metric;
       return _exhaustive;
