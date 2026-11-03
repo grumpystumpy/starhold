@@ -375,6 +375,7 @@ describe("row save migration", () => {
   });
 });
 
+
 function migrationState(raw: DatabaseSync): { v: number; stage: string; pass: number; cursor: string } {
   const row = raw.prepare("SELECT value FROM save_meta WHERE id = ?").get("migration") as
     | { value: string }
@@ -561,6 +562,22 @@ describe("row save review fixes", () => {
     assert.equal(aged.universe.debris?.["deb-77"]?.metal, 8);
     assert.equal(aged.universe.debris?.["deb-77"]?.crystal, 2);
     assert.equal(aged.universe.debris?.["deb-new"]?.metal, 5);
+  });
+
+  it("persists the NPC catch-up resume cursor in the world row", async () => {
+    const { db } = sqliteD1();
+    await migrateAll(db, fixture());
+    const store = createD1Store(db);
+    const cursor = "1700000000000:pir:resume-test";
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "POST", cpuMs: 0 },
+      () =>
+        withUniverse((universe) => {
+          universe.aiCatchUpCursor = cursor;
+        }, { npc: true }),
+    );
+    const loaded = await loadWorkingSet(db, { full: true });
+    assert.equal(loaded.universe.aiCatchUpCursor, cursor);
   });
 
   it("saves battle debris for npc and player fights without blowing the query budget", async () => {
@@ -2002,4 +2019,3 @@ describe("row save review fixes", () => {
     assert.ok(maxQueries <= 50);
   });
 });
-

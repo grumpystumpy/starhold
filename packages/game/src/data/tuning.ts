@@ -1645,9 +1645,9 @@ export const WORKERS_TICK_SEED_PIRATES = 4;
 
 /**
  * 10-minute NPC job. 200 bases at one raid per 90 minutes is about 23 dues
- * per run, and a real day peaks around 31. 36 clears that bucket in one pass.
+ * per run. Any burst beyond this budget resumes on the next scheduled run.
  */
-export const NPC_JOB_RAID_BUDGET = 36;
+export const NPC_JOB_RAID_BUDGET = 24;
 export const NPC_JOB_LEVELUP_BUDGET = 80;
 export const NPC_JOB_FLEET_BUDGET = 8;
 

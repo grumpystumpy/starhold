@@ -92,7 +92,13 @@ export function mountCpuRoutes(app: Hono): void {
         raids += 1;
       }
       if (!base || scheduledAt !== base.nextRaidAt) raids = 0;
-      return c.json({ case: name, ms: performance.now() - started, cpu: readCpuMs(), raids });
+      return c.json({
+        case: name,
+        ms: performance.now() - started,
+        cpu: readCpuMs(),
+        raids,
+        backlog: Boolean(base && base.nextRaidAt <= now),
+      });
     }
     if (name === "encode") {
       const started = performance.now();
