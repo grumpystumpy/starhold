@@ -102,6 +102,57 @@ export interface CombatReport {
   acsParticipantIds?: string[];
 }
 
+export interface PlayerCombatStats {
+  lostValue: number;
+  destroyedValue: number;
+  wins: number;
+  losses: number;
+}
+
+/** Fields deliberately exposed by a public battle-report share link. */
+export interface PublicCombatReport {
+  shareCode: string;
+  at: number;
+  attackerName: string;
+  defenderName: string;
+  originCoords?: Coordinates;
+  targetCoords: Coordinates;
+  attackerBefore: Partial<FleetShips>;
+  attackerAfter: Partial<FleetShips>;
+  defenderBefore: Partial<FleetShips>;
+  defenderAfter: Partial<FleetShips>;
+  defensesBefore: Partial<DefenseStock>;
+  defensesAfter: Partial<DefenseStock>;
+  defensesDestroyed?: Partial<Record<DefenseId, number>>;
+  loot: Resources;
+  debrisCreated: Resources;
+  outcome: CombatOutcome;
+  rounds: number;
+}
+
+export interface HallOfFameEntry {
+  at: number;
+  attackerName: string;
+  defenderName: string;
+  targetCoords: Coordinates;
+  outcome: CombatOutcome;
+  destroyedValue: number;
+  shareCode?: string;
+}
+
+export interface HallOfShameEntry {
+  rank: number;
+  playerId: string;
+  name: string;
+  lostValue: number;
+}
+
+export interface HighscoreCache {
+  rows: HighscoreEntry[];
+  hallOfFame: HallOfFameEntry[];
+  hallOfShame: HallOfShameEntry[];
+}
+
 export interface EspionageReport {
   id: string;
   at: number;
@@ -491,6 +542,8 @@ export interface PlayerState {
     dayKey: string;
     successfulRaids: number;
   };
+  /** Lifetime combat counters; missing on old saves means zero. */
+  combatStats?: PlayerCombatStats;
   /**
    * Daily / weekly goal counters for the current UTC periods.
    * Lives on the player inside the universe document (no extra KV keys).
@@ -721,6 +774,8 @@ export interface PlayerView {
   highscores: HighscoreEntry[];
   /** Cached alliance ranks. Empty until the next highscore rebuild. */
   allianceHighscores?: AllianceRankEntry[];
+  hallOfFame?: HallOfFameEntry[];
+  hallOfShame?: HallOfShameEntry[];
   galaxy: GalaxyView;
   fleets: FleetMission[];
   /** Server-derived slot limits, including active bonuses and owned beacons. */

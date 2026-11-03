@@ -474,6 +474,7 @@ export function resolveAcsGroup(
       .join(", ");
     report.acsGroupId = group.id;
     report.acsParticipantIds = fleets.map((f) => f.ownerPlayerId);
+    report.attackerName = names;
     report.summary = `Joint Strike (ACS) [${names}]: ${report.summary}`;
     report.missionId = group.id;
   }

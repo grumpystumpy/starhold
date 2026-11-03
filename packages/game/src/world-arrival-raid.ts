@@ -1,4 +1,4 @@
-import { mintCombatShareCode } from "./combat-share.js";
+import { recordCombatReport } from "./combat-share.js";
 import {
   classBonuses,
   allianceBonusesForPlayer,
@@ -294,6 +294,7 @@ export function resolveRaidArrival(
     outcome: combat.outcome,
     rounds: combat.rounds,
     summary,
+    acsGroupId: fleet.acsGroupId ?? undefined,
     moonFormed,
     moonDestroyed: moonDestroyed || undefined,
     moonKillChancePct,
@@ -301,9 +302,8 @@ export function resolveRaidArrival(
     miniPlanetId,
     roundLog: combat.roundLog.length ? combat.roundLog : undefined,
     xpAwarded: { attacker: attackerXp, defender: defenderXp },
-    shareCode: mintCombatShareCode(universe),
   };
-  universe.reports[reportId] = report;
+  recordCombatReport(universe, report);
 
   if (defenderOwner && defenderOwner.id !== fleet.ownerPlayerId) {
     pushEventLog(defenderOwner, {

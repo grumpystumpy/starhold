@@ -198,6 +198,24 @@ function namedCounts(
   return parts.join(", ");
 }
 
+function shipTotalsTable(
+  side: "Attacker" | "Defender",
+  before: CombatReport["attackerBefore"] | undefined,
+  after: CombatReport["attackerAfter"] | undefined,
+): string {
+  const rows = SHIP_ORDER.filter((id) => (before?.[id] ?? 0) > 0)
+    .map(
+      (id) =>
+        `<tr><th scope="row">${escapeHtml(SHIPS[id].name)}</th><td>${fmt(before?.[id] ?? 0)}</td><td>${fmt(Math.max(0, (before?.[id] ?? 0) - (after?.[id] ?? 0)))}</td></tr>`,
+    )
+    .join("");
+  return `<div class="battle-ship-totals" data-testid="battle-ship-totals-${side.toLowerCase()}"><h4>${side} ships</h4>${
+    rows
+      ? `<table><thead><tr><th>Ship</th><th>Total (before)</th><th>Lost</th></tr></thead><tbody>${rows}</tbody></table>`
+      : `<p class="meta">None</p>`
+  }</div>`;
+}
+
 export function combatLossSummary(report: CombatReport): {
   attackerShipsLost: number;
   defenderShipsLost: number;
@@ -305,10 +323,12 @@ function renderReportSubwindow(view: PlayerView): string {
             <h4>Debris & Summary</h4>
             <p class="meta"><strong>Debris field created:</strong> ${debrisText}</p>
             <p class="meta"><strong>Loot:</strong> ${lootText}</p>
+            ${shipTotalsTable("Attacker", report.attackerBefore, report.attackerAfter)}
+            ${shipTotalsTable("Defender", report.defenderBefore, report.defenderAfter)}
             ${defenseSummaryHtml}
             ${report.summary ? `<p class="meta"><strong>Summary:</strong> ${escapeHtml(report.summary)}</p>` : ""}
             <div class="battle-report-actions">
-              <button type="button" class="ghost" data-copy-battle-share="${escapeAttr(report.id)}" data-testid="copy-battle-share-${escapeAttr(report.id)}">Copy share</button>
+              ${report.shareCode ? `<button type="button" class="ghost" data-copy-battle-share="${escapeAttr(report.id)}" data-testid="copy-battle-share-${escapeAttr(report.id)}">Copy share</button>` : ""}
             </div>
           </div>
         </div>
@@ -569,12 +589,16 @@ export function messagesPageHtml(
             let combatClasses = "";
             let combatAttr = "";
             let shareBtn = "";
+            let combatDetails = "";
             if (report) {
               const res = viewerResult(report, view.player.id);
               const pres = resultPresentation(res);
               combatClasses = ` ${pres.className}`;
               combatAttr = ` data-combat-result="${pres.resultAttr}"`;
-              shareBtn = `<div class="battle-report-actions"><button type="button" class="ghost" data-copy-battle-share="${escapeAttr(report.id)}" data-testid="copy-battle-share-${escapeAttr(report.id)}">Copy share</button></div>`;
+              shareBtn = report.shareCode
+                ? `<div class="battle-report-actions"><button type="button" class="ghost" data-copy-battle-share="${escapeAttr(report.id)}" data-testid="copy-battle-share-${escapeAttr(report.id)}">Copy share</button></div>`
+                : "";
+              combatDetails = `<details class="inbox-combat-details" data-testid="inbox-combat-details-${escapeAttr(report.id)}"><summary>Battle details</summary>${shipTotalsTable("Attacker", report.attackerBefore, report.attackerAfter)}${shipTotalsTable("Defender", report.defenderBefore, report.defenderAfter)}</details>`;
             }
             const spy =
               item.kind === "spy"
@@ -594,6 +618,7 @@ export function messagesPageHtml(
               <span class="meta message-body">${escapeHtml(item.body)}</span>
               ${openReportBtn}
               ${shareBtn}
+              ${combatDetails}
               ${spyDetail}
               ${readBtn}
             </li>`;

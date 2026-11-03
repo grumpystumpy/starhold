@@ -1,5 +1,11 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { AllianceRankEntry, HighscoreEntry, TickBudget } from "@starhold/game";
+import type {
+  AllianceRankEntry,
+  HallOfFameEntry,
+  HallOfShameEntry,
+  HighscoreEntry,
+  TickBudget,
+} from "@starhold/game";
 import type { D1Like } from "./d1-store.js";
 import type { KvStore, StorageMode } from "./kv.js";
 
@@ -16,6 +22,8 @@ export interface RequestScope {
   highscores?: HighscoreEntry[];
   /** Cached alliance ranks. Missing row serves [] — never computed on a page load. */
   allianceHighscores?: AllianceRankEntry[];
+  hallOfFame?: HallOfFameEntry[];
+  hallOfShame?: HallOfShameEntry[];
   /** Page loads on the row path must not recompute rankings. */
   rowSave?: boolean;
 }

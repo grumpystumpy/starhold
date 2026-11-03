@@ -39,6 +39,7 @@ import {
   applyStarshardMultiplier,
   grantStarshards,
 } from "./world-boosts.js";
+import { recordCombatReport } from "./combat-share.js";
 
 /** OGame-style expedition find scaling constants. */
 export const EXPEDITION_STRUCTURAL_CAP = 10_000;
@@ -372,8 +373,7 @@ export function resolveExpeditionArrival(
         summary: `Expedition fleet encounter — battle fought between ${ownerForYield?.name ?? "Commander"} and ${rivalOwner?.name ?? "Commander"}.`,
         roundLog: combat.roundLog,
       };
-      if (!universe.reports) universe.reports = {};
-      universe.reports[combatReportId] = combatReport;
+      recordCombatReport(universe, combatReport);
 
       const summary = `Encountered rival expedition fleet (${rivalOwner?.name ?? "Commander"}) in deep space — battle fought.`;
 
@@ -497,8 +497,7 @@ export function resolveExpeditionArrival(
         : `Pirate ambush battle — ${combat.outcome}.`,
       roundLog: combat.roundLog,
     };
-    if (!universe.reports) universe.reports = {};
-    universe.reports[reportId] = combatReport;
+    recordCombatReport(universe, combatReport);
 
     summary = isAlien
       ? `Alien ambush battle — ${combat.outcome}.`

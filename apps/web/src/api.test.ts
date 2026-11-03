@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import {
   ApiError,
+  fetchPublicCombatReport,
   fetchState,
   GET_TIMEOUT_MS,
   OVERLOAD_MESSAGE,
@@ -14,6 +15,32 @@ import {
 } from "./api";
 
 describe("safe JSON parse", () => {
+  it("fetches a public report without relying on a player session", async () => {
+    const original = globalThis.fetch;
+    let requestUrl = "";
+    let credentials = "";
+    globalThis.fetch = async (input, init) => {
+      requestUrl = String(input);
+      credentials = String(init?.credentials);
+      return new Response(
+        JSON.stringify({
+          shareCode: "sh_public",
+          attackerName: "A",
+          defenderName: "B",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+    try {
+      const report = await fetchPublicCombatReport("sh_public");
+      assert.equal(report.shareCode, "sh_public");
+      assert.equal(requestUrl, "/api/reports/sh_public");
+      assert.equal(credentials, "include");
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
   it("turns an HTML error page into overload, not a busy universe", async () => {
     const res = new Response("<html><title>Error 1102</title>exceeded resource limits</html>", {
       status: 503,

@@ -1,5 +1,4 @@
 import {
-  formatCombatShareCard,
   fortressRelocateDeutCost,
   fortressRelocateLandingWindow,
   MINI_FORTRESS_RELOCATE_ACCURACY,
@@ -103,6 +102,7 @@ import {
 } from "./ui/render-fleets-draft";
 import { resolveNavPage } from "./ui/nav";
 import { navigateShopTab, navigateTo } from "./ui/router";
+import { battleShareUrl } from "./ui/shared-report";
 
 export function bindClickHandlers(): void {
   root.addEventListener(
@@ -540,7 +540,12 @@ export function bindClickHandlers(): void {
           schedulePaint();
           return;
         }
-        const text = formatCombatShareCard(report, session.view?.player.id);
+        if (!report.shareCode) {
+          setFlash("error", "This battle report has no public link.");
+          schedulePaint();
+          return;
+        }
+        const text = battleShareUrl(report.shareCode, window.location.origin);
         void navigator.clipboard.writeText(text).then(
           () => {
             setFlash("notice", "Battle share copied.");

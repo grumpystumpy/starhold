@@ -23,6 +23,7 @@ import {
 } from "./world.js";
 import { emptyBuildings } from "./world-bootstrap.js";
 import { graduateNewbieProtection } from "./test-graduate.js";
+import { bindHighscoreSource } from "./world-view.js";
 
 describe("P2 highscores", () => {
   it("shows an owner's empire total and debris in the galaxy row", () => {
@@ -265,6 +266,38 @@ describe("P2 highscores", () => {
       assert.deepEqual(playerView(universe, recruit.player.id).allianceHighscores, []);
     } finally {
       bindAllianceRankSource(undefined);
+    }
+  });
+
+  it("uses the supplied cached combat halls in player views", () => {
+    const universe = createUniverse("Cached Combat Halls", 9);
+    const player = joinUniverse(universe, "Cache Viewer", 160_000_000);
+    const hallOfFame = [{
+      at: 1,
+      attackerName: "Attacker",
+      defenderName: "Defender",
+      targetCoords: { galaxy: 1, system: 1, slot: 8 },
+      outcome: "attacker_win" as const,
+      destroyedValue: 123,
+      shareCode: "sh_cached",
+    }];
+    const hallOfShame = [{
+      rank: 1,
+      playerId: player.player.id,
+      name: player.player.name,
+      lostValue: 456,
+    }];
+    bindHighscoreSource(() => ({
+      rows: highscoresBoard(universe),
+      hallOfFame,
+      hallOfShame,
+    }));
+    try {
+      const view = playerView(universe, player.player.id, 160_000_100);
+      assert.deepEqual(view.hallOfFame, hallOfFame);
+      assert.deepEqual(view.hallOfShame, hallOfShame);
+    } finally {
+      bindHighscoreSource(undefined);
     }
   });
 });

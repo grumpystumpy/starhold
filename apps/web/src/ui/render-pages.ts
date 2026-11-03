@@ -398,6 +398,31 @@ function highscorePage(view: PlayerView): string {
       </ol>`
       }
     </section>
+    <section class="panel" data-testid="hall-of-fame">
+      <h2>Hall of Fame</h2>
+      <p class="hint">Biggest battles by the value of ships and defenses destroyed.</p>
+      ${(view.hallOfFame ?? []).length
+        ? `<ol class="highscores">
+            ${(view.hallOfFame ?? []).map((fight, index) => {
+              const share = fight.shareCode
+                ? ` · <a href="/?report=${escapeAttr(encodeURIComponent(fight.shareCode))}">Battle report</a>`
+                : "";
+              return `<li data-testid="hall-of-fame-${index + 1}"><span>${escapeHtml(fight.attackerName)} vs ${escapeHtml(fight.defenderName)} · ${escapeHtml(fight.outcome.replaceAll("_", " "))}</span><span>${fmtCompact(fight.destroyedValue)} value · ${escapeHtml(new Date(fight.at).toLocaleDateString())} · ${fmtCoordsLink(fight.targetCoords)}${share}</span></li>`;
+            }).join("")}
+          </ol>`
+        : `<p class="hint">No recorded battles yet.</p>`}
+    </section>
+    <section class="panel" data-testid="hall-of-shame">
+      <h2>Hall of Shame</h2>
+      <p class="hint">Commanders ranked by the lifetime value of ships lost in combat.</p>
+      ${(view.hallOfShame ?? []).length
+        ? `<ol class="highscores">
+            ${(view.hallOfShame ?? []).map((commander) =>
+              `<li data-testid="hall-of-shame-${commander.rank}" data-player-id="${escapeAttr(commander.playerId)}"><span>#${fmt(commander.rank)} ${escapeHtml(commander.name)}</span><span>${fmtCompact(commander.lostValue)} ship value lost</span></li>`,
+            ).join("")}
+          </ol>`
+        : `<p class="hint">No combat losses recorded yet.</p>`}
+    </section>
     <section class="panel">
       <h2>Universe roster</h2>
       <p class="hint">Home planets only.</p>

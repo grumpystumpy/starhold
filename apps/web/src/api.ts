@@ -8,6 +8,7 @@ import type {
   MissionType,
   OfficerId,
   PlayerView,
+  PublicCombatReport,
   ResearchId,
   Resources,
   ShipId,
@@ -310,6 +311,15 @@ export interface AuthMeResponse {
 export async function fetchAuthMe(): Promise<AuthMeResponse> {
   const res = await credFetch("/api/auth/me");
   return parse<AuthMeResponse>(res);
+}
+
+export async function fetchPublicCombatReport(
+  shareCode: string,
+): Promise<PublicCombatReport> {
+  const res = await credFetch(
+    `/api/reports/${encodeURIComponent(shareCode)}`,
+  );
+  return parse<PublicCombatReport>(res);
 }
 
 export async function signupAccount(

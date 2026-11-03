@@ -8,6 +8,7 @@ import {
   ensureUniverseShape,
   migrateOrResetUniverse,
   UNIVERSE_SCHEMA_VERSION,
+  type HighscoreCache,
   type UniverseState,
 } from "@starhold/game";
 import type { KvGetOptions, KvSetOptions, KvStore, StorageMode } from "./kv.js";
@@ -36,8 +37,17 @@ export type { UniverseWork };
 bindHighscoreSource(() => {
   const scope = currentScope();
   if (!scope?.rowSave) return undefined;
-  if (scope.highscores === undefined) return undefined;
-  return scope.highscores;
+  if (
+    scope.highscores === undefined ||
+    scope.hallOfFame === undefined ||
+    scope.hallOfShame === undefined
+  ) return undefined;
+  const cache: HighscoreCache = {
+    rows: scope.highscores,
+    hallOfFame: scope.hallOfFame,
+    hallOfShame: scope.hallOfShame,
+  };
+  return cache;
 });
 
 bindAllianceRankSource(() => {
