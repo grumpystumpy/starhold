@@ -18,11 +18,20 @@ describe("CPU profile cases", () => {
           () => app.request(`/api/profile/${name}`),
         );
         assert.equal(response.status, 200);
-        const body = await response.json() as { case: string; ms: number; cpu: number; raids?: number };
+        const body = await response.json() as {
+          case: string;
+          ms: number;
+          cpu: number;
+          raids?: number;
+          backlog?: boolean;
+        };
         assert.equal(body.case, name);
         assert.ok(Number.isFinite(body.ms));
         assert.ok(Number.isFinite(body.cpu));
-        if (name === "pirate-raids") assert.equal(body.raids, NPC_RAID_CATCHUP_MAX);
+        if (name === "pirate-raids") {
+          assert.equal(body.raids, NPC_RAID_CATCHUP_MAX);
+          assert.equal(body.backlog, true);
+        }
       }
     } finally {
       if (previous === undefined) delete process.env.STARHOLD_CPU_PROFILE;

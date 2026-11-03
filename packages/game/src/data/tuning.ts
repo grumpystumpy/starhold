@@ -1533,8 +1533,8 @@ export const PIRATE_GROWTH_INTERVAL_MS = PIRATE_LEVEL_GROWTH_INTERVAL_MS;
 
 export const PIRATE_TARGET_BASE_COUNT = 200;
 
-/** Once per 90 minutes; each base rolls nextRaidAt = periodStart + offset. */
-export const PIRATE_RAID_PERIOD_MS = 90 * 60 * 1000;
+/** Once per 180 minutes; each base rolls nextRaidAt = periodStart + offset. */
+export const PIRATE_RAID_PERIOD_MS = 180 * 60 * 1000;
 export const PIRATE_FATIGUE_WINDOW_MS = 2 * 60 * 60 * 1000;
 export const PIRATE_FATIGUE_FIRST_HITS = 5;
 export const PIRATE_FATIGUE_EXTRA_HITS = 3;
@@ -1645,9 +1645,9 @@ export const WORKERS_TICK_SEED_PIRATES = 4;
 
 /**
  * 10-minute NPC job. 200 bases at one raid per 90 minutes is about 23 dues
- * per run, and a real day peaks around 31. 36 clears that bucket in one pass.
+ * per run. Any burst beyond this budget resumes on the next scheduled run.
  */
-export const NPC_JOB_RAID_BUDGET = 36;
+export const NPC_JOB_RAID_BUDGET = 24;
 export const NPC_JOB_LEVELUP_BUDGET = 80;
 export const NPC_JOB_FLEET_BUDGET = 8;
 

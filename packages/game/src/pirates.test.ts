@@ -242,9 +242,62 @@ describe("pirate galaxy + raids", () => {
     assert.ok(at < periodStart + PIRATE_RAID_PERIOD_MS);
   });
 
-  it("raids pirates every 90 minutes and aliens every hour", () => {
-    assert.equal(PIRATE_RAID_PERIOD_MS, 90 * 60 * 1000);
+  it("raids pirates every 180 minutes and aliens every hour", () => {
+    assert.equal(PIRATE_RAID_PERIOD_MS, 180 * 60 * 1000);
     assert.equal(ALIEN_RAID_PERIOD_MS, 60 * 60 * 1000);
+  });
+
+  it("halves raid frequency over a 24h window compared to the 90-min period", () => {
+    const start = 1_700_000_000_000;
+    const windowMs = 24 * 60 * 60 * 1000;
+    const baseId = "pir:1:1:1";
+
+    const oldPeriodMs = 90 * 60 * 1000;
+    let atOld = rollNextRaidAt(baseId, start, oldPeriodMs);
+    let oldRaidCount = 0;
+    while (atOld <= start + windowMs) {
+      oldRaidCount++;
+      atOld = rollNextRaidAt(baseId, atOld, oldPeriodMs);
+    }
+
+    let atNew = rollNextRaidAt(baseId, start, PIRATE_RAID_PERIOD_MS);
+    let newRaidCount = 0;
+    while (atNew <= start + windowMs) {
+      newRaidCount++;
+      atNew = rollNextRaidAt(baseId, atNew, PIRATE_RAID_PERIOD_MS);
+    }
+
+    // 24h has 16 90-min periods and 8 180-min periods (allowing +/-1 for offset boundaries)
+    assert.ok(Math.abs(oldRaidCount - 16) <= 1, `old raid count expected ~16, got ${oldRaidCount}`);
+    assert.ok(Math.abs(newRaidCount - 8) <= 1, `new raid count expected ~8, got ${newRaidCount}`);
+    assert.ok(
+      Math.abs(newRaidCount - Math.round(oldRaidCount / 2)) <= 1,
+      `new raid count ${newRaidCount} should be half of old count ${oldRaidCount} within +/-1`,
+    );
+  });
+
+  it("preserves pre-change nextRaidAt, fires at that time, then reschedules within the 180-min period", () => {
+    const universe = createUniverse("Pre-change nextRaidAt", 8);
+    const base = activePirateBases(universe)[0]!;
+    const start = 1_700_000_000_000;
+    for (const b of activePirateBases(universe)) {
+      b.nextRaidAt = start + 48 * 60 * 60 * 1000;
+      b.lastGrewAt = start + 48 * 60 * 60 * 1000;
+      b.lastFreeSpawnAt = start + 48 * 60 * 60 * 1000;
+    }
+    const preChangeNextRaidAt = start + 45 * 60 * 1000;
+    base.nextRaidAt = preChangeNextRaidAt;
+
+    tickPirates(universe, preChangeNextRaidAt - 1000);
+    assert.equal(base.nextRaidAt, preChangeNextRaidAt);
+
+    tickPirates(universe, preChangeNextRaidAt);
+    assert.ok(base.nextRaidAt > preChangeNextRaidAt);
+    const periodStart = Math.floor(preChangeNextRaidAt / PIRATE_RAID_PERIOD_MS) * PIRATE_RAID_PERIOD_MS;
+    assert.ok(base.nextRaidAt >= periodStart);
+    assert.ok(base.nextRaidAt <= preChangeNextRaidAt + PIRATE_RAID_PERIOD_MS);
+    const rolledExpected = rollNextRaidAt(base.id, preChangeNextRaidAt, PIRATE_RAID_PERIOD_MS);
+    assert.equal(base.nextRaidAt, rolledExpected);
   });
 });
 
@@ -688,11 +741,59 @@ describe("workers tick budget", () => {
       const mid = universe.pirateBases![base.id]!.nextRaidAt;
       assert.ok(mid > 0);
       assert.ok(mid <= now);
+      assert.equal(universe.aiCatchUpCursor, `${now}:${base.id}`);
       budget = step();
       tickPirates(universe, now);
       assert.ok(universe.pirateBases![base.id]!.nextRaidAt > mid);
     } finally {
       bindTickBudget(() => undefined);
+    }
+  });
+
+  it("bounded pirate and alien runs match one full catch-up tick", () => {
+    const previous = process.env.STARHOLD_E2E;
+    process.env.STARHOLD_E2E = "1";
+    try {
+      const now = 1_700_000_000_000;
+      const initial = createUniverse("Split NPC catch-up", 8);
+      const pirates = activePirateBases(initial);
+      for (const base of pirates) {
+        base.lastGrewAt = now + 1;
+        base.lastFreeSpawnAt = now + 1;
+        base.nextRaidAt = now + PIRATE_RAID_PERIOD_MS;
+      }
+      pirates[0]!.nextRaidAt = now - 1;
+      pirates[1]!.nextRaidAt = now - 1;
+      const alien = createAlienBase(initial, 1, 300, 1, now, "test-player");
+      alien.buildupEndsAt = now - 1;
+      alien.lastGrewAt = now + 1;
+      alien.lastFreeSpawnAt = now + 1;
+      alien.nextRaidAt = now - 1;
+      initial.alienBases![alien.id] = alien;
+
+      const full = structuredClone(initial);
+      const split = structuredClone(initial);
+      bindTickBudget(() => undefined);
+      tickPirates(full, now);
+
+      let budget = npcJobBudget();
+      budget.raids = 1;
+      bindTickBudget(() => budget);
+      let runs = 0;
+      do {
+        tickPirates(split, now + runs * 10 * 60 * 1000);
+        runs += 1;
+        assert.ok(runs <= 4, "bounded catch-up did not resume");
+        budget = npcJobBudget();
+        budget.raids = 1;
+      } while (split.aiCatchUpCursor);
+
+      assert.equal(runs, 3);
+      assert.deepEqual(split, full);
+    } finally {
+      bindTickBudget(() => undefined);
+      if (previous == null) delete process.env.STARHOLD_E2E;
+      else process.env.STARHOLD_E2E = previous;
     }
   });
 
@@ -723,6 +824,13 @@ describe("workers tick budget", () => {
       let backlog = 0;
       for (const base of Object.values(universe.pirateBases ?? {})) {
         if (base.destroyedAt == null && base.nextRaidAt <= end) backlog += 1;
+      }
+      for (let run = 0; backlog > 0 && run < 20; run += 1) {
+        budget = npcJobBudget();
+        tickPirates(universe, end);
+        backlog = Object.values(universe.pirateBases ?? {}).filter(
+          (base) => base.destroyedAt == null && base.nextRaidAt <= end,
+        ).length;
       }
       console.log(`pirate job cpu ms ${measured.toFixed(3)} backlog ${backlog} bases ${bases.length}`);
       assert.equal(backlog, 0);

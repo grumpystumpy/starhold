@@ -300,6 +300,7 @@ export function highscoreCacheExpired(builtAt: number, now = Date.now()): boolea
 }
 
 function worldDoc(universe: UniverseState): UniverseState {
+  // Keep aiCatchUpCursor durable so the NPC cron resumes after each row save.
   const doc = {
     ...universe,
     players: {},
