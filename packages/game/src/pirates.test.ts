@@ -1030,6 +1030,8 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
     const reportA = universe1.reports[launchA.fleet.reportId!];
     assert.ok(reportA);
     assert.equal(reportA.outcome, "attacker_win");
+    assert.match(reportA.shareCode ?? "", /^sh_/);
+    assert.ok(universe1.players[playerA.id]?.combatStats);
 
     // 3. Direction B: Pirate raids player.
     // Player has tech 8/8/8. Pirate base tier 100 (stored tech 25) raids player planet.
@@ -1289,7 +1291,10 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
       assert.equal(launch.ok, true);
       advanceUniverse(universe, launch.fleet.arrivesAt);
       assert.ok(launch.fleet.reportId);
-      assert.ok(universe.reports[launch.fleet.reportId!]);
+      const report = universe.reports[launch.fleet.reportId!];
+      assert.ok(report);
+      assert.match(report.shareCode ?? "", /^sh_/);
+      assert.ok(universe.players[player.id]?.combatStats);
 
       assert.equal(universe.players[player.id]?.name, "OldCommander");
       assert.ok((universe.players[player.id]?.xpTotal ?? 0) >= 1200);
@@ -1484,6 +1489,8 @@ describe("B3-25 alien strength and raid power", () => {
     assert.equal(report.outcome, expectedCombat.outcome);
     assert.deepEqual(report.attackerAfter, expectedCombat.attackerAfter);
     assert.deepEqual(report.defenderAfter, expectedCombat.defenderAfter);
+    assert.match(report.shareCode ?? "", /^sh_/);
+    assert.ok(universe.players[player.id]?.combatStats);
   });
 
   it("loads an existing alien base from a save, preserves progress, and resolves its raid", () => {

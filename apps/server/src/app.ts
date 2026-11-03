@@ -50,6 +50,7 @@ import {
   leaveAlliance,
   markEventsRead,
   playerView,
+  publicCombatReport,
   pushEventLog,
   queueBuildingUpgrade,
   queueDefenseBuild,
@@ -91,7 +92,10 @@ import { readCpuMs, reportServerError, currentScope } from "./request-context.js
 import { respondWithPlayerView } from "./state-response.js";
 import { staticCacheControl } from "./static-cache.js";
 import { storageMode, isUniverseBusy, withUniverse, withUniverseRead } from "./store.js";
-import { rollbackRowsToLegacy } from "./row-store.js";
+import {
+  readCombatReportByShareCode,
+  rollbackRowsToLegacy,
+} from "./row-store.js";
 
 function allowedOrigins(): Set<string> {
   const fromEnv = (process.env.ALLOWED_ORIGINS ?? "")
@@ -214,6 +218,23 @@ export function createApp(): Hono {
         passwordAuth: true,
       },
     });
+  });
+
+  app.get("/api/reports/:shareCode", async (c) => {
+    const shareCode = c.req.param("shareCode");
+    if (!/^sh_[a-z0-9]{1,32}$/.test(shareCode)) {
+      return c.json({ error: "Not found" }, 404);
+    }
+    const db = currentScope()?.db;
+    const report = db
+      ? await readCombatReportByShareCode(db, shareCode)
+      : await withUniverseRead((universe) =>
+          Object.values(universe.reports ?? {}).find(
+            (item) => item.shareCode === shareCode,
+          ) ?? null,
+        );
+    const shared = report ? publicCombatReport(report) : null;
+    return shared ? c.json(shared) : c.json({ error: "Not found" }, 404);
   });
 
   // Copies save_* back into the kv slices main loads. 404 unless the token matches.

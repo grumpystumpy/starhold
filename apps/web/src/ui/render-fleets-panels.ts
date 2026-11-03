@@ -138,7 +138,7 @@ export function combatBattleExtrasHtml(report: CombatReport): string {
   const open = openReplayRound.has(report.id);
   return `
     <div class="battle-report-actions">
-      <button type="button" class="ghost" data-copy-battle-share="${escapeAttr(report.id)}" data-testid="copy-battle-share-${escapeAttr(report.id)}">Copy share</button>
+      ${report.shareCode ? `<button type="button" class="ghost" data-copy-battle-share="${escapeAttr(report.id)}" data-testid="copy-battle-share-${escapeAttr(report.id)}">Copy share</button>` : ""}
     </div>
     <details class="battle-report-details" data-battle-report="${escapeAttr(report.id)}" data-testid="battle-details-${escapeAttr(report.id)}"${open ? " open" : ""}>
       <summary data-battle-replay-summary="${escapeAttr(report.id)}" data-first-round="${firstRound}">Replay rounds</summary>

@@ -95,6 +95,11 @@ describe("ACS joint strike", () => {
     assert.ok(
       reports.some((r) => (r.summary ?? "").includes("Joint Strike")),
     );
+    const report = reports.find((r) => r.acsGroupId === acsId)!;
+    assert.deepEqual(report.acsParticipantIds, [a.player.id, b.player.id]);
+    assert.equal(report.attackerName, "Leader, Wing");
+    assert.ok(universe.players[a.player.id]?.combatStats);
+    assert.ok(universe.players[b.player.id]?.combatStats);
   });
 
   it("rejects cross-alliance join", () => {

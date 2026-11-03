@@ -69,7 +69,7 @@ import {
   PIRATE_RAID_POWER_FACTOR_PLAYER,
   PIRATE_TECH_OFFSET,
 } from "./data/tuning.js";
-import { mintCombatShareCode } from "./combat-share.js";
+import { recordCombatReport } from "./combat-share.js";
 import {
   computeRaidLoot,
   debrisFromDestroyed,
@@ -1631,7 +1631,7 @@ export function applyNpcRaidOnPlanet(
   if (!universe.reports) universe.reports = {};
   const reportId = `rpt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
   const npcId = faction === "pirate" ? "npc_pirates" : "npc_aliens";
-  universe.reports[reportId] = {
+  recordCombatReport(universe, {
     id: reportId,
     at: now,
     missionId: base.id,
@@ -1658,8 +1658,7 @@ export function applyNpcRaidOnPlanet(
       : combat.summary,
     moonFormed,
     roundLog: combat.roundLog.length ? combat.roundLog : undefined,
-    shareCode: mintCombatShareCode(universe),
-  };
+  });
   const sent = fleetShipCount(raidFleet);
   const survived = fleetShipCount(combat.attackerAfter);
   if (sent > 0) {
@@ -2111,10 +2110,11 @@ function resolveNpcRaidArrival(
 
   const label = kind === "pirate" ? "Pirate" : "Alien";
   const reportId = `rpt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
-  universe.reports[reportId] = {
+  recordCombatReport(universe, {
     id: reportId,
     at: now,
     missionId: fleet.id,
+    acsGroupId: fleet.acsGroupId ?? undefined,
     attackerPlayerId: fleet.ownerPlayerId,
     defenderPlayerId: kind === "pirate" ? "npc_pirates" : "npc_aliens",
     attackerName: owner?.name ?? "Unknown",
@@ -2140,8 +2140,7 @@ function resolveNpcRaidArrival(
     moonFormed: false,
     roundLog: combat.roundLog.length ? combat.roundLog : undefined,
     xpAwarded: { attacker: attackerXp, defender: 0 },
-    shareCode: mintCombatShareCode(universe),
-  };
+  });
   fleet.ships = combat.attackerAfter;
   fleet.cargo = loot;
   fleet.reportId = reportId;

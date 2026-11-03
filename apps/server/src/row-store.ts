@@ -5,6 +5,8 @@
  */
 import {
   advancePlanetNow,
+  combatHallOfFame,
+  combatHallOfShame,
   ensureSystemVisited,
   ensureUniverseShape,
   highscoresBoard,
@@ -15,6 +17,7 @@ import {
   type ExpeditionReport,
   type FleetMission,
   type HighscoreEntry,
+  type HighscoreCache,
   type PlanetState,
   type PlayerState,
   type EspionageReport,
@@ -297,6 +300,20 @@ export async function rewindMigration(db: D1Like, seen: string): Promise<void> {
 
 export function highscoreCacheExpired(builtAt: number, now = Date.now()): boolean {
   return now - builtAt >= HIGHSCORE_TTL_MS;
+}
+
+export async function readCombatReportByShareCode(
+  db: D1Like,
+  shareCode: string,
+): Promise<CombatReport | null> {
+  const row = await first<{ doc: string }>(
+    db,
+    `SELECT doc FROM save_messages
+     WHERE kind = 'report' AND json_extract(doc, '$.shareCode') = ?
+     LIMIT 1`,
+    shareCode,
+  );
+  return row ? (timedParse(row.doc) as CombatReport) : null;
 }
 
 function worldDoc(universe: UniverseState): UniverseState {
@@ -694,7 +711,7 @@ export async function legacyMirrorIfSealed(
 
 async function writeHighscoreCache(
   db: D1Like,
-  rows: HighscoreEntry[],
+  cache: HighscoreCache,
   builtAt: number,
 ): Promise<void> {
   await run(
@@ -702,8 +719,19 @@ async function writeHighscoreCache(
     `INSERT INTO save_highscores (id, built_at, doc) VALUES ('board', ?, ?)
      ON CONFLICT(id) DO UPDATE SET built_at = excluded.built_at, doc = excluded.doc`,
     builtAt,
-    timedStringify(rows),
+    timedStringify(cache),
   );
+}
+
+function buildHighscoreCache(
+  universe: UniverseState,
+  includeCombatLists: boolean,
+): HighscoreCache {
+  return {
+    rows: highscoresBoard(universe),
+    hallOfFame: includeCombatLists ? combatHallOfFame(universe) : [],
+    hallOfShame: includeCombatLists ? combatHallOfShame(universe) : [],
+  };
 }
 
 const STAGES = [
@@ -880,7 +908,7 @@ export async function migrateChunk(
       push(
         `INSERT INTO save_highscores (id, built_at, doc) VALUES ('board', ?, ?)
          ON CONFLICT(id) DO UPDATE SET built_at = excluded.built_at, doc = excluded.doc`,
-        [Date.now(), timedStringify(highscoresBoard(universe))],
+        [Date.now(), timedStringify(buildHighscoreCache(universe, false))],
       );
       if (state.pass < 1) {
         state.pass = 1;
@@ -1823,7 +1851,7 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
   let boardJson: string | null = null;
   let boardAt = 0;
   if (rebuildScores) {
-    boardJson = timedStringify(highscoresBoard(universe));
+    boardJson = timedStringify(buildHighscoreCache(universe, true));
     boardAt = Date.now();
   } else {
     // Keep the board in step with every player this save scored correctly:
@@ -1841,7 +1869,11 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
       const mine = highscoresBoard(universe).filter((row) => scoredIds.has(row.playerId));
       if (mine.length) {
         const kept = cached.filter((row) => !scoredIds.has(row.playerId));
-        boardJson = timedStringify(rerank([...kept, ...mine]));
+        boardJson = timedStringify({
+          rows: rerank([...kept, ...mine]),
+          hallOfFame: currentScope()?.hallOfFame ?? [],
+          hallOfShame: currentScope()?.hallOfShame ?? [],
+        } satisfies HighscoreCache);
         // Merged into a cached board: keep its build time (-1) so the TTL rebuild
         // still happens. A board seeded from a partial working set gets time 0,
         // so the next maintenance pass treats it as expired and rebuilds it in full.
@@ -1870,13 +1902,21 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
   await commitRows(db, stmts);
 }
 
-async function readBoard(db: D1Like): Promise<{ builtAt: number; rows: HighscoreEntry[] } | null> {
+async function readBoard(db: D1Like): Promise<{ builtAt: number; cache: HighscoreCache } | null> {
   const row = await first<{ built_at: number; doc: string }>(
     db,
     "SELECT built_at, doc FROM save_highscores WHERE id = 'board'",
   );
   if (!row) return null;
-  return { builtAt: row.built_at, rows: timedParse(row.doc) as HighscoreEntry[] };
+  const parsed = timedParse(row.doc) as HighscoreCache | HighscoreEntry[];
+  const cache: HighscoreCache = Array.isArray(parsed)
+    ? { rows: parsed, hallOfFame: [], hallOfShame: [] }
+    : {
+        rows: parsed.rows ?? [],
+        hallOfFame: parsed.hallOfFame ?? [],
+        hallOfShame: parsed.hallOfShame ?? [],
+      };
+  return { builtAt: row.built_at, cache };
 }
 
 async function resolvePlayerIds(db: D1Like, work: UniverseWork | undefined): Promise<string[]> {
@@ -2026,9 +2066,13 @@ async function attachBoard(db: D1Like, work: UniverseWork | undefined): Promise<
   if (!scope) return board?.builtAt ?? null;
   if (work?.maintenance && (!board || highscoreCacheExpired(board.builtAt))) {
     scope.highscores = undefined;
+    scope.hallOfFame = undefined;
+    scope.hallOfShame = undefined;
     return board?.builtAt ?? null;
   }
-  scope.highscores = board?.rows ?? [];
+  scope.highscores = board?.cache.rows ?? [];
+  scope.hallOfFame = board?.cache.hallOfFame ?? [];
+  scope.hallOfShame = board?.cache.hallOfShame ?? [];
   return board?.builtAt ?? null;
 }
 
@@ -2307,7 +2351,7 @@ export async function readHighscoreMeta(
 ): Promise<{ builtAt: number; rows: number } | null> {
   const board = await readBoard(db);
   if (!board) return null;
-  return { builtAt: board.builtAt, rows: board.rows.length };
+  return { builtAt: board.builtAt, rows: board.cache.rows.length };
 }
 
 export { STAGES };

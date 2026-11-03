@@ -33,6 +33,7 @@ import type {
   GalaxyMiniBody,
   GalaxySlot,
   GalaxyView,
+  HighscoreCache,
   HighscoreEntry,
   PlanetArtFields,
   PlayerView,
@@ -77,7 +78,7 @@ import {
 
 export { empirePoints };
 
-export type HighscoreSource = () => HighscoreEntry[] | undefined;
+export type HighscoreSource = () => HighscoreCache | undefined;
 
 let highscoreSource: HighscoreSource | undefined;
 
@@ -337,7 +338,7 @@ export function playerView(
   if (!player) throw new Error("Unknown player.");
   pruneExpiredOfficers(player, now);
   const provided = highscoreSource?.();
-  const highscores = provided ?? highscoresBoard(universe);
+  const highscores = provided?.rows ?? highscoresBoard(universe);
   maybeGrantHighscoreStarshards(universe, playerId, highscores);
   const pointsById = new Map(
     highscores.map((row) => [row.playerId, row.points]),
@@ -514,13 +515,15 @@ export function playerView(
     },
     roster: provided
       ? [
-          ...highscoreRoster(provided),
+          ...highscoreRoster(provided.rows),
           ...publicRoster(universe, pointsById).filter(
-            (entry) => entry.id === playerId && !provided.some((row) => row.playerId === playerId),
+            (entry) => entry.id === playerId && !provided.rows.some((row) => row.playerId === playerId),
           ),
         ]
       : publicRoster(universe, pointsById),
     highscores,
+    hallOfFame: provided?.hallOfFame ?? [],
+    hallOfShame: provided?.hallOfShame ?? [],
     galaxy: galaxyViewFor(universe, playerId, g, s, now),
     fleets,
     fleetSlotCap,

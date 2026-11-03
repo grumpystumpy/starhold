@@ -760,6 +760,8 @@ describe("P2 expeditions", () => {
     assert.equal(combatReportsP.length, 1);
     assert.equal(combatReportsP[0]!.defenderName, "Pirate Ambush Fleet");
     const crP = combatReportsP[0]!;
+    assert.match(crP.shareCode ?? "", /^sh_/);
+    assert.ok(universe.players[p.player.id]?.combatStats);
 
     // Assert fleet ships after arrival equal the floor-based survivors for report outcome/rounds
     const expectedLossFrac = expeditionAmbushLossFraction(crP.outcome, crP.rounds);
@@ -943,5 +945,8 @@ describe("P2 expeditions", () => {
       (r) => r.missionId === fleetId1 && r.defenderPlayerId === p2.player.id,
     );
     assert.equal(pvpCombatReports.length, 1);
+    assert.match(pvpCombatReports[0]!.shareCode ?? "", /^sh_/);
+    assert.ok(universe.players[p1.player.id]?.combatStats);
+    assert.ok(universe.players[p2.player.id]?.combatStats);
   });
 });
