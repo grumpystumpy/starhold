@@ -1,6 +1,7 @@
 import { Redis } from "@upstash/redis";
 import {
   archiveUniverseKey,
+  bindAllianceRankSource,
   bindHighscoreSource,
   bindTickBudget,
   createUniverse,
@@ -37,6 +38,12 @@ bindHighscoreSource(() => {
   if (!scope?.rowSave) return undefined;
   if (scope.highscores === undefined) return undefined;
   return scope.highscores;
+});
+
+bindAllianceRankSource(() => {
+  const scope = currentScope();
+  if (!scope?.rowSave) return undefined;
+  return scope.allianceHighscores ?? [];
 });
 
 bindTickBudget(() => currentScope()?.budget);

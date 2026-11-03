@@ -8,6 +8,8 @@ import {
   ensureSystemVisited,
   ensureUniverseShape,
   highscoresBoard,
+  allianceRankBoard,
+  type AllianceRankEntry,
   type AsteroidField,
   type CombatReport,
   type DebrisField,
@@ -877,10 +879,19 @@ export async function migrateChunk(
       continue;
     }
     if (state.stage === "scores") {
+      if (state.cursor !== "board-done") {
+        push(
+          `INSERT INTO save_highscores (id, built_at, doc) VALUES ('board', ?, ?)
+           ON CONFLICT(id) DO UPDATE SET built_at = excluded.built_at, doc = excluded.doc`,
+          [Date.now(), timedStringify(highscoresBoard(universe))],
+        );
+        state.cursor = "board-done";
+        continue;
+      }
       push(
-        `INSERT INTO save_highscores (id, built_at, doc) VALUES ('board', ?, ?)
+        `INSERT INTO save_highscores (id, built_at, doc) VALUES ('alliances', ?, ?)
          ON CONFLICT(id) DO UPDATE SET built_at = excluded.built_at, doc = excluded.doc`,
-        [Date.now(), timedStringify(highscoresBoard(universe))],
+        [Date.now(), timedStringify(allianceRankBoard(universe))],
       );
       if (state.pass < 1) {
         state.pass = 1;
@@ -1821,9 +1832,11 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
   );
 
   let boardJson: string | null = null;
+  let allianceJson: string | null = null;
   let boardAt = 0;
   if (rebuildScores) {
     boardJson = timedStringify(highscoresBoard(universe));
+    allianceJson = timedStringify(allianceRankBoard(universe));
     boardAt = Date.now();
   } else {
     // Keep the board in step with every player this save scored correctly:
@@ -1865,18 +1878,44 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
       ),
     );
   }
+  if (allianceJson) {
+    stmts.push(
+      bind(
+        db,
+        `INSERT INTO save_highscores (id, built_at, doc) VALUES ('alliances', ?, ?)
+         ON CONFLICT(id) DO UPDATE SET built_at = excluded.built_at, doc = excluded.doc`,
+        [boardAt, allianceJson],
+      ),
+    );
+  }
 
   if (guards) stmts.push(bind(db, "DELETE FROM save_assert", []));
   await commitRows(db, stmts);
 }
 
-async function readBoard(db: D1Like): Promise<{ builtAt: number; rows: HighscoreEntry[] } | null> {
-  const row = await first<{ built_at: number; doc: string }>(
+async function readScoreCache(db: D1Like): Promise<{
+  board: { builtAt: number; rows: HighscoreEntry[] } | null;
+  alliances: AllianceRankEntry[];
+}> {
+  const rows = await all<{ id: string; built_at: number; doc: string }>(
     db,
-    "SELECT built_at, doc FROM save_highscores WHERE id = 'board'",
+    "SELECT id, built_at, doc FROM save_highscores WHERE id IN ('board', 'alliances')",
   );
-  if (!row) return null;
-  return { builtAt: row.built_at, rows: timedParse(row.doc) as HighscoreEntry[] };
+  let board: { builtAt: number; rows: HighscoreEntry[] } | null = null;
+  let alliances: AllianceRankEntry[] = [];
+  for (const row of rows) {
+    if (row.id === "board") {
+      board = { builtAt: row.built_at, rows: timedParse(row.doc) as HighscoreEntry[] };
+    } else if (row.id === "alliances") {
+      const parsed = timedParse(row.doc);
+      alliances = Array.isArray(parsed) ? (parsed as AllianceRankEntry[]) : [];
+    }
+  }
+  return { board, alliances };
+}
+
+async function readBoard(db: D1Like): Promise<{ builtAt: number; rows: HighscoreEntry[] } | null> {
+  return (await readScoreCache(db)).board;
 }
 
 async function resolvePlayerIds(db: D1Like, work: UniverseWork | undefined): Promise<string[]> {
@@ -2022,8 +2061,10 @@ async function attachBoard(db: D1Like, work: UniverseWork | undefined): Promise<
   const scope = currentScope();
   if (scope) scope.rowSave = true;
   if (work?.npc) return Date.now();
-  const board = await readBoard(db);
+  const cached = await readScoreCache(db);
+  const board = cached.board;
   if (!scope) return board?.builtAt ?? null;
+  scope.allianceHighscores = cached.alliances;
   if (work?.maintenance && (!board || highscoreCacheExpired(board.builtAt))) {
     scope.highscores = undefined;
     return board?.builtAt ?? null;

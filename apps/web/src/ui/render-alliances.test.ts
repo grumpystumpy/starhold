@@ -1,7 +1,10 @@
+import "../test-dom";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { PlayerView } from "@starhold/game";
 import { alliancesPageHtml } from "./render-alliances";
+import { pageHtml } from "./render-pages";
+import { setHighscoreTab } from "./render-pages";
 
 function baseView(overrides: Partial<PlayerView> = {}): PlayerView {
   return {
@@ -107,5 +110,103 @@ describe("alliances panel", () => {
     assert.match(html, /fleet speed ×1\.05/);
     assert.match(html, /loot ×1\.10/);
     assert.doesNotMatch(html, /data-testid="alliance-class-select"/);
+  });
+
+  it("shows Request, Leader, and approve controls", () => {
+    const open = alliancesPageHtml(
+      baseView({
+        allianceDirectory: [
+          {
+            id: "ally_r",
+            name: "Request Gate",
+            tag: "REQ",
+            joinMode: "request",
+            memberCount: 1,
+            maxMembers: 16,
+          },
+        ],
+      }),
+      false,
+    );
+    assert.match(open, /data-testid="alliance-request-ally_r"/);
+    assert.match(open, /value="request"/);
+
+    const leader = alliancesPageHtml(
+      baseView({
+        alliance: {
+          id: "ally_r",
+          name: "Request Gate",
+          tag: "REQ",
+          joinMode: "request",
+          createdAt: 1,
+          founderPlayerId: "p1",
+          myRole: "founder",
+          members: [
+            {
+              playerId: "p1",
+              name: "Alpha",
+              role: "founder",
+              joinedAt: 1,
+              pointsHint: 10,
+            },
+            {
+              playerId: "p2",
+              name: "Bravo",
+              role: "officer",
+              joinedAt: 2,
+              pointsHint: 5,
+            },
+          ],
+          pendingInvites: [],
+          pendingRequests: [
+            { playerId: "p3", name: "Cara", requestedAt: 3 },
+          ],
+          memberCount: 2,
+          maxMembers: 16,
+          chat: [],
+          intel: [],
+          markers: [],
+          allianceClass: null,
+        },
+      }),
+      false,
+    );
+    assert.match(leader, /you are Leader/);
+    assert.match(leader, /data-testid="alliance-approve-p3"/);
+    assert.match(leader, /data-testid="alliance-reject-p3"/);
+    assert.match(leader, /data-testid="alliance-demote-p2"/);
+    assert.match(leader, /Transfer Leader/);
+    assert.doesNotMatch(leader, /Transfer Founder/);
+  });
+
+  it("renders the alliance highscore tab", () => {
+    const view = baseView({
+      highscores: [],
+      allianceHighscores: [
+        {
+          rank: 1,
+          allianceId: "ally_r",
+          name: "Request Gate",
+          tag: "REQ",
+          memberCount: 2,
+          points: 400,
+          averagePoints: 200,
+        },
+      ],
+      roster: [],
+    });
+    setHighscoreTab("alliances");
+    try {
+      const html = pageHtml("highscore", view, false, null);
+      assert.match(html, /data-testid="highscore-tab-alliances"/);
+      assert.match(html, /data-testid="alliance-highscores"/);
+      assert.match(html, /\[REQ\] Request Gate/);
+      assert.match(html, /2 members/);
+    } finally {
+      setHighscoreTab("players");
+    }
+    const players = pageHtml("highscore", view, false, null);
+    assert.match(players, /data-testid="highscores-list"/);
+    assert.doesNotMatch(players, /data-testid="alliance-highscore-1"/);
   });
 });

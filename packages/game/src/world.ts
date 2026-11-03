@@ -61,6 +61,11 @@ export {
   isAllianceClassId,
   isAllianceRole,
   joinAlliance,
+  approveJoinRequest,
+  rejectJoinRequest,
+  cancelJoinRequest,
+  allianceRankBoard,
+  pendingAllianceRequestFor,
   kickFromAlliance,
   leaveAlliance,
   normalizeAllianceName,
@@ -73,6 +78,7 @@ export {
   leaveAcsFleet,
   listOpenAcsForAlliance,
   lockAcsEarly,
+  releasePlayerAcsFleets,
 } from "./world-acs.js";
 export type { AllianceIntelResult, StrikeMission } from "./world-alliance-intel.js";
 export {
@@ -118,6 +124,7 @@ export {
   playerView,
   publicRoster,
   bindHighscoreSource,
+  bindAllianceRankSource,
 } from "./world-view.js";
 export { ensureSystemVisited } from "./world-seed.js";
 export {

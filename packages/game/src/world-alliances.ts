@@ -5,11 +5,14 @@ import {
   ALLIANCE_MAX_OFFICERS,
   ALLIANCE_NAME_MAX,
   ALLIANCE_NAME_MIN,
+  ALLIANCE_PENDING_REQUEST_CAP,
+  ALLIANCE_RANK_CAP,
   ALLIANCE_TAG_MAX,
   ALLIANCE_TAG_MIN,
   ALLIANCE_CLASS_ORDER,
 } from "./catalog.js";
 import {
+  empirePoints,
   planetPoints,
   researchPoints,
   shipStockPoints,
@@ -18,15 +21,18 @@ import type {
   AllianceJoinMode,
   AllianceListEntry,
   AllianceMemberView,
+  AllianceRankEntry,
   AllianceRecord,
   AllianceRole,
   AllianceView,
   AllianceClassId,
+  PendingAllianceRequestView,
   PlayerState,
   UniverseState,
 } from "./types.js";
 import { advanceUniverse } from "./world-arrival.js";
 import { allianceSharedView } from "./world-alliance-intel.js";
+import { releasePlayerAcsFleets } from "./world-acs.js";
 import { ensureUniverseShape } from "./world-bootstrap.js";
 
 /** Local points helper — avoid importing world-view (cycle). */
@@ -48,7 +54,7 @@ function playerPointsHint(
 }
 
 export type AllianceActionResult =
-  | { ok: true }
+  | { ok: true; requested?: boolean }
   | { ok: false; error: string };
 
 function alliancesMap(universe: UniverseState): Record<string, AllianceRecord> {
@@ -73,7 +79,7 @@ export function normalizeAllianceName(raw: string): string | null {
 }
 
 export function isAllianceJoinMode(value: string): value is AllianceJoinMode {
-  return value === "open" || value === "invite";
+  return value === "open" || value === "invite" || value === "request";
 }
 
 export function isAllianceRole(value: string): value is AllianceRole {
@@ -138,7 +144,9 @@ function removeMember(
   universe: UniverseState,
   alliance: AllianceRecord,
   playerId: string,
+  now: number,
 ): void {
+  releasePlayerAcsFleets(universe, playerId, now);
   delete alliance.members[playerId];
   if (alliance.pendingInvites) {
     alliance.pendingInvites = alliance.pendingInvites.filter(
@@ -147,6 +155,85 @@ function removeMember(
   }
   detachPlayer(universe, playerId);
   alliancesMap(universe)[alliance.id] = alliance;
+}
+
+function clearPendingRequest(universe: UniverseState, playerId: string): void {
+  const player = universe.players[playerId];
+  if (!player?.pendingAllianceId) return;
+  const alliance = alliancesMap(universe)[player.pendingAllianceId];
+  if (alliance?.pendingRequests) {
+    alliance.pendingRequests = alliance.pendingRequests.filter(
+      (request) => request.playerId !== playerId,
+    );
+    alliancesMap(universe)[alliance.id] = alliance;
+  }
+  player.pendingAllianceId = null;
+  universe.players[playerId] = player;
+}
+
+function clearAllianceRequesters(
+  universe: UniverseState,
+  alliance: AllianceRecord,
+): void {
+  for (const request of (alliance.pendingRequests ?? []).slice(
+    0,
+    ALLIANCE_PENDING_REQUEST_CAP,
+  )) {
+    const player = universe.players[request.playerId];
+    if (player?.pendingAllianceId === alliance.id) {
+      player.pendingAllianceId = null;
+      universe.players[request.playerId] = player;
+    }
+  }
+}
+
+/** Oldest officer, else oldest member. joinedAt ascending, playerId tie-break. */
+function successorMemberId(
+  alliance: AllianceRecord,
+  leavingId: string,
+): string | null {
+  const others = Object.values(alliance.members).filter(
+    (member) => member.playerId !== leavingId,
+  );
+  if (others.length === 0) return null;
+  const officers = others.filter((member) => member.role === "officer");
+  const pool = (officers.length > 0 ? officers : others).slice(
+    0,
+    ALLIANCE_MAX_MEMBERS,
+  );
+  pool.sort(
+    (a, b) =>
+      a.joinedAt - b.joinedAt || a.playerId.localeCompare(b.playerId),
+  );
+  return pool[0]?.playerId ?? null;
+}
+
+function storeJoinRequest(
+  universe: UniverseState,
+  player: PlayerState,
+  alliance: AllianceRecord,
+  now: number,
+): AllianceActionResult {
+  if (player.pendingAllianceId && player.pendingAllianceId !== alliance.id) {
+    return { ok: false, error: "Cancel your other join request first." };
+  }
+  const list = alliance.pendingRequests ?? [];
+  if (list.some((request) => request.playerId === player.id)) {
+    player.pendingAllianceId = alliance.id;
+    universe.players[player.id] = player;
+    return { ok: true, requested: true };
+  }
+  if (list.length >= ALLIANCE_PENDING_REQUEST_CAP) {
+    return { ok: false, error: "This alliance has too many pending requests." };
+  }
+  alliance.pendingRequests = [
+    ...list,
+    { playerId: player.id, requestedAt: now },
+  ];
+  alliancesMap(universe)[alliance.id] = alliance;
+  player.pendingAllianceId = alliance.id;
+  universe.players[player.id] = player;
+  return { ok: true, requested: true };
 }
 
 export function allianceDirectory(
@@ -210,6 +297,20 @@ export function allianceViewFor(
       return p ? { playerId: id, name: p.name } : null;
     })
     .filter((x): x is { playerId: string; name: string } => x !== null);
+  const myRole = alliance.members[playerId].role;
+  const pendingRequests =
+    myRole === "founder" || myRole === "officer"
+      ? (alliance.pendingRequests ?? [])
+          .slice(0, ALLIANCE_PENDING_REQUEST_CAP)
+          .map((request) => {
+            const p = universe.players[request.playerId];
+            return {
+              playerId: request.playerId,
+              name: p?.name ?? request.playerId,
+              requestedAt: request.requestedAt,
+            };
+          })
+      : [];
   const shared = allianceSharedView(universe, alliance, now);
   return {
     id: alliance.id,
@@ -218,9 +319,10 @@ export function allianceViewFor(
     joinMode: alliance.joinMode,
     createdAt: alliance.createdAt,
     founderPlayerId: alliance.founderPlayerId,
-    myRole: alliance.members[playerId].role,
+    myRole,
     members,
     pendingInvites,
+    pendingRequests,
     memberCount: members.length,
     maxMembers: ALLIANCE_MAX_MEMBERS,
     chat: shared.chat,
@@ -260,7 +362,7 @@ export function createAlliance(
     };
   }
   if (!isAllianceJoinMode(joinMode)) {
-    return { ok: false, error: "Join mode must be open or invite." };
+    return { ok: false, error: "Join mode must be open, invite, or request." };
   }
   if (nameTaken(universe, name)) {
     return { ok: false, error: "Alliance name already taken." };
@@ -289,6 +391,7 @@ export function createAlliance(
     pendingInvites: [],
   };
   alliancesMap(universe)[id] = record;
+  clearPendingRequest(universe, playerId);
   player.allianceId = id;
   universe.players[playerId] = player;
   return { ok: true };
@@ -317,6 +420,9 @@ export function joinAlliance(
   if (memberCount(alliance) >= ALLIANCE_MAX_MEMBERS) {
     return { ok: false, error: "Alliance is full." };
   }
+  if (alliance.joinMode === "request") {
+    return storeJoinRequest(universe, player, alliance, now);
+  }
   const invited = (alliance.pendingInvites ?? []).includes(playerId);
   if (alliance.joinMode === "invite" && !invited) {
     return { ok: false, error: "Alliance requires an invite." };
@@ -331,6 +437,7 @@ export function joinAlliance(
       (id) => id !== playerId,
     );
   }
+  clearPendingRequest(universe, playerId);
   alliancesMap(universe)[alliance.id] = alliance;
   player.allianceId = alliance.id;
   universe.players[playerId] = player;
@@ -357,18 +464,24 @@ export function leaveAlliance(
   }
   const role = alliance.members[playerId].role;
   if (role === "founder") {
-    const others = Object.keys(alliance.members).filter((id) => id !== playerId);
-    if (others.length > 0) {
-      return {
-        ok: false,
-        error: "Transfer Founder or disband before leaving.",
-      };
+    const nextId = successorMemberId(alliance, playerId);
+    if (!nextId) {
+      releasePlayerAcsFleets(universe, playerId, now);
+      clearAllianceRequesters(universe, alliance);
+      delete alliancesMap(universe)[alliance.id];
+      detachPlayer(universe, playerId);
+      return { ok: true };
     }
-    delete alliancesMap(universe)[alliance.id];
-    detachPlayer(universe, playerId);
+    removeMember(universe, alliance, playerId, now);
+    const next = alliance.members[nextId];
+    if (next) {
+      next.role = "founder";
+      alliance.founderPlayerId = nextId;
+    }
+    alliancesMap(universe)[alliance.id] = alliance;
     return { ok: true };
   }
-  removeMember(universe, alliance, playerId);
+  removeMember(universe, alliance, playerId, now);
   return { ok: true };
 }
 
@@ -443,7 +556,7 @@ export function kickFromAlliance(
   if (me.role === "officer" && target.role !== "member") {
     return { ok: false, error: "Officers may only kick Members." };
   }
-  removeMember(universe, alliance, targetPlayerId);
+  removeMember(universe, alliance, targetPlayerId, now);
   return { ok: true };
 }
 
@@ -544,7 +657,7 @@ export function setAllianceJoinMode(
   ensureUniverseShape(universe);
   advanceUniverse(universe, now);
   if (!isAllianceJoinMode(joinMode)) {
-    return { ok: false, error: "Join mode must be open or invite." };
+    return { ok: false, error: "Join mode must be open, invite, or request." };
   }
   const player = universe.players[playerId];
   if (!player?.allianceId) {
@@ -582,9 +695,168 @@ export function disbandAlliance(
     return { ok: false, error: "Only the Founder can disband." };
   }
   const memberIds = Object.keys(alliance.members);
+  clearAllianceRequesters(universe, alliance);
   delete alliancesMap(universe)[alliance.id];
   for (const id of memberIds) {
+    releasePlayerAcsFleets(universe, id, now);
     detachPlayer(universe, id);
   }
   return { ok: true };
+}
+
+function moderatedAlliance(
+  universe: UniverseState,
+  playerId: string,
+):
+  | { ok: true; alliance: AllianceRecord }
+  | { ok: false; error: string } {
+  const player = universe.players[playerId];
+  if (!player?.allianceId) return { ok: false, error: "Not in an alliance." };
+  const alliance = alliancesMap(universe)[player.allianceId];
+  const me = alliance?.members[playerId];
+  if (!alliance || !me) return { ok: false, error: "Not in an alliance." };
+  if (me.role !== "founder" && me.role !== "officer") {
+    return { ok: false, error: "Only Founder or Officer can review requests." };
+  }
+  return { ok: true, alliance };
+}
+
+export function approveJoinRequest(
+  universe: UniverseState,
+  playerId: string,
+  targetPlayerId: string,
+  now = Date.now(),
+): AllianceActionResult {
+  ensureUniverseShape(universe);
+  advanceUniverse(universe, now);
+  const gate = moderatedAlliance(universe, playerId);
+  if (!gate.ok) return gate;
+  const alliance = gate.alliance;
+  const pending = (alliance.pendingRequests ?? []).some(
+    (request) => request.playerId === targetPlayerId,
+  );
+  if (!pending) return { ok: false, error: "No pending request." };
+  const target = universe.players[targetPlayerId];
+  if (!target) return { ok: false, error: "Unknown player." };
+  if (target.allianceId) {
+    alliance.pendingRequests = (alliance.pendingRequests ?? []).filter(
+      (request) => request.playerId !== targetPlayerId,
+    );
+    if (target.pendingAllianceId === alliance.id) target.pendingAllianceId = null;
+    alliancesMap(universe)[alliance.id] = alliance;
+    universe.players[targetPlayerId] = target;
+    return { ok: false, error: "Player is already in an alliance." };
+  }
+  if (memberCount(alliance) >= ALLIANCE_MAX_MEMBERS) {
+    return { ok: false, error: "Alliance is full." };
+  }
+  clearPendingRequest(universe, targetPlayerId);
+  alliance.pendingRequests = (alliance.pendingRequests ?? []).filter(
+    (request) => request.playerId !== targetPlayerId,
+  );
+  alliance.members[targetPlayerId] = {
+    playerId: targetPlayerId,
+    role: "member",
+    joinedAt: now,
+  };
+  alliancesMap(universe)[alliance.id] = alliance;
+  target.allianceId = alliance.id;
+  target.pendingAllianceId = null;
+  universe.players[targetPlayerId] = target;
+  return { ok: true };
+}
+
+export function rejectJoinRequest(
+  universe: UniverseState,
+  playerId: string,
+  targetPlayerId: string,
+  now = Date.now(),
+): AllianceActionResult {
+  ensureUniverseShape(universe);
+  advanceUniverse(universe, now);
+  const gate = moderatedAlliance(universe, playerId);
+  if (!gate.ok) return gate;
+  const alliance = gate.alliance;
+  const pending = (alliance.pendingRequests ?? []).some(
+    (request) => request.playerId === targetPlayerId,
+  );
+  if (!pending) return { ok: false, error: "No pending request." };
+  alliance.pendingRequests = (alliance.pendingRequests ?? []).filter(
+    (request) => request.playerId !== targetPlayerId,
+  );
+  alliancesMap(universe)[alliance.id] = alliance;
+  const target = universe.players[targetPlayerId];
+  if (target?.pendingAllianceId === alliance.id) {
+    target.pendingAllianceId = null;
+    universe.players[targetPlayerId] = target;
+  }
+  return { ok: true };
+}
+
+export function cancelJoinRequest(
+  universe: UniverseState,
+  playerId: string,
+  now = Date.now(),
+): AllianceActionResult {
+  ensureUniverseShape(universe);
+  advanceUniverse(universe, now);
+  const player = universe.players[playerId];
+  if (!player) return { ok: false, error: "Unknown player." };
+  if (!player.pendingAllianceId) {
+    return { ok: false, error: "No pending request." };
+  }
+  clearPendingRequest(universe, playerId);
+  return { ok: true };
+}
+
+export function pendingAllianceRequestFor(
+  universe: UniverseState,
+  player: PlayerState | undefined | null,
+): PendingAllianceRequestView | null {
+  if (!player?.pendingAllianceId) return null;
+  const alliance = universe.alliances?.[player.pendingAllianceId];
+  if (!alliance) return null;
+  const request = (alliance.pendingRequests ?? []).find(
+    (row) => row.playerId === player.id,
+  );
+  if (!request) return null;
+  return {
+    allianceId: alliance.id,
+    name: alliance.name,
+    tag: alliance.tag,
+    requestedAt: request.requestedAt,
+  };
+}
+
+/** Total member points, capped at ALLIANCE_MAX_MEMBERS per alliance. Top 100. */
+export function allianceRankBoard(universe: UniverseState): AllianceRankEntry[] {
+  ensureUniverseShape(universe);
+  const rows = Object.values(alliancesMap(universe)).map((alliance) => {
+    const members = Object.values(alliance.members).slice(0, ALLIANCE_MAX_MEMBERS);
+    let points = 0;
+    for (const member of members) {
+      const player = universe.players[member.playerId];
+      if (player) points += empirePoints(universe, player);
+    }
+    points = Math.floor(points);
+    const memberCount = members.length;
+    return {
+      allianceId: alliance.id,
+      name: alliance.name,
+      tag: alliance.tag,
+      memberCount,
+      points,
+      averagePoints: memberCount > 0 ? Math.floor(points / memberCount) : 0,
+    };
+  });
+  rows.sort(
+    (a, b) =>
+      b.points - a.points ||
+      a.tag.localeCompare(b.tag) ||
+      a.allianceId.localeCompare(b.allianceId),
+  );
+  return rows.slice(0, ALLIANCE_RANK_CAP).map((row, index) => ({
+    ...row,
+    rank: index + 1,
+  }));
 }

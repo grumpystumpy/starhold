@@ -45,6 +45,10 @@ import {
   doInviteAlliance,
   doJoin,
   doJoinAlliance,
+  doRequestAllianceJoin,
+  doCancelAllianceRequest,
+  doApproveAllianceRequest,
+  doRejectAllianceRequest,
   doKickAllianceMember,
   doLaunchFleet,
   doLaunchMaxExpeditions,
@@ -78,6 +82,7 @@ import {
   doUpgrade,
 } from "./main-actions";
 import { parseGalaxyCoords } from "./galaxy-coords";
+import { setHighscoreTab } from "./ui/render-pages";
 import {
   closeReportWindow,
   isInboxFilter,
@@ -675,6 +680,47 @@ export function bindClickHandlers(): void {
         return;
       }
 
+      const requestAlly = closestActionEl(target, "[data-alliance-request]");
+      if (requestAlly) {
+        ev.preventDefault();
+        const id = requestAlly.getAttribute("data-alliance-request");
+        if (id) void doRequestAllianceJoin(id);
+        return;
+      }
+
+      if (closestActionEl(target, "[data-alliance-request-cancel]")) {
+        ev.preventDefault();
+        void doCancelAllianceRequest();
+        return;
+      }
+
+      const approveRequest = closestActionEl(target, "[data-alliance-request-approve]");
+      if (approveRequest) {
+        ev.preventDefault();
+        const id = approveRequest.getAttribute("data-alliance-request-approve");
+        if (id) void doApproveAllianceRequest(id);
+        return;
+      }
+
+      const rejectRequest = closestActionEl(target, "[data-alliance-request-reject]");
+      if (rejectRequest) {
+        ev.preventDefault();
+        const id = rejectRequest.getAttribute("data-alliance-request-reject");
+        if (id) void doRejectAllianceRequest(id);
+        return;
+      }
+
+      const highscoreTab = closestActionEl(target, "[data-highscore-tab]");
+      if (highscoreTab) {
+        ev.preventDefault();
+        const tab = highscoreTab.getAttribute("data-highscore-tab");
+        if (tab === "players" || tab === "alliances") {
+          setHighscoreTab(tab);
+          schedulePaint();
+        }
+        return;
+      }
+
       if (closestActionEl(target, "[data-alliance-leave]")) {
         ev.preventDefault();
         void doLeaveAlliance();
@@ -700,6 +746,14 @@ export function bindClickHandlers(): void {
         ev.preventDefault();
         const id = promoteBtn.getAttribute("data-alliance-promote");
         if (id) void doSetAllianceRole(id, "officer");
+        return;
+      }
+
+      const demoteBtn = closestActionEl(target, "[data-alliance-demote]");
+      if (demoteBtn) {
+        ev.preventDefault();
+        const id = demoteBtn.getAttribute("data-alliance-demote");
+        if (id) void doSetAllianceRole(id, "member");
         return;
       }
 
@@ -794,7 +848,8 @@ export function bindClickHandlers(): void {
       el instanceof HTMLSelectElement &&
       el.matches("[data-alliance-join-mode-select]")
     ) {
-      const mode = el.value === "invite" ? "invite" : "open";
+      const mode =
+        el.value === "invite" || el.value === "request" ? el.value : "open";
       void doSetAllianceJoinMode(mode);
       return;
     }
@@ -943,7 +998,9 @@ export function bindClickHandlers(): void {
       const modeSelect = form.querySelector<HTMLSelectElement>(
         '[name="alliance-join-mode"]',
       );
-      const joinMode = modeSelect?.value === "invite" ? "invite" : "open";
+      const raw = modeSelect?.value;
+      const joinMode =
+        raw === "invite" || raw === "request" ? raw : "open";
       void doCreateAlliance(
         nameInput?.value ?? "",
         tagInput?.value ?? "",

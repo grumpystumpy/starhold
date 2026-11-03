@@ -321,6 +321,12 @@ describe("row save migration", () => {
     const rebuilt = await readHighscoreMeta(db);
     assert.ok(rebuilt && rebuilt.builtAt !== staleAt);
     assert.equal(highscoreCacheExpired(rebuilt!.builtAt), false);
+    const alliances = await db
+      .prepare("SELECT id, doc FROM save_highscores WHERE id = 'alliances'")
+      .bind()
+      .first<{ id: string; doc: string }>();
+    assert.equal(alliances?.id, "alliances");
+    assert.match(alliances?.doc ?? "", /^\[/);
   });
 
   it("locks per player and rejects a stale row", async () => {

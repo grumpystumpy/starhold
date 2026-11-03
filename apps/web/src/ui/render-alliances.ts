@@ -144,7 +144,7 @@ function markersSection(view: PlayerView, busy: boolean): string {
 function roleLabel(role: string): string {
   switch (role) {
     case "founder":
-      return "Founder";
+      return "Leader";
     case "officer":
       return "Officer";
     case "member":
@@ -209,7 +209,9 @@ function allianceClassSection(
 }
 
 function joinModeLabel(mode: AllianceJoinMode): string {
-  return mode === "invite" ? "Invite only" : "Open";
+  if (mode === "invite") return "Invite only";
+  if (mode === "request") return "Request";
+  return "Open";
 }
 
 function createFormHtml(busy: boolean): string {
@@ -225,6 +227,7 @@ function createFormHtml(busy: boolean): string {
         <select name="alliance-join-mode" data-testid="alliance-join-mode" ${busy ? "disabled" : ""}>
           <option value="open" selected>Open</option>
           <option value="invite">Invite only</option>
+          <option value="request">Request</option>
         </select>
       </label>
       <button type="submit" data-testid="alliance-create-btn" ${busy ? "disabled" : ""}>Create alliance</button>
@@ -240,18 +243,29 @@ function directoryHtml(view: PlayerView, busy: boolean): string {
     <ul class="alliance-directory" data-testid="alliance-directory">
       ${rows
         .map((a) => {
+          const pendingId = view.pendingAllianceRequest?.allianceId;
           const canJoin =
             !view.alliance &&
+            !pendingId &&
             a.joinMode === "open" &&
             a.memberCount < a.maxMembers;
+          const canRequest =
+            !view.alliance &&
+            !pendingId &&
+            a.joinMode === "request" &&
+            a.memberCount < a.maxMembers;
+          const sentHere = !view.alliance && pendingId === a.id;
+          const action = canJoin
+            ? `<button type="button" data-alliance-join="${escapeAttr(a.id)}" data-testid="alliance-join-${escapeAttr(a.id)}" ${busy ? "disabled" : ""}>Join</button>`
+            : canRequest
+              ? `<button type="button" data-alliance-request="${escapeAttr(a.id)}" data-testid="alliance-request-${escapeAttr(a.id)}" ${busy ? "disabled" : ""}>Request</button>`
+              : sentHere
+                ? `<span data-testid="alliance-request-sent-${escapeAttr(a.id)}">Request sent</span> <button type="button" data-alliance-request-cancel data-testid="alliance-request-cancel" ${busy ? "disabled" : ""}>Cancel</button>`
+                : "";
           return `<li class="alliance-dir-row" data-testid="alliance-dir-${escapeAttr(a.id)}">
             <span><strong>[${escapeHtml(a.tag)}]</strong> ${escapeHtml(a.name)}</span>
             <span class="meta">${fmt(a.memberCount)}/${fmt(a.maxMembers)} · ${escapeHtml(joinModeLabel(a.joinMode))}</span>
-            ${
-              canJoin
-                ? `<button type="button" data-alliance-join="${escapeAttr(a.id)}" data-testid="alliance-join-${escapeAttr(a.id)}" ${busy ? "disabled" : ""}>Join</button>`
-                : ""
-            }
+            ${action}
           </li>`;
         })
         .join("")}
@@ -282,9 +296,14 @@ function rosterHtml(view: PlayerView, busy: boolean): string {
               `<button type="button" data-alliance-promote="${escapeAttr(m.playerId)}" data-testid="alliance-promote-${escapeAttr(m.playerId)}" ${busy ? "disabled" : ""}>Make Officer</button>`,
             );
           }
+          if (canPromote && !isSelf && m.role === "officer") {
+            actions.push(
+              `<button type="button" data-alliance-demote="${escapeAttr(m.playerId)}" data-testid="alliance-demote-${escapeAttr(m.playerId)}" ${busy ? "disabled" : ""}>Demote</button>`,
+            );
+          }
           if (canPromote && !isSelf) {
             actions.push(
-              `<button type="button" data-alliance-transfer="${escapeAttr(m.playerId)}" data-testid="alliance-transfer-${escapeAttr(m.playerId)}" ${busy ? "disabled" : ""}>Transfer Founder</button>`,
+              `<button type="button" data-alliance-transfer="${escapeAttr(m.playerId)}" data-testid="alliance-transfer-${escapeAttr(m.playerId)}" ${busy ? "disabled" : ""}>Transfer Leader</button>`,
             );
           }
           return `<li class="alliance-member" data-testid="alliance-member-${escapeAttr(m.playerId)}">
@@ -293,6 +312,31 @@ function rosterHtml(view: PlayerView, busy: boolean): string {
             ${actions.length ? `<span class="alliance-member-actions">${actions.join(" ")}</span>` : ""}
           </li>`;
         })
+        .join("")}
+    </ul>`;
+}
+
+function requestsHtml(view: PlayerView, busy: boolean): string {
+  const alliance = view.alliance;
+  if (!alliance || !canModerate(alliance.myRole)) return "";
+  const pending = alliance.pendingRequests ?? [];
+  if (pending.length === 0) {
+    return alliance.joinMode === "request"
+      ? `<p class="hint" data-testid="alliance-requests-empty">No pending requests.</p>`
+      : "";
+  }
+  return `
+    <ul class="alliance-roster" data-testid="alliance-requests">
+      ${pending
+        .map(
+          (request) => `<li class="alliance-member" data-testid="alliance-request-row-${escapeAttr(request.playerId)}">
+            <span>${escapeHtml(request.name)}</span>
+            <span class="alliance-member-actions">
+              <button type="button" data-alliance-request-approve="${escapeAttr(request.playerId)}" data-testid="alliance-approve-${escapeAttr(request.playerId)}" ${busy ? "disabled" : ""}>Approve</button>
+              <button type="button" data-alliance-request-reject="${escapeAttr(request.playerId)}" data-testid="alliance-reject-${escapeAttr(request.playerId)}" ${busy ? "disabled" : ""}>Reject</button>
+            </span>
+          </li>`,
+        )
         .join("")}
     </ul>`;
 }
@@ -319,6 +363,7 @@ export function alliancesPageHtml(view: PlayerView, busy: boolean): string {
             <select data-alliance-join-mode-select data-testid="alliance-join-mode-select" ${busy ? "disabled" : ""}>
               <option value="open" ${alliance.joinMode === "open" ? "selected" : ""}>Open</option>
               <option value="invite" ${alliance.joinMode === "invite" ? "selected" : ""}>Invite only</option>
+              <option value="request" ${alliance.joinMode === "request" ? "selected" : ""}>Request</option>
             </select>
           </label>
           <button type="button" data-alliance-disband data-testid="alliance-disband-btn" ${busy ? "disabled" : ""}>Disband</button>
@@ -351,6 +396,7 @@ export function alliancesPageHtml(view: PlayerView, busy: boolean): string {
         ${fmt(alliance.memberCount)}/${fmt(alliance.maxMembers)} · you are ${escapeHtml(roleLabel(alliance.myRole))}
       </p>
       ${rosterHtml(view, busy)}
+      ${requestsHtml(view, busy)}
       ${allianceClassSection(alliance, busy)}
       ${chatSection(view, busy)}
       ${intelSection(view, busy)}

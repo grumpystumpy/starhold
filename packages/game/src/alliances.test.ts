@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  ALLIANCE_MAX_MEMBERS,
+  ALLIANCE_PENDING_REQUEST_CAP,
+  approveJoinRequest,
+  cancelJoinRequest,
   createAlliance,
   createUniverse,
   disbandAlliance,
@@ -11,6 +15,7 @@ import {
   kickFromAlliance,
   leaveAlliance,
   playerView,
+  rejectJoinRequest,
   setAllianceJoinMode,
   setAllianceRole,
 } from "./index.js";
@@ -156,5 +161,199 @@ describe("alliances foundation", () => {
       setAllianceJoinMode(universe, b.player.id, "invite").ok,
       true,
     );
+  });
+});
+
+describe("alliance join requests and leader handoff", () => {
+  function requestAlliance() {
+    const universe = createUniverse("Ally Request", 1);
+    const leader = joinUniverse(universe, "Leader");
+    const recruit = joinUniverse(universe, "Recruit");
+    const other = joinUniverse(universe, "Other");
+    assert.equal(
+      createAlliance(universe, leader.player.id, "Gate Watch", "gate", "request").ok,
+      true,
+    );
+    const id = playerView(universe, leader.player.id).alliance!.id;
+    return { universe, leader, recruit, other, id };
+  }
+
+  it("stores one request, dedupes, and caps the list", () => {
+    const { universe, leader, recruit, other, id } = requestAlliance();
+    const first = joinAlliance(universe, recruit.player.id, { allianceId: id });
+    assert.equal(first.ok, true);
+    assert.equal(first.ok && first.requested, true);
+    assert.equal(playerView(universe, recruit.player.id).alliance, null);
+    assert.equal(
+      playerView(universe, recruit.player.id).pendingAllianceRequest?.allianceId,
+      id,
+    );
+    const again = joinAlliance(universe, recruit.player.id, { allianceId: id });
+    assert.equal(again.ok, true);
+    assert.equal(universe.alliances?.[id]?.pendingRequests?.length, 1);
+
+    const blocked = joinAlliance(universe, recruit.player.id, {
+      allianceId: "missing",
+    });
+    assert.equal(blocked.ok, false);
+    const second = createAlliance(universe, other.player.id, "Other Gate", "ogt", "request");
+    assert.equal(second.ok, true);
+    const otherId = playerView(universe, other.player.id).alliance!.id;
+    const cross = joinAlliance(universe, recruit.player.id, { allianceId: otherId });
+    assert.equal(cross.ok, false);
+
+    const cappedPlayer = joinUniverse(universe, "Cap");
+    const alliance = universe.alliances![id]!;
+    alliance.pendingRequests = [];
+    for (let i = 0; i < ALLIANCE_PENDING_REQUEST_CAP; i++) {
+      alliance.pendingRequests.push({ playerId: `ghost${i}`, requestedAt: i });
+    }
+    const capped = joinAlliance(universe, cappedPlayer.player.id, { allianceId: id });
+    assert.equal(capped.ok, false);
+    assert.equal(
+      universe.alliances?.[id]?.pendingRequests?.length,
+      ALLIANCE_PENDING_REQUEST_CAP,
+    );
+    assert.equal(playerView(universe, leader.player.id).alliance?.pendingRequests?.length, 20);
+  });
+
+  it("approves, rejects, and cancels, and clears a request when the player joins", () => {
+    const { universe, leader, recruit, other, id } = requestAlliance();
+    assert.equal(joinAlliance(universe, recruit.player.id, { allianceId: id }).ok, true);
+    assert.equal(
+      approveJoinRequest(universe, recruit.player.id, leader.player.id).ok,
+      false,
+    );
+    assert.equal(
+      approveJoinRequest(universe, leader.player.id, recruit.player.id).ok,
+      true,
+    );
+    assert.equal(playerView(universe, recruit.player.id).alliance?.id, id);
+    assert.equal(playerView(universe, recruit.player.id).pendingAllianceRequest, null);
+    assert.equal(universe.alliances?.[id]?.pendingRequests?.length ?? 0, 0);
+
+    assert.equal(joinAlliance(universe, other.player.id, { allianceId: id }).ok, true);
+    assert.equal(
+      rejectJoinRequest(universe, leader.player.id, other.player.id).ok,
+      true,
+    );
+    assert.equal(universe.players[other.player.id]?.pendingAllianceId ?? null, null);
+    assert.equal(joinAlliance(universe, other.player.id, { allianceId: id }).ok, true);
+    assert.equal(cancelJoinRequest(universe, other.player.id).ok, true);
+    assert.equal(playerView(universe, other.player.id).pendingAllianceRequest, null);
+
+    assert.equal(setAllianceRole(universe, leader.player.id, recruit.player.id, "officer").ok, true);
+    assert.equal(joinAlliance(universe, other.player.id, { allianceId: id }).ok, true);
+    assert.equal(
+      approveJoinRequest(universe, recruit.player.id, other.player.id).ok,
+      true,
+    );
+    const member = joinUniverse(universe, "Member");
+    assert.equal(joinAlliance(universe, member.player.id, { allianceId: id }).ok, true);
+    assert.equal(
+      approveJoinRequest(universe, other.player.id, member.player.id).ok,
+      false,
+    );
+  });
+
+  it("transfers leadership to the oldest officer, else the oldest member, else disbands", () => {
+    const universe = createUniverse("Handoff", 1);
+    const leader = joinUniverse(universe, "Leader");
+    const early = joinUniverse(universe, "Early");
+    const late = joinUniverse(universe, "Late");
+    const plain = joinUniverse(universe, "Plain");
+    assert.equal(
+      createAlliance(universe, leader.player.id, "Torch Bearers", "tor").ok,
+      true,
+    );
+    const id = playerView(universe, leader.player.id).alliance!.id;
+    const t = 5_000_000;
+    assert.equal(joinAlliance(universe, late.player.id, { allianceId: id }, t + 50).ok, true);
+    assert.equal(joinAlliance(universe, early.player.id, { allianceId: id }, t + 10).ok, true);
+    assert.equal(joinAlliance(universe, plain.player.id, { allianceId: id }, t + 5).ok, true);
+    assert.equal(setAllianceRole(universe, leader.player.id, late.player.id, "officer", t + 60).ok, true);
+    assert.equal(setAllianceRole(universe, leader.player.id, early.player.id, "officer", t + 70).ok, true);
+    universe.alliances![id]!.members[early.player.id]!.joinedAt = t + 10;
+    universe.alliances![id]!.members[late.player.id]!.joinedAt = t + 50;
+    assert.equal(kickFromAlliance(universe, late.player.id, early.player.id, t + 75).ok, false);
+    assert.equal(kickFromAlliance(universe, late.player.id, plain.player.id, t + 76).ok, true);
+    assert.equal(joinAlliance(universe, plain.player.id, { allianceId: id }, t + 77).ok, true);
+    universe.alliances![id]!.members[plain.player.id]!.joinedAt = t + 5;
+    assert.equal(leaveAlliance(universe, leader.player.id, t + 80).ok, true);
+    assert.equal(playerView(universe, early.player.id).alliance?.myRole, "founder");
+    assert.equal(universe.alliances?.[id]?.founderPlayerId, early.player.id);
+    assert.equal(disbandAlliance(universe, late.player.id, t + 90).ok, false);
+    assert.equal(setAllianceJoinMode(universe, late.player.id, "invite", t + 90).ok, false);
+    assert.equal(kickFromAlliance(universe, early.player.id, plain.player.id, t + 95).ok, true);
+    assert.equal(playerView(universe, plain.player.id).alliance, null);
+    assert.equal(joinAlliance(universe, plain.player.id, { allianceId: id }, t + 96).ok, true);
+    universe.alliances![id]!.members[plain.player.id]!.joinedAt = t + 5;
+
+    assert.equal(leaveAlliance(universe, early.player.id, t + 100).ok, true);
+    assert.equal(universe.alliances?.[id]?.founderPlayerId, late.player.id);
+    assert.equal(universe.alliances?.[id]?.members[late.player.id]?.role, "founder");
+    assert.equal(setAllianceRole(universe, late.player.id, plain.player.id, "member", t + 105).ok, true);
+    assert.equal(leaveAlliance(universe, late.player.id, t + 110).ok, true);
+    assert.equal(universe.alliances?.[id]?.founderPlayerId, plain.player.id);
+    assert.equal(leaveAlliance(universe, plain.player.id, t + 120).ok, true);
+    assert.equal(universe.alliances?.[id], undefined);
+  });
+
+  it("loads an old alliance record that has no pendingRequests", () => {
+    const universe = createUniverse("Old Ally", 1);
+    const leader = joinUniverse(universe, "OldLead");
+    const id = "ally_legacy";
+    universe.alliances = {
+      [id]: {
+        id,
+        name: "Old Guard",
+        tag: "OLD",
+        joinMode: "open",
+        createdAt: 1,
+        founderPlayerId: leader.player.id,
+        members: {
+          [leader.player.id]: {
+            playerId: leader.player.id,
+            role: "founder",
+            joinedAt: 1,
+          },
+        },
+      },
+    };
+    universe.players[leader.player.id]!.allianceId = id;
+    const view = playerView(universe, leader.player.id);
+    assert.equal(view.alliance?.tag, "OLD");
+    assert.equal(view.alliance?.myRole, "founder");
+    assert.equal(view.player.allianceId, id);
+    assert.deepEqual(view.alliance?.pendingRequests, []);
+    const galaxy = galaxyViewFor(
+      universe,
+      leader.player.id,
+      view.planet.coords.galaxy,
+      view.planet.coords.system,
+    );
+    assert.equal(
+      galaxy.slots.find((slot) => slot.playerId === leader.player.id)?.allianceTag,
+      "OLD",
+    );
+    assert.ok(ALLIANCE_MAX_MEMBERS >= 1);
+  });
+
+  it("breaks an officer handoff tie by player id", () => {
+    const universe = createUniverse("Handoff Tie", 1);
+    const leader = joinUniverse(universe, "Leader");
+    const a = joinUniverse(universe, "A");
+    const b = joinUniverse(universe, "B");
+    assert.equal(createAlliance(universe, leader.player.id, "Tied Torch", "tie").ok, true);
+    const id = playerView(universe, leader.player.id).alliance!.id;
+    assert.equal(joinAlliance(universe, a.player.id, { allianceId: id }, 10).ok, true);
+    assert.equal(joinAlliance(universe, b.player.id, { allianceId: id }, 11).ok, true);
+    assert.equal(setAllianceRole(universe, leader.player.id, a.player.id, "officer", 12).ok, true);
+    assert.equal(setAllianceRole(universe, leader.player.id, b.player.id, "officer", 13).ok, true);
+    universe.alliances![id]!.members[a.player.id]!.joinedAt = 20;
+    universe.alliances![id]!.members[b.player.id]!.joinedAt = 20;
+    const expected = [a.player.id, b.player.id].sort((x, y) => x.localeCompare(y))[0];
+    assert.equal(leaveAlliance(universe, leader.player.id, 30).ok, true);
+    assert.equal(universe.alliances?.[id]?.founderPlayerId, expected);
   });
 });

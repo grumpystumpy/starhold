@@ -7,6 +7,8 @@ import type {
   PlayerView,
 } from "@starhold/game";
 import {
+  approveAllianceRequest,
+  cancelAllianceRequest,
   createAllianceRequest,
   deleteAllianceIntelRequest,
   deleteAllianceMarkerRequest,
@@ -17,6 +19,7 @@ import {
   leaveAllianceRequest,
   postAllianceChatRequest,
   proposeAllianceStrikeRequest,
+  rejectAllianceRequest,
   setAllianceJoinModeRequest,
   setAllianceClassRequest,
   setAllianceRoleRequest,
@@ -51,6 +54,12 @@ export function wireJointStrikeForm(prefill: AcsPrefill): boolean {
   }
   target.value = match.value;
   return true;
+}
+
+function releaseActionFocus(): void {
+  const active = globalThis.document?.activeElement;
+  if (typeof HTMLElement === "undefined") return;
+  if (active instanceof HTMLElement) active.blur();
 }
 
 function coordsFromFleetTarget(view: PlayerView, raw: string): Coordinates | null {
@@ -154,6 +163,129 @@ export async function doJoinAlliance(allianceId: string): Promise<void> {
   }
 }
 
+export async function doRequestAllianceJoin(allianceId: string): Promise<void> {
+  if (!session.view) return;
+  if (session.busy) {
+    setFlash("error", "Still applying the last action — try again in a moment.");
+    schedulePaint();
+    return;
+  }
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    session.view = await joinAllianceRequest(session.view.player.id, {
+      allianceId,
+    });
+    if (session.view.pendingAllianceRequest?.allianceId === allianceId) {
+      setFlash("notice", "Request sent.");
+    } else if (session.view.alliance?.id === allianceId) {
+      setFlash("notice", `Joined [${session.view.alliance.tag}].`);
+    } else {
+      setFlash("notice", "Request sent.");
+    }
+  } catch (err) {
+    await settleMutation({
+      err,
+      failureFallback: "Alliance request failed.",
+      applied: (view) => view.pendingAllianceRequest?.allianceId === allianceId,
+      successNotice: () => "Request sent.",
+    });
+  } finally {
+    releaseActionFocus();
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doCancelAllianceRequest(): Promise<void> {
+  if (!session.view) return;
+  if (session.busy) {
+    setFlash("error", "Still applying the last action — try again in a moment.");
+    schedulePaint();
+    return;
+  }
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    session.view = await cancelAllianceRequest(session.view.player.id);
+    setFlash("notice", "Request cancelled.");
+  } catch (err) {
+    await settleMutation({
+      err,
+      failureFallback: "Cancel request failed.",
+      applied: (view) => view.pendingAllianceRequest == null,
+      successNotice: () => "Request cancelled.",
+    });
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doApproveAllianceRequest(targetPlayerId: string): Promise<void> {
+  if (!session.view) return;
+  if (session.busy) {
+    setFlash("error", "Still applying the last action — try again in a moment.");
+    schedulePaint();
+    return;
+  }
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    session.view = await approveAllianceRequest(
+      session.view.player.id,
+      targetPlayerId,
+    );
+    setFlash("notice", "Request approved.");
+  } catch (err) {
+    await settleMutation({
+      err,
+      failureFallback: "Approve failed.",
+      applied: (view) =>
+        Boolean(view.alliance?.members.some((m) => m.playerId === targetPlayerId)),
+      successNotice: () => "Request approved.",
+    });
+  } finally {
+    releaseActionFocus();
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doRejectAllianceRequest(targetPlayerId: string): Promise<void> {
+  if (!session.view) return;
+  if (session.busy) {
+    setFlash("error", "Still applying the last action — try again in a moment.");
+    schedulePaint();
+    return;
+  }
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    session.view = await rejectAllianceRequest(
+      session.view.player.id,
+      targetPlayerId,
+    );
+    setFlash("notice", "Request rejected.");
+  } catch (err) {
+    await settleMutation({
+      err,
+      failureFallback: "Reject failed.",
+      applied: (view) =>
+        !view.alliance?.pendingRequests?.some((r) => r.playerId === targetPlayerId),
+      successNotice: () => "Request rejected.",
+    });
+  } finally {
+    releaseActionFocus();
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
 export async function doLeaveAlliance(): Promise<void> {
   if (!session.view) return;
   if (session.busy) {
@@ -237,6 +369,7 @@ export async function doKickAllianceMember(targetPlayerId: string): Promise<void
       successNotice: () => "Member kicked.",
     });
   } finally {
+    releaseActionFocus();
     session.busy = false;
     schedulePaint();
   }
