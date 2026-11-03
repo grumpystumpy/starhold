@@ -676,11 +676,12 @@ export async function tradeResources(
 export async function activateOfficerHire(
   playerId: string,
   officerId: OfficerId,
+  hours?: number,
 ): Promise<PlayerView> {
   const res = await credFetch("/api/activate-officer", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ playerId, officerId }),
+    body: JSON.stringify({ playerId, officerId, hours }),
   });
   return parse<PlayerView>(res);
 }

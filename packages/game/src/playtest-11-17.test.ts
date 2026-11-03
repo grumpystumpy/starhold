@@ -226,7 +226,7 @@ describe("playtest 11–17", () => {
   it("scales skill and officer effects and costs through level 10", () => {
     assert.equal(levelUpCost(SKILLS.eco_mines_1.cost, 0), 25);
     assert.equal(levelUpCost(SKILLS.eco_mines_1.cost, 1), 50);
-    assert.equal(levelUpCost(OFFICERS.quartermaster.cost, 9), 500);
+    assert.equal(levelUpCost(OFFICERS.quartermaster.cost, 9), 1000);
     const mine = scaleEffect({ kind: "mineOutput", value: 1.05 }, 1);
     assert.equal(mine.value, 1.05);
     const maxMine = scaleEffect({ kind: "mineOutput", value: 1.05 }, 10);

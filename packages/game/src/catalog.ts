@@ -12,6 +12,9 @@ export {
   OFFICERS,
   OFFICER_ORDER,
   OFFICER_DURATION_MS,
+  OFFICER_DURATION_OPTIONS_HOURS,
+  SHOP_PRICE_MULT,
+  officerDurationCost,
   officerRenewalCost,
   officerRenewalDurationMs,
 } from "./catalog-officers.js";

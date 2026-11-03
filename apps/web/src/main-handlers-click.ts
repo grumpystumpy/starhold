@@ -127,9 +127,9 @@ export function bindClickHandlers(): void {
         ev.preventDefault();
         const itemId = buyShopItemBtn.getAttribute("data-buy-shop-item");
         if (itemId) {
-          const targetSelect = root.querySelector<HTMLSelectElement>(
-            `[data-item-target="${itemId}"]`,
-          );
+          const targetSelect = buyShopItemBtn
+            .closest(".shop-item-card")
+            ?.querySelector<HTMLSelectElement>(".shop-item-target");
           const targetPlanetId = targetSelect?.value || undefined;
           void doBuyShopItem(itemId, targetPlanetId);
         }
@@ -592,7 +592,12 @@ export function bindClickHandlers(): void {
         const officerId = officerBtn.getAttribute(
           "data-activate-officer",
         ) as OfficerId | null;
-        if (officerId) void doActivateOfficer(officerId);
+        if (officerId) {
+          const hours = officerBtn
+            .closest(".officer-row")
+            ?.querySelector<HTMLSelectElement>("[data-officer-hours]")?.value;
+          void doActivateOfficer(officerId, hours ? Number(hours) : undefined);
+        }
         return;
       }
 
@@ -781,6 +786,41 @@ export function bindClickHandlers(): void {
 
   root.addEventListener("change", (ev) => {
     const el = ev.target;
+    if (el instanceof HTMLSelectElement && el.matches("[data-shop-item-tier]")) {
+      const option = el.selectedOptions[0];
+      const card = el.closest<HTMLElement>(".shop-item-card");
+      const button = card?.querySelector<HTMLButtonElement>("[data-buy-shop-item]");
+      if (!option || !card || !button) return;
+      const price = Number(option.dataset.price);
+      card.querySelector("[data-shop-item-name]")!.textContent =
+        option.dataset.name ?? "";
+      card.querySelector("[data-shop-item-price]")!.textContent = `${fmt(price)} ✦`;
+      card.querySelector("[data-shop-item-bonus]")!.textContent =
+        `Bonus: ${option.dataset.bonus ?? ""}`;
+      card.querySelector("[data-shop-item-description]")!.textContent =
+        option.dataset.description ?? "";
+      card.dataset.testid = `shop-item-${option.value}`;
+      button.dataset.testid = `buy-item-${option.value}`;
+      button.dataset.buyShopItem = option.value;
+      button.textContent = `Buy · ${fmt(price)} ✦`;
+      button.disabled =
+        card.dataset.busy === "true" ||
+        card.dataset.active === "true" ||
+        card.dataset.targetValid === "false" ||
+        price > Number(card.dataset.balance);
+      return;
+    }
+    if (el instanceof HTMLSelectElement && el.matches("[data-officer-hours]")) {
+      const option = el.selectedOptions[0];
+      const row = el.closest<HTMLElement>(".officer-row");
+      const button = row?.querySelector<HTMLButtonElement>("[data-activate-officer]");
+      if (!option || !row || !button) return;
+      const price = Number(option.dataset.price);
+      button.textContent = `${button.dataset.actionLabel} · ${fmt(price)} ✦`;
+      button.disabled =
+        row.dataset.busy === "true" || price > Number(row.dataset.balance);
+      return;
+    }
     if (el instanceof HTMLSelectElement && el.matches("[data-nav-select]")) {
       const page = resolveNavPage(el.value);
       if (page) navigateTo(page);

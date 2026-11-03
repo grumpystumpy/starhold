@@ -1,4 +1,10 @@
-import { OFFICERS, officerRenewalCost, officerRenewalDurationMs } from "./catalog-officers.js";
+import {
+  OFFICERS,
+  OFFICER_DURATION_OPTIONS_HOURS,
+  officerDurationCost,
+  officerRenewalCost,
+  officerRenewalDurationMs,
+} from "./catalog-officers.js";
 import { SKILLS } from "./catalog-skills.js";
 import { OFFICER_MAX_LEVEL, SKILL_MAX_LEVEL, STARSHARDS_DAILY_LOGIN } from "./catalog.js";
 import { levelUpCost } from "./formulas-levels.js";
@@ -151,18 +157,29 @@ export function activateOfficer(
   playerId: string,
   officerId: OfficerId,
   now = Date.now(),
+  hours?: number,
 ): StarshardActionResult {
   const player = universe.players[playerId];
   if (!player) return { ok: false, error: "Unknown player." };
   const def = OFFICERS[officerId];
   if (!def) return { ok: false, error: "Unknown officer." };
+  if (
+    hours !== undefined &&
+    !OFFICER_DURATION_OPTIONS_HOURS.some((allowedHours) => allowedHours === hours)
+  ) {
+    return { ok: false, error: "Invalid officer duration." };
+  }
 
   advanceUniverse(universe, now);
   pruneExpiredOfficers(player, now);
 
   const renewals = Math.max(0, Math.floor(player.officerRenewals?.[officerId] ?? 0));
-  const cost = officerRenewalCost(def.cost, renewals);
-  const durationMs = officerRenewalDurationMs(renewals);
+  const cost = hours === undefined
+    ? officerRenewalCost(def.cost, renewals)
+    : officerDurationCost(def.cost, renewals, hours);
+  const durationMs = hours === undefined
+    ? officerRenewalDurationMs(renewals)
+    : hours * 60 * 60 * 1000;
 
   const balance = Math.floor(player.starshards ?? 0);
   if (balance < cost) {
