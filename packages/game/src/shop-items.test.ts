@@ -14,6 +14,7 @@ import {
   playerView,
   resolveCombat,
   SHOP_ITEMS,
+  SHOP_PRICE_MULT,
   unitHp,
 } from "./index.js";
 import { SHIPS } from "./catalog.js";
@@ -41,13 +42,13 @@ describe("Shop Items (STA-44)", () => {
       const unitCostM = computeShopItemPerUnitCost(tierM);
       const unitCostL = computeShopItemPerUnitCost(tierL);
 
-      assert.equal(unitCostS, tierS.baseUnitCost);
+      assert.equal(unitCostS, tierS.baseUnitCost * SHOP_PRICE_MULT);
       assert.ok(
-        Math.abs(unitCostM - 0.95 * tierS.baseUnitCost) < 0.1,
+        Math.abs(unitCostM - 0.95 * tierS.baseUnitCost * SHOP_PRICE_MULT) < 0.1,
         `Tier M per unit cost (${unitCostM}) should be ~0.95 * c`,
       );
       assert.ok(
-        Math.abs(unitCostL - 0.95 * tierS.baseUnitCost) < 0.1,
+        Math.abs(unitCostL - 0.95 * tierS.baseUnitCost * SHOP_PRICE_MULT) < 0.1,
         `Tier L per unit cost (${unitCostL}) should be ~0.95 * c`,
       );
 
@@ -75,19 +76,29 @@ describe("Shop Items (STA-44)", () => {
       );
     }
 
-    // Explicit numbers check for Planet Fields (c=20): S=100 (20/u), M=190 (19/u), L=380 (19/u)
-    assert.equal(SHOP_ITEMS.item_planet_fields_s.starshards, 100);
-    assert.equal(SHOP_ITEMS.item_planet_fields_m.starshards, 190);
-    assert.equal(SHOP_ITEMS.item_planet_fields_l.starshards, 380);
-    assert.equal(SHOP_ITEMS.item_moon_fields_s.starshards, 80);
-    assert.equal(SHOP_ITEMS.item_moon_fields_m.starshards, 152);
-    assert.equal(SHOP_ITEMS.item_moon_fields_l.starshards, 304);
-    assert.equal(SHOP_ITEMS.item_buff_hull_s.starshards, 60);
-    assert.equal(SHOP_ITEMS.item_buff_hull_m.starshards, 114);
-    assert.equal(SHOP_ITEMS.item_buff_hull_l.starshards, 171);
-    assert.equal(SHOP_ITEMS.item_fleet_slots_s.starshards, 40);
-    assert.equal(SHOP_ITEMS.item_fleet_slots_m.starshards, 76);
-    assert.equal(SHOP_ITEMS.item_fleet_slots_l.starshards, 152);
+    const expectedPrices: Record<string, number> = {
+      item_planet_fields_s: 200,
+      item_planet_fields_m: 380,
+      item_planet_fields_l: 760,
+      item_moon_fields_s: 160,
+      item_moon_fields_m: 304,
+      item_moon_fields_l: 608,
+      item_buff_hull_s: 120,
+      item_buff_hull_m: 228,
+      item_buff_hull_l: 342,
+      item_buff_armor_s: 120,
+      item_buff_armor_m: 228,
+      item_buff_armor_l: 342,
+      item_buff_shield_s: 120,
+      item_buff_shield_m: 228,
+      item_buff_shield_l: 342,
+      item_fleet_slots_s: 80,
+      item_fleet_slots_m: 152,
+      item_fleet_slots_l: 304,
+    };
+    for (const [id, cost] of Object.entries(expectedPrices)) {
+      assert.equal(SHOP_ITEMS[id]!.starshards, cost);
+    }
   });
 
   it("purchase deducts starshards and rejects invalid attempts without state change", () => {
@@ -95,7 +106,7 @@ describe("Shop Items (STA-44)", () => {
     const { player } = joinUniverse(universe, "Trader");
     const p = universe.players[player.id];
 
-    grantStarshards(p, 150); // 150 shards
+    grantStarshards(p, 300); // 300 shards
     const initialShards = p.starshards;
 
     // Unknown item
@@ -106,7 +117,7 @@ describe("Shop Items (STA-44)", () => {
     assert.equal(res1.ok, false);
     assert.equal(p.starshards, initialShards);
 
-    // Insufficient starshards (buying item_fleet_slots_l for 152 shards with only 150)
+    // Insufficient starshards (buying item_fleet_slots_l for 304 shards with only 300)
     const res2 = buyShopItem(universe, {
       playerId: p.id,
       itemId: "item_fleet_slots_l",
@@ -130,7 +141,7 @@ describe("Shop Items (STA-44)", () => {
       targetPlanetId: p.homePlanetId,
     });
     assert.equal(res4.ok, true);
-    assert.equal(p.starshards, initialShards - 100); // 150 - 100 = 50
+    assert.equal(p.starshards, initialShards - 200);
   });
 
   it("field items permanently raise fieldsCap and restrict target type (planet vs moon)", () => {
@@ -147,6 +158,36 @@ describe("Shop Items (STA-44)", () => {
       playerId: p.id,
       itemId: "item_moon_fields_s",
       targetPlanetId: pl.id,
+    });
+
+    it("applies planet field purchases to the selected planet rather than home", () => {
+      const universe = createUniverse("Selected Shop Target", 8);
+      const { player } = joinUniverse(universe, "Builder");
+      const p = universe.players[player.id]!;
+      const home = universe.planets[p.homePlanetId]!;
+      const selected = structuredClone(home);
+      selected.id = `${home.id}_second`;
+      selected.name = "Second Planet";
+      selected.coords = { ...home.coords, slot: home.coords.slot + 1 };
+      universe.planets[selected.id] = selected;
+      p.planetIds.push(selected.id);
+      p.activePlanetId = selected.id;
+      p.starshards = 500;
+
+      const view = playerView(universe, p.id);
+      assert.equal(view.planet.id, selected.id);
+      const homeCap = fieldsCap(home);
+      const selectedCap = fieldsCap(selected);
+      assert.equal(
+        buyShopItem(universe, {
+          playerId: p.id,
+          itemId: "item_planet_fields_s",
+          targetPlanetId: view.planet.id,
+        }).ok,
+        true,
+      );
+      assert.equal(fieldsCap(universe.planets[selected.id]!), selectedCap + 5);
+      assert.equal(fieldsCap(universe.planets[home.id]!), homeCap);
     });
     assert.equal(moonRes.ok, false);
     assert.equal(fieldsCap(pl), initialCap);

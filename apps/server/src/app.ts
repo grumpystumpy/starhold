@@ -15,6 +15,7 @@ import {
   type ResearchId,
   type Resources,
   type ShipId,
+  OFFICER_DURATION_OPTIONS_HOURS,
   abandonOccupation,
   activateOfficer,
   buyShopItem,
@@ -776,15 +777,24 @@ export function createApp(): Hono {
     const body = (await c.req.json().catch(() => ({}))) as {
       playerId?: string;
       officerId?: OfficerId;
+      hours?: number;
     };
     if (!body.playerId || !body.officerId) {
       return c.json({ error: "playerId and officerId required." }, 400);
+    }
+    if (
+      body.hours !== undefined &&
+      !OFFICER_DURATION_OPTIONS_HOURS.some((hours) => hours === body.hours)
+    ) {
+      return c.json({ error: "Invalid officer duration." }, 400);
     }
     return withUniverse((universe) => {
       const result = activateOfficer(
         universe,
         body.playerId!,
         body.officerId!,
+        Date.now(),
+        body.hours,
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));

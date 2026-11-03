@@ -89,7 +89,10 @@ export async function doClaimGoal(goalId: string): Promise<void> {
   }
 }
 
-export async function doActivateOfficer(officerId: OfficerId): Promise<void> {
+export async function doActivateOfficer(
+  officerId: OfficerId,
+  hours?: number,
+): Promise<void> {
   if (!session.view || session.busy) return;
   const beforeLevel = session.view.officerLevels?.[officerId] ?? 0;
   const previousHire = session.view.officers.find(
@@ -104,6 +107,7 @@ export async function doActivateOfficer(officerId: OfficerId): Promise<void> {
     session.view = await activateOfficerHire(
       session.view.player.id,
       officerId,
+      hours,
     );
     setFlash("notice", "Officer hired.");
   } catch (err) {

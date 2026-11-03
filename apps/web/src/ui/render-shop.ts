@@ -52,12 +52,12 @@ function itemsPanel(view: PlayerView, busy: boolean): string {
   const items = Object.values(catalog);
 
   const categories = [
-    { title: "Planet Field Items", cat: "fields_planet" },
-    { title: "Moon Field Items", cat: "fields_moon" },
-    { title: "24h Hull Buffs", cat: "buff_hull" },
-    { title: "24h Armor Buffs", cat: "buff_armor" },
-    { title: "24h Shield Buffs", cat: "buff_shield" },
-    { title: "24h Fleet Slot Licenses", cat: "fleet_slots" },
+    { title: "Planet Fields", cat: "fields_planet" },
+    { title: "Moon Fields", cat: "fields_moon" },
+    { title: "Hull", cat: "buff_hull" },
+    { title: "Armor", cat: "buff_armor" },
+    { title: "Shield", cat: "buff_shield" },
+    { title: "Fleet Slots", cat: "fleet_slots" },
   ];
 
   let html = `<section class="shop-items-panel" data-testid="shop-items">
@@ -68,65 +68,68 @@ function itemsPanel(view: PlayerView, busy: boolean): string {
     const groupItems = items.filter((i) => i.category === group.cat);
     if (groupItems.length === 0) continue;
 
+    const orderedItems = [...groupItems].sort(
+      (a, b) => ["S", "M", "L"].indexOf(a.tier) - ["S", "M", "L"].indexOf(b.tier),
+    );
+    const selectedItem = orderedItems[0]!;
+    const activeBuff = activeBuffs.find((b) => b.category === group.cat);
+    const isBuffActive = Boolean(activeBuff);
+    const targetRequired = group.cat === "fields_planet" || group.cat === "fields_moon";
+    const selectedIsMoon = view.planet.kind === "moon";
+    const targetValid = group.cat === "fields_planet"
+      ? !selectedIsMoon
+      : group.cat === "fields_moon"
+        ? selectedIsMoon
+        : true;
+    const targetReason = !targetRequired
+      ? ""
+      : targetValid
+        ? ""
+        : group.cat === "fields_moon"
+          ? "Select a moon to buy moon field expansions."
+          : "Select a planet to buy planet field expansions.";
+    const targetSelector = targetRequired
+      ? `<select class="shop-item-target" data-item-target="${escapeAttr(selectedItem.id)}" disabled>${targetValid
+          ? `<option value="${escapeAttr(view.planet.id)}" selected>${escapeHtml(view.planet.name)} (${view.planet.coords.galaxy}:${view.planet.coords.system}:${view.planet.coords.slot})</option>`
+          : `<option value="" selected>${escapeHtml(view.planet.name)} — unavailable</option>`}</select>
+        ${targetReason ? `<span class="shop-item-target-reason">${escapeHtml(targetReason)}</span>` : ""}`
+      : "";
+    const bonusUnit = group.cat.startsWith("buff_")
+      ? "%"
+      : group.cat === "fleet_slots"
+        ? " fleet slots"
+        : " fields";
+    const options = orderedItems
+      .map((item) =>
+        `<option value="${escapeAttr(item.id)}" data-price="${item.starshards}" data-name="${escapeAttr(item.name)}" data-description="${escapeAttr(item.description)}" data-bonus="${escapeAttr(`+${item.bonus}${bonusUnit}`)}">${escapeHtml(item.tier)} — ${escapeHtml(item.name)}</option>`,
+      )
+      .join("");
+    const initialDisabled =
+      busy ||
+      balance < selectedItem.starshards ||
+      isBuffActive ||
+      !targetValid;
+    const activeBadge = activeBuff
+      ? `<span class="shop-buff-active">Active (${fmt(Math.ceil(activeBuff.remainingMs / (60 * 1000)))}m left)</span>`
+      : "";
+
     html += `<div class="shop-item-group">
       <h4>${escapeHtml(group.title)}</h4>
-      <ul class="shop-item-list">`;
-
-    for (const item of groupItems) {
-      const canAfford = balance >= item.starshards;
-      const activeBuff = activeBuffs.find((b) => b.category === item.category);
-      const isBuffActive = Boolean(activeBuff);
-
-      let targetSelector = "";
-      if (item.category === "fields_planet") {
-        const planets = view.ownedPlanets.filter((p) => !p.isMoon);
-        const options = planets
-          .map(
-            (p) =>
-              `<option value="${escapeAttr(p.id)}">${escapeHtml(p.name)} (${p.coords.galaxy}:${p.coords.system}:${p.coords.slot})</option>`,
-          )
-          .join("");
-        targetSelector = `<select class="shop-item-target" data-item-target="${escapeAttr(item.id)}">${options}</select>`;
-      } else if (item.category === "fields_moon") {
-        const moons = view.ownedPlanets.filter((p) => p.isMoon);
-        const options = moons.length > 0
-          ? moons
-              .map(
-                (p) =>
-                  `<option value="${escapeAttr(p.id)}">${escapeHtml(p.name)} (${p.coords.galaxy}:${p.coords.system}:${p.coords.slot})</option>`,
-              )
-              .join("")
-          : `<option value="">No Moons Owned</option>`;
-        targetSelector = `<select class="shop-item-target" data-item-target="${escapeAttr(item.id)}" ${moons.length === 0 ? "disabled" : ""}>${options}</select>`;
-      }
-
-      let activeBadge = "";
-      if (activeBuff) {
-        const remMinutes = Math.ceil(activeBuff.remainingMs / (60 * 1000));
-        activeBadge = `<span class="shop-buff-active">Active (${fmt(remMinutes)}m left)</span>`;
-      }
-
-      const disabled =
-        busy ||
-        !canAfford ||
-        isBuffActive ||
-        (item.category === "fields_moon" &&
-          view.ownedPlanets.filter((p) => p.isMoon).length === 0);
-
-      html += `<li class="shop-item-card" data-testid="shop-item-${escapeAttr(item.id)}">
-        <div class="shop-item-info">
-          <strong>${escapeHtml(item.name)}</strong> <span class="shop-item-cost">${fmt(item.starshards)} ✦</span>
-          <p>${escapeHtml(item.description)}</p>
-          ${activeBadge}
-        </div>
-        <div class="shop-item-buy-controls">
-          ${targetSelector}
-          <button type="button" data-buy-shop-item="${escapeAttr(item.id)}" data-testid="buy-item-${escapeAttr(item.id)}" ${disabled ? "disabled" : ""}>Buy · ${fmt(item.starshards)} ✦</button>
-        </div>
-      </li>`;
-    }
-
-    html += `</ul></div>`;
+      <ul class="shop-item-list">
+        <li class="shop-item-card" data-testid="shop-item-${escapeAttr(selectedItem.id)}" data-balance="${balance}" data-busy="${busy}" data-active="${isBuffActive}" data-target-valid="${targetValid}">
+          <div class="shop-item-info">
+            <strong data-shop-item-name>${escapeHtml(selectedItem.name)}</strong> <span class="shop-item-cost" data-shop-item-price>${fmt(selectedItem.starshards)} ✦</span>
+            <p data-shop-item-bonus>Bonus: +${selectedItem.bonus}${bonusUnit}</p>
+            <p data-shop-item-description>${escapeHtml(selectedItem.description)}</p>
+            ${activeBadge}
+          </div>
+          <div class="shop-item-buy-controls">
+            <select class="shop-item-tier" data-shop-item-tier aria-label="${escapeAttr(group.title)} tier" ${busy ? "disabled" : ""}>${options}</select>
+            ${targetSelector}
+            <button type="button" data-buy-shop-item="${escapeAttr(selectedItem.id)}" data-testid="buy-item-${escapeAttr(selectedItem.id)}" ${initialDisabled ? "disabled" : ""}>Buy · ${fmt(selectedItem.starshards)} ✦</button>
+          </div>
+        </li>
+      </ul></div>`;
   }
 
   html += `</section>`;

@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   OFFICER_DURATION_MS,
+  OFFICER_DURATION_OPTIONS_HOURS,
   OFFICERS,
+  officerDurationCost,
   PIRATE_DEFENSE_WIN_STARSHARDS,
   PIRATE_DESTROY_STARSHARDS_BASE,
   SKILLS,
@@ -316,6 +318,46 @@ describe("Thread D Starshards / officers / skills", () => {
       assert.equal(player.officers?.[0]?.expiresAt, now + renewals + expectedDuration);
       assert.equal(player.officerRenewals?.engineer, renewals + 1);
     }
+  });
+
+  it("prices each selectable officer duration from the current renewal rate", () => {
+    assert.deepEqual(
+      Object.fromEntries(
+        Object.values(OFFICERS).map((officer) => [officer.id, officer.cost]),
+      ),
+      {
+        quartermaster: 100,
+        archivist: 100,
+        navigator: 120,
+        warden: 120,
+        engineer: 80,
+        spymaster: 140,
+        vaultkeeper: 100,
+      },
+    );
+    const costs = OFFICER_DURATION_OPTIONS_HOURS.map((hours) =>
+      officerDurationCost(OFFICERS.quartermaster.cost, 0, hours),
+    );
+    assert.deepEqual(costs, [5, 10, 20, 40, 80, 120, 240, 480, 960]);
+
+    const universe = createUniverse("Custom Officer Duration", 8);
+    const a = joinUniverse(universe, "Duration", 161_700_000);
+    const player = universe.players[a.player.id]!;
+    player.starshards = 1000;
+    const now = 161_700_100;
+    assert.equal(
+      activateOfficer(universe, a.player.id, "quartermaster", now, 48).ok,
+      true,
+    );
+    assert.equal(
+      player.officers?.[0]?.expiresAt,
+      now + 48 * 60 * 60 * 1000,
+    );
+    assert.equal(player.starshards, 1000 - 240);
+    assert.equal(
+      activateOfficer(universe, a.player.id, "quartermaster", now + 1, 3).ok,
+      false,
+    );
   });
 
   it("treats a legacy save without officer renewal counts as zero", () => {
