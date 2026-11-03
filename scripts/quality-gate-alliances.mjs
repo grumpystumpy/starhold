@@ -121,10 +121,18 @@ async function runRequestScenario(browser, logs) {
     await recruit.page.getByTestId("highscore-tab-alliances").click();
     await recruit.page.getByTestId("alliance-highscores").waitFor({ timeout: 10_000 });
     const ranks = await recruit.page.getByTestId("alliance-highscores").innerText();
-    if (!ranks.includes(`[${tag}]`)) {
-      throw new Error(`alliance ranks missing [${tag}]: ${ranks}`);
+    // The alliance ranking is a cached board rebuilt every 30 minutes (kept by
+    // design, Micah 2026-11-03), so a just-created alliance may not be listed yet.
+    // The tab must still render a ranking list or the empty-state row.
+    if (ranks.includes(`[${tag}]`)) {
+      logs.push("alliance_rank_tab");
+    } else {
+      const rows = await recruit.page.getByTestId("alliance-highscores").locator("li").count();
+      if (rows < 1) {
+        throw new Error(`alliance ranks tab rendered no rows: ${ranks}`);
+      }
+      logs.push("alliance_rank_tab_cached");
     }
-    logs.push("alliance_rank_tab");
 
     await recruit.page.getByTestId("nav-alliances").click();
     await recruit.page.getByTestId("alliance-chat-form").waitFor({ timeout: 10_000 });
