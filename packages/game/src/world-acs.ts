@@ -310,6 +310,45 @@ export function leaveAcsFleet(
   return { ok: true, fleet };
 }
 
+/**
+ * Kick, leave, or disband: detach this player's ACS fleets and send them home.
+ * Outbound and holding both turn around. Does not change combat math.
+ */
+export function releasePlayerAcsFleets(
+  universe: UniverseState,
+  playerId: string,
+  now: number,
+): void {
+  ensureUniverseShape(universe);
+  for (const fleet of Object.values(universe.fleets ?? {})) {
+    if (fleet.ownerPlayerId !== playerId || !fleet.acsGroupId) continue;
+    const group = acsMap(universe)[fleet.acsGroupId];
+    if (group && group.status !== "resolved" && group.status !== "cancelled") {
+      group.fleetIds = group.fleetIds.filter((id) => id !== fleet.id);
+      if (group.fleetIds.length < ACS_MIN_FLEETS_TO_RESOLVE) {
+        group.status = "cancelled";
+      } else if (group.status === "locked") {
+        let maxArrive = now;
+        for (const fid of group.fleetIds) {
+          const other = universe.fleets[fid];
+          if (other) maxArrive = Math.max(maxArrive, other.arrivesAt);
+        }
+        group.resolvesAt = maxArrive;
+      }
+      acsMap(universe)[group.id] = group;
+    }
+    fleet.acsGroupId = null;
+    if (
+      (fleet.phase === "outbound" || fleet.phase === "holding") &&
+      !fleet.reportId
+    ) {
+      fleet.phase = "returning";
+      fleet.arrivesAt = now + Math.max(1, fleet.arrivesAt - fleet.departedAt);
+    }
+    universe.fleets[fleet.id] = fleet;
+  }
+}
+
 export function lockAcsEarly(
   universe: UniverseState,
   playerId: string,

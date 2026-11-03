@@ -38,6 +38,7 @@ import {
   IDLE_PAUSE_MS,
   POLL_INTERVAL_MS,
   silentRefresh,
+  refreshAllianceChatIfOpen,
   startPolling,
 } from "./main-actions";
 import { wireJointStrikeForm } from "./main-actions-alliances";
@@ -288,8 +289,11 @@ window.starhold = {
   refresh: () => doRefresh(),
   upsertMarker: (coords: Coordinates, note: string) => doUpsertAllianceMarker(coords, note),
 
-  poll: () =>
-    session.view ? silentRefresh(session.view.player.id) : Promise.resolve(),
+  poll: async () => {
+    if (!session.view) return;
+    await silentRefresh(session.view.player.id);
+    await refreshAllianceChatIfOpen();
+  },
   pollIntervalMs: POLL_INTERVAL_MS,
   idlePauseMs: IDLE_PAUSE_MS,
   getState: () => ({

@@ -30,6 +30,7 @@ import {
   type PlanetArtContext,
 } from "./planet-art.js";
 import type {
+  AllianceRankEntry,
   GalaxyMiniBody,
   GalaxySlot,
   GalaxyView,
@@ -41,8 +42,10 @@ import type {
 } from "./types.js";
 import {
   allianceDirectory,
+  allianceRankBoard,
   allianceTagForPlayer,
   allianceViewFor,
+  pendingAllianceRequestFor,
 } from "./world-alliances.js";
 import { galaxyMarkerOverlay } from "./world-alliance-intel.js";
 import { listOpenAcsForAlliance } from "./world-acs.js";
@@ -88,6 +91,21 @@ let highscoreSource: HighscoreSource | undefined;
  */
 export function bindHighscoreSource(source: HighscoreSource | undefined): void {
   highscoreSource = source;
+}
+
+export type AllianceRankSource = () => AllianceRankEntry[] | undefined;
+
+let allianceRankSource: AllianceRankSource | undefined;
+
+/**
+ * Server installs this so a page load can pass a cached alliance board.
+ * `undefined` means "compute now" (tests, memory mode).
+ * An array, including empty, is served as-is and is never rebuilt here.
+ */
+export function bindAllianceRankSource(
+  source: AllianceRankSource | undefined,
+): void {
+  allianceRankSource = source;
 }
 
 function highscoreRoster(rows: HighscoreEntry[]): PublicPlayer[] {
@@ -338,6 +356,8 @@ export function playerView(
   pruneExpiredOfficers(player, now);
   const provided = highscoreSource?.();
   const highscores = provided ?? highscoresBoard(universe);
+  const allianceProvided = allianceRankSource?.();
+  const allianceHighscores = allianceProvided ?? allianceRankBoard(universe);
   maybeGrantHighscoreStarshards(universe, playerId, highscores);
   const pointsById = new Map(
     highscores.map((row) => [row.playerId, row.points]),
@@ -521,6 +541,7 @@ export function playerView(
         ]
       : publicRoster(universe, pointsById),
     highscores,
+    allianceHighscores,
     galaxy: galaxyViewFor(universe, playerId, g, s, now),
     fleets,
     fleetSlotCap,
@@ -546,6 +567,7 @@ export function playerView(
     progress: playerProgressView(player),
     occupation: occupationForPlanet(universe, planet.id, now),
     alliance: allianceViewFor(universe, playerId, now),
+    pendingAllianceRequest: pendingAllianceRequestFor(universe, player),
     allianceDirectory: allianceDirectory(universe),
     openAcsGroups: listOpenAcsForAlliance(universe, player.allianceId),
     goals: goalsView(player, now),

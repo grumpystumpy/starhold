@@ -1751,8 +1751,12 @@ export const ALLIANCE_NAME_MAX = 30;
 export const ALLIANCE_MAX_MEMBERS = 16;
 export const ALLIANCE_MAX_OFFICERS = 3;
 export const ALLIANCE_CREATE_MIN_POINTS = 0;
+/** Pending join requests stored on one alliance. */
+export const ALLIANCE_PENDING_REQUEST_CAP = 20;
+/** Alliance rank rows kept on the cached board. */
+export const ALLIANCE_RANK_CAP = 100;
 /** Default join mode when creating an alliance. */
-export const ALLIANCE_JOIN_MODE_DEFAULT: "open" | "invite" = "open";
+export const ALLIANCE_JOIN_MODE_DEFAULT: "open" | "invite" | "request" = "open";
 
 /**
  * Newbie protection (Micah CHANGE #15): empire points below this are
@@ -1879,6 +1883,8 @@ export const EVENT_LOG_MINI_NEARBY_SYSTEM_RADIUS = 5;
 export const EVENT_LOG_UNREAD_BADGE = true;
 /** Alliance chat + shared intel (backlog #12). */
 export const ALLIANCE_CHAT_MAX_MESSAGES = 200;
+/** Chat lines returned to the client. Stored history stays at the cap above. */
+export const ALLIANCE_CHAT_RETURN_MAX = 50;
 export const ALLIANCE_CHAT_MAX_CHARS = 500;
 export const ALLIANCE_CHAT_RATE_PER_MIN = 20;
 export const ALLIANCE_INTEL_MAX_REPORTS = 50;

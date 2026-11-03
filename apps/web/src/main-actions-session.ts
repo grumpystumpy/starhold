@@ -4,6 +4,7 @@ import {
   authJoin,
   claimAnonymousPlayer,
   fetchAuthMe,
+  fetchAllianceChat,
   fetchState,
   invalidateCachedState,
   joinGame,
@@ -281,12 +282,48 @@ function pollNow(): Promise<void> {
     try {
       if (!playerId || pollPlayerId !== playerId || !pollsAllowed()) return;
       await silentRefresh(playerId);
+      await refreshAllianceChatIfOpen();
     } finally {
       pollChain = null;
       if (pollPlayerId === playerId) schedulePoll(POLL_INTERVAL_MS);
     }
   })();
   return pollChain;
+}
+
+/** Incremental alliance chat. Only while the Alliances page is open. */
+export async function refreshAllianceChatIfOpen(): Promise<void> {
+  if (session.activePage !== "alliances") return;
+  const view = session.view;
+  if (!view?.alliance) return;
+  const since = (view.alliance.chat ?? []).reduce(
+    (max, message) => Math.max(max, message.createdAt),
+    0,
+  );
+  try {
+    const payload = await fetchAllianceChat(since > 0 ? since : undefined);
+    const current = session.view;
+    if (!current?.alliance || current.alliance.id !== view.alliance.id) return;
+    const incoming = payload.messages ?? [];
+    if (incoming.length === 0) return;
+    const byId = new Map(current.alliance.chat.map((message) => [message.id, message]));
+    let added = false;
+    for (const message of incoming) {
+      if (!byId.has(message.id)) {
+        byId.set(message.id, message);
+        added = true;
+      }
+    }
+    if (!added) return;
+    const merged = [...byId.values()].sort((a, b) => a.createdAt - b.createdAt);
+    session.view = {
+      ...current,
+      alliance: { ...current.alliance, chat: merged.slice(-50) },
+    };
+    schedulePaint();
+  } catch {
+    /* a chat poll must not fail the state refresh */
+  }
 }
 
 function clearIdleTimer(): void {

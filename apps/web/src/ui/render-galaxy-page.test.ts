@@ -240,4 +240,35 @@ describe("galaxy page rendering", () => {
     assert.doesNotMatch(html, /data-testid="galaxy-mini-preset-miniPlanetCapture-mini-own"/);
     assert.doesNotMatch(html, /data-testid="galaxy-mini-preset-miniPlanetDestruction-mini-own"/);
   });
+  it("B7-31: shows the escaped alliance tag next to player names in Galaxy rows and omits it for players without one", () => {
+    const base = {
+      planetId: null,
+      playerId: null,
+      playerName: null,
+      allianceTag: null,
+      empirePoints: 0,
+      isOwn: false,
+      hasMoon: false,
+      moonId: null,
+      debris: null,
+      artThumbUrl: "/thumb.webp",
+      allianceMarker: null,
+    };
+    const slots = Array.from({ length: 15 }, (_, i) => ({
+      ...base,
+      coords: { galaxy: 3, system: 7, slot: i + 1 },
+      artId: `normal-${i + 1}`,
+    }));
+    slots[0] = { ...slots[0], planetId: "pl-a", playerId: "pa", playerName: "Tagged", allianceTag: "<X&>", empirePoints: 100 };
+    slots[1] = { ...slots[1], planetId: "pl-b", playerId: "pb", playerName: "Loner", allianceTag: null, empirePoints: 100 };
+    const view = {
+      galaxy: { galaxy: 3, system: 7, slots, minis: [], asteroids: [] },
+    } as unknown as PlayerView;
+
+    const html = pageHtml("galaxy", view, false, null);
+
+    assert.match(html, /<span class="galaxy-slot-label">Tagged \[&lt;X&amp;&gt;\]/);
+    assert.doesNotMatch(html, /\[<X&>\]/);
+    assert.match(html, /<span class="galaxy-slot-label">Loner(?! \[)/);
+  });
 });

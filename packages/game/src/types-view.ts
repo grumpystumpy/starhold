@@ -194,12 +194,18 @@ export interface PlanetState {
 }
 
 export type AllianceRole = "founder" | "officer" | "member";
-export type AllianceJoinMode = "open" | "invite";
+export type AllianceJoinMode = "open" | "invite" | "request";
 
 export interface AllianceMember {
   playerId: string;
   role: AllianceRole;
   joinedAt: number;
+}
+
+/** One player's ask to join a request-mode alliance. Missing on older saves. */
+export interface AlliancePendingRequest {
+  playerId: string;
+  requestedAt: number;
 }
 
 export interface AllianceChatMessage {
@@ -260,6 +266,8 @@ export interface AllianceRecord {
   members: Record<string, AllianceMember>;
   /** Pending invite player ids (invite mode). */
   pendingInvites?: string[];
+  /** Join requests (request mode). Missing on older saves — treat as []. */
+  pendingRequests?: AlliancePendingRequest[];
   /** Ring buffer. Missing on older saves — treat as []. */
   chat?: AllianceChatMessage[];
   /** Shared spy stamps. Missing on older saves — treat as []. */
@@ -291,6 +299,12 @@ export interface AllianceView {
   myRole: AllianceRole;
   members: AllianceMemberView[];
   pendingInvites: Array<{ playerId: string; name: string }>;
+  /** Present for Leader and Officer. Older clients may omit it. */
+  pendingRequests?: Array<{
+    playerId: string;
+    name: string;
+    requestedAt: number;
+  }>;
   memberCount: number;
   maxMembers: number;
   chat: AllianceChatMessage[];
@@ -307,6 +321,25 @@ export interface AllianceListEntry {
   joinMode: AllianceJoinMode;
   memberCount: number;
   maxMembers: number;
+}
+
+/** Cached alliance rank row. Rebuilt with the player highscore board. */
+export interface AllianceRankEntry {
+  rank: number;
+  allianceId: string;
+  name: string;
+  tag: string;
+  memberCount: number;
+  points: number;
+  averagePoints: number;
+}
+
+/** The viewer's one outstanding join request, if any. */
+export interface PendingAllianceRequestView {
+  allianceId: string;
+  name: string;
+  tag: string;
+  requestedAt: number;
 }
 
 export type EventLogKind =
@@ -445,6 +478,11 @@ export interface PlayerState {
   discoveredMiniIds?: string[];
   /** Alliance membership — tag resolved at read time. */
   allianceId?: string | null;
+  /**
+   * Alliance this player has asked to join. One pending request per player.
+   * Missing on older saves.
+   */
+  pendingAllianceId?: string | null;
   /**
    * Pirate raid fairness (CHANGE #18): successful pirate NPC raids on this
    * player for a UTC day. Lazy daily reset by `dayKey`. Aliens exempt.
@@ -681,6 +719,8 @@ export interface PlayerView {
   economy: EconomySnapshot;
   roster: PublicPlayer[];
   highscores: HighscoreEntry[];
+  /** Cached alliance ranks. Empty until the next highscore rebuild. */
+  allianceHighscores?: AllianceRankEntry[];
   galaxy: GalaxyView;
   fleets: FleetMission[];
   /** Server-derived slot limits, including active bonuses and owned beacons. */
@@ -723,6 +763,8 @@ export interface PlayerView {
   occupation: OccupationState | null;
   /** Current alliance view, or null when unaffiliated. */
   alliance: AllianceView | null;
+  /** Set when this player has one outstanding join request. */
+  pendingAllianceRequest?: PendingAllianceRequestView | null;
   /** Lightweight directory of alliances (for join UI). */
   allianceDirectory: AllianceListEntry[];
   /** Open Joint Strike (ACS) groups for the player's alliance. */
