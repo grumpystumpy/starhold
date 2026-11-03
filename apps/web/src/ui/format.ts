@@ -67,3 +67,9 @@ export function fmtEta(seconds: number): string {
 export function fmtLabel(raw: string): string {
   return raw.replace(/_/g, " ");
 }
+
+/** Format percentage for bonus descriptions (e.g. 2.5% or 2.0%). */
+export function fmtBonusPct(pct: number): string {
+  const rounded = Math.round(pct * 10) / 10;
+  return `${rounded.toFixed(1)}%`;
+}

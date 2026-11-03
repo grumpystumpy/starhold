@@ -8,7 +8,8 @@ import { NAV_LABELS } from "./nav";
 import { session } from "../session";
 import { patchFlash } from "./render-chrome-join.js";
 import { escapeHtml } from "./render-escape";
-import { storageFillTitle } from "./render-tooltips";
+import { infoTooltip, storageFillTitle } from "./render-tooltips";
+import { levelBonusHelpTooltip } from "./render-shell";
 
 /**
  * Update top bar + resource bar in place (no remount) so background polls
@@ -95,10 +96,35 @@ export function patchLiveChrome(
     topArt.classList.toggle("planet-disc-moon", moon);
   }
 
-  const levelLabel = root.querySelector<HTMLElement>(
-    '[data-testid="player-level"] .level-label',
+  const levelText = root.querySelector<HTMLElement>(
+    '[data-testid="player-level"] .level-text',
   );
-  if (levelLabel) levelLabel.textContent = `Lv ${fmt(progress.level)}`;
+  if (levelText) {
+    levelText.textContent = `Lv ${fmt(progress.level)}`;
+  } else {
+    const levelLabel = root.querySelector<HTMLElement>(
+      '[data-testid="player-level"] .level-label',
+    );
+    if (levelLabel) {
+      levelLabel.innerHTML = `<span class="level-text">Lv ${fmt(progress.level)}</span> ${infoTooltip({
+        title: `Commander level ${fmt(progress.level)}`,
+        lines: [
+          `Progress ${fmt(progress.xp)} / ${fmt(progress.xpToNext)} XP to next level.`,
+          `Lifetime XP ${fmt(progress.xpTotal)}.`,
+          "XP comes from buildings, fleets, defenses, and research.",
+        ],
+        testId: "level-tip",
+      }).html}${levelBonusHelpTooltip(progress.level).html}`;
+    }
+  }
+
+  const bonusHelp = root.querySelector<HTMLElement>(
+    '[data-testid="level-bonus-help"]',
+  );
+  if (bonusHelp) {
+    const fresh = levelBonusHelpTooltip(progress.level);
+    bonusHelp.outerHTML = fresh.html;
+  }
 
   const levelWrap = root.querySelector<HTMLElement>('[data-testid="player-level"]');
   if (levelWrap) {
