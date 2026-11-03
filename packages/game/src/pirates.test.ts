@@ -688,11 +688,59 @@ describe("workers tick budget", () => {
       const mid = universe.pirateBases![base.id]!.nextRaidAt;
       assert.ok(mid > 0);
       assert.ok(mid <= now);
+      assert.equal(universe.aiCatchUpCursor, `${now}:${base.id}`);
       budget = step();
       tickPirates(universe, now);
       assert.ok(universe.pirateBases![base.id]!.nextRaidAt > mid);
     } finally {
       bindTickBudget(() => undefined);
+    }
+  });
+
+  it("bounded pirate and alien runs match one full catch-up tick", () => {
+    const previous = process.env.STARHOLD_E2E;
+    process.env.STARHOLD_E2E = "1";
+    try {
+      const now = 1_700_000_000_000;
+      const initial = createUniverse("Split NPC catch-up", 8);
+      const pirates = activePirateBases(initial);
+      for (const base of pirates) {
+        base.lastGrewAt = now + 1;
+        base.lastFreeSpawnAt = now + 1;
+        base.nextRaidAt = now + PIRATE_RAID_PERIOD_MS;
+      }
+      pirates[0]!.nextRaidAt = now - 1;
+      pirates[1]!.nextRaidAt = now - 1;
+      const alien = createAlienBase(initial, 1, 300, 1, now, "test-player");
+      alien.buildupEndsAt = now - 1;
+      alien.lastGrewAt = now + 1;
+      alien.lastFreeSpawnAt = now + 1;
+      alien.nextRaidAt = now - 1;
+      initial.alienBases![alien.id] = alien;
+
+      const full = structuredClone(initial);
+      const split = structuredClone(initial);
+      bindTickBudget(() => undefined);
+      tickPirates(full, now);
+
+      let budget = npcJobBudget();
+      budget.raids = 1;
+      bindTickBudget(() => budget);
+      let runs = 0;
+      do {
+        tickPirates(split, now + runs * 10 * 60 * 1000);
+        runs += 1;
+        assert.ok(runs <= 4, "bounded catch-up did not resume");
+        budget = npcJobBudget();
+        budget.raids = 1;
+      } while (split.aiCatchUpCursor);
+
+      assert.equal(runs, 3);
+      assert.deepEqual(split, full);
+    } finally {
+      bindTickBudget(() => undefined);
+      if (previous == null) delete process.env.STARHOLD_E2E;
+      else process.env.STARHOLD_E2E = previous;
     }
   });
 
@@ -723,6 +771,13 @@ describe("workers tick budget", () => {
       let backlog = 0;
       for (const base of Object.values(universe.pirateBases ?? {})) {
         if (base.destroyedAt == null && base.nextRaidAt <= end) backlog += 1;
+      }
+      for (let run = 0; backlog > 0 && run < 20; run += 1) {
+        budget = npcJobBudget();
+        tickPirates(universe, end);
+        backlog = Object.values(universe.pirateBases ?? {}).filter(
+          (base) => base.destroyedAt == null && base.nextRaidAt <= end,
+        ).length;
       }
       console.log(`pirate job cpu ms ${measured.toFixed(3)} backlog ${backlog} bases ${bases.length}`);
       assert.equal(backlog, 0);

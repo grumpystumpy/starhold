@@ -104,6 +104,7 @@ const worker = {
     if (!env.DB) return;
     applyEnv(env);
     const npc = event.cron === "*/10 * * * *";
+    const scheduledAt = Date.now();
     const store = createD1Store(env.DB);
     ctx.waitUntil(
       runWithScope(
@@ -117,8 +118,8 @@ const worker = {
         },
         () =>
           withUniverse((universe) => {
-            if (npc) tickPirates(universe, Date.now());
-            else advanceUniverse(universe);
+            if (npc) tickPirates(universe, scheduledAt);
+            else advanceUniverse(universe, scheduledAt);
           }, npc ? { npc: true } : { maintenance: true }),
       ),
     );
