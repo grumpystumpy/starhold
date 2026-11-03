@@ -42,8 +42,11 @@ export function mountAllianceIntelRoutes(app: Hono): void {
   app.get("/api/alliance/chat", async (c) => {
     const playerId = await sessionPlayerId(c);
     if (isResponse(playerId)) return playerId;
+    const sinceRaw = c.req.query("since");
+    const sinceNum = sinceRaw == null || sinceRaw === "" ? undefined : Number(sinceRaw);
+    const since = sinceNum != null && Number.isFinite(sinceNum) ? sinceNum : undefined;
     return withUniverse((universe) => {
-      const result = listAllianceChat(universe, playerId);
+      const result = listAllianceChat(universe, playerId, Date.now(), since);
       if (!result.ok) {
         return c.json({ error: result.error }, denied(result.error) ? 403 : 400);
       }

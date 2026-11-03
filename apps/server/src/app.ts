@@ -15,6 +15,7 @@ import {
   type ResearchId,
   type Resources,
   type ShipId,
+  OFFICER_DURATION_OPTIONS_HOURS,
   abandonOccupation,
   activateOfficer,
   buyShopItem,
@@ -43,6 +44,9 @@ import {
   isAllianceRole,
   isPlayerClassId,
   joinAlliance,
+  approveJoinRequest,
+  rejectJoinRequest,
+  cancelJoinRequest,
   joinUniverse,
   kickFromAlliance,
   launchFleet,
@@ -50,6 +54,7 @@ import {
   leaveAlliance,
   markEventsRead,
   playerView,
+  publicCombatReport,
   pushEventLog,
   queueBuildingUpgrade,
   queueDefenseBuild,
@@ -91,7 +96,10 @@ import { readCpuMs, reportServerError, currentScope } from "./request-context.js
 import { respondWithPlayerView } from "./state-response.js";
 import { staticCacheControl } from "./static-cache.js";
 import { storageMode, isUniverseBusy, withUniverse, withUniverseRead } from "./store.js";
-import { rollbackRowsToLegacy } from "./row-store.js";
+import {
+  readCombatReportByShareCode,
+  rollbackRowsToLegacy,
+} from "./row-store.js";
 
 function allowedOrigins(): Set<string> {
   const fromEnv = (process.env.ALLOWED_ORIGINS ?? "")
@@ -214,6 +222,23 @@ export function createApp(): Hono {
         passwordAuth: true,
       },
     });
+  });
+
+  app.get("/api/reports/:shareCode", async (c) => {
+    const shareCode = c.req.param("shareCode");
+    if (!/^sh_[a-z0-9]{1,32}$/.test(shareCode)) {
+      return c.json({ error: "Not found" }, 404);
+    }
+    const db = currentScope()?.db;
+    const report = db
+      ? await readCombatReportByShareCode(db, shareCode)
+      : await withUniverseRead((universe) =>
+          Object.values(universe.reports ?? {}).find(
+            (item) => item.shareCode === shareCode,
+          ) ?? null,
+        );
+    const shared = report ? publicCombatReport(report) : null;
+    return shared ? c.json(shared) : c.json({ error: "Not found" }, 404);
   });
 
   // Copies save_* back into the kv slices main loads. 404 unless the token matches.
@@ -773,15 +798,24 @@ export function createApp(): Hono {
     const body = (await c.req.json().catch(() => ({}))) as {
       playerId?: string;
       officerId?: OfficerId;
+      hours?: number;
     };
     if (!body.playerId || !body.officerId) {
       return c.json({ error: "playerId and officerId required." }, 400);
+    }
+    if (
+      body.hours !== undefined &&
+      !OFFICER_DURATION_OPTIONS_HOURS.some((hours) => hours === body.hours)
+    ) {
+      return c.json({ error: "Invalid officer duration." }, 400);
     }
     return withUniverse((universe) => {
       const result = activateOfficer(
         universe,
         body.playerId!,
         body.officerId!,
+        Date.now(),
+        body.hours,
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
@@ -905,7 +939,7 @@ export function createApp(): Hono {
     }
     const joinMode = body.joinMode ?? "open";
     if (!isAllianceJoinMode(joinMode)) {
-      return c.json({ error: "joinMode must be open or invite." }, 400);
+      return c.json({ error: "joinMode must be open, invite, or request." }, 400);
     }
     return withUniverse((universe) => {
       const result = createAlliance(
@@ -937,6 +971,56 @@ export function createApp(): Hono {
         allianceId: body.allianceId,
         tag: body.tag,
       });
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    }, { playerIds: [body.playerId] });
+  });
+
+  app.post("/api/alliance/request/approve", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      targetPlayerId?: string;
+    };
+    if (!body.playerId || !body.targetPlayerId) {
+      return c.json({ error: "playerId and targetPlayerId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = approveJoinRequest(
+        universe,
+        body.playerId!,
+        body.targetPlayerId!,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    }, { playerIds: [body.playerId, body.targetPlayerId] });
+  });
+
+  app.post("/api/alliance/request/reject", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      targetPlayerId?: string;
+    };
+    if (!body.playerId || !body.targetPlayerId) {
+      return c.json({ error: "playerId and targetPlayerId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = rejectJoinRequest(
+        universe,
+        body.playerId!,
+        body.targetPlayerId!,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    }, { playerIds: [body.playerId, body.targetPlayerId] });
+  });
+
+  app.post("/api/alliance/request/cancel", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+    };
+    if (!body.playerId) return c.json({ error: "playerId required." }, 400);
+    return withUniverse((universe) => {
+      const result = cancelJoinRequest(universe, body.playerId!);
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
     }, { playerIds: [body.playerId] });
@@ -1028,7 +1112,7 @@ export function createApp(): Hono {
       return c.json({ error: "playerId and joinMode required." }, 400);
     }
     if (!isAllianceJoinMode(body.joinMode)) {
-      return c.json({ error: "joinMode must be open or invite." }, 400);
+      return c.json({ error: "joinMode must be open, invite, or request." }, 400);
     }
     return withUniverse((universe) => {
       const result = setAllianceJoinMode(

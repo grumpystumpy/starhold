@@ -2,6 +2,7 @@ import {
   ALLIANCE_CHAT_MAX_CHARS,
   ALLIANCE_CHAT_MAX_MESSAGES,
   ALLIANCE_CHAT_RATE_PER_MIN,
+  ALLIANCE_CHAT_RETURN_MAX,
   ALLIANCE_INTEL_MAX_REPORTS,
   ALLIANCE_MARKER_NOTE_MAX,
   ALLIANCE_MARKER_TTL_MS,
@@ -161,7 +162,9 @@ export function allianceSharedView(
 } {
   ensureBoard(alliance);
   purgeMarkers(alliance, now);
-  const chat = [...alliance.chat!].sort((a, b) => a.createdAt - b.createdAt);
+  const chat = [...alliance.chat!]
+    .sort((a, b) => a.createdAt - b.createdAt)
+    .slice(-ALLIANCE_CHAT_RETURN_MAX);
   const intel = [...alliance.intel!].sort((a, b) => b.createdAt - a.createdAt);
   const markers = [...alliance.markers!].sort(
     (a, b) => b.createdAt - a.createdAt,
@@ -173,11 +176,21 @@ export function listAllianceChat(
   universe: UniverseState,
   playerId: string,
   now = Date.now(),
+  since?: number,
 ): AllianceIntelResult<{ messages: AllianceChatMessage[] }> {
   const member = membership(universe, playerId);
   if (!member.ok) return member;
-  const board = allianceSharedView(universe, member.alliance, now);
-  return { ok: true, messages: board.chat };
+  allianceSharedView(universe, member.alliance, now);
+  let messages = [...(member.alliance.chat ?? [])].sort(
+    (a, b) => a.createdAt - b.createdAt,
+  );
+  if (since != null && Number.isFinite(since)) {
+    messages = messages.filter((message) => message.createdAt > since);
+  }
+  if (messages.length > ALLIANCE_CHAT_RETURN_MAX) {
+    messages = messages.slice(messages.length - ALLIANCE_CHAT_RETURN_MAX);
+  }
+  return { ok: true, messages };
 }
 
 export function postAllianceChat(

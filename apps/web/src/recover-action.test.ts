@@ -135,11 +135,13 @@ describe("failed actions check state", () => {
     session.notice = null;
     let posts = 0;
     let states = 0;
+    let postedHours: number | undefined;
     const original = globalThis.fetch;
-    globalThis.fetch = async (input) => {
+    globalThis.fetch = async (input, init) => {
       const url = String(input);
       if (url.includes("/api/activate-officer")) {
         posts += 1;
+        postedHours = JSON.parse(String(init?.body)).hours as number;
         return new Response("<html>Error 503</html>", { status: 503 });
       }
       if (url.includes("/api/state")) {
@@ -157,12 +159,13 @@ describe("failed actions check state", () => {
       throw new Error(`unexpected ${url}`);
     };
     try {
-      await doActivateOfficer("engineer");
+      await doActivateOfficer("engineer", 48);
     } finally {
       globalThis.fetch = original;
       mock.timers.reset();
     }
     assert.equal(posts, 1);
+    assert.equal(postedHours, 48);
     assert.equal(states, 1);
     assert.equal(session.error, null);
     assert.equal(session.notice, "Officer hired.");

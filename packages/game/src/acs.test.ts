@@ -8,8 +8,10 @@ import {
   createUniverse,
   joinAlliance,
   joinUniverse,
+  kickFromAlliance,
   graduateNewbieProtection,
   launchFleet,
+  leaveAlliance,
   leaveAcsFleet,
   playerView,
 } from "./index.js";
@@ -95,6 +97,11 @@ describe("ACS joint strike", () => {
     assert.ok(
       reports.some((r) => (r.summary ?? "").includes("Joint Strike")),
     );
+    const report = reports.find((r) => r.acsGroupId === acsId)!;
+    assert.deepEqual(report.acsParticipantIds, [a.player.id, b.player.id]);
+    assert.equal(report.attackerName, "Leader, Wing");
+    assert.ok(universe.players[a.player.id]?.combatStats);
+    assert.ok(universe.players[b.player.id]?.combatStats);
   });
 
   it("rejects cross-alliance join", () => {
@@ -178,5 +185,54 @@ describe("ACS joint strike", () => {
     assert.equal(view.openAcsGroups[0]?.status, "open");
     assert.ok(ACS_JOIN_WINDOW_MS > 0);
     assert.ok(ACS_HOLD_MAX_MS > 0);
+  });
+
+  it("sends a kicked or leaving member's ACS fleet home", () => {
+    const universe = createUniverse("ACS Detach", 40, 40);
+    const a = joinUniverse(universe, "Lead");
+    const b = joinUniverse(universe, "Wing");
+    assert.equal(createAlliance(universe, a.player.id, "Detach", "det").ok, true);
+    const allyId = playerView(universe, a.player.id).alliance!.id;
+    assert.equal(joinAlliance(universe, b.player.id, { allianceId: allyId }).ok, true);
+    const pa = universe.planets[a.player.homePlanetId]!;
+    const pb = universe.planets[b.player.homePlanetId]!;
+    pa.ships.interceptor = 8;
+    pb.ships.interceptor = 8;
+    pa.resources.deuterium = 20_000;
+    pb.resources.deuterium = 20_000;
+    const c = joinUniverse(universe, "Mark");
+    graduateNewbieProtection(universe, universe.players[c.player.id]!);
+    const now = 8_000_000_000;
+    const lead = launchFleet(universe, {
+      playerId: a.player.id,
+      mission: "raid",
+      ships: { interceptor: 2 },
+      targetPlanetId: c.player.homePlanetId,
+      openAcs: true,
+      now,
+    });
+    assert.equal(lead.ok, true);
+    const acsId = lead.ok ? lead.fleet!.acsGroupId! : "";
+    const wing = launchFleet(universe, {
+      playerId: b.player.id,
+      mission: "raid",
+      ships: { interceptor: 2 },
+      targetPlanetId: c.player.homePlanetId,
+      acsGroupId: acsId,
+      now: now + 1_000,
+    });
+    assert.equal(wing.ok, true);
+    assert.equal(wing.ok && wing.fleet?.phase, "outbound");
+    assert.equal(kickFromAlliance(universe, a.player.id, b.player.id, now + 2_000).ok, true);
+    const sentHome = universe.fleets[wing.ok ? wing.fleet!.id : ""];
+    assert.equal(sentHome?.acsGroupId, null);
+    assert.equal(sentHome?.phase, "returning");
+    assert.equal(universe.acsGroups?.[acsId]?.fleetIds.includes(sentHome?.id ?? ""), false);
+    assert.notEqual(universe.acsGroups?.[acsId]?.status, "cancelled");
+    assert.equal(leaveAlliance(universe, a.player.id, now + 3_000).ok, true);
+    const leadFleet = universe.fleets[lead.ok ? lead.fleet!.id : ""];
+    assert.equal(leadFleet?.acsGroupId, null);
+    assert.equal(leadFleet?.phase, "returning");
+    assert.equal(universe.acsGroups?.[acsId]?.status, "cancelled");
   });
 });

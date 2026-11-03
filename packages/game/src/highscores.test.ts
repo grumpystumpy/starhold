@@ -9,16 +9,21 @@ import {
   roughPoints,
 } from "./formulas.js";
 import {
+  allianceRankBoard,
+  bindAllianceRankSource,
+  createAlliance,
   createUniverse,
   empirePoints,
   galaxyViewFor,
   highscoresBoard,
+  joinAlliance,
   joinUniverse,
   launchFleet,
   playerView,
 } from "./world.js";
 import { emptyBuildings } from "./world-bootstrap.js";
 import { graduateNewbieProtection } from "./test-graduate.js";
+import { bindHighscoreSource } from "./world-view.js";
 
 describe("P2 highscores", () => {
   it("shows an owner's empire total and debris in the galaxy row", () => {
@@ -191,5 +196,108 @@ describe("P2 highscores", () => {
       researchPoints(universe.players[late.player.id].research),
       expectedResearch,
     );
+  });
+
+  it("ranks alliances by points then tag and caps the member loop", () => {
+    const universe = createUniverse("Ally Ranks", 8);
+    const low = joinUniverse(universe, "Low");
+    const high = joinUniverse(universe, "High");
+    assert.equal(createAlliance(universe, low.player.id, "Bravo", "bbb").ok, true);
+    assert.equal(createAlliance(universe, high.player.id, "Alpha", "aaa").ok, true);
+    const lowId = playerView(universe, low.player.id).alliance!.id;
+    const highId = playerView(universe, high.player.id).alliance!.id;
+    universe.players[high.player.id]!.research.energyTech = 4;
+    const ranked = allianceRankBoard(universe);
+    assert.equal(ranked[0]?.allianceId, highId);
+    assert.equal(ranked[1]?.allianceId, lowId);
+    assert.equal(ranked[0]?.tag, "AAA");
+    assert.ok((ranked[0]?.points ?? 0) > (ranked[1]?.points ?? 0));
+    assert.equal(
+      ranked[0]?.averagePoints,
+      Math.floor((ranked[0]?.points ?? 0) / (ranked[0]?.memberCount ?? 1)),
+    );
+
+    const tieA = joinUniverse(universe, "TieA");
+    const tieB = joinUniverse(universe, "TieB");
+    assert.equal(createAlliance(universe, tieA.player.id, "Zulu", "zzz").ok, true);
+    assert.equal(createAlliance(universe, tieB.player.id, "Yankee", "yyy").ok, true);
+    const zid = playerView(universe, tieA.player.id).alliance!.id;
+    const yid = playerView(universe, tieB.player.id).alliance!.id;
+    const planetA = universe.planets[tieA.player.homePlanetId]!;
+    const planetB = universe.planets[tieB.player.homePlanetId]!;
+    planetB.buildings = { ...planetA.buildings };
+    planetB.ships = { ...planetA.ships };
+    planetB.defenses = { ...planetA.defenses };
+    planetB.resources = { ...planetA.resources };
+    universe.players[tieB.player.id]!.research = {
+      ...universe.players[tieA.player.id]!.research,
+    };
+    assert.equal(
+      empirePoints(universe, universe.players[tieA.player.id]!),
+      empirePoints(universe, universe.players[tieB.player.id]!),
+    );
+    const tied = allianceRankBoard(universe);
+    const y = tied.find((row) => row.allianceId === yid);
+    const z = tied.find((row) => row.allianceId === zid);
+    assert.ok(y && z);
+    assert.ok(y.rank < z.rank);
+
+    const stuffed = universe.alliances![lowId]!;
+    for (let i = 0; i < 20; i++) {
+      stuffed.members[`ghost${i}`] = {
+        playerId: `ghost${i}`,
+        role: "member",
+        joinedAt: i + 1,
+      };
+    }
+    const capped = allianceRankBoard(universe).find((row) => row.allianceId === lowId);
+    assert.equal(capped?.memberCount, 16);
+    const recruit = joinUniverse(universe, "Shown");
+    assert.equal(joinAlliance(universe, recruit.player.id, { allianceId: highId }).ok, true);
+    const view = playerView(universe, recruit.player.id);
+    assert.ok(view.allianceHighscores?.some((row) => row.tag === "AAA"));
+    assert.ok(
+      view.highscores.some(
+        (row) => row.playerId === recruit.player.id && row.allianceTag === "AAA",
+      ),
+    );
+    bindAllianceRankSource(() => []);
+    try {
+      assert.deepEqual(playerView(universe, recruit.player.id).allianceHighscores, []);
+    } finally {
+      bindAllianceRankSource(undefined);
+    }
+  });
+
+  it("uses the supplied cached combat halls in player views", () => {
+    const universe = createUniverse("Cached Combat Halls", 9);
+    const player = joinUniverse(universe, "Cache Viewer", 160_000_000);
+    const hallOfFame = [{
+      at: 1,
+      attackerName: "Attacker",
+      defenderName: "Defender",
+      targetCoords: { galaxy: 1, system: 1, slot: 8 },
+      outcome: "attacker_win" as const,
+      destroyedValue: 123,
+      shareCode: "sh_cached",
+    }];
+    const hallOfShame = [{
+      rank: 1,
+      playerId: player.player.id,
+      name: player.player.name,
+      lostValue: 456,
+    }];
+    bindHighscoreSource(() => ({
+      rows: highscoresBoard(universe),
+      hallOfFame,
+      hallOfShame,
+    }));
+    try {
+      const view = playerView(universe, player.player.id, 160_000_100);
+      assert.deepEqual(view.hallOfFame, hallOfFame);
+      assert.deepEqual(view.hallOfShame, hallOfShame);
+    } finally {
+      bindHighscoreSource(undefined);
+    }
   });
 });

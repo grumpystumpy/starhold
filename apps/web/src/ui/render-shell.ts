@@ -1,10 +1,15 @@
 import {
+  DAILY_LOGIN_CRYSTAL,
+  DAILY_LOGIN_DEUTERIUM,
+  DAILY_LOGIN_METAL,
   PRODUCTION_MULT,
+  STARSHARDS_DAILY_LOGIN,
+  levelBonuses,
   unreadEventCount,
   type PlayerView,
 } from "@starhold/game";
 import { RESOURCE_ART } from "./assets";
-import { fmt, fmtCoords } from "./format";
+import { fmt, fmtBonusPct, fmtCoords } from "./format";
 import { planetDiscHtml } from "./planet-disc";
 import { NAV_LABELS, NAV_PAGES, type NavPage } from "./nav";
 import { flashHtml, resBlock } from "./render-chrome";
@@ -12,6 +17,54 @@ import { escapeAttr, escapeHtml } from "./render-escape";
 import { hrefForPage } from "./router";
 import { session } from "../session";
 import { infoTooltip, storageFillTitle } from "./render-tooltips";
+
+export function levelBonusLines(level: number): string[] {
+  const b = levelBonuses(level);
+  const n = Math.max(0, Math.floor(level) - 1);
+  if (n === 0) {
+    return [
+      "Production +0.0% (none)",
+      "Building time -0.0% (none)",
+      "Research time -0.0% (none)",
+      "Fleet flight time -0.0% (none)",
+      "Ship build time -0.0% (none)",
+      "Weapons +0 levels (none)",
+      "Shielding +0 levels (none)",
+    ];
+  }
+
+  const prodPct = (b.production - 1) * 100;
+  const bTimePct = (1 - b.buildTime) * 100;
+  const rTimePct = (1 - b.researchTime) * 100;
+  const fTimePct = (1 - b.fleetTime) * 100;
+  const sBuildPct = (1 - b.shipBuild) * 100;
+
+  const bCap = b.buildTime <= 0.70001 ? " (cap 30%)" : "";
+  const rCap = b.researchTime <= 0.70001 ? " (cap 30%)" : "";
+  const fCap = b.fleetTime <= 0.75001 ? " (cap 25%)" : "";
+  const sCap = b.shipBuild <= 0.65001 ? " (cap 35%)" : "";
+
+  const wUnit = b.weaponsBonus === 1 ? "level" : "levels";
+  const sUnit = b.shieldingBonus === 1 ? "level" : "levels";
+
+  return [
+    `Production +${fmtBonusPct(prodPct)}`,
+    `Building time -${fmtBonusPct(bTimePct)}${bCap}`,
+    `Research time -${fmtBonusPct(rTimePct)}${rCap}`,
+    `Fleet flight time -${fmtBonusPct(fTimePct)}${fCap}`,
+    `Ship build time -${fmtBonusPct(sBuildPct)}${sCap}`,
+    `Weapons +${b.weaponsBonus} ${wUnit}`,
+    `Shielding +${b.shieldingBonus} ${sUnit}`,
+  ];
+}
+
+export function levelBonusHelpTooltip(level: number) {
+  return infoTooltip({
+    title: `Commander level ${fmt(level)} bonuses`,
+    lines: levelBonusLines(level),
+    testId: "level-bonus-help",
+  });
+}
 
 function resourceBar(view: PlayerView, busy: boolean): string {
   const { planet, economy } = view;
@@ -72,7 +125,7 @@ function resourceBar(view: PlayerView, busy: boolean): string {
         <span class="res-head"><span class="label">Starshards ${shardsTip.html}</span></span>
         <span class="value" data-testid="starshards-balance">${fmt(shards)}</span>
         <span class="sub">earned in-game</span>
-        <button type="button" class="ghost claim-daily" data-claim-daily data-testid="claim-daily" ${canClaim ? "" : "disabled"}>${view.dailyLoginAvailable ? "Claim daily +15" : "Daily claimed"}</button>
+        <button type="button" class="ghost claim-daily" data-claim-daily data-testid="claim-daily" title="${escapeAttr(`Daily login reward: +${STARSHARDS_DAILY_LOGIN} Starshards, +${fmt(DAILY_LOGIN_METAL)} metal, +${fmt(DAILY_LOGIN_CRYSTAL)} crystal, +${fmt(DAILY_LOGIN_DEUTERIUM)} deut`)}" ${canClaim ? "" : "disabled"}>${view.dailyLoginAvailable ? `Claim daily +${STARSHARDS_DAILY_LOGIN} +res` : "Daily claimed"}</button>
       </div>
     </section>`;
 }
@@ -204,7 +257,7 @@ export function shellHtml(
         </div>
         ${view.newbieBonusEndsAt != null && view.newbieBonusEndsAt - view.now > 0 ? `<div class="topbar-newbie-badge" data-testid="newbie-bonus-badge">Newbie bonus: +50% prod · +100% def (${Math.ceil((view.newbieBonusEndsAt - view.now) / (60 * 60 * 1000))}h left)</div>` : ""}
         <div class="topbar-progress" data-testid="player-level" title="Lifetime XP ${fmt(progress.xpTotal)}">
-          <span class="level-label">Lv ${fmt(progress.level)} ${infoTooltip({
+          <span class="level-label"><span class="level-text">Lv ${fmt(progress.level)}</span> ${infoTooltip({
             title: `Commander level ${fmt(progress.level)}`,
             lines: [
               `Progress ${fmt(progress.xp)} / ${fmt(progress.xpToNext)} XP to next level.`,
@@ -212,7 +265,7 @@ export function shellHtml(
               "XP comes from buildings, fleets, defenses, and research.",
             ],
             testId: "level-tip",
-          }).html}</span>
+          }).html}${levelBonusHelpTooltip(progress.level).html}</span>
           <div class="xp-bar" data-testid="xp-bar" role="progressbar" aria-valuemin="0" aria-valuemax="${progress.xpToNext}" aria-valuenow="${progress.xp}" aria-label="Experience">
             <div class="xp-fill" style="width:${xpPct}%"></div>
             <span class="xp-text">${fmt(progress.xp)} / ${fmt(progress.xpToNext)}</span>

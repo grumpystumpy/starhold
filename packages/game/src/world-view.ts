@@ -30,9 +30,11 @@ import {
   type PlanetArtContext,
 } from "./planet-art.js";
 import type {
+  AllianceRankEntry,
   GalaxyMiniBody,
   GalaxySlot,
   GalaxyView,
+  HighscoreCache,
   HighscoreEntry,
   PlanetArtFields,
   PlayerView,
@@ -41,8 +43,10 @@ import type {
 } from "./types.js";
 import {
   allianceDirectory,
+  allianceRankBoard,
   allianceTagForPlayer,
   allianceViewFor,
+  pendingAllianceRequestFor,
 } from "./world-alliances.js";
 import { galaxyMarkerOverlay } from "./world-alliance-intel.js";
 import { listOpenAcsForAlliance } from "./world-acs.js";
@@ -77,7 +81,7 @@ import {
 
 export { empirePoints };
 
-export type HighscoreSource = () => HighscoreEntry[] | undefined;
+export type HighscoreSource = () => HighscoreCache | undefined;
 
 let highscoreSource: HighscoreSource | undefined;
 
@@ -88,6 +92,21 @@ let highscoreSource: HighscoreSource | undefined;
  */
 export function bindHighscoreSource(source: HighscoreSource | undefined): void {
   highscoreSource = source;
+}
+
+export type AllianceRankSource = () => AllianceRankEntry[] | undefined;
+
+let allianceRankSource: AllianceRankSource | undefined;
+
+/**
+ * Server installs this so a page load can pass a cached alliance board.
+ * `undefined` means "compute now" (tests, memory mode).
+ * An array, including empty, is served as-is and is never rebuilt here.
+ */
+export function bindAllianceRankSource(
+  source: AllianceRankSource | undefined,
+): void {
+  allianceRankSource = source;
 }
 
 function highscoreRoster(rows: HighscoreEntry[]): PublicPlayer[] {
@@ -337,7 +356,9 @@ export function playerView(
   if (!player) throw new Error("Unknown player.");
   pruneExpiredOfficers(player, now);
   const provided = highscoreSource?.();
-  const highscores = provided ?? highscoresBoard(universe);
+  const highscores = provided?.rows ?? highscoresBoard(universe);
+  const allianceProvided = allianceRankSource?.();
+  const allianceHighscores = allianceProvided ?? allianceRankBoard(universe);
   maybeGrantHighscoreStarshards(universe, playerId, highscores);
   const pointsById = new Map(
     highscores.map((row) => [row.playerId, row.points]),
@@ -514,13 +535,16 @@ export function playerView(
     },
     roster: provided
       ? [
-          ...highscoreRoster(provided),
+          ...highscoreRoster(provided.rows),
           ...publicRoster(universe, pointsById).filter(
-            (entry) => entry.id === playerId && !provided.some((row) => row.playerId === playerId),
+            (entry) => entry.id === playerId && !provided.rows.some((row) => row.playerId === playerId),
           ),
         ]
       : publicRoster(universe, pointsById),
     highscores,
+    allianceHighscores,
+    hallOfFame: provided?.hallOfFame ?? [],
+    hallOfShame: provided?.hallOfShame ?? [],
     galaxy: galaxyViewFor(universe, playerId, g, s, now),
     fleets,
     fleetSlotCap,
@@ -546,6 +570,7 @@ export function playerView(
     progress: playerProgressView(player),
     occupation: occupationForPlanet(universe, planet.id, now),
     alliance: allianceViewFor(universe, playerId, now),
+    pendingAllianceRequest: pendingAllianceRequestFor(universe, player),
     allianceDirectory: allianceDirectory(universe),
     openAcsGroups: listOpenAcsForAlliance(universe, player.allianceId),
     goals: goalsView(player, now),

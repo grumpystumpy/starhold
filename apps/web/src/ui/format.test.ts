@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { fmt, fmtCompact, fmtCoordsLink, fmtLabel } from "./format";
+import { fmt, fmtCompact, fmtCoordsLink, fmtLabel, fmtBonusPct } from "./format";
 
 describe("fmt", () => {
   it("uses compact notation for numbers >= 1000 with floored rounding", () => {
@@ -50,6 +50,13 @@ describe("fmtCompact", () => {
 });
 
 describe("fmtCoordsLink", () => {
+  it("formats bonus percentage with one decimal place", () => {
+    assert.equal(fmtBonusPct(2.5), "2.5%");
+    assert.equal(fmtBonusPct(2), "2.0%");
+    assert.equal(fmtBonusPct(0), "0.0%");
+    assert.equal(fmtBonusPct(12.5), "12.5%");
+  });
+
   it("formats coordinate link HTML string", () => {
     const coords = { galaxy: 1, system: 2, slot: 3 };
     assert.equal(

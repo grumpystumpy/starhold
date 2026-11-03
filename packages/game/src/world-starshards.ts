@@ -1,8 +1,21 @@
-import { OFFICERS, officerRenewalCost, officerRenewalDurationMs } from "./catalog-officers.js";
+import {
+  OFFICERS,
+  OFFICER_DURATION_OPTIONS_HOURS,
+  officerDurationCost,
+  officerRenewalCost,
+  officerRenewalDurationMs,
+} from "./catalog-officers.js";
 import { SKILLS } from "./catalog-skills.js";
-import { OFFICER_MAX_LEVEL, SKILL_MAX_LEVEL, STARSHARDS_DAILY_LOGIN } from "./catalog.js";
+import {
+  DAILY_LOGIN_CRYSTAL,
+  DAILY_LOGIN_DEUTERIUM,
+  DAILY_LOGIN_METAL,
+  OFFICER_MAX_LEVEL,
+  SKILL_MAX_LEVEL,
+  STARSHARDS_DAILY_LOGIN,
+} from "./catalog.js";
 import { levelUpCost } from "./formulas-levels.js";
-import type { OfficerId, UniverseState } from "./types.js";
+import type { OfficerId, Resources, UniverseState } from "./types.js";
 import { advanceUniverse } from "./world-arrival.js";
 import { claimGoal, type GoalActionResult } from "./world-goals.js";
 import {
@@ -17,8 +30,10 @@ import {
   officerLevelOf,
   skillLevelOf,
 } from "./world-progression.js";
+import { addCargoToPlanet } from "./world-tick.js";
+
 export type StarshardActionResult =
-  | { ok: true; starshardsGranted?: number }
+  | { ok: true; starshardsGranted?: number; resourcesGranted?: Resources }
   | { ok: false; error: string };
 
 export type ResourceTradeDirection = "buy" | "sell";
@@ -39,7 +54,7 @@ export {
   type PlayerBoosts,
 } from "./world-boosts.js";
 
-/** Daily login earn: +15 Starshards once per UTC day. */
+/** Daily login earn: +15 Starshards and resource bundle once per UTC day. */
 export function claimDailyLogin(
   universe: UniverseState,
   playerId: string,
@@ -53,8 +68,26 @@ export function claimDailyLogin(
   }
   player.lastDailyLoginUtc = utcDayKey(now);
   grantStarshards(player, STARSHARDS_DAILY_LOGIN);
+
+  const planetId =
+    player.activePlanetId || player.homePlanetId || player.planetIds[0];
+  const planet = planetId ? universe.planets[planetId] : null;
+  const bundle: Resources = {
+    metal: DAILY_LOGIN_METAL,
+    crystal: DAILY_LOGIN_CRYSTAL,
+    deuterium: DAILY_LOGIN_DEUTERIUM,
+  };
+  if (planet) {
+    addCargoToPlanet(universe, planet, bundle, now);
+    universe.planets[planet.id] = planet;
+  }
+
   universe.players[player.id] = player;
-  return { ok: true, starshardsGranted: STARSHARDS_DAILY_LOGIN };
+  return {
+    ok: true,
+    starshardsGranted: STARSHARDS_DAILY_LOGIN,
+    resourcesGranted: bundle,
+  };
 }
 
 /**
@@ -151,18 +184,29 @@ export function activateOfficer(
   playerId: string,
   officerId: OfficerId,
   now = Date.now(),
+  hours?: number,
 ): StarshardActionResult {
   const player = universe.players[playerId];
   if (!player) return { ok: false, error: "Unknown player." };
   const def = OFFICERS[officerId];
   if (!def) return { ok: false, error: "Unknown officer." };
+  if (
+    hours !== undefined &&
+    !OFFICER_DURATION_OPTIONS_HOURS.some((allowedHours) => allowedHours === hours)
+  ) {
+    return { ok: false, error: "Invalid officer duration." };
+  }
 
   advanceUniverse(universe, now);
   pruneExpiredOfficers(player, now);
 
   const renewals = Math.max(0, Math.floor(player.officerRenewals?.[officerId] ?? 0));
-  const cost = officerRenewalCost(def.cost, renewals);
-  const durationMs = officerRenewalDurationMs(renewals);
+  const cost = hours === undefined
+    ? officerRenewalCost(def.cost, renewals)
+    : officerDurationCost(def.cost, renewals, hours);
+  const durationMs = hours === undefined
+    ? officerRenewalDurationMs(renewals)
+    : hours * 60 * 60 * 1000;
 
   const balance = Math.floor(player.starshards ?? 0);
   if (balance < cost) {

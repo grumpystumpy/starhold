@@ -102,6 +102,57 @@ export interface CombatReport {
   acsParticipantIds?: string[];
 }
 
+export interface PlayerCombatStats {
+  lostValue: number;
+  destroyedValue: number;
+  wins: number;
+  losses: number;
+}
+
+/** Fields deliberately exposed by a public battle-report share link. */
+export interface PublicCombatReport {
+  shareCode: string;
+  at: number;
+  attackerName: string;
+  defenderName: string;
+  originCoords?: Coordinates;
+  targetCoords: Coordinates;
+  attackerBefore: Partial<FleetShips>;
+  attackerAfter: Partial<FleetShips>;
+  defenderBefore: Partial<FleetShips>;
+  defenderAfter: Partial<FleetShips>;
+  defensesBefore: Partial<DefenseStock>;
+  defensesAfter: Partial<DefenseStock>;
+  defensesDestroyed?: Partial<Record<DefenseId, number>>;
+  loot: Resources;
+  debrisCreated: Resources;
+  outcome: CombatOutcome;
+  rounds: number;
+}
+
+export interface HallOfFameEntry {
+  at: number;
+  attackerName: string;
+  defenderName: string;
+  targetCoords: Coordinates;
+  outcome: CombatOutcome;
+  destroyedValue: number;
+  shareCode?: string;
+}
+
+export interface HallOfShameEntry {
+  rank: number;
+  playerId: string;
+  name: string;
+  lostValue: number;
+}
+
+export interface HighscoreCache {
+  rows: HighscoreEntry[];
+  hallOfFame: HallOfFameEntry[];
+  hallOfShame: HallOfShameEntry[];
+}
+
 export interface EspionageReport {
   id: string;
   at: number;
@@ -194,12 +245,18 @@ export interface PlanetState {
 }
 
 export type AllianceRole = "founder" | "officer" | "member";
-export type AllianceJoinMode = "open" | "invite";
+export type AllianceJoinMode = "open" | "invite" | "request";
 
 export interface AllianceMember {
   playerId: string;
   role: AllianceRole;
   joinedAt: number;
+}
+
+/** One player's ask to join a request-mode alliance. Missing on older saves. */
+export interface AlliancePendingRequest {
+  playerId: string;
+  requestedAt: number;
 }
 
 export interface AllianceChatMessage {
@@ -260,6 +317,8 @@ export interface AllianceRecord {
   members: Record<string, AllianceMember>;
   /** Pending invite player ids (invite mode). */
   pendingInvites?: string[];
+  /** Join requests (request mode). Missing on older saves — treat as []. */
+  pendingRequests?: AlliancePendingRequest[];
   /** Ring buffer. Missing on older saves — treat as []. */
   chat?: AllianceChatMessage[];
   /** Shared spy stamps. Missing on older saves — treat as []. */
@@ -291,6 +350,12 @@ export interface AllianceView {
   myRole: AllianceRole;
   members: AllianceMemberView[];
   pendingInvites: Array<{ playerId: string; name: string }>;
+  /** Present for Leader and Officer. Older clients may omit it. */
+  pendingRequests?: Array<{
+    playerId: string;
+    name: string;
+    requestedAt: number;
+  }>;
   memberCount: number;
   maxMembers: number;
   chat: AllianceChatMessage[];
@@ -307,6 +372,25 @@ export interface AllianceListEntry {
   joinMode: AllianceJoinMode;
   memberCount: number;
   maxMembers: number;
+}
+
+/** Cached alliance rank row. Rebuilt with the player highscore board. */
+export interface AllianceRankEntry {
+  rank: number;
+  allianceId: string;
+  name: string;
+  tag: string;
+  memberCount: number;
+  points: number;
+  averagePoints: number;
+}
+
+/** The viewer's one outstanding join request, if any. */
+export interface PendingAllianceRequestView {
+  allianceId: string;
+  name: string;
+  tag: string;
+  requestedAt: number;
 }
 
 export type EventLogKind =
@@ -446,6 +530,11 @@ export interface PlayerState {
   /** Alliance membership — tag resolved at read time. */
   allianceId?: string | null;
   /**
+   * Alliance this player has asked to join. One pending request per player.
+   * Missing on older saves.
+   */
+  pendingAllianceId?: string | null;
+  /**
    * Pirate raid fairness (CHANGE #18): successful pirate NPC raids on this
    * player for a UTC day. Lazy daily reset by `dayKey`. Aliens exempt.
    */
@@ -453,6 +542,8 @@ export interface PlayerState {
     dayKey: string;
     successfulRaids: number;
   };
+  /** Lifetime combat counters; missing on old saves means zero. */
+  combatStats?: PlayerCombatStats;
   /**
    * Daily / weekly goal counters for the current UTC periods.
    * Lives on the player inside the universe document (no extra KV keys).
@@ -681,6 +772,10 @@ export interface PlayerView {
   economy: EconomySnapshot;
   roster: PublicPlayer[];
   highscores: HighscoreEntry[];
+  /** Cached alliance ranks. Empty until the next highscore rebuild. */
+  allianceHighscores?: AllianceRankEntry[];
+  hallOfFame?: HallOfFameEntry[];
+  hallOfShame?: HallOfShameEntry[];
   galaxy: GalaxyView;
   fleets: FleetMission[];
   /** Server-derived slot limits, including active bonuses and owned beacons. */
@@ -723,6 +818,8 @@ export interface PlayerView {
   occupation: OccupationState | null;
   /** Current alliance view, or null when unaffiliated. */
   alliance: AllianceView | null;
+  /** Set when this player has one outstanding join request. */
+  pendingAllianceRequest?: PendingAllianceRequestView | null;
   /** Lightweight directory of alliances (for join UI). */
   allianceDirectory: AllianceListEntry[];
   /** Open Joint Strike (ACS) groups for the player's alliance. */

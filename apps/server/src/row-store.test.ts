@@ -43,6 +43,7 @@ import {
   migrateChunk,
   migrationDone,
   readHighscoreMeta,
+  readCombatReportByShareCode,
   rollbackRowsToLegacy,
   ensureRowTables,
   ROW_LOCK_MS,
@@ -258,6 +259,60 @@ function fixture(): UniverseState {
 }
 
 describe("row save migration", () => {
+  it("serves a sanitized public report with one share-code lookup", async () => {
+    resetMemoryUniverse();
+    const { db } = sqliteD1();
+    const source = fixture();
+    const attacker = Object.values(source.players).find((p) => p.name === "OldHand")!;
+    const defender = Object.values(source.players).find((p) => p.name === "Other")!;
+    source.reports["public-report"] = {
+      id: "public-report",
+      at: 1_700_000_000_000,
+      missionId: "private-mission",
+      attackerPlayerId: attacker.id,
+      defenderPlayerId: defender.id,
+      attackerName: attacker.name,
+      defenderName: defender.name,
+      originCoords: { galaxy: 1, system: 1, slot: 8 },
+      targetCoords: { galaxy: 1, system: 2, slot: 8 },
+      attackerBefore: { scout: 2 },
+      attackerAfter: { scout: 1 },
+      defenderBefore: { interceptor: 1 },
+      defenderAfter: {},
+      defensesBefore: { ...emptyDefenses(), laserBattery: 3 },
+      defensesAfter: { ...emptyDefenses(), laserBattery: 1 },
+      defensesDestroyed: { laserBattery: 2 },
+      loot: { metal: 10, crystal: 20, deuterium: 30 },
+      debrisCreated: { metal: 40, crystal: 50, deuterium: 0 },
+      outcome: "attacker_win",
+      rounds: 2,
+      summary: "Private summary",
+      shareCode: "sh_public123",
+    };
+    await migrateAll(db, source);
+    const countedDb = subrequestD1(db);
+    const store = createD1Store(countedDb);
+    const app = createApp();
+    const response = await runWithScope(
+      { kv: store, db: countedDb, mode: "d1", method: "GET", cpuMs: 0 },
+      () => app.request("/api/reports/sh_public123"),
+    );
+    assert.equal(response.status, 200);
+    const report = await response.json() as Record<string, unknown>;
+    assert.equal(report.shareCode, "sh_public123");
+    assert.equal(report.attackerName, "OldHand");
+    assert.equal("attackerPlayerId" in report, false);
+    assert.equal("defenderPlayerId" in report, false);
+    assert.equal("missionId" in report, false);
+    assert.equal("summary" in report, false);
+    assert.equal(countedDb.count(), 1);
+    assert.equal(
+      (await readCombatReportByShareCode(countedDb, "sh_missing")),
+      null,
+    );
+    assert.equal(countedDb.count(), 2);
+  });
+
   it("keeps progress, is idempotent, and resumes after an interrupt", async () => {
     const { db } = sqliteD1();
     const source = fixture();
@@ -299,11 +354,35 @@ describe("row save migration", () => {
     resetMemoryUniverse();
     const { db, raw } = sqliteD1();
     const source = fixture();
+    const alpha = Object.values(source.players).find((player) => player.name === "OldHand")!;
+    const bravo = Object.values(source.players).find((player) => player.name === "Other")!;
+    bravo.combatStats = { lostValue: 750, destroyedValue: 100, wins: 0, losses: 1 };
+    source.reports["hall-fight"] = {
+      id: "hall-fight",
+      at: 1_700_000_100_000,
+      missionId: "fight-mission",
+      attackerPlayerId: alpha.id,
+      defenderPlayerId: bravo.id,
+      attackerName: alpha.name,
+      defenderName: bravo.name,
+      targetCoords: { galaxy: 1, system: 2, slot: 8 },
+      attackerBefore: { scout: 2 },
+      attackerAfter: { scout: 1 },
+      defenderBefore: { interceptor: 1 },
+      defenderAfter: {},
+      defensesBefore: emptyDefenses(),
+      defensesAfter: emptyDefenses(),
+      loot: { metal: 0, crystal: 0, deuterium: 0 },
+      debrisCreated: { metal: 0, crystal: 0, deuterium: 0 },
+      outcome: "attacker_win",
+      rounds: 1,
+      summary: "Fight",
+      shareCode: "sh_hallfight",
+    };
     await migrateAll(db, source);
     const staleAt = Date.now() - HIGHSCORE_TTL_MS - 5_000;
     raw.prepare("UPDATE save_highscores SET built_at = ? WHERE id = 'board'").run(staleAt);
     const store = createD1Store(db);
-    const alpha = Object.values(source.players).find((player) => player.name === "OldHand")!;
     await runWithScope(
       { kv: store, db, mode: "d1", method: "GET", cpuMs: 0 },
       () =>
@@ -314,6 +393,10 @@ describe("row save migration", () => {
     );
     const afterRead = await readHighscoreMeta(db);
     assert.equal(afterRead?.builtAt, staleAt);
+    const staleCache = JSON.parse(
+      raw.prepare("SELECT doc FROM save_highscores WHERE id = 'board'").get()!.doc as string,
+    ) as { hallOfFame: unknown[] };
+    assert.deepEqual(staleCache.hallOfFame, []);
     await runWithScope(
       { kv: store, db, mode: "d1", method: "POST", cpuMs: 0 },
       () => withUniverse(() => undefined, { maintenance: true }),
@@ -321,6 +404,18 @@ describe("row save migration", () => {
     const rebuilt = await readHighscoreMeta(db);
     assert.ok(rebuilt && rebuilt.builtAt !== staleAt);
     assert.equal(highscoreCacheExpired(rebuilt!.builtAt), false);
+    const alliances = await db
+      .prepare("SELECT id, doc FROM save_highscores WHERE id = 'alliances'")
+      .bind()
+      .first<{ id: string; doc: string }>();
+    assert.equal(alliances?.id, "alliances");
+    assert.match(alliances?.doc ?? "", /^\[/);
+    const rebuiltCache = JSON.parse(
+      raw.prepare("SELECT doc FROM save_highscores WHERE id = 'board'").get()!.doc as string,
+    ) as { hallOfFame: Array<{ shareCode?: string }>; hallOfShame: Array<{ name: string; lostValue: number }> };
+    assert.equal(rebuiltCache.hallOfFame[0]?.shareCode, "sh_hallfight");
+    assert.equal(rebuiltCache.hallOfShame[0]?.name, "Other");
+    assert.equal(rebuiltCache.hallOfShame[0]?.lostValue, 750);
   });
 
   it("locks per player and rejects a stale row", async () => {

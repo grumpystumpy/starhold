@@ -4,6 +4,7 @@ import {
   ALLIANCE_CHAT_MAX_CHARS,
   ALLIANCE_CHAT_MAX_MESSAGES,
   ALLIANCE_CHAT_RATE_PER_MIN,
+  ALLIANCE_CHAT_RETURN_MAX,
   ALLIANCE_MARKERS_MAX,
   createAlliance,
   createUniverse,
@@ -131,6 +132,10 @@ describe("alliance chat, intel, markers", () => {
       );
       assert.equal(result.ok, true);
     }
+    const stored = allyOf(universe, founder.player.id).chat ?? [];
+    assert.equal(stored.length, ALLIANCE_CHAT_MAX_MESSAGES);
+    assert.equal(stored[0]?.body, "ring1");
+    assert.equal(stored[stored.length - 1]?.body, `ring${ALLIANCE_CHAT_MAX_MESSAGES}`);
     const messages = listAllianceChat(
       universe,
       founder.player.id,
@@ -138,12 +143,26 @@ describe("alliance chat, intel, markers", () => {
     );
     assert.equal(messages.ok, true);
     if (!messages.ok) return;
-    assert.equal(messages.messages.length, ALLIANCE_CHAT_MAX_MESSAGES);
-    assert.equal(messages.messages[0]?.body, "ring1");
+    assert.equal(messages.messages.length, ALLIANCE_CHAT_RETURN_MAX);
+    assert.equal(
+      messages.messages[0]?.body,
+      `ring${ALLIANCE_CHAT_MAX_MESSAGES - ALLIANCE_CHAT_RETURN_MAX + 1}`,
+    );
     assert.equal(
       messages.messages[messages.messages.length - 1]?.body,
       `ring${ALLIANCE_CHAT_MAX_MESSAGES}`,
     );
+    const newest = messages.messages[messages.messages.length - 1]!.createdAt;
+    const since = listAllianceChat(
+      universe,
+      founder.player.id,
+      newest + 1,
+      newest - 1,
+    );
+    assert.equal(since.ok, true);
+    if (!since.ok) return;
+    assert.equal(since.messages.length, 1);
+    assert.equal(since.messages[0]?.body, `ring${ALLIANCE_CHAT_MAX_MESSAGES}`);
   });
 
   it("shares a frozen spy snapshot and lets officers remove it", () => {

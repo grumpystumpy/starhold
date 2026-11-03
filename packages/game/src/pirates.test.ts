@@ -10,6 +10,8 @@ import {
   ALIEN_SPLIT_LEVEL,
   MAP_GALAXIES,
   MAP_SYSTEMS,
+  NPC_JOB_LEVELUP_BUDGET,
+  NPC_JOB_RAID_BUDGET,
   PIRATE_DESTROY_STARSHARDS_BASE,
   PIRATE_DESTROY_STARSHARDS_PER_TIER,
   PIRATE_EXCLUDED_SHIP_IDS,
@@ -797,6 +799,108 @@ describe("workers tick budget", () => {
     }
   });
 
+  it("keeps NPC cron work within caps and fires every raid scheduled over 24h", () => {
+    const previous = process.env.STARHOLD_E2E;
+    process.env.STARHOLD_E2E = "1";
+    try {
+      const now = 1_700_000_000_000;
+      const levelWork = createUniverse("NPC level-up caps", 8);
+      const levelBases = activePirateBases(levelWork);
+      const initialLevels = new Map(levelBases.map((base) => [base.id, base.level]));
+      for (const base of levelBases) {
+        base.lastGrewAt = now - PIRATE_LEVEL_GROWTH_INTERVAL_MS;
+        base.lastFreeSpawnAt = now + 1;
+        base.nextRaidAt = now + PIRATE_RAID_PERIOD_MS;
+      }
+      let budget = npcJobBudget();
+      bindTickBudget(() => budget);
+      tickPirates(levelWork, now);
+      const levelsGained = levelBases.reduce(
+        (sum, base) => sum + base.level - initialLevels.get(base.id)!,
+        0,
+      );
+      assert.equal(levelsGained, NPC_JOB_LEVELUP_BUDGET);
+
+      const raidWork = createUniverse("NPC raid caps", 8);
+      const raidBases = activePirateBases(raidWork);
+      for (const base of raidBases) {
+        base.lastGrewAt = now + 1;
+        base.lastFreeSpawnAt = now + 1;
+        base.nextRaidAt = now - 1;
+      }
+      budget = npcJobBudget();
+      tickPirates(raidWork, now);
+      assert.equal(
+        raidBases.filter((base) => base.nextRaidAt > now).length,
+        NPC_JOB_RAID_BUDGET,
+      );
+
+      const start = now;
+      const end = start + 24 * 60 * 60 * 1000;
+      const step = 10 * 60 * 1000;
+      const reference = createUniverse("NPC raid schedule", 8);
+      const referenceBases = activePirateBases(reference);
+      for (const base of referenceBases) {
+        base.lastGrewAt = end + 1;
+        base.lastFreeSpawnAt = end + 1;
+        base.nextRaidAt = rollNextRaidAt(base.id, start, PIRATE_RAID_PERIOD_MS);
+      }
+      const split = structuredClone(reference);
+      const expectedNext = new Map<string, number>();
+      let expectedRaids = 0;
+      for (const base of referenceBases) {
+        let next = base.nextRaidAt;
+        while (next <= end) {
+          next = rollNextRaidAt(base.id, next, PIRATE_RAID_PERIOD_MS);
+          expectedRaids += 1;
+        }
+        expectedNext.set(base.id, next);
+      }
+
+      bindTickBudget(() => undefined);
+      for (let at = start + step; at <= end; at += step) {
+        tickPirates(reference, at);
+      }
+      let actualRaids = 0;
+      for (const base of referenceBases) {
+        const expected = expectedNext.get(base.id)!;
+        assert.equal(reference.pirateBases![base.id]!.nextRaidAt, expected);
+        let next = rollNextRaidAt(base.id, start, PIRATE_RAID_PERIOD_MS);
+        while (next < expected) {
+          actualRaids += 1;
+          next = rollNextRaidAt(base.id, next, PIRATE_RAID_PERIOD_MS);
+        }
+      }
+      assert.equal(actualRaids, expectedRaids);
+
+      let runs = 0;
+      while (
+        split.aiCatchUpCursor ||
+        Object.values(split.pirateBases ?? {}).some((base) => base.nextRaidAt <= end)
+      ) {
+        assert.ok(runs < 12, "budgeted NPC cron did not catch up");
+        budget = npcJobBudget();
+        tickPirates(split, end);
+        runs += 1;
+      }
+      let splitRaids = 0;
+      for (const [id, expected] of expectedNext) {
+        const base = split.pirateBases![id]!;
+        assert.equal(base.nextRaidAt, expected);
+        let next = rollNextRaidAt(id, start, PIRATE_RAID_PERIOD_MS);
+        while (next < base.nextRaidAt) {
+          splitRaids += 1;
+          next = rollNextRaidAt(id, next, PIRATE_RAID_PERIOD_MS);
+        }
+      }
+      assert.equal(splitRaids, expectedRaids);
+    } finally {
+      bindTickBudget(() => undefined);
+      if (previous == null) delete process.env.STARHOLD_E2E;
+      else process.env.STARHOLD_E2E = previous;
+    }
+  });
+
   it("fires every due raid across 24h and ends with no backlog", () => {
     const previous = process.env.STARHOLD_E2E;
     process.env.STARHOLD_E2E = "1";
@@ -874,9 +978,21 @@ describe("workers tick budget", () => {
         base.nextRaidAt = now - 1;
         base.lastRaidAt = 0;
       }
-      const warmBegan = performance.now();
-      tickPirates(universe, now);
-      const cpu = performance.now() - warmBegan;
+      let cpu = 0;
+      let raidRuns = 0;
+      while (
+        [...dueIds].some((id) => {
+          const base = universe.pirateBases?.[id];
+          return base && base.destroyedAt == null && base.lastRaidAt !== now - 1;
+        })
+      ) {
+        assert.ok(raidRuns < 10, "budgeted pirate combat did not resume");
+        budget = npcJobBudget();
+        const warmBegan = performance.now();
+        tickPirates(universe, now);
+        cpu = Math.max(cpu, performance.now() - warmBegan);
+        raidRuns += 1;
+      }
       let fired = 0;
       let destroyed = 0;
       let stillDue = 0;
@@ -909,9 +1025,20 @@ describe("workers tick budget", () => {
         armed += 1;
       }
       budget = npcJobBudget();
-      const waveBegan = performance.now();
-      tickPirates(universe, now);
-      const waveCpu = performance.now() - waveBegan;
+      let waveCpu = 0;
+      let waveRuns = 0;
+      while (
+        Object.values(universe.pirateBases ?? {}).some(
+          (base) => base.destroyedAt == null && base.nextRaidAt <= now,
+        )
+      ) {
+        assert.ok(waveRuns < 10, "budgeted pirate wave did not resume");
+        budget = npcJobBudget();
+        const waveBegan = performance.now();
+        tickPirates(universe, now);
+        waveCpu = Math.max(waveCpu, performance.now() - waveBegan);
+        waveRuns += 1;
+      }
       console.log(`pirate job wave cpu ms ${waveCpu.toFixed(3)} due ${Math.min(wave, armed)}`);
       assert.ok(waveCpu < 250, `pirate job wave cpu ${waveCpu.toFixed(3)}ms`);
     } finally {
@@ -1030,6 +1157,8 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
     const reportA = universe1.reports[launchA.fleet.reportId!];
     assert.ok(reportA);
     assert.equal(reportA.outcome, "attacker_win");
+    assert.match(reportA.shareCode ?? "", /^sh_/);
+    assert.ok(universe1.players[playerA.id]?.combatStats);
 
     // 3. Direction B: Pirate raids player.
     // Player has tech 8/8/8. Pirate base tier 100 (stored tech 25) raids player planet.
@@ -1289,7 +1418,10 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
       assert.equal(launch.ok, true);
       advanceUniverse(universe, launch.fleet.arrivesAt);
       assert.ok(launch.fleet.reportId);
-      assert.ok(universe.reports[launch.fleet.reportId!]);
+      const report = universe.reports[launch.fleet.reportId!];
+      assert.ok(report);
+      assert.match(report.shareCode ?? "", /^sh_/);
+      assert.ok(universe.players[player.id]?.combatStats);
 
       assert.equal(universe.players[player.id]?.name, "OldCommander");
       assert.ok((universe.players[player.id]?.xpTotal ?? 0) >= 1200);
@@ -1484,6 +1616,8 @@ describe("B3-25 alien strength and raid power", () => {
     assert.equal(report.outcome, expectedCombat.outcome);
     assert.deepEqual(report.attackerAfter, expectedCombat.attackerAfter);
     assert.deepEqual(report.defenderAfter, expectedCombat.defenderAfter);
+    assert.match(report.shareCode ?? "", /^sh_/);
+    assert.ok(universe.players[player.id]?.combatStats);
   });
 
   it("loads an existing alien base from a save, preserves progress, and resolves its raid", () => {

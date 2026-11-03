@@ -107,9 +107,19 @@ function overviewPage(view: PlayerView, busy: boolean): string {
   const solarTemp = economy.energy.solarTempFactor ?? 1;
   const title = view.player.cosmetics?.activeTitle?.trim() ?? "";
   const skin = view.player.cosmetics?.activePlanetSkinId ?? "";
+  const readyDailyMissions = (view.goals ?? []).filter(
+    (g) => g.cadence === "daily" && !g.claimed && g.progress >= g.target,
+  ).length;
+  const goalsHref = hrefForPage("goals", {
+    playerId: view.player.id,
+    planetId: view.planet.id,
+  });
   return `
     <section class="panel" data-testid="overview-panel">
       <h2>Overview</h2>
+      <p class="hint" data-testid="overview-daily-missions-ready">
+        Daily missions ready to claim: <a href="${escapeAttr(goalsHref)}" data-nav="goals" data-testid="overview-goals-link"><strong>${fmt(readyDailyMissions)}</strong></a>
+      </p>
       <div class="overview-hero">
         <div class="planet-frame" data-testid="planet-skin-frame" data-planet-skin="${escapeAttr(skin)}">
           ${planetDiscHtml({
@@ -359,19 +369,69 @@ function fleetPage(
     </section>`;
 }
 
+let highscoreTab: "players" | "alliances" = "players";
+
+export function setHighscoreTab(tab: "players" | "alliances"): void {
+  highscoreTab = tab;
+}
+
 function highscorePage(view: PlayerView): string {
+  const playersActive = highscoreTab !== "alliances";
+  const playerRows = (view.highscores ?? [])
+    .map(
+      (h) =>
+        `<li data-testid="highscore-${h.rank}" data-player-id="${escapeAttr(h.playerId)}" data-home-planet="${escapeAttr(h.homePlanetId)}"><span class="row-with-thumb"><span class="hs-rank">#${fmt(h.rank)}</span>${planetDiscHtml({ src: h.artThumbUrl, artId: h.artId, size: 32 })}${h.allianceTag ? `[${escapeHtml(h.allianceTag)}] ` : ""}${escapeHtml(h.name)}${h.playerId === view.player.id ? " (you)" : ""}</span><span>Home ${escapeHtml(h.planetName || "world")} · ${fmtCoordsLink(h.coords)} · ${fmtCompact(h.points)} pts · Lv ${fmt(h.level ?? 1)} · ${fmt(h.xpTotal ?? 0)} XP</span></li>`,
+    )
+    .join("");
+  const allianceRows = (view.allianceHighscores ?? [])
+    .map(
+      (row) =>
+        `<li data-testid="alliance-highscore-${row.rank}"><span class="hs-rank">#${fmt(row.rank)}</span> [${escapeHtml(row.tag)}] ${escapeHtml(row.name)} · ${fmt(row.memberCount)} members · ${fmtCompact(row.points)} pts · avg ${fmtCompact(row.averagePoints)}</li>`,
+    )
+    .join("");
   return `
     <section class="panel" data-testid="highscores">
       <h2>Highscores</h2>
-      <p class="hint">One row per commander — their home planet only. Points still count the whole empire.</p>
+      <div class="alliance-member-actions" data-testid="highscore-tabs">
+        <button type="button" data-highscore-tab="players" data-testid="highscore-tab-players" aria-pressed="${playersActive ? "true" : "false"}">Commanders</button>
+        <button type="button" data-highscore-tab="alliances" data-testid="highscore-tab-alliances" aria-pressed="${playersActive ? "false" : "true"}">Alliances</button>
+      </div>
+      ${
+        playersActive
+          ? `<p class="hint">One row per commander — their home planet only. Points still count the whole empire.</p>
       <ol class="highscores" data-testid="highscores-list">
-        ${(view.highscores ?? [])
-          .map(
-            (h) =>
-              `<li data-testid="highscore-${h.rank}" data-player-id="${escapeAttr(h.playerId)}" data-home-planet="${escapeAttr(h.homePlanetId)}"><span class="row-with-thumb"><span class="hs-rank">#${fmt(h.rank)}</span>${planetDiscHtml({ src: h.artThumbUrl, artId: h.artId, size: 32 })}${h.allianceTag ? `[${escapeHtml(h.allianceTag)}] ` : ""}${escapeHtml(h.name)}${h.playerId === view.player.id ? " (you)" : ""}</span><span>Home ${escapeHtml(h.planetName || "world")} · ${fmtCoordsLink(h.coords)} · ${fmtCompact(h.points)} pts · Lv ${fmt(h.level ?? 1)} · ${fmt(h.xpTotal ?? 0)} XP</span></li>`,
-          )
-          .join("")}
-      </ol>
+        ${playerRows}
+      </ol>`
+          : `<p class="hint">Ranked by total member points. Rebuilt with the highscore cache, not on each page load.</p>
+      <ol class="highscores" data-testid="alliance-highscores">
+        ${allianceRows || `<li data-testid="alliance-highscores-empty">No alliances ranked yet.</li>`}
+      </ol>`
+      }
+    </section>
+    <section class="panel" data-testid="hall-of-fame">
+      <h2>Hall of Fame</h2>
+      <p class="hint">Biggest battles by the value of ships and defenses destroyed.</p>
+      ${(view.hallOfFame ?? []).length
+        ? `<ol class="highscores">
+            ${(view.hallOfFame ?? []).map((fight, index) => {
+              const share = fight.shareCode
+                ? ` · <a href="/?report=${escapeAttr(encodeURIComponent(fight.shareCode))}">Battle report</a>`
+                : "";
+              return `<li data-testid="hall-of-fame-${index + 1}"><span>${escapeHtml(fight.attackerName)} vs ${escapeHtml(fight.defenderName)} · ${escapeHtml(fight.outcome.replaceAll("_", " "))}</span><span>${fmtCompact(fight.destroyedValue)} value · ${escapeHtml(new Date(fight.at).toLocaleDateString())} · ${fmtCoordsLink(fight.targetCoords)}${share}</span></li>`;
+            }).join("")}
+          </ol>`
+        : `<p class="hint">No recorded battles yet.</p>`}
+    </section>
+    <section class="panel" data-testid="hall-of-shame">
+      <h2>Hall of Shame</h2>
+      <p class="hint">Commanders ranked by the lifetime value of ships lost in combat.</p>
+      ${(view.hallOfShame ?? []).length
+        ? `<ol class="highscores">
+            ${(view.hallOfShame ?? []).map((commander) =>
+              `<li data-testid="hall-of-shame-${commander.rank}" data-player-id="${escapeAttr(commander.playerId)}"><span>#${fmt(commander.rank)} ${escapeHtml(commander.name)}</span><span>${fmtCompact(commander.lostValue)} ship value lost</span></li>`,
+            ).join("")}
+          </ol>`
+        : `<p class="hint">No combat losses recorded yet.</p>`}
     </section>
     <section class="panel">
       <h2>Universe roster</h2>

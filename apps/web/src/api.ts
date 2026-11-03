@@ -1,5 +1,6 @@
 import type {
   AcsPrefill,
+  AllianceChatMessage,
   BuildingId,
   Coordinates,
   DefenseId,
@@ -7,6 +8,7 @@ import type {
   MissionType,
   OfficerId,
   PlayerView,
+  PublicCombatReport,
   ResearchId,
   Resources,
   ShipId,
@@ -309,6 +311,15 @@ export interface AuthMeResponse {
 export async function fetchAuthMe(): Promise<AuthMeResponse> {
   const res = await credFetch("/api/auth/me");
   return parse<AuthMeResponse>(res);
+}
+
+export async function fetchPublicCombatReport(
+  shareCode: string,
+): Promise<PublicCombatReport> {
+  const res = await credFetch(
+    `/api/reports/${encodeURIComponent(shareCode)}`,
+  );
+  return parse<PublicCombatReport>(res);
 }
 
 export async function signupAccount(
@@ -676,11 +687,12 @@ export async function tradeResources(
 export async function activateOfficerHire(
   playerId: string,
   officerId: OfficerId,
+  hours?: number,
 ): Promise<PlayerView> {
   const res = await credFetch("/api/activate-officer", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ playerId, officerId }),
+    body: JSON.stringify({ playerId, officerId, hours }),
   });
   return parse<PlayerView>(res);
 }
@@ -798,7 +810,7 @@ export async function relocateMiniFortress(
 
 export async function createAllianceRequest(
   playerId: string,
-  opts: { name: string; tag: string; joinMode?: "open" | "invite" },
+  opts: { name: string; tag: string; joinMode?: "open" | "invite" | "request" },
 ): Promise<PlayerView> {
   const res = await credFetch("/api/alliance/create", {
     method: "POST",
@@ -870,7 +882,7 @@ export async function setAllianceRoleRequest(
 
 export async function setAllianceJoinModeRequest(
   playerId: string,
-  joinMode: "open" | "invite",
+  joinMode: "open" | "invite" | "request",
 ): Promise<PlayerView> {
   const res = await credFetch("/api/alliance/set-join-mode", {
     method: "POST",
@@ -901,6 +913,52 @@ export async function disbandAllianceRequest(
     body: JSON.stringify({ playerId }),
   });
   return parse<PlayerView>(res);
+}
+
+export async function approveAllianceRequest(
+  playerId: string,
+  targetPlayerId: string,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/alliance/request/approve", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, targetPlayerId }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function rejectAllianceRequest(
+  playerId: string,
+  targetPlayerId: string,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/alliance/request/reject", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, targetPlayerId }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function cancelAllianceRequest(
+  playerId: string,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/alliance/request/cancel", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function fetchAllianceChat(
+  since?: number,
+): Promise<{ messages: AllianceChatMessage[] }> {
+  const query =
+    since != null && Number.isFinite(since)
+      ? `?since=${encodeURIComponent(String(since))}`
+      : "";
+  const res = await credFetch(`/api/alliance/chat${query}`);
+  return parse(res);
 }
 
 export async function postAllianceChatRequest(body: string): Promise<PlayerView> {

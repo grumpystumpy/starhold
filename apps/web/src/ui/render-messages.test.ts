@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { PlayerView } from "@starhold/game";
+import type { CombatReport, PlayerView } from "@starhold/game";
 import {
   closeReportWindow,
   collectInbox,
@@ -9,6 +9,7 @@ import {
   setConfirmDelete,
   setInboxFilter,
 } from "./render-messages";
+import { combatBattleExtrasHtml } from "./render-fleets-panels";
 
 function baseView(overrides: Partial<PlayerView> = {}): PlayerView {
   return {
@@ -367,6 +368,7 @@ describe("messages inbox", () => {
       outcome: "attacker_win",
       rounds: 2,
       summary: "Battle summary text",
+      shareCode: "sh_test1",
       roundLog: [
         {
           round: 1,
@@ -438,6 +440,29 @@ describe("messages inbox", () => {
     assert.match(combatWinHtml, /Points lost:/);
     assert.match(combatWinHtml, /coord-link/);
     assert.match(combatWinHtml, /1\.2k metal, 800 crystal/);
+    assert.match(combatWinHtml, /<th scope="row">Recon Drone<\/th><td>10<\/td><td>2<\/td>/);
+    assert.match(combatWinHtml, /<th scope="row">Guided-Missile Cruiser<\/th><td>2<\/td><td>0<\/td>/);
+    assert.match(combatWinHtml, /<th scope="row">Strike Fighter<\/th><td>5<\/td><td>5<\/td>/);
+    assert.match(combatWinHtml, /data-testid="battle-ship-totals-attacker"/);
+    assert.match(combatWinHtml, /data-testid="battle-ship-totals-defender"/);
+    assert.match(combatWinHtml, /data-copy-battle-share="c_test_1"/);
+
+    const inboxDetails = messagesPageHtml(view);
+    assert.match(inboxDetails, /data-testid="inbox-combat-details-c_test_1"/);
+    assert.match(inboxDetails, /<th scope="row">Recon Drone<\/th><td>10<\/td><td>2<\/td>/);
+    assert.match(inboxDetails, /<th scope="row">Strike Fighter<\/th><td>5<\/td><td>5<\/td>/);
+    assert.equal(
+      combatWinHtml.match(/<th scope="row">Recon Drone<\/th><td>10<\/td><td>2<\/td>/g)?.length,
+      2,
+    );
+    assert.match(
+      combatBattleExtrasHtml(combatReport as CombatReport),
+      /data-copy-battle-share="c_test_1"/,
+    );
+    assert.doesNotMatch(
+      combatBattleExtrasHtml({ ...combatReport, shareCode: undefined } as CombatReport),
+      /data-copy-battle-share=/,
+    );
 
     // Open Spy Report
     openReportWindow("spy", "s_test_1");
@@ -494,6 +519,7 @@ describe("messages inbox", () => {
     assert.match(legacyHtml, /BravoLegacy/);
     assert.match(legacyHtml, /coord-link/);
     assert.doesNotMatch(legacyHtml, /Defenses destroyed:/);
+    assert.doesNotMatch(legacyHtml, /data-copy-battle-share="c_legacy_1"/);
 
     closeReportWindow();
   });

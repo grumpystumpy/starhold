@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  DAILY_LOGIN_CRYSTAL,
+  DAILY_LOGIN_DEUTERIUM,
+  DAILY_LOGIN_METAL,
   OFFICER_DURATION_MS,
+  OFFICER_DURATION_OPTIONS_HOURS,
   OFFICERS,
+  officerDurationCost,
   PIRATE_DEFENSE_WIN_STARSHARDS,
   PIRATE_DESTROY_STARSHARDS_BASE,
   SKILLS,
@@ -248,16 +253,30 @@ describe("Thread D Starshards / officers / skills", () => {
     const universe = createUniverse("Shard Drift", 8);
     const a = joinUniverse(universe, "Daily", 160_000_000);
     const day = utcDayKey(160_000_000);
+    const initialPlanetResources = { ...universe.planets[a.planet.id]!.resources };
     const first = claimDailyLogin(universe, a.player.id, 160_000_000);
     assert.equal(first.ok, true);
     if (!first.ok) return;
     assert.equal(first.starshardsGranted, STARSHARDS_DAILY_LOGIN);
     assert.equal(universe.players[a.player.id].starshards, STARSHARDS_DAILY_LOGIN);
     assert.equal(universe.players[a.player.id].lastDailyLoginUtc, day);
+    assert.equal(
+      universe.planets[a.planet.id]!.resources.metal,
+      initialPlanetResources.metal + DAILY_LOGIN_METAL,
+    );
+    assert.equal(
+      universe.planets[a.planet.id]!.resources.crystal,
+      initialPlanetResources.crystal + DAILY_LOGIN_CRYSTAL,
+    );
+    assert.equal(
+      universe.planets[a.planet.id]!.resources.deuterium,
+      initialPlanetResources.deuterium + DAILY_LOGIN_DEUTERIUM,
+    );
 
     const again = claimDailyLogin(universe, a.player.id, 160_000_000 + 60_000);
     assert.equal(again.ok, false);
 
+    const beforeNext = universe.planets[a.planet.id]!.resources.metal;
     const nextDay = claimDailyLogin(
       universe,
       a.player.id,
@@ -267,6 +286,12 @@ describe("Thread D Starshards / officers / skills", () => {
     assert.equal(
       universe.players[a.player.id].starshards,
       STARSHARDS_DAILY_LOGIN * 2,
+    );
+    // advanceUniverse runs during claimDailyLogin and accrued mine income over the 24h,
+    // so verify that the planet metal increased by at least DAILY_LOGIN_METAL
+    assert.ok(
+      universe.planets[a.planet.id]!.resources.metal >=
+      beforeNext + DAILY_LOGIN_METAL,
     );
   });
 
@@ -316,6 +341,46 @@ describe("Thread D Starshards / officers / skills", () => {
       assert.equal(player.officers?.[0]?.expiresAt, now + renewals + expectedDuration);
       assert.equal(player.officerRenewals?.engineer, renewals + 1);
     }
+  });
+
+  it("prices each selectable officer duration from the current renewal rate", () => {
+    assert.deepEqual(
+      Object.fromEntries(
+        Object.values(OFFICERS).map((officer) => [officer.id, officer.cost]),
+      ),
+      {
+        quartermaster: 100,
+        archivist: 100,
+        navigator: 120,
+        warden: 120,
+        engineer: 80,
+        spymaster: 140,
+        vaultkeeper: 100,
+      },
+    );
+    const costs = OFFICER_DURATION_OPTIONS_HOURS.map((hours) =>
+      officerDurationCost(OFFICERS.quartermaster.cost, 0, hours),
+    );
+    assert.deepEqual(costs, [5, 10, 20, 40, 80, 120, 240, 480, 960]);
+
+    const universe = createUniverse("Custom Officer Duration", 8);
+    const a = joinUniverse(universe, "Duration", 161_700_000);
+    const player = universe.players[a.player.id]!;
+    player.starshards = 1000;
+    const now = 161_700_100;
+    assert.equal(
+      activateOfficer(universe, a.player.id, "quartermaster", now, 48).ok,
+      true,
+    );
+    assert.equal(
+      player.officers?.[0]?.expiresAt,
+      now + 48 * 60 * 60 * 1000,
+    );
+    assert.equal(player.starshards, 1000 - 240);
+    assert.equal(
+      activateOfficer(universe, a.player.id, "quartermaster", now + 1, 3).ok,
+      false,
+    );
   });
 
   it("treats a legacy save without officer renewal counts as zero", () => {

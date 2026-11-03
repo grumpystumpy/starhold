@@ -1,4 +1,5 @@
 import type { ActiveItemBuff } from "./types-core.js";
+import { SHOP_PRICE_MULT } from "./catalog-officers.js";
 import type {
   PlayerState,
   PlanetState,
@@ -28,17 +29,17 @@ export interface ShopItemDefinition {
 }
 
 // Micah's pricing rule (approved):
-// S tier cost = c * bonus_S
-// M & L tier cost = round(0.95 * c * bonus_tier)
+// S tier cost = SHOP_PRICE_MULT * c * bonus_S
+// M & L tier cost = SHOP_PRICE_MULT * round(0.95 * c * bonus_tier)
 export function computeShopItemCost(
   baseUnitCost: number,
   tier: ShopItemTier,
   bonus: number,
 ): number {
   if (tier === "S") {
-    return Math.round(baseUnitCost * bonus);
+    return Math.round(baseUnitCost * bonus * SHOP_PRICE_MULT);
   }
-  return Math.round(0.95 * baseUnitCost * bonus);
+  return Math.round(0.95 * baseUnitCost * bonus * SHOP_PRICE_MULT);
 }
 
 export function computeShopItemPerUnitCost(item: ShopItemDefinition): number {
@@ -54,7 +55,7 @@ export const SHOP_ITEMS: Record<string, ShopItemDefinition> = {
     tier: "S",
     bonus: 5,
     baseUnitCost: 20,
-    starshards: computeShopItemCost(20, "S", 5), // 100
+    starshards: computeShopItemCost(20, "S", 5), // 200
     description: "Permanently adds +5 fields capacity to the target planet.",
   },
   item_planet_fields_m: {
@@ -64,7 +65,7 @@ export const SHOP_ITEMS: Record<string, ShopItemDefinition> = {
     tier: "M",
     bonus: 10,
     baseUnitCost: 20,
-    starshards: computeShopItemCost(20, "M", 10), // round(0.95 * 20 * 10) = 190
+    starshards: computeShopItemCost(20, "M", 10), // round(0.95 * 20 * 10) * 2 = 380
     description: "Permanently adds +10 fields capacity to the target planet.",
   },
   item_planet_fields_l: {
@@ -74,7 +75,7 @@ export const SHOP_ITEMS: Record<string, ShopItemDefinition> = {
     tier: "L",
     bonus: 20,
     baseUnitCost: 20,
-    starshards: computeShopItemCost(20, "L", 20), // round(0.95 * 20 * 20) = 380
+    starshards: computeShopItemCost(20, "L", 20), // round(0.95 * 20 * 20) * 2 = 760
     description: "Permanently adds +20 fields capacity to the target planet.",
   },
 
@@ -86,7 +87,7 @@ export const SHOP_ITEMS: Record<string, ShopItemDefinition> = {
     tier: "S",
     bonus: 2,
     baseUnitCost: 40,
-    starshards: computeShopItemCost(40, "S", 2), // 80
+    starshards: computeShopItemCost(40, "S", 2), // 160
     description: "Permanently adds +2 fields capacity to the target moon.",
   },
   item_moon_fields_m: {
@@ -96,7 +97,7 @@ export const SHOP_ITEMS: Record<string, ShopItemDefinition> = {
     tier: "M",
     bonus: 4,
     baseUnitCost: 40,
-    starshards: computeShopItemCost(40, "M", 4), // round(0.95 * 40 * 4) = 152
+    starshards: computeShopItemCost(40, "M", 4), // round(0.95 * 40 * 4) * 2 = 304
     description: "Permanently adds +4 fields capacity to the target moon.",
   },
   item_moon_fields_l: {
@@ -106,7 +107,7 @@ export const SHOP_ITEMS: Record<string, ShopItemDefinition> = {
     tier: "L",
     bonus: 8,
     baseUnitCost: 40,
-    starshards: computeShopItemCost(40, "L", 8), // round(0.95 * 40 * 8) = 304
+    starshards: computeShopItemCost(40, "L", 8), // round(0.95 * 40 * 8) * 2 = 608
     description: "Permanently adds +8 fields capacity to the target moon.",
   },
 
@@ -118,7 +119,7 @@ export const SHOP_ITEMS: Record<string, ShopItemDefinition> = {
     tier: "S",
     bonus: 5,
     baseUnitCost: 12,
-    starshards: computeShopItemCost(12, "S", 5), // 60
+    starshards: computeShopItemCost(12, "S", 5), // 120
     description: "Grants +5% Hull strength for 24 hours.",
   },
   item_buff_hull_m: {
@@ -128,7 +129,7 @@ export const SHOP_ITEMS: Record<string, ShopItemDefinition> = {
     tier: "M",
     bonus: 10,
     baseUnitCost: 12,
-    starshards: computeShopItemCost(12, "M", 10), // round(0.95 * 12 * 10) = 114
+    starshards: computeShopItemCost(12, "M", 10), // round(0.95 * 12 * 10) * 2 = 228
     description: "Grants +10% Hull strength for 24 hours.",
   },
   item_buff_hull_l: {
@@ -138,7 +139,7 @@ export const SHOP_ITEMS: Record<string, ShopItemDefinition> = {
     tier: "L",
     bonus: 15,
     baseUnitCost: 12,
-    starshards: computeShopItemCost(12, "L", 15), // round(0.95 * 12 * 15) = 171
+    starshards: computeShopItemCost(12, "L", 15), // round(0.95 * 12 * 15) * 2 = 342
     description: "Grants +15% Hull strength for 24 hours.",
   },
 
@@ -150,7 +151,7 @@ export const SHOP_ITEMS: Record<string, ShopItemDefinition> = {
     tier: "S",
     bonus: 5,
     baseUnitCost: 12,
-    starshards: computeShopItemCost(12, "S", 5), // 60
+    starshards: computeShopItemCost(12, "S", 5), // 120
     description: "Grants +5% Armor protection for 24 hours.",
   },
   item_buff_armor_m: {
@@ -160,7 +161,7 @@ export const SHOP_ITEMS: Record<string, ShopItemDefinition> = {
     tier: "M",
     bonus: 10,
     baseUnitCost: 12,
-    starshards: computeShopItemCost(12, "M", 10), // round(0.95 * 12 * 10) = 114
+    starshards: computeShopItemCost(12, "M", 10), // round(0.95 * 12 * 10) * 2 = 228
     description: "Grants +10% Armor protection for 24 hours.",
   },
   item_buff_armor_l: {
@@ -170,7 +171,7 @@ export const SHOP_ITEMS: Record<string, ShopItemDefinition> = {
     tier: "L",
     bonus: 15,
     baseUnitCost: 12,
-    starshards: computeShopItemCost(12, "L", 15), // round(0.95 * 12 * 15) = 171
+    starshards: computeShopItemCost(12, "L", 15), // round(0.95 * 12 * 15) * 2 = 342
     description: "Grants +15% Armor protection for 24 hours.",
   },
 
@@ -182,7 +183,7 @@ export const SHOP_ITEMS: Record<string, ShopItemDefinition> = {
     tier: "S",
     bonus: 5,
     baseUnitCost: 12,
-    starshards: computeShopItemCost(12, "S", 5), // 60
+    starshards: computeShopItemCost(12, "S", 5), // 120
     description: "Grants +5% Shield capacity for 24 hours.",
   },
   item_buff_shield_m: {
@@ -192,7 +193,7 @@ export const SHOP_ITEMS: Record<string, ShopItemDefinition> = {
     tier: "M",
     bonus: 10,
     baseUnitCost: 12,
-    starshards: computeShopItemCost(12, "M", 10), // round(0.95 * 12 * 10) = 114
+    starshards: computeShopItemCost(12, "M", 10), // round(0.95 * 12 * 10) * 2 = 228
     description: "Grants +10% Shield capacity for 24 hours.",
   },
   item_buff_shield_l: {
@@ -202,7 +203,7 @@ export const SHOP_ITEMS: Record<string, ShopItemDefinition> = {
     tier: "L",
     bonus: 15,
     baseUnitCost: 12,
-    starshards: computeShopItemCost(12, "L", 15), // round(0.95 * 12 * 15) = 171
+    starshards: computeShopItemCost(12, "L", 15), // round(0.95 * 12 * 15) * 2 = 342
     description: "Grants +15% Shield capacity for 24 hours.",
   },
 
@@ -214,7 +215,7 @@ export const SHOP_ITEMS: Record<string, ShopItemDefinition> = {
     tier: "S",
     bonus: 1,
     baseUnitCost: 40,
-    starshards: computeShopItemCost(40, "S", 1), // 40
+    starshards: computeShopItemCost(40, "S", 1), // 80
     description: "Grants +1 extra fleet slot for 24 hours.",
   },
   item_fleet_slots_m: {
@@ -224,7 +225,7 @@ export const SHOP_ITEMS: Record<string, ShopItemDefinition> = {
     tier: "M",
     bonus: 2,
     baseUnitCost: 40,
-    starshards: computeShopItemCost(40, "M", 2), // round(0.95 * 40 * 2) = 76
+    starshards: computeShopItemCost(40, "M", 2), // round(0.95 * 40 * 2) * 2 = 152
     description: "Grants +2 extra fleet slots for 24 hours.",
   },
   item_fleet_slots_l: {
@@ -234,7 +235,7 @@ export const SHOP_ITEMS: Record<string, ShopItemDefinition> = {
     tier: "L",
     bonus: 4,
     baseUnitCost: 40,
-    starshards: computeShopItemCost(40, "L", 4), // round(0.95 * 40 * 4) = 152
+    starshards: computeShopItemCost(40, "L", 4), // round(0.95 * 40 * 4) * 2 = 304
     description: "Grants +4 extra fleet slots for 24 hours.",
   },
 };
@@ -273,11 +274,12 @@ export function buyShopItem(
 
   // Handle target validation for planet/moon field items
   if (item.category === "fields_planet" || item.category === "fields_moon") {
-    if (!params.targetPlanetId) {
+    const targetPlanetId = params.targetPlanetId ?? player.activePlanetId;
+    if (!targetPlanetId) {
       return { ok: false, error: "Target planet or moon required." };
     }
     const planet: PlanetState | undefined =
-      universe.planets[params.targetPlanetId];
+      universe.planets[targetPlanetId];
     if (!planet || planet.ownerPlayerId !== player.id) {
       return { ok: false, error: "Target planet/moon not owned by player." };
     }

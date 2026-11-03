@@ -20,7 +20,12 @@ import {
   setPaintImpl,
   stripJoinParams,
 } from "./session";
-import { fetchState, selectPlanet, ApiError } from "./api";
+import {
+  fetchPublicCombatReport,
+  fetchState,
+  selectPlanet,
+  ApiError,
+} from "./api";
 import { shouldClearSavedPlayer } from "./auth-resume";
 import {
   doBuild,
@@ -38,11 +43,17 @@ import {
   IDLE_PAUSE_MS,
   POLL_INTERVAL_MS,
   silentRefresh,
+  refreshAllianceChatIfOpen,
   startPolling,
 } from "./main-actions";
 import { wireJointStrikeForm } from "./main-actions-alliances";
 import { ensureDelegatedHandlers } from "./main-handlers";
 import { initTelemetry } from "./telemetry";
+import {
+  sharedReportCodeFromSearch,
+  sharedCombatReportError,
+  sharedCombatReportPage,
+} from "./ui/shared-report";
 import {
   ensurePopstateHandler,
   pageFromLocation,
@@ -146,6 +157,20 @@ async function boot(): Promise<void> {
   ensureDelegatedHandlers();
   ensurePopstateHandler();
   session.activePage = pageFromLocation();
+  const reportCode = sharedReportCodeFromSearch(window.location.search);
+  if (reportCode) {
+    root.innerHTML = `<main class="panel" data-testid="shared-combat-report-loading">Loading battle report…</main>`;
+    try {
+      root.innerHTML = sharedCombatReportPage(
+        await fetchPublicCombatReport(reportCode),
+      );
+    } catch (err) {
+      root.innerHTML = sharedCombatReportError(
+        err instanceof Error ? err.message : "Could not load this battle report.",
+      );
+    }
+    return;
+  }
   paint();
 
   const params = new URLSearchParams(window.location.search);
@@ -288,8 +313,11 @@ window.starhold = {
   refresh: () => doRefresh(),
   upsertMarker: (coords: Coordinates, note: string) => doUpsertAllianceMarker(coords, note),
 
-  poll: () =>
-    session.view ? silentRefresh(session.view.player.id) : Promise.resolve(),
+  poll: async () => {
+    if (!session.view) return;
+    await silentRefresh(session.view.player.id);
+    await refreshAllianceChatIfOpen();
+  },
   pollIntervalMs: POLL_INTERVAL_MS,
   idlePauseMs: IDLE_PAUSE_MS,
   getState: () => ({

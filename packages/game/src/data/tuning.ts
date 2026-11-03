@@ -1644,10 +1644,10 @@ export const WORKERS_TICK_SEED_MINIS = 1;
 export const WORKERS_TICK_SEED_PIRATES = 4;
 
 /**
- * 10-minute NPC job. 200 bases at one raid per 90 minutes is about 23 dues
+ * 10-minute NPC job. 200 bases at one raid per 180 minutes is about 11 dues
  * per run. Any burst beyond this budget resumes on the next scheduled run.
  */
-export const NPC_JOB_RAID_BUDGET = 24;
+export const NPC_JOB_RAID_BUDGET = 12;
 export const NPC_JOB_LEVELUP_BUDGET = 80;
 export const NPC_JOB_FLEET_BUDGET = 8;
 
@@ -1751,8 +1751,12 @@ export const ALLIANCE_NAME_MAX = 30;
 export const ALLIANCE_MAX_MEMBERS = 16;
 export const ALLIANCE_MAX_OFFICERS = 3;
 export const ALLIANCE_CREATE_MIN_POINTS = 0;
+/** Pending join requests stored on one alliance. */
+export const ALLIANCE_PENDING_REQUEST_CAP = 20;
+/** Alliance rank rows kept on the cached board. */
+export const ALLIANCE_RANK_CAP = 100;
 /** Default join mode when creating an alliance. */
-export const ALLIANCE_JOIN_MODE_DEFAULT: "open" | "invite" = "open";
+export const ALLIANCE_JOIN_MODE_DEFAULT: "open" | "invite" | "request" = "open";
 
 /**
  * Newbie protection (Micah CHANGE #15): empire points below this are
@@ -1787,11 +1791,21 @@ export const ACS_HOLD_MAX_MS = 30 * 60 * 1000;
 export const ACS_MIN_FLEETS_TO_RESOLVE = 1;
 /** Drop resolved/cancelled ACS groups after this age on tick. */
 export const ACS_GROUP_PRUNE_MS = 24 * 60 * 60 * 1000;
+/** Daily login resource rewards granted to currently selected (or home) planet. */
+export const DAILY_LOGIN_METAL = 2_000;
+export const DAILY_LOGIN_CRYSTAL = 1_000;
+export const DAILY_LOGIN_DEUTERIUM = 500;
+
 /**
  * Daily / weekly goals. Targets and rewards live here so balance edits
  * do not touch rules code. Display titles are original (no underscores).
  */
-export type GoalMetric = "pirateWin" | "expedition";
+export type GoalMetric =
+  | "pirateWin"
+  | "expedition"
+  | "buildingUpgrade"
+  | "researchComplete"
+  | "shipBuild";
 
 export interface GoalTuning {
   id: string;
@@ -1812,6 +1826,19 @@ export const GOAL_DAILY_EXPEDITIONS = 5;
 export const GOAL_DAILY_EXPEDITION_METAL = 2_000;
 export const GOAL_DAILY_EXPEDITION_CRYSTAL = 1_000;
 export const GOAL_DAILY_EXPEDITION_DEUTERIUM = 500;
+
+export const GOAL_DAILY_BUILDINGS = 3;
+export const GOAL_DAILY_BUILDING_METAL = 1_500;
+export const GOAL_DAILY_BUILDING_CRYSTAL = 750;
+export const GOAL_DAILY_BUILDING_DEUTERIUM = 250;
+
+export const GOAL_DAILY_RESEARCH = 1;
+export const GOAL_DAILY_RESEARCH_STARSHARDS = 15;
+
+export const GOAL_DAILY_SHIPS = 10;
+export const GOAL_DAILY_SHIP_METAL = 2_500;
+export const GOAL_DAILY_SHIP_CRYSTAL = 1_250;
+export const GOAL_DAILY_SHIP_DEUTERIUM = 500;
 
 export const GOAL_WEEKLY_PIRATE_WINS = 12;
 export const GOAL_WEEKLY_PIRATE_STARSHARDS = 100;
@@ -1844,6 +1871,42 @@ export const GOALS: readonly GoalTuning[] = [
     metal: GOAL_DAILY_EXPEDITION_METAL,
     crystal: GOAL_DAILY_EXPEDITION_CRYSTAL,
     deuterium: GOAL_DAILY_EXPEDITION_DEUTERIUM,
+  },
+  {
+    id: "dailyBuildingUpgrades",
+    cadence: "daily",
+    metric: "buildingUpgrade",
+    title: "Building upgrades",
+    detail: "Finish building upgrades today across your empire.",
+    target: GOAL_DAILY_BUILDINGS,
+    starshards: 0,
+    metal: GOAL_DAILY_BUILDING_METAL,
+    crystal: GOAL_DAILY_BUILDING_CRYSTAL,
+    deuterium: GOAL_DAILY_BUILDING_DEUTERIUM,
+  },
+  {
+    id: "dailyResearch",
+    cadence: "daily",
+    metric: "researchComplete",
+    title: "Research project",
+    detail: "Finish research projects today across your empire.",
+    target: GOAL_DAILY_RESEARCH,
+    starshards: GOAL_DAILY_RESEARCH_STARSHARDS,
+    metal: 0,
+    crystal: 0,
+    deuterium: 0,
+  },
+  {
+    id: "dailyShips",
+    cadence: "daily",
+    metric: "shipBuild",
+    title: "Fleet construction",
+    detail: "Build ships of any type today across your shipyards.",
+    target: GOAL_DAILY_SHIPS,
+    starshards: 0,
+    metal: GOAL_DAILY_SHIP_METAL,
+    crystal: GOAL_DAILY_SHIP_CRYSTAL,
+    deuterium: GOAL_DAILY_SHIP_DEUTERIUM,
   },
   {
     id: "weeklyPirateWins",
@@ -1879,6 +1942,8 @@ export const EVENT_LOG_MINI_NEARBY_SYSTEM_RADIUS = 5;
 export const EVENT_LOG_UNREAD_BADGE = true;
 /** Alliance chat + shared intel (backlog #12). */
 export const ALLIANCE_CHAT_MAX_MESSAGES = 200;
+/** Chat lines returned to the client. Stored history stays at the cap above. */
+export const ALLIANCE_CHAT_RETURN_MAX = 50;
 export const ALLIANCE_CHAT_MAX_CHARS = 500;
 export const ALLIANCE_CHAT_RATE_PER_MIN = 20;
 export const ALLIANCE_INTEL_MAX_REPORTS = 50;

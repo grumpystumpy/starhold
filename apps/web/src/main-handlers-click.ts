@@ -1,5 +1,4 @@
 import {
-  formatCombatShareCard,
   fortressRelocateDeutCost,
   fortressRelocateLandingWindow,
   MINI_FORTRESS_RELOCATE_ACCURACY,
@@ -45,6 +44,10 @@ import {
   doInviteAlliance,
   doJoin,
   doJoinAlliance,
+  doRequestAllianceJoin,
+  doCancelAllianceRequest,
+  doApproveAllianceRequest,
+  doRejectAllianceRequest,
   doKickAllianceMember,
   doLaunchFleet,
   doLaunchMaxExpeditions,
@@ -78,6 +81,7 @@ import {
   doUpgrade,
 } from "./main-actions";
 import { parseGalaxyCoords } from "./galaxy-coords";
+import { setHighscoreTab } from "./ui/render-pages";
 import {
   closeReportWindow,
   isInboxFilter,
@@ -98,6 +102,7 @@ import {
 } from "./ui/render-fleets-draft";
 import { resolveNavPage } from "./ui/nav";
 import { navigateShopTab, navigateTo } from "./ui/router";
+import { battleShareUrl } from "./ui/shared-report";
 
 export function bindClickHandlers(): void {
   root.addEventListener(
@@ -127,9 +132,9 @@ export function bindClickHandlers(): void {
         ev.preventDefault();
         const itemId = buyShopItemBtn.getAttribute("data-buy-shop-item");
         if (itemId) {
-          const targetSelect = root.querySelector<HTMLSelectElement>(
-            `[data-item-target="${itemId}"]`,
-          );
+          const targetSelect = buyShopItemBtn
+            .closest(".shop-item-card")
+            ?.querySelector<HTMLSelectElement>(".shop-item-target");
           const targetPlanetId = targetSelect?.value || undefined;
           void doBuyShopItem(itemId, targetPlanetId);
         }
@@ -535,7 +540,12 @@ export function bindClickHandlers(): void {
           schedulePaint();
           return;
         }
-        const text = formatCombatShareCard(report, session.view?.player.id);
+        if (!report.shareCode) {
+          setFlash("error", "This battle report has no public link.");
+          schedulePaint();
+          return;
+        }
+        const text = battleShareUrl(report.shareCode, window.location.origin);
         void navigator.clipboard.writeText(text).then(
           () => {
             setFlash("notice", "Battle share copied.");
@@ -592,7 +602,12 @@ export function bindClickHandlers(): void {
         const officerId = officerBtn.getAttribute(
           "data-activate-officer",
         ) as OfficerId | null;
-        if (officerId) void doActivateOfficer(officerId);
+        if (officerId) {
+          const hours = officerBtn
+            .closest(".officer-row")
+            ?.querySelector<HTMLSelectElement>("[data-officer-hours]")?.value;
+          void doActivateOfficer(officerId, hours ? Number(hours) : undefined);
+        }
         return;
       }
 
@@ -675,6 +690,47 @@ export function bindClickHandlers(): void {
         return;
       }
 
+      const requestAlly = closestActionEl(target, "[data-alliance-request]");
+      if (requestAlly) {
+        ev.preventDefault();
+        const id = requestAlly.getAttribute("data-alliance-request");
+        if (id) void doRequestAllianceJoin(id);
+        return;
+      }
+
+      if (closestActionEl(target, "[data-alliance-request-cancel]")) {
+        ev.preventDefault();
+        void doCancelAllianceRequest();
+        return;
+      }
+
+      const approveRequest = closestActionEl(target, "[data-alliance-request-approve]");
+      if (approveRequest) {
+        ev.preventDefault();
+        const id = approveRequest.getAttribute("data-alliance-request-approve");
+        if (id) void doApproveAllianceRequest(id);
+        return;
+      }
+
+      const rejectRequest = closestActionEl(target, "[data-alliance-request-reject]");
+      if (rejectRequest) {
+        ev.preventDefault();
+        const id = rejectRequest.getAttribute("data-alliance-request-reject");
+        if (id) void doRejectAllianceRequest(id);
+        return;
+      }
+
+      const highscoreTab = closestActionEl(target, "[data-highscore-tab]");
+      if (highscoreTab) {
+        ev.preventDefault();
+        const tab = highscoreTab.getAttribute("data-highscore-tab");
+        if (tab === "players" || tab === "alliances") {
+          setHighscoreTab(tab);
+          schedulePaint();
+        }
+        return;
+      }
+
       if (closestActionEl(target, "[data-alliance-leave]")) {
         ev.preventDefault();
         void doLeaveAlliance();
@@ -700,6 +756,14 @@ export function bindClickHandlers(): void {
         ev.preventDefault();
         const id = promoteBtn.getAttribute("data-alliance-promote");
         if (id) void doSetAllianceRole(id, "officer");
+        return;
+      }
+
+      const demoteBtn = closestActionEl(target, "[data-alliance-demote]");
+      if (demoteBtn) {
+        ev.preventDefault();
+        const id = demoteBtn.getAttribute("data-alliance-demote");
+        if (id) void doSetAllianceRole(id, "member");
         return;
       }
 
@@ -781,6 +845,41 @@ export function bindClickHandlers(): void {
 
   root.addEventListener("change", (ev) => {
     const el = ev.target;
+    if (el instanceof HTMLSelectElement && el.matches("[data-shop-item-tier]")) {
+      const option = el.selectedOptions[0];
+      const card = el.closest<HTMLElement>(".shop-item-card");
+      const button = card?.querySelector<HTMLButtonElement>("[data-buy-shop-item]");
+      if (!option || !card || !button) return;
+      const price = Number(option.dataset.price);
+      card.querySelector("[data-shop-item-name]")!.textContent =
+        option.dataset.name ?? "";
+      card.querySelector("[data-shop-item-price]")!.textContent = `${fmt(price)} ✦`;
+      card.querySelector("[data-shop-item-bonus]")!.textContent =
+        `Bonus: ${option.dataset.bonus ?? ""}`;
+      card.querySelector("[data-shop-item-description]")!.textContent =
+        option.dataset.description ?? "";
+      card.dataset.testid = `shop-item-${option.value}`;
+      button.dataset.testid = `buy-item-${option.value}`;
+      button.dataset.buyShopItem = option.value;
+      button.textContent = `Buy · ${fmt(price)} ✦`;
+      button.disabled =
+        card.dataset.busy === "true" ||
+        card.dataset.active === "true" ||
+        card.dataset.targetValid === "false" ||
+        price > Number(card.dataset.balance);
+      return;
+    }
+    if (el instanceof HTMLSelectElement && el.matches("[data-officer-hours]")) {
+      const option = el.selectedOptions[0];
+      const row = el.closest<HTMLElement>(".officer-row");
+      const button = row?.querySelector<HTMLButtonElement>("[data-activate-officer]");
+      if (!option || !row || !button) return;
+      const price = Number(option.dataset.price);
+      button.textContent = `${button.dataset.actionLabel} · ${fmt(price)} ✦`;
+      button.disabled =
+        row.dataset.busy === "true" || price > Number(row.dataset.balance);
+      return;
+    }
     if (el instanceof HTMLSelectElement && el.matches("[data-nav-select]")) {
       const page = resolveNavPage(el.value);
       if (page) navigateTo(page);
@@ -794,7 +893,8 @@ export function bindClickHandlers(): void {
       el instanceof HTMLSelectElement &&
       el.matches("[data-alliance-join-mode-select]")
     ) {
-      const mode = el.value === "invite" ? "invite" : "open";
+      const mode =
+        el.value === "invite" || el.value === "request" ? el.value : "open";
       void doSetAllianceJoinMode(mode);
       return;
     }
@@ -943,7 +1043,9 @@ export function bindClickHandlers(): void {
       const modeSelect = form.querySelector<HTMLSelectElement>(
         '[name="alliance-join-mode"]',
       );
-      const joinMode = modeSelect?.value === "invite" ? "invite" : "open";
+      const raw = modeSelect?.value;
+      const joinMode =
+        raw === "invite" || raw === "request" ? raw : "open";
       void doCreateAlliance(
         nameInput?.value ?? "",
         tagInput?.value ?? "",
