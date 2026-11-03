@@ -27,6 +27,7 @@ import { formatEventCount, pushEventLog } from "./world-event-log.js";
 import { ensureQueueFrontStarted } from "./world-queue-normalize.js";
 import { addSeasonEconomySpend } from "./world-seasons.js";
 import { storageForPlanet } from "./world-boosts.js";
+import { noteGoalMetric } from "./world-goals.js";
 
 const MIN_UNIT_SECONDS = 1e-9;
 
@@ -140,7 +141,10 @@ export function advancePlanet(
   // Ship, defense, and research completions still notify. Saved rows stay put.
   advanceBuildingQueue(state.buildQueue, now, (item) => {
     state.buildings[item.buildingId] = item.targetLevel;
-    if (owner) addSeasonEconomySpend(owner, item.paidCost, now);
+    if (owner) {
+      addSeasonEconomySpend(owner, item.paidCost, now);
+      noteGoalMetric(owner, "buildingUpgrade", 1, now);
+    }
   });
 
   const scoreSpend = owner
@@ -152,6 +156,7 @@ export function advancePlanet(
     now,
     (item, batch) => {
       state.ships[item.shipId] = (state.ships[item.shipId] ?? 0) + batch;
+      if (owner) noteGoalMetric(owner, "shipBuild", batch, now);
     },
     (item, finished) => {
       noteBuildComplete(
@@ -280,6 +285,7 @@ export function advanceResearch(
       meta: { researchId, targetLevel },
     });
     addSeasonEconomySpend(player, done.paidCost, now);
+    noteGoalMetric(player, "researchComplete", 1, now);
     ensureQueueFrontStarted(player.researchQueue, now, freedAt);
   }
   universe.players[player.id] = player;

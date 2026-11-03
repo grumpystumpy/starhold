@@ -1,5 +1,9 @@
 import {
+  DAILY_LOGIN_CRYSTAL,
+  DAILY_LOGIN_DEUTERIUM,
+  DAILY_LOGIN_METAL,
   PRODUCTION_MULT,
+  STARSHARDS_DAILY_LOGIN,
   unreadEventCount,
   type PlayerView,
 } from "@starhold/game";
@@ -72,7 +76,7 @@ function resourceBar(view: PlayerView, busy: boolean): string {
         <span class="res-head"><span class="label">Starshards ${shardsTip.html}</span></span>
         <span class="value" data-testid="starshards-balance">${fmt(shards)}</span>
         <span class="sub">earned in-game</span>
-        <button type="button" class="ghost claim-daily" data-claim-daily data-testid="claim-daily" ${canClaim ? "" : "disabled"}>${view.dailyLoginAvailable ? "Claim daily +15" : "Daily claimed"}</button>
+        <button type="button" class="ghost claim-daily" data-claim-daily data-testid="claim-daily" title="${escapeAttr(`Daily login reward: +${STARSHARDS_DAILY_LOGIN} Starshards, +${fmt(DAILY_LOGIN_METAL)} metal, +${fmt(DAILY_LOGIN_CRYSTAL)} crystal, +${fmt(DAILY_LOGIN_DEUTERIUM)} deut`)}" ${canClaim ? "" : "disabled"}>${view.dailyLoginAvailable ? `Claim daily +${STARSHARDS_DAILY_LOGIN} +res` : "Daily claimed"}</button>
       </div>
     </section>`;
 }

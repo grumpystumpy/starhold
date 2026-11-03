@@ -24,6 +24,9 @@ export {
   newbieBonusRemainingMs,
 } from "./world-protection.js";
 export {
+  DAILY_LOGIN_METAL,
+  DAILY_LOGIN_CRYSTAL,
+  DAILY_LOGIN_DEUTERIUM,
   ENERGY_TECH_ENERGY_PER_LEVEL,
   FLAT_BONUS_LEVELS_PER_STEP,
   OFFICER_MAX_LEVEL,

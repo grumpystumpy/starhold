@@ -1787,11 +1787,21 @@ export const ACS_HOLD_MAX_MS = 30 * 60 * 1000;
 export const ACS_MIN_FLEETS_TO_RESOLVE = 1;
 /** Drop resolved/cancelled ACS groups after this age on tick. */
 export const ACS_GROUP_PRUNE_MS = 24 * 60 * 60 * 1000;
+/** Daily login resource rewards granted to currently selected (or home) planet. */
+export const DAILY_LOGIN_METAL = 2_000;
+export const DAILY_LOGIN_CRYSTAL = 1_000;
+export const DAILY_LOGIN_DEUTERIUM = 500;
+
 /**
  * Daily / weekly goals. Targets and rewards live here so balance edits
  * do not touch rules code. Display titles are original (no underscores).
  */
-export type GoalMetric = "pirateWin" | "expedition";
+export type GoalMetric =
+  | "pirateWin"
+  | "expedition"
+  | "buildingUpgrade"
+  | "researchComplete"
+  | "shipBuild";
 
 export interface GoalTuning {
   id: string;
@@ -1812,6 +1822,19 @@ export const GOAL_DAILY_EXPEDITIONS = 5;
 export const GOAL_DAILY_EXPEDITION_METAL = 2_000;
 export const GOAL_DAILY_EXPEDITION_CRYSTAL = 1_000;
 export const GOAL_DAILY_EXPEDITION_DEUTERIUM = 500;
+
+export const GOAL_DAILY_BUILDINGS = 3;
+export const GOAL_DAILY_BUILDING_METAL = 1_500;
+export const GOAL_DAILY_BUILDING_CRYSTAL = 750;
+export const GOAL_DAILY_BUILDING_DEUTERIUM = 250;
+
+export const GOAL_DAILY_RESEARCH = 1;
+export const GOAL_DAILY_RESEARCH_STARSHARDS = 15;
+
+export const GOAL_DAILY_SHIPS = 10;
+export const GOAL_DAILY_SHIP_METAL = 2_500;
+export const GOAL_DAILY_SHIP_CRYSTAL = 1_250;
+export const GOAL_DAILY_SHIP_DEUTERIUM = 500;
 
 export const GOAL_WEEKLY_PIRATE_WINS = 12;
 export const GOAL_WEEKLY_PIRATE_STARSHARDS = 100;
@@ -1844,6 +1867,42 @@ export const GOALS: readonly GoalTuning[] = [
     metal: GOAL_DAILY_EXPEDITION_METAL,
     crystal: GOAL_DAILY_EXPEDITION_CRYSTAL,
     deuterium: GOAL_DAILY_EXPEDITION_DEUTERIUM,
+  },
+  {
+    id: "dailyBuildingUpgrades",
+    cadence: "daily",
+    metric: "buildingUpgrade",
+    title: "Building upgrades",
+    detail: "Finish building upgrades today across your empire.",
+    target: GOAL_DAILY_BUILDINGS,
+    starshards: 0,
+    metal: GOAL_DAILY_BUILDING_METAL,
+    crystal: GOAL_DAILY_BUILDING_CRYSTAL,
+    deuterium: GOAL_DAILY_BUILDING_DEUTERIUM,
+  },
+  {
+    id: "dailyResearch",
+    cadence: "daily",
+    metric: "researchComplete",
+    title: "Research project",
+    detail: "Finish research projects today across your empire.",
+    target: GOAL_DAILY_RESEARCH,
+    starshards: GOAL_DAILY_RESEARCH_STARSHARDS,
+    metal: 0,
+    crystal: 0,
+    deuterium: 0,
+  },
+  {
+    id: "dailyShips",
+    cadence: "daily",
+    metric: "shipBuild",
+    title: "Fleet construction",
+    detail: "Build ships of any type today across your shipyards.",
+    target: GOAL_DAILY_SHIPS,
+    starshards: 0,
+    metal: GOAL_DAILY_SHIP_METAL,
+    crystal: GOAL_DAILY_SHIP_CRYSTAL,
+    deuterium: GOAL_DAILY_SHIP_DEUTERIUM,
   },
   {
     id: "weeklyPirateWins",

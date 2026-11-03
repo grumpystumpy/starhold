@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  DAILY_LOGIN_CRYSTAL,
+  DAILY_LOGIN_DEUTERIUM,
+  DAILY_LOGIN_METAL,
   OFFICER_DURATION_MS,
   OFFICERS,
   PIRATE_DEFENSE_WIN_STARSHARDS,
@@ -248,16 +251,30 @@ describe("Thread D Starshards / officers / skills", () => {
     const universe = createUniverse("Shard Drift", 8);
     const a = joinUniverse(universe, "Daily", 160_000_000);
     const day = utcDayKey(160_000_000);
+    const initialPlanetResources = { ...universe.planets[a.planet.id]!.resources };
     const first = claimDailyLogin(universe, a.player.id, 160_000_000);
     assert.equal(first.ok, true);
     if (!first.ok) return;
     assert.equal(first.starshardsGranted, STARSHARDS_DAILY_LOGIN);
     assert.equal(universe.players[a.player.id].starshards, STARSHARDS_DAILY_LOGIN);
     assert.equal(universe.players[a.player.id].lastDailyLoginUtc, day);
+    assert.equal(
+      universe.planets[a.planet.id]!.resources.metal,
+      initialPlanetResources.metal + DAILY_LOGIN_METAL,
+    );
+    assert.equal(
+      universe.planets[a.planet.id]!.resources.crystal,
+      initialPlanetResources.crystal + DAILY_LOGIN_CRYSTAL,
+    );
+    assert.equal(
+      universe.planets[a.planet.id]!.resources.deuterium,
+      initialPlanetResources.deuterium + DAILY_LOGIN_DEUTERIUM,
+    );
 
     const again = claimDailyLogin(universe, a.player.id, 160_000_000 + 60_000);
     assert.equal(again.ok, false);
 
+    const beforeNext = universe.planets[a.planet.id]!.resources.metal;
     const nextDay = claimDailyLogin(
       universe,
       a.player.id,
@@ -267,6 +284,12 @@ describe("Thread D Starshards / officers / skills", () => {
     assert.equal(
       universe.players[a.player.id].starshards,
       STARSHARDS_DAILY_LOGIN * 2,
+    );
+    // advanceUniverse runs during claimDailyLogin and accrued mine income over the 24h,
+    // so verify that the planet metal increased by at least DAILY_LOGIN_METAL
+    assert.ok(
+      universe.planets[a.planet.id]!.resources.metal >=
+      beforeNext + DAILY_LOGIN_METAL,
     );
   });
 
