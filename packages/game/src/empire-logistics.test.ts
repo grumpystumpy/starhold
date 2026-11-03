@@ -9,10 +9,12 @@ import {
 } from "./formulas.js";
 import {
   advanceUniverse,
+  alienBaseAtCoords,
   createUniverse,
   galaxyViewFor,
   joinUniverse,
   launchFleet,
+  pirateBaseAtCoords,
   playerView,
   pruneSpyReports,
   queueBuildingUpgrade,
@@ -34,7 +36,12 @@ describe("empire logistics — deploy park", () => {
       a.planet.coords.galaxy,
       a.planet.coords.system,
     );
-    const empty = galaxy.slots.find((s) => !s.planetId);
+    const empty = galaxy.slots.find(
+      (s) =>
+        !s.planetId &&
+        !pirateBaseAtCoords(universe, s.coords) &&
+        !alienBaseAtCoords(universe, s.coords),
+    );
     assert.ok(empty);
 
     const colonize = launchFleet(universe, {
