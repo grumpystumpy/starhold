@@ -11,6 +11,78 @@ const mainSource = readFileSync(
 );
 
 describe("galaxy jump controls", () => {
+  it("shows NPC attack buttons with base coordinates in action order and hides missing bases", () => {
+    const view = {
+      galaxy: {
+        galaxy: 2,
+        system: 9,
+        slots: [],
+        minis: [],
+        asteroids: [],
+        pirateBase: {
+          id: "pirate-1",
+          name: "Pirate base",
+          coords: { galaxy: 2, system: 9, slot: 17 },
+          level: 2,
+          tier: 2,
+          threatHint: "moderate",
+          active: true,
+        },
+        alienBase: {
+          id: "alien-1",
+          name: "Alien base",
+          coords: { galaxy: 2, system: 9, slot: 18 },
+          level: 3,
+          tier: 3,
+          threatHint: "high",
+          active: true,
+        },
+      },
+    } as unknown as PlayerView;
+
+    const html = galaxyPanel(view, false);
+    const buttonOrder = [
+      "galaxy-max-expeditions",
+      "galaxy-attack-pirates",
+      "galaxy-attack-aliens",
+      "galaxy-scan-system",
+    ];
+    const buttonIndexes = buttonOrder.map((testId) =>
+      html.indexOf(`data-testid="${testId}"`),
+    );
+    assert.ok(
+      buttonIndexes.every(
+        (index, position) =>
+          index >= 0 &&
+          (position === 0 || index > buttonIndexes[position - 1]!),
+      ),
+    );
+    assert.match(
+      html,
+      /data-galaxy-attack-pirates="2:9:17"[^>]*data-galaxy-pirate-base="pirate-1"[^>]*data-testid="galaxy-attack-pirates"/,
+    );
+    assert.match(
+      html,
+      /data-galaxy-attack-aliens="2:9:18"[^>]*data-galaxy-alien-base="alien-1"[^>]*data-testid="galaxy-attack-aliens"/,
+    );
+
+    const missingBases = galaxyPanel(
+      {
+        galaxy: {
+          ...view.galaxy,
+          pirateBase: null,
+          alienBase: null,
+        },
+      } as unknown as PlayerView,
+      false,
+    );
+    assert.doesNotMatch(missingBases, /data-testid="galaxy-attack-(?:pirates|aliens)"/);
+
+    const busyHtml = galaxyPanel(view, true);
+    assert.match(busyHtml, /data-testid="galaxy-attack-pirates"[^>]*disabled/);
+    assert.match(busyHtml, /data-testid="galaxy-attack-aliens"[^>]*disabled/);
+  });
+
   it("renders empire points and debris without planet points", () => {
     const view = {
       galaxy: {

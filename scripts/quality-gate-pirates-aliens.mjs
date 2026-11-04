@@ -223,7 +223,21 @@ async function runViewport(browser, vp, email, password, commander) {
     foundPirate =
       (await loginPage.locator('[data-testid="galaxy-pirate"]').count()) > 0;
   }
-  if (pirateInHome && !foundPirate) {
+  if (!pirateInHome) {
+    const jump = loginPage.locator('[data-testid="galaxy-jump"]');
+    await jump.fill(`${pirateHit.coords.galaxy}:${pirateHit.coords.system}`);
+    await jump.press("Enter");
+    await loginPage.waitForFunction(
+      (target) =>
+        (document.querySelector('[data-testid="galaxy-label"]')?.textContent ??
+          "").startsWith(target),
+      `${pirateHit.coords.galaxy}:${pirateHit.coords.system}`,
+      { timeout: 10_000 },
+    );
+    foundPirate =
+      (await loginPage.locator('[data-testid="galaxy-pirate"]').count()) > 0;
+  }
+  if (!foundPirate) {
     throw new Error(
       `${vp.name}: UI did not show pirate at ${targetLabel} after galaxy nav`,
     );
@@ -236,6 +250,71 @@ async function runViewport(browser, vp, email, password, commander) {
       throw new Error(`${vp.name}: pirate row missing Lv label: ${pirateText}`);
     }
     pass.push(`galaxy pirate found with level: ${pirateText.trim()}`);
+
+    const pirateButton = loginPage.locator(
+      '[data-testid="galaxy-attack-pirates"]',
+    );
+    if ((await pirateButton.count()) !== 1) {
+      throw new Error(`${vp.name}: pirate attack button missing`);
+    }
+    const expectedCoords = `${pirateHit.coords.galaxy}:${pirateHit.coords.system}:${pirateHit.coords.slot}`;
+    if (
+      (await pirateButton.getAttribute("data-galaxy-attack-pirates")) !==
+      expectedCoords
+    ) {
+      throw new Error(`${vp.name}: pirate attack button has wrong coordinates`);
+    }
+
+    const galaxyActionButtons = loginPage.locator(
+      '[data-testid="galaxy-actions"] button',
+    );
+    const buttonCount = await galaxyActionButtons.count();
+    const buttonSizes = await galaxyActionButtons.evaluateAll((buttons) =>
+      buttons.map((button) => {
+        const { width, height } = button.getBoundingClientRect();
+        return { width, height };
+      }),
+    );
+    if (
+      buttonSizes.some(
+        (size) =>
+          size.width !== buttonSizes[0].width ||
+          size.height !== buttonSizes[0].height,
+      )
+    ) {
+      throw new Error(`${vp.name}: galaxy action buttons have unequal sizes`);
+    }
+    pass.push(`all ${buttonCount} galaxy action buttons have equal size`);
+
+    await pirateButton.click();
+    await loginPage.waitForSelector('[data-testid="fleet-form"]', {
+      timeout: 10_000,
+    });
+    const shipCount = loginPage.locator("[data-fleet-count]").first();
+    if ((await shipCount.count()) === 0) {
+      throw new Error(`${vp.name}: fleet composer has no ship input`);
+    }
+    await shipCount.fill("1");
+    await loginPage.click('[data-testid="fleet-next"]');
+    await loginPage.waitForSelector('[data-testid="fleet-target"]', {
+      timeout: 10_000,
+    });
+    const targetValue = await loginPage
+      .locator('[data-testid="fleet-target"]')
+      .inputValue();
+    const missionValue = await loginPage
+      .locator('[data-testid="fleet-mission"]')
+      .inputValue();
+    if (targetValue !== `pirate:${pirateHit.id}` || missionValue !== "pirateRaid") {
+      throw new Error(
+        `${vp.name}: fleet target/mission prefill mismatch (${targetValue}, ${missionValue})`,
+      );
+    }
+    const fleetCoords = await loginPage.textContent('[data-testid="fleet-coords"]');
+    if (!fleetCoords?.includes(expectedCoords)) {
+      throw new Error(`${vp.name}: fleet composer coordinates do not match pirate base`);
+    }
+    pass.push("pirate attack opens fleet composer with pirate target and mission");
   } else {
     const empty = await loginPage
       .locator('[data-testid="galaxy-pirate-empty"]')

@@ -190,12 +190,14 @@ describe("galaxy page rendering", () => {
           { id: "ast-1", richness: 3, metal: 5000, crystal: 2000, deuterium: 1000 },
         ],
         pirateBase: {
+          id: "pirate-test",
           name: "Black Skull Den",
           tier: 2,
           threatHint: "Medium",
           coords: { galaxy: 1, system: 5, slot: 20 },
         },
         alienBase: {
+          id: "alien-test",
           name: "Xeno Hive",
           tier: 3,
           threatHint: "High",

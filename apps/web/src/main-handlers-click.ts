@@ -3,6 +3,7 @@ import {
   fortressRelocateLandingWindow,
   MINI_FORTRESS_RELOCATE_ACCURACY,
   type BuildingId,
+  type Coordinates,
   type DefenseId,
   type OfficerId,
   type PlayerClassId,
@@ -103,6 +104,18 @@ import {
 import { resolveNavPage } from "./ui/nav";
 import { navigateShopTab, navigateTo } from "./ui/router";
 import { battleShareUrl } from "./ui/shared-report";
+
+function parseGalaxyFleetCoords(raw: string | null): Coordinates | null {
+  const parts = raw?.split(":").map(Number);
+  if (
+    !parts ||
+    parts.length !== 3 ||
+    !parts.every((part) => Number.isInteger(part) && part > 0)
+  ) {
+    return null;
+  }
+  return { galaxy: parts[0]!, system: parts[1]!, slot: parts[2]! };
+}
 
 export function bindClickHandlers(): void {
   root.addEventListener(
@@ -261,6 +274,34 @@ export function bindClickHandlers(): void {
       if (closestActionEl(target, "[data-galaxy-scan-system]")) {
         ev.preventDefault();
         void doScanSystem();
+        return;
+      }
+
+      const pirateAttack = closestActionEl(
+        target,
+        "[data-galaxy-attack-pirates]",
+      );
+      if (pirateAttack) {
+        ev.preventDefault();
+        const coords = parseGalaxyFleetCoords(
+          pirateAttack.getAttribute("data-galaxy-attack-pirates"),
+        );
+        const baseId = pirateAttack.getAttribute("data-galaxy-pirate-base");
+        if (coords && baseId) doGalaxyFleetAction(coords, "pirateRaid", baseId);
+        return;
+      }
+
+      const alienAttack = closestActionEl(
+        target,
+        "[data-galaxy-attack-aliens]",
+      );
+      if (alienAttack) {
+        ev.preventDefault();
+        const coords = parseGalaxyFleetCoords(
+          alienAttack.getAttribute("data-galaxy-attack-aliens"),
+        );
+        const baseId = alienAttack.getAttribute("data-galaxy-alien-base");
+        if (coords && baseId) doGalaxyFleetAction(coords, "alienRaid", baseId);
         return;
       }
 

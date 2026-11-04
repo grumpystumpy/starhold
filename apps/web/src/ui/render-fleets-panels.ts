@@ -461,6 +461,16 @@ export function galaxyPanel(
             <button type="button" data-galaxy-max-expeditions data-testid="galaxy-max-expeditions" ${busy ? "disabled" : ""} title="${maxTip.title}">Send max expeditions</button>
             ${maxTip.html}
           </span>
+          ${
+            galaxy.pirateBase
+              ? `<span class="galaxy-action"><button type="button" data-galaxy-attack-pirates="${galaxy.pirateBase.coords.galaxy}:${galaxy.pirateBase.coords.system}:${galaxy.pirateBase.coords.slot}" data-galaxy-pirate-base="${escapeAttr(galaxy.pirateBase.id)}" data-testid="galaxy-attack-pirates" ${busy ? "disabled" : ""}>Attack pirates</button></span>`
+              : ""
+          }
+          ${
+            galaxy.alienBase
+              ? `<span class="galaxy-action"><button type="button" data-galaxy-attack-aliens="${galaxy.alienBase.coords.galaxy}:${galaxy.alienBase.coords.system}:${galaxy.alienBase.coords.slot}" data-galaxy-alien-base="${escapeAttr(galaxy.alienBase.id)}" data-testid="galaxy-attack-aliens" ${busy ? "disabled" : ""}>Attack aliens</button></span>`
+              : ""
+          }
           <span class="galaxy-action">
             <button type="button" data-galaxy-scan-system data-testid="galaxy-scan-system" ${busy ? "disabled" : ""} title="${scanTip.title}">Scan system (probes)</button>
             ${scanTip.html}
