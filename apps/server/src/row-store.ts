@@ -2129,24 +2129,23 @@ function changed(loaded: LoadedRows): boolean {
   return false;
 }
 
-async function attachBoard(db: D1Like, work: UniverseWork | undefined): Promise<number | null> {
+async function attachBoard(db: D1Like, work: UniverseWork | undefined): Promise<void> {
   const scope = currentScope();
   if (scope) scope.rowSave = true;
-  if (work?.npc) return Date.now();
+  if (work?.npc) return;
   const cached = await readScoreCache(db);
   const board = cached.board;
-  if (!scope) return board?.builtAt ?? null;
+  if (!scope) return;
   scope.allianceHighscores = cached.alliances;
-  if (work?.maintenance && (!board || highscoreCacheExpired(board.builtAt))) {
+  if (work?.maintenance) {
     scope.highscores = undefined;
     scope.hallOfFame = undefined;
     scope.hallOfShame = undefined;
-    return board?.builtAt ?? null;
+    return;
   }
   scope.highscores = board?.cache.rows ?? [];
   scope.hallOfFame = board?.cache.hallOfFame ?? [];
   scope.hallOfShame = board?.cache.hallOfShame ?? [];
-  return board?.builtAt ?? null;
 }
 
 async function runGame<T>(
@@ -2199,12 +2198,11 @@ export async function withRowUniverse<T>(
 
   const play = async () => {
     const loaded = await loadWorkingSet(db, loadWork);
-    const builtAt = await attachBoard(db, work);
+    await attachBoard(db, work);
     const result = await runGame(loaded.universe, fn);
     restoreUnresolvedFleets(loaded);
     loaded.pendingSystems = await planSystemWrites(db, loaded);
-    const scoresDue =
-      Boolean(work?.maintenance) && (builtAt == null || highscoreCacheExpired(builtAt));
+    const scoresDue = Boolean(work?.maintenance);
     return { loaded, result, scoresDue };
   };
 
