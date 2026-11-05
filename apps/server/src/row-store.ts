@@ -26,7 +26,7 @@ import {
   type UniverseState,
   UNIVERSE_SCHEMA_VERSION,
 } from "@starhold/game";
-import type { D1Like, D1Stmt } from "./d1-store.js";
+import type { D1Like, D1RunResult, D1Stmt } from "./d1-store.js";
 import { chunkKey, splitChunkText } from "./d1-codec.js";
 import type { KvStore } from "./kv.js";
 import { addCpu, currentScope } from "./request-context.js";
@@ -1047,11 +1047,7 @@ function stubPlanet(row: {
   } as unknown as PlanetState;
 }
 
-async function loadPlayers(db: D1Like, into: LoadedRows): Promise<void> {
-  const rows = await all<{ id: string; version: number; doc: string }>(
-    db,
-    "SELECT id, version, doc FROM save_players",
-  );
+function applyPlayerRows(into: LoadedRows, rows: Array<{ id: string; version: number; doc: string }>): void {
   for (const row of rows) {
     const player = timedParse(row.doc) as PlayerState;
     player.eventLog = [];
@@ -1061,15 +1057,19 @@ async function loadPlayers(db: D1Like, into: LoadedRows): Promise<void> {
   }
 }
 
-async function loadPlanetDocs(
-  db: D1Like,
+async function loadPlayers(db: D1Like, into: LoadedRows): Promise<void> {
+  const rows = await all<{ id: string; version: number; doc: string }>(
+    db,
+    "SELECT id, version, doc FROM save_players",
+  );
+  applyPlayerRows(into, rows);
+}
+
+function applyPlanetRows(
   into: LoadedRows,
-  sql: string,
-  values: unknown[],
+  rows: Array<{ id: string; version: number; doc: string }>,
   expectIds?: string[],
-): Promise<void> {
-  if (!sql) return;
-  const rows = await all<{ id: string; version: number; doc: string }>(db, sql, ...values);
+): void {
   for (const row of rows) {
     if (into.fullPlanetIds.has(row.id)) continue;
     const planet = timedParse(row.doc) as PlanetState;
@@ -1086,6 +1086,18 @@ async function loadPlanetDocs(
       if (!into.fullPlanetIds.has(id)) into.absentPlanetIds.add(id);
     }
   }
+}
+
+async function loadPlanetDocs(
+  db: D1Like,
+  into: LoadedRows,
+  sql: string,
+  values: unknown[],
+  expectIds?: string[],
+): Promise<void> {
+  if (!sql) return;
+  const rows = await all<{ id: string; version: number; doc: string }>(db, sql, ...values);
+  applyPlanetRows(into, rows, expectIds);
 }
 
 async function loadFleets(db: D1Like, into: LoadedRows, where: string, values: unknown[]): Promise<void> {
@@ -1257,10 +1269,38 @@ async function loadOccupancy(db: D1Like, loaded: LoadedRows): Promise<void> {
 }
 
 export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined): Promise<LoadedRows> {
-  const world = await first<{ version: number; doc: string }>(
-    db,
-    "SELECT version, doc FROM save_world WHERE id = 'world'",
-  );
+  const requestedIds = [...new Set((work?.playerIds ?? []).filter(Boolean))] as string[];
+  const planetIds = [...new Set((work?.planetIds ?? []).filter((id): id is string => Boolean(id)))];
+  const wide =
+    Boolean(work?.maintenance || work?.full) ||
+    (requestedIds.length === 0 && !work?.catalog && !work?.npc);
+  const batchCoreRows = Boolean(work?.npc || wide);
+  let world: { version: number; doc: string } | null;
+  let playerRows: Array<{ id: string; version: number; doc: string }> | undefined;
+  let planetRows: Array<{ id: string; version: number; doc: string }> | undefined;
+  if (batchCoreRows) {
+    const planetSql = work?.full
+      ? "SELECT id, version, doc FROM save_planets"
+      : "SELECT id, version, doc FROM save_planets WHERE owner_id != ''";
+    const [worldResult, playerResult, planetResult] = await db.batch([
+      db.prepare("SELECT version, doc FROM save_world WHERE id = 'world'"),
+      db.prepare("SELECT id, version, doc FROM save_players"),
+      db.prepare(planetSql),
+    ]);
+    world = (worldResult as D1RunResult & { results?: Array<{ version: number; doc: string }> })
+      .results?.[0] ?? null;
+    playerRows = (playerResult as D1RunResult & {
+      results?: Array<{ id: string; version: number; doc: string }>;
+    }).results ?? [];
+    planetRows = (planetResult as D1RunResult & {
+      results?: Array<{ id: string; version: number; doc: string }>;
+    }).results ?? [];
+  } else {
+    world = await first<{ version: number; doc: string }>(
+      db,
+      "SELECT version, doc FROM save_world WHERE id = 'world'",
+    );
+  }
   if (!world) throw new Error("Row save is missing the world document.");
   const universe = emptyUniverse(timedParse(world.doc) as UniverseState);
   const loaded: LoadedRows = {
@@ -1280,26 +1320,16 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
     fingerprints: new Map([["world", stable(worldDoc(universe))]]),
     planetDocs: new Map(),
   };
-  await loadPlayers(db, loaded);
-
-  const requestedIds = [...new Set((work?.playerIds ?? []).filter(Boolean))] as string[];
-  const planetIds = [...new Set((work?.planetIds ?? []).filter((id): id is string => Boolean(id)))];
-  const wide =
-    Boolean(work?.maintenance || work?.full) ||
-    (requestedIds.length === 0 && !work?.catalog && !work?.npc);
+  if (playerRows) applyPlayerRows(loaded, playerRows);
+  else await loadPlayers(db, loaded);
+  if (planetRows) applyPlanetRows(loaded, planetRows);
 
   if (work?.full) {
-    await loadPlanetDocs(db, loaded, "SELECT id, version, doc FROM save_planets", []);
+    if (!planetRows) await loadPlanetDocs(db, loaded, "SELECT id, version, doc FROM save_planets", []);
     await loadFleets(db, loaded, "", []);
     await loadMessages(db, loaded, "", []);
     await loadAllSystems(db, loaded);
   } else if (work?.npc) {
-    await loadPlanetDocs(
-      db,
-      loaded,
-      "SELECT id, version, doc FROM save_planets WHERE owner_id != ''",
-      [],
-    );
     await loadSystems(db, loaded, systemPairs(Object.values(loaded.universe.planets)));
     // Raids need owned bodies. Placement also needs every occupied slot, below.
   } else if (work?.catalog) {
@@ -1324,12 +1354,14 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
     await loadFleets(db, loaded, "", []);
     await loadMessages(db, loaded, "", []);
   } else if (wide) {
-    await loadPlanetDocs(
-      db,
-      loaded,
-      "SELECT id, version, doc FROM save_planets WHERE owner_id != ''",
-      [],
-    );
+    if (!planetRows) {
+      await loadPlanetDocs(
+        db,
+        loaded,
+        "SELECT id, version, doc FROM save_planets WHERE owner_id != ''",
+        [],
+      );
+    }
     const systems = systemPairs(Object.values(loaded.universe.planets));
     await loadPlanetsAt(db, loaded, systems);
     await loadFleets(db, loaded, "", []);

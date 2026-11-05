@@ -85,6 +85,9 @@ function sqliteD1(): { db: D1Like; raw: DatabaseSync } {
           return { results: rows };
         },
         async run(): Promise<D1RunResult> {
+          if (/^\s*SELECT\b/i.test(sql)) {
+            return { results: compiled().all(...(bound.values as never[])) as unknown[] };
+          }
           const result = compiled().run(...(bound.values as never[]));
           return { meta: { changes: Number(result.changes ?? 0) } };
         },
@@ -259,6 +262,72 @@ function fixture(): UniverseState {
 }
 
 describe("row save migration", () => {
+  it("batches independent world, player, and owned-planet reads for scheduled loads", async () => {
+    const { db: inner } = sqliteD1();
+    const source = fixture();
+    await migrateAll(inner, source);
+    const baseline = await loadWorkingSet(inner, { full: true });
+    const batchSql: string[][] = [];
+    const sqlByStatement = new WeakMap<D1Stmt, string>();
+    const db: D1Like = {
+      prepare(sql: string) {
+        const statement = inner.prepare(sql);
+        sqlByStatement.set(statement, sql);
+        return statement;
+      },
+      batch(statements) {
+        batchSql.push(statements.map((statement) => sqlByStatement.get(statement) ?? ""));
+        return inner.batch(statements);
+      },
+    };
+    const coreReads = [
+      "SELECT version, doc FROM save_world WHERE id = 'world'",
+      "SELECT id, version, doc FROM save_players",
+      "SELECT id, version, doc FROM save_planets WHERE owner_id != ''",
+    ];
+
+    for (const work of [{ npc: true }, { maintenance: true }] as const) {
+      batchSql.length = 0;
+      const loaded = await loadWorkingSet(db, work);
+      assert.deepEqual(batchSql[0], coreReads);
+      assert.deepEqual(
+        Object.keys(loaded.universe.players).sort(),
+        Object.keys(baseline.universe.players).sort(),
+      );
+      for (const [id, player] of Object.entries(loaded.universe.players)) {
+        const expected = structuredClone(baseline.universe.players[id]!);
+        if ("npc" in work) expected.eventLog = [];
+        assert.deepEqual(player, expected);
+      }
+
+      const ownedPlanetIds = Object.values(baseline.universe.planets)
+        .filter((planet) => planet.ownerPlayerId !== "")
+        .map((planet) => planet.id)
+        .sort();
+      if ("npc" in work) assert.deepEqual([...loaded.fullPlanetIds].sort(), ownedPlanetIds);
+      else for (const id of ownedPlanetIds) assert.ok(loaded.fullPlanetIds.has(id));
+      for (const id of ownedPlanetIds) {
+        assert.deepEqual(loaded.universe.planets[id], baseline.universe.planets[id]);
+      }
+      for (const key of loaded.loadedSystemKeys) {
+        const matchesSystem = <T extends { coords: { galaxy: number; system: number } }>(
+          entries: Record<string, T>,
+        ) =>
+          Object.fromEntries(
+            Object.entries(entries).filter(([, value]) => `${value.coords.galaxy}:${value.coords.system}` === key),
+          );
+        assert.deepEqual(
+          matchesSystem(loaded.universe.asteroids ?? {}),
+          matchesSystem(baseline.universe.asteroids ?? {}),
+        );
+        assert.deepEqual(
+          matchesSystem(loaded.universe.debris ?? {}),
+          matchesSystem(baseline.universe.debris ?? {}),
+        );
+      }
+    }
+  });
+
   it("serves a sanitized public report with one share-code lookup", async () => {
     resetMemoryUniverse();
     const { db } = sqliteD1();
