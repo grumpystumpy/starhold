@@ -1,6 +1,5 @@
 import {
   DEFENSES,
-  RESEARCH,
   SHIPS,
   type BuildingId,
   type DefenseId,
@@ -20,51 +19,48 @@ import {
   session,
   setFlash,
 } from "./session";
-import { noteCancelledQueueItem } from "./main-actions-session";
 import { fmt } from "./ui/format";
 import { captureGameEvent } from "./telemetry";
 import { settleMutation } from "./recover-action";
 
-function upgradeNotice(view: NonNullable<typeof session.view>): string {
+function upgradeNotice(view: NonNullable<typeof session.view>): string | null {
   const q = view.planet.buildQueue;
   const last = q?.length ? q[q.length - 1] : null;
   return last
     ? `Queued upgrade → level ${fmt(last.targetLevel)} (${fmt(q!.length)} in queue).`
-    : "Upgrade complete.";
+    : null;
 }
 
-function shipNotice(view: NonNullable<typeof session.view>, shipId: ShipId): string {
+function shipNotice(
+  view: NonNullable<typeof session.view>,
+  shipId: ShipId,
+): string | null {
   const q = view.planet.shipQueue;
   const last = q?.length ? q[q.length - 1] : null;
-  const hangar = view.planet.ships[shipId] ?? 0;
   const shipName = SHIPS[shipId]?.name ?? shipId;
   return last
     ? `Queued ${fmt(last.count)}× ${shipName} · hangar will update when done.`
-    : `Hangar: ${shipName} ×${fmt(hangar)}.`;
+    : null;
 }
 
 function defenseNotice(
   view: NonNullable<typeof session.view>,
   defenseId: DefenseId,
-): string {
+): string | null {
   const q = view.planet.defenseQueue;
   const last = q?.length ? q[q.length - 1] : null;
   const defenseName = DEFENSES[defenseId]?.name ?? defenseId;
   return last
     ? `Queued ${fmt(last.count)}× ${defenseName}.`
-    : `Defense built: ${defenseName}.`;
+    : null;
 }
 
-function researchNotice(
-  view: NonNullable<typeof session.view>,
-  researchId: ResearchId,
-): string {
+function researchNotice(view: NonNullable<typeof session.view>): string | null {
   const q = view.player.researchQueue;
   const last = q?.length ? q[q.length - 1] : null;
-  const researchName = RESEARCH[researchId]?.name ?? researchId;
   return last
     ? `Researching → level ${fmt(last.targetLevel)}.`
-    : `Research complete: ${researchName}.`;
+    : null;
 }
 
 function queueItems(
@@ -98,7 +94,8 @@ export async function doUpgrade(buildingId: BuildingId): Promise<void> {
 
   try {
     session.view = await upgradeBuilding(session.view.player.id, buildingId);
-    setFlash("notice", upgradeNotice(session.view));
+    const notice = upgradeNotice(session.view);
+    if (notice) setFlash("notice", notice);
   } catch (err) {
     await settleMutation({
       err,
@@ -146,7 +143,8 @@ export async function doBuild(shipId: ShipId, count: number): Promise<void> {
 
   try {
     session.view = await buildShip(session.view.player.id, shipId, count);
-    setFlash("notice", shipNotice(session.view, shipId));
+    const notice = shipNotice(session.view, shipId);
+    if (notice) setFlash("notice", notice);
   } catch (err) {
     await settleMutation({
       err,
@@ -201,7 +199,8 @@ export async function doBuildDefense(
 
   try {
     session.view = await buildDefense(session.view.player.id, defenseId, count);
-    setFlash("notice", defenseNotice(session.view, defenseId));
+    const notice = defenseNotice(session.view, defenseId);
+    if (notice) setFlash("notice", notice);
   } catch (err) {
     await settleMutation({
       err,
@@ -250,7 +249,8 @@ export async function doResearch(researchId: ResearchId): Promise<void> {
 
   try {
     session.view = await researchTech(session.view.player.id, researchId);
-    setFlash("notice", researchNotice(session.view, researchId));
+    const notice = researchNotice(session.view);
+    if (notice) setFlash("notice", notice);
   } catch (err) {
     await settleMutation({
       err,
@@ -266,7 +266,7 @@ export async function doResearch(researchId: ResearchId): Promise<void> {
         const currentTotal = currentLevel + queueForResearch.length;
         return currentTotal - beforeTotal >= 1;
       },
-      successNotice: (view) => researchNotice(view, researchId),
+      successNotice: researchNotice,
     });
   } finally {
     session.busy = false;
@@ -284,7 +284,6 @@ export async function doCancelQueue(
     schedulePaint();
     return;
   }
-  noteCancelledQueueItem(itemId);
   session.busy = true;
   clearFlash();
   schedulePaint();

@@ -138,7 +138,7 @@ it("schedules a completion timer when only defenseQueue has items", async () => 
   }
 });
 
-it("shows exact completion notices when research, ship, and defense items finish", async () => {
+it("refreshes after research, ship, and defense items finish without notices", async () => {
   reset();
   const originalFetch = globalThis.fetch;
   let fetchStep = 0;
@@ -178,21 +178,24 @@ it("shows exact completion notices when research, ship, and defense items finish
 
     // Advance to research completion
     await advanceBy(1_250);
-    assert.equal(session.notice, "Research complete: Power Discipline → level 5");
+    assert.equal(fetchStep, 1);
+    assert.equal(session.notice, null);
 
     // Advance to ship completion
     await advanceBy(1_000);
-    assert.equal(session.notice, "Shipyard: Strike Fighter × 10 finished");
+    assert.equal(fetchStep, 2);
+    assert.equal(session.notice, null);
 
     // Advance to defense completion
     await advanceBy(1_000);
-    assert.equal(session.notice, "Defense: Light Laser Turret × 4 finished");
+    assert.equal(fetchStep, 3);
+    assert.equal(session.notice, null);
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-it("does not repeat completion notice on subsequent poll or reload", async () => {
+it("does not create a completion notice on subsequent poll or reload", async () => {
   reset();
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => {
@@ -207,7 +210,7 @@ it("does not repeat completion notice on subsequent poll or reload", async () =>
     setView(view({ researchQueue: [researchItem] }));
 
     await advanceBy(1_250);
-    assert.equal(session.notice, "Research complete: Power Discipline → level 5");
+    assert.equal(session.notice, null);
 
     // Clear notice as if user or timer cleared flash
     session.notice = null;
@@ -216,7 +219,7 @@ it("does not repeat completion notice on subsequent poll or reload", async () =>
     const { silentRefresh } = await import("./main-actions-session");
     await silentRefresh("p1");
 
-    // Notice should NOT reappear
+    // No completion notice should appear.
     assert.equal(session.notice, null);
   } finally {
     globalThis.fetch = originalFetch;
