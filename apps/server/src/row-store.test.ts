@@ -8,6 +8,7 @@ import {
   applyNpcRaidOnPlanet,
   createPirateBase,
   createUniverse,
+  empirePoints,
   joinUniverse,
   launchFleet,
   MAP_GALAXIES,
@@ -85,6 +86,9 @@ function sqliteD1(): { db: D1Like; raw: DatabaseSync } {
           return { results: rows };
         },
         async run(): Promise<D1RunResult> {
+          if (/^\s*SELECT\b/i.test(sql)) {
+            return { results: compiled().all(...(bound.values as never[])) as unknown[] };
+          }
           const result = compiled().run(...(bound.values as never[]));
           return { meta: { changes: Number(result.changes ?? 0) } };
         },
@@ -259,6 +263,72 @@ function fixture(): UniverseState {
 }
 
 describe("row save migration", () => {
+  it("batches independent world, player, and owned-planet reads for scheduled loads", async () => {
+    const { db: inner } = sqliteD1();
+    const source = fixture();
+    await migrateAll(inner, source);
+    const baseline = await loadWorkingSet(inner, { full: true });
+    const batchSql: string[][] = [];
+    const sqlByStatement = new WeakMap<D1Stmt, string>();
+    const db: D1Like = {
+      prepare(sql: string) {
+        const statement = inner.prepare(sql);
+        sqlByStatement.set(statement, sql);
+        return statement;
+      },
+      batch(statements) {
+        batchSql.push(statements.map((statement) => sqlByStatement.get(statement) ?? ""));
+        return inner.batch(statements);
+      },
+    };
+    const coreReads = [
+      "SELECT version, doc FROM save_world WHERE id = 'world'",
+      "SELECT id, version, doc FROM save_players",
+      "SELECT id, version, doc FROM save_planets WHERE owner_id != ''",
+    ];
+
+    for (const work of [{ npc: true }, { maintenance: true }] as const) {
+      batchSql.length = 0;
+      const loaded = await loadWorkingSet(db, work);
+      assert.deepEqual(batchSql[0], coreReads);
+      assert.deepEqual(
+        Object.keys(loaded.universe.players).sort(),
+        Object.keys(baseline.universe.players).sort(),
+      );
+      for (const [id, player] of Object.entries(loaded.universe.players)) {
+        const expected = structuredClone(baseline.universe.players[id]!);
+        if ("npc" in work) expected.eventLog = [];
+        assert.deepEqual(player, expected);
+      }
+
+      const ownedPlanetIds = Object.values(baseline.universe.planets)
+        .filter((planet) => planet.ownerPlayerId !== "")
+        .map((planet) => planet.id)
+        .sort();
+      if ("npc" in work) assert.deepEqual([...loaded.fullPlanetIds].sort(), ownedPlanetIds);
+      else for (const id of ownedPlanetIds) assert.ok(loaded.fullPlanetIds.has(id));
+      for (const id of ownedPlanetIds) {
+        assert.deepEqual(loaded.universe.planets[id], baseline.universe.planets[id]);
+      }
+      for (const key of loaded.loadedSystemKeys) {
+        const matchesSystem = <T extends { coords: { galaxy: number; system: number } }>(
+          entries: Record<string, T>,
+        ) =>
+          Object.fromEntries(
+            Object.entries(entries).filter(([, value]) => `${value.coords.galaxy}:${value.coords.system}` === key),
+          );
+        assert.deepEqual(
+          matchesSystem(loaded.universe.asteroids ?? {}),
+          matchesSystem(baseline.universe.asteroids ?? {}),
+        );
+        assert.deepEqual(
+          matchesSystem(loaded.universe.debris ?? {}),
+          matchesSystem(baseline.universe.debris ?? {}),
+        );
+      }
+    }
+  });
+
   it("serves a sanitized public report with one share-code lookup", async () => {
     resetMemoryUniverse();
     const { db } = sqliteD1();
@@ -416,6 +486,50 @@ describe("row save migration", () => {
     assert.equal(rebuiltCache.hallOfFame[0]?.shareCode, "sh_hallfight");
     assert.equal(rebuiltCache.hallOfShame[0]?.name, "Other");
     assert.equal(rebuiltCache.hallOfShame[0]?.lostValue, 750);
+  });
+
+  it("rebuilds every player's highscore after maintenance when the cache is fresh", async () => {
+    resetMemoryUniverse();
+    const { db: inner, raw } = sqliteD1();
+    const source = fixture();
+    const offline = Object.values(source.players).find((player) => player.name === "Other")!;
+    const home = source.planets[offline.homePlanetId]!;
+    home.resources = { metal: 9_000_000, crystal: 9_000_000, deuterium: 9_000_000 };
+    const queued = queueBuildingUpgrade(
+      source,
+      offline.id,
+      "metalMine",
+      Date.now() - 86_400_000,
+      home.id,
+    );
+    assert.ok(queued.ok);
+    await migrateAll(inner, source);
+
+    const freshAt = Date.now() - Math.floor(HIGHSCORE_TTL_MS / 2);
+    raw.prepare("UPDATE save_highscores SET built_at = ? WHERE id = 'board'").run(freshAt);
+    const db = subrequestD1(inner, 40);
+    const store = createD1Store(db);
+    let expectedPoints = 0;
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "POST", cpuMs: 0 },
+      () =>
+        withUniverse((universe) => {
+          advanceUniverse(universe);
+          expectedPoints = empirePoints(universe, universe.players[offline.id]!);
+        }, { maintenance: true }),
+    );
+
+    const rebuilt = await readHighscoreMeta(inner);
+    assert.ok(rebuilt && rebuilt.builtAt > freshAt);
+    const board = JSON.parse(
+      raw.prepare("SELECT doc FROM save_highscores WHERE id = 'board'").get()!.doc as string,
+    ) as { rows: Array<{ playerId: string; points: number }> };
+    assert.deepEqual(
+      new Set(board.rows.map((row) => row.playerId)),
+      new Set(Object.keys(source.players)),
+    );
+    assert.equal(board.rows.find((row) => row.playerId === offline.id)?.points, expectedPoints);
+    assert.ok(db.count() <= 40, `maintenance used ${db.count()} D1 queries`);
   });
 
   it("locks per player and rejects a stale row", async () => {
