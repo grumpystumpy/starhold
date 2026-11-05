@@ -26,10 +26,10 @@ function shipTable(
   const rows = SHIP_ORDER.filter((id) => (before[id] ?? 0) > 0)
     .map(
       (id) =>
-        `<tr><th scope="row">${escapeHtml(SHIPS[id].name)}</th><td>${fmt(before[id] ?? 0)}</td><td>${fmt(Math.max(0, (before[id] ?? 0) - (after[id] ?? 0)))}</td></tr>`,
+        `<tr><th scope="row">${escapeHtml(SHIPS[id].name)}</th><td>${fmt(before[id] ?? 0)}</td><td>${fmt(after[id] ?? 0)}</td><td>${fmt(Math.max(0, (before[id] ?? 0) - (after[id] ?? 0)))}</td></tr>`,
     )
     .join("");
-  return `<section><h3>${side} ships</h3>${rows ? `<table><thead><tr><th>Ship</th><th>Total (before)</th><th>Lost</th></tr></thead><tbody>${rows}</tbody></table>` : `<p>None</p>`}</section>`;
+  return `<section><h3>${side} ships</h3>${rows ? `<table><thead><tr><th>Ship</th><th>Before</th><th>After</th><th>Lost</th></tr></thead><tbody>${rows}</tbody></table>` : `<p>None</p>`}</section>`;
 }
 
 function defenseTable(report: PublicCombatReport): string {
