@@ -8,6 +8,7 @@ import {
   applyNpcRaidOnPlanet,
   createPirateBase,
   createUniverse,
+  empirePoints,
   joinUniverse,
   launchFleet,
   MAP_GALAXIES,
@@ -485,6 +486,50 @@ describe("row save migration", () => {
     assert.equal(rebuiltCache.hallOfFame[0]?.shareCode, "sh_hallfight");
     assert.equal(rebuiltCache.hallOfShame[0]?.name, "Other");
     assert.equal(rebuiltCache.hallOfShame[0]?.lostValue, 750);
+  });
+
+  it("rebuilds every player's highscore after maintenance when the cache is fresh", async () => {
+    resetMemoryUniverse();
+    const { db: inner, raw } = sqliteD1();
+    const source = fixture();
+    const offline = Object.values(source.players).find((player) => player.name === "Other")!;
+    const home = source.planets[offline.homePlanetId]!;
+    home.resources = { metal: 9_000_000, crystal: 9_000_000, deuterium: 9_000_000 };
+    const queued = queueBuildingUpgrade(
+      source,
+      offline.id,
+      "metalMine",
+      Date.now() - 86_400_000,
+      home.id,
+    );
+    assert.ok(queued.ok);
+    await migrateAll(inner, source);
+
+    const freshAt = Date.now() - Math.floor(HIGHSCORE_TTL_MS / 2);
+    raw.prepare("UPDATE save_highscores SET built_at = ? WHERE id = 'board'").run(freshAt);
+    const db = subrequestD1(inner, 40);
+    const store = createD1Store(db);
+    let expectedPoints = 0;
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "POST", cpuMs: 0 },
+      () =>
+        withUniverse((universe) => {
+          advanceUniverse(universe);
+          expectedPoints = empirePoints(universe, universe.players[offline.id]!);
+        }, { maintenance: true }),
+    );
+
+    const rebuilt = await readHighscoreMeta(inner);
+    assert.ok(rebuilt && rebuilt.builtAt > freshAt);
+    const board = JSON.parse(
+      raw.prepare("SELECT doc FROM save_highscores WHERE id = 'board'").get()!.doc as string,
+    ) as { rows: Array<{ playerId: string; points: number }> };
+    assert.deepEqual(
+      new Set(board.rows.map((row) => row.playerId)),
+      new Set(Object.keys(source.players)),
+    );
+    assert.equal(board.rows.find((row) => row.playerId === offline.id)?.points, expectedPoints);
+    assert.ok(db.count() <= 40, `maintenance used ${db.count()} D1 queries`);
   });
 
   it("locks per player and rejects a stale row", async () => {

@@ -30,6 +30,8 @@ Tags render as `Name [TAG]` on galaxy rows and `[TAG] Name` on commander highsco
 
 Player ranks stay on `save_highscores` id `board`. Alliance ranks are a second row, id `alliances`, written in the same maintenance rebuild and the migration scores stage. A normal page load reads both rows in one `SELECT` and never scans alliances. A missing alliances row serves `[]`.
 
+The */30 maintenance cron always fully rebuilds the commander board for every player on the server; page loads only read the cached board.
+
 The highscore page has Commanders and Alliances tabs. The Alliances tab shows rank, `[TAG] name`, members, total points, and average points, top 100, sorted by total member points then tag. Each alliance contributes at most `ALLIANCE_MAX_MEMBERS` (16) members to that total.
 
 ## Open questions
