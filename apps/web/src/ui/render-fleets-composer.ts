@@ -192,15 +192,17 @@ export function fleetComposer(
   }
 
   let selected =
-    draft?.pirateBaseId != null
-      ? `pirate:${draft.pirateBaseId}`
-      : draft?.asteroidId != null
-        ? `asteroid:${draft.asteroidId}`
-        : draft?.targetPlanetId != null
-          ? `planet:${draft.targetPlanetId}`
-          : draft?.targetCoords
-            ? `coords:${draft.targetCoords.galaxy}:${draft.targetCoords.system}:${draft.targetCoords.slot}`
-            : options[0]?.match(/value="([^"]+)"/)?.[1] ?? "";
+    draft?.alienBaseId != null
+      ? `alien:${draft.alienBaseId}`
+      : draft?.pirateBaseId != null
+        ? `pirate:${draft.pirateBaseId}`
+        : draft?.asteroidId != null
+          ? `asteroid:${draft.asteroidId}`
+          : draft?.targetPlanetId != null
+            ? `planet:${draft.targetPlanetId}`
+            : draft?.targetCoords
+              ? `coords:${draft.targetCoords.galaxy}:${draft.targetCoords.system}:${draft.targetCoords.slot}`
+              : options[0]?.match(/value="([^"]+)"/)?.[1] ?? "";
 
   if (selected && !options.some((o) => o.includes(`value="${selected}"`))) {
     selected = options[0]?.match(/value="([^"]+)"/)?.[1] ?? "";

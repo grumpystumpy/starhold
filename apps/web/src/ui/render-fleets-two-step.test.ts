@@ -851,4 +851,71 @@ describe("galaxy fleet actions", () => {
     session.activePage = originalPage;
     session.pendingGalaxyFleetDraft = null;
   });
+
+  it("prefills pirate and alien attack missions, base IDs, and coordinates", () => {
+    const originalPage = session.activePage;
+    const attackView = view();
+    attackView.galaxy.pirateBase = {
+      id: "pirate-1",
+      name: "Pirate base",
+      coords: { galaxy: 2, system: 9, slot: 17 },
+      level: 2,
+      tier: 2,
+      threatHint: "moderate",
+      active: true,
+    };
+    attackView.galaxy.alienBase = {
+      id: "alien-1",
+      name: "Alien base",
+      coords: { galaxy: 2, system: 9, slot: 18 },
+      level: 3,
+      tier: 3,
+      threatHint: "high",
+      active: true,
+    };
+    const targets = [
+      {
+        coords: { galaxy: 2, system: 9, slot: 17 },
+        mission: "pirateRaid" as const,
+        baseId: "pirate-1",
+        targetId: "pirateBaseId" as const,
+      },
+      {
+        coords: { galaxy: 2, system: 9, slot: 18 },
+        mission: "alienRaid" as const,
+        baseId: "alien-1",
+        targetId: "alienBaseId" as const,
+      },
+    ];
+
+    for (const target of targets) {
+      session.activePage = "galaxy";
+      doGalaxyFleetAction(target.coords, target.mission, target.baseId);
+      assert.equal(session.activePage, "fleet");
+      assert.equal(session.pendingGalaxyFleetDraft?.mission, target.mission);
+      assert.deepEqual(
+        session.pendingGalaxyFleetDraft?.targetCoords,
+        target.coords,
+      );
+      assert.equal(
+        session.pendingGalaxyFleetDraft?.[target.targetId],
+        target.baseId,
+      );
+      const stepTwo = fleetComposer(attackView, false, {
+        ...session.pendingGalaxyFleetDraft!,
+        counts: { scout: 1 },
+        step: 2,
+      });
+      assert.match(stepTwo, new RegExp(`value="${target.mission === "pirateRaid" ? "pirate" : "alien"}:${target.baseId}" selected`));
+      assert.match(
+        stepTwo,
+        new RegExp(
+          `data-testid="fleet-coords">Coords .*${target.coords.galaxy}:${target.coords.system}:${target.coords.slot}`,
+        ),
+      );
+    }
+
+    session.activePage = originalPage;
+    session.pendingGalaxyFleetDraft = null;
+  });
 });

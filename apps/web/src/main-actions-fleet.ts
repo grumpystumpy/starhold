@@ -136,10 +136,16 @@ export async function doGalaxySpy(coords: Coordinates): Promise<void> {
 
 export function doGalaxyFleetAction(
   coords: Coordinates,
-  mission: "colonize" | "raid",
+  mission: "colonize" | "raid" | "pirateRaid" | "alienRaid",
+  baseId?: string,
 ): void {
   const next = fleetDraftAfterPreset(null, mission, {});
-  session.pendingGalaxyFleetDraft = { ...next, targetCoords: coords };
+  session.pendingGalaxyFleetDraft = {
+    ...next,
+    targetCoords: coords,
+    ...(mission === "pirateRaid" && baseId ? { pirateBaseId: baseId } : {}),
+    ...(mission === "alienRaid" && baseId ? { alienBaseId: baseId } : {}),
+  };
   navigateTo("fleet");
 }
 
