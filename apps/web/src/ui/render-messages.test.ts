@@ -440,19 +440,19 @@ describe("messages inbox", () => {
     assert.match(combatWinHtml, /Points lost:/);
     assert.match(combatWinHtml, /coord-link/);
     assert.match(combatWinHtml, /1\.2k metal, 800 crystal/);
-    assert.match(combatWinHtml, /<th scope="row">Recon Drone<\/th><td>10<\/td><td>2<\/td>/);
-    assert.match(combatWinHtml, /<th scope="row">Guided-Missile Cruiser<\/th><td>2<\/td><td>0<\/td>/);
-    assert.match(combatWinHtml, /<th scope="row">Strike Fighter<\/th><td>5<\/td><td>5<\/td>/);
+    assert.match(combatWinHtml, /<th scope="row">Recon Drone<\/th><td>10<\/td><td>8<\/td><td>2<\/td>/);
+    assert.match(combatWinHtml, /<th scope="row">Guided-Missile Cruiser<\/th><td>2<\/td><td>2<\/td><td>0<\/td>/);
+    assert.match(combatWinHtml, /<th scope="row">Strike Fighter<\/th><td>5<\/td><td>0<\/td><td>5<\/td>/);
     assert.match(combatWinHtml, /data-testid="battle-ship-totals-attacker"/);
     assert.match(combatWinHtml, /data-testid="battle-ship-totals-defender"/);
     assert.match(combatWinHtml, /data-copy-battle-share="c_test_1"/);
 
     const inboxDetails = messagesPageHtml(view);
     assert.match(inboxDetails, /data-testid="inbox-combat-details-c_test_1"/);
-    assert.match(inboxDetails, /<th scope="row">Recon Drone<\/th><td>10<\/td><td>2<\/td>/);
-    assert.match(inboxDetails, /<th scope="row">Strike Fighter<\/th><td>5<\/td><td>5<\/td>/);
+    assert.match(inboxDetails, /<th scope="row">Recon Drone<\/th><td>10<\/td><td>8<\/td><td>2<\/td>/);
+    assert.match(inboxDetails, /<th scope="row">Strike Fighter<\/th><td>5<\/td><td>0<\/td><td>5<\/td>/);
     assert.equal(
-      combatWinHtml.match(/<th scope="row">Recon Drone<\/th><td>10<\/td><td>2<\/td>/g)?.length,
+      combatWinHtml.match(/<th scope="row">Recon Drone<\/th><td>10<\/td><td>8<\/td><td>2<\/td>/g)?.length,
       2,
     );
     assert.match(

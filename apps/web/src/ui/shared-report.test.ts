@@ -38,8 +38,8 @@ describe("public battle report view", () => {
 
     const html = sharedCombatReportPage(report);
     assert.match(html, /&lt;Attackers&gt; vs Defender/);
-    assert.match(html, /<th scope="row">Recon Drone<\/th><td>3<\/td><td>2<\/td>/);
-    assert.match(html, /<th scope="row">Strike Fighter<\/th><td>4<\/td><td>2<\/td>/);
+    assert.match(html, /<th scope="row">Recon Drone<\/th><td>3<\/td><td>1<\/td><td>2<\/td>/);
+    assert.match(html, /<th scope="row">Strike Fighter<\/th><td>4<\/td><td>2<\/td><td>2<\/td>/);
     assert.match(html, /<th scope="row">Light Laser Turret<\/th><td>3<\/td><td>2<\/td>/);
     assert.doesNotMatch(html, /attackerPlayerId|defenderPlayerId|missionId|privatePlanet/);
   });
