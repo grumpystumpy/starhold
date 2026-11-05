@@ -15,7 +15,7 @@ export async function settleMutation(args: {
   err: unknown;
   failureFallback: string;
   applied: (view: PlayerView) => boolean;
-  successNotice: (view: PlayerView) => string;
+  successNotice: (view: PlayerView) => string | null;
 }): Promise<void> {
   const err = args.err;
   if (!(err instanceof ApiError) || !err.retryable || !session.view) {
@@ -61,7 +61,8 @@ export async function settleMutation(args: {
 
   session.view = view;
   if (args.applied(view)) {
-    setFlash("notice", args.successNotice(view));
+    const notice = args.successNotice(view);
+    if (notice) setFlash("notice", notice);
     return;
   }
   setFlash("error", NOT_APPLIED_MESSAGE);

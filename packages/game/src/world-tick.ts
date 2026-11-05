@@ -1,4 +1,4 @@
-import { DEFENSES, RESEARCH, SHIPS, SHIP_ORDER } from "./catalog.js";
+import { SHIP_ORDER } from "./catalog.js";
 import {
   clampToStorage,
   coordsKey,
@@ -14,7 +14,6 @@ import type {
   Coordinates,
   DebrisField,
   DefenseQueueItem,
-  EventLogEntry,
   FleetMission,
   FleetShips,
   PlanetState,
@@ -23,7 +22,6 @@ import type {
   ShipQueueItem,
   UniverseState,
 } from "./types.js";
-import { formatEventCount, pushEventLog } from "./world-event-log.js";
 import { ensureQueueFrontStarted } from "./world-queue-normalize.js";
 import { addSeasonEconomySpend } from "./world-seasons.js";
 import { storageForPlanet } from "./world-boosts.js";
@@ -138,7 +136,7 @@ export function advancePlanet(
 
   // Buildings grant no XP (Micah amendment / Round 2 rebalance).
   // Finished upgrades are not mailed: they complete often enough to bury alerts.
-  // Ship, defense, and research completions still notify. Saved rows stay put.
+  // Ship, defense, and research completions are not mailed. Saved rows stay put.
   advanceBuildingQueue(state.buildQueue, now, (item) => {
     state.buildings[item.buildingId] = item.targetLevel;
     if (owner) {
@@ -158,15 +156,7 @@ export function advancePlanet(
       state.ships[item.shipId] = (state.ships[item.shipId] ?? 0) + batch;
       if (owner) noteGoalMetric(owner, "shipBuild", batch, now);
     },
-    (item, finished) => {
-      noteBuildComplete(
-        owner,
-        `${SHIPS[item.shipId].name} × ${formatEventCount(finished)}`,
-        `Shipyard finished on ${state.name}.`,
-        item.completesAt,
-        { shipId: item.shipId, count: finished, planetId: state.id },
-      );
-    },
+    undefined,
     scoreSpend,
   );
 
@@ -177,15 +167,7 @@ export function advancePlanet(
       state.defenses[item.defenseId] =
         (state.defenses[item.defenseId] ?? 0) + batch;
     },
-    (item, finished) => {
-      noteBuildComplete(
-        owner,
-        `${DEFENSES[item.defenseId].name} × ${formatEventCount(finished)}`,
-        `Shipyard finished on ${state.name}.`,
-        item.completesAt,
-        { defenseId: item.defenseId, count: finished, planetId: state.id },
-      );
-    },
+    undefined,
     scoreSpend,
   );
 
@@ -277,35 +259,11 @@ export function advanceResearch(
     player.research[researchId] = targetLevel;
     player.researchQueue.shift();
     grantPlayerXp(player, xpForResearch(targetLevel));
-    pushEventLog(player, {
-      kind: "buildComplete",
-      createdAt: freedAt,
-      title: `${RESEARCH[researchId].name} → level ${formatEventCount(targetLevel)}`,
-      body: "Research finished.",
-      meta: { researchId, targetLevel },
-    });
     addSeasonEconomySpend(player, done.paidCost, now);
     noteGoalMetric(player, "researchComplete", 1, now);
     ensureQueueFrontStarted(player.researchQueue, now, freedAt);
   }
   universe.players[player.id] = player;
-}
-
-function noteBuildComplete(
-  owner: PlayerState | undefined,
-  title: string,
-  body: string,
-  createdAt: number,
-  meta: EventLogEntry["meta"],
-): void {
-  if (!owner) return;
-  pushEventLog(owner, {
-    kind: "buildComplete",
-    title,
-    body,
-    createdAt,
-    meta,
-  });
 }
 
 export function addShipsToPlanet(planet: PlanetState, ships: FleetShips): void {

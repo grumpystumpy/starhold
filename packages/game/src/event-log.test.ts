@@ -12,6 +12,7 @@ import {
   playerView,
   pushEventLog,
   queueBuildingUpgrade,
+  queueDefenseBuild,
   queueResearch,
   queueShipBuild,
   recordMiniPlanetSighting,
@@ -59,7 +60,7 @@ describe("event log", () => {
     assert.equal(unreadEventCount(player), 0);
   });
 
-  it("skips building-upgrade mail and still emits ship and research completions", () => {
+  it("skips new building, ship, defense, and research completion mail", () => {
     const universe = createUniverse("Build Drift", 8);
     const { player, planet } = joinUniverse(universe, "Builder", 50_000_000);
     planet.resources = { metal: 20_000, crystal: 20_000, deuterium: 20_000 };
@@ -108,39 +109,45 @@ describe("event log", () => {
     assert.equal(ship.ok, true, ship.ok ? "" : ship.error);
     const shipDone = universe.planets[planet.id].shipQueue[0]!.completesAt;
     advanceUniverse(universe, shipDone);
-    assert.ok(
-      (universe.players[player.id].eventLog ?? []).some(
-        (entry) =>
-          entry.kind === "buildComplete" && entry.title === "Recon Drone × 2",
-      ),
+    assert.deepEqual(
+      (universe.players[player.id].eventLog ?? [])
+        .filter((entry) => entry.kind === "buildComplete")
+        .map((entry) => entry.title),
+      [saved.title],
+    );
+
+    const defense = queueDefenseBuild(
+      universe,
+      player.id,
+      "laserBattery",
+      2,
+      shipDone + 1,
+    );
+    assert.equal(defense.ok, true, defense.ok ? "" : defense.error);
+    const defenseDone = universe.planets[planet.id].defenseQueue[0]!.completesAt;
+    advanceUniverse(universe, defenseDone);
+    assert.equal(universe.planets[planet.id].defenses.laserBattery, 2);
+    assert.deepEqual(
+      (universe.players[player.id].eventLog ?? [])
+        .filter((entry) => entry.kind === "buildComplete")
+        .map((entry) => entry.title),
+      [saved.title],
     );
 
     const research = queueResearch(
       universe,
       player.id,
       "energyTech",
-      shipDone + 1,
+      defenseDone + 1,
     );
     assert.equal(research.ok, true, research.ok ? "" : research.error);
     const researchDone =
       universe.players[player.id].researchQueue[0]!.completesAt;
     advanceUniverse(universe, researchDone);
-    assert.ok(
-      (universe.players[player.id].eventLog ?? []).some(
-        (entry) => entry.title === "Power Discipline → level 1",
-      ),
-    );
-
     const view = playerView(universe, player.id, researchDone + 1);
     const titles = (view.player.eventLog ?? []).map((entry) => entry.title);
-    assert.ok(titles.includes("Solar Array → level 3"));
-    assert.ok(titles.includes("Recon Drone × 2"));
-    assert.ok(titles.includes("Power Discipline → level 1"));
-    assert.equal(
-      titles.includes("Ore Mine → level 2"),
-      false,
-    );
-    assert.ok(unreadEventCount(view.player) >= 2);
+    assert.deepEqual(titles, [saved.title]);
+    assert.equal(unreadEventCount(view.player), 0);
   });
 
   it("reports the full ship order when batches finish across ticks", () => {
@@ -166,7 +173,7 @@ describe("event log", () => {
     const titles = (universe.players[player.id].eventLog ?? [])
       .filter((entry) => entry.kind === "buildComplete")
       .map((entry) => entry.title);
-    assert.deepEqual(titles, ["Recon Drone × 2"]);
+    assert.deepEqual(titles, []);
   });
 
   it("alerts the defender on a hostile raid and the owner when the fleet returns", () => {
