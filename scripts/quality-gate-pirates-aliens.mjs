@@ -162,6 +162,27 @@ async function runViewport(browser, vp, email, password, commander) {
   pass.push("post-login reload keeps session");
   await shot(loginPage, path.join(OUT, vp.name), "08-login-reload-resume.png");
 
+  // Freshly joined players start without ships; seed one so this exercises the
+  // attack prefill with a usable ship input instead of the empty-orbit state.
+  const scoutGrant = await fetch(`${API}/api/e2e/grant`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, ships: { scout: 1 } }),
+  });
+  if (!scoutGrant.ok) {
+    throw new Error(`${vp.name}: scout grant failed (${scoutGrant.status})`);
+  }
+  await loginPage.reload({ waitUntil: "networkidle" });
+  await loginPage.waitForSelector('[data-testid="resources"]', {
+    timeout: 20_000,
+  });
+  await loginPage.waitForFunction(
+    () => (window.starhold?.getState()?.ships?.scout ?? 0) >= 1,
+    null,
+    { timeout: 15_000 },
+  );
+  pass.push("one scout available for pirate attack prefill");
+
   // Pirates + Aliens galaxy smoke — locate a pirate via API (seed density is sparse per system)
   const homeGalaxy = await loginPage.evaluate(
     () => window.starhold?.getState()?.galaxy?.galaxy ?? 1,
