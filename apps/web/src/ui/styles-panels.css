@@ -289,6 +289,43 @@
   gap: 0.75rem;
 }
 
+.message-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.message-category {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 0.05rem 0.45rem;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg2) 80%, transparent);
+  color: var(--fg);
+}
+
+.message-category-combat {
+  border-color: color-mix(in srgb, var(--bad, #f87171) 60%, transparent);
+  background: color-mix(in srgb, var(--bad, #f87171) 15%, transparent);
+  color: color-mix(in srgb, var(--bad, #f87171) 85%, #fff);
+}
+
+.message-category-spy {
+  border-color: color-mix(in srgb, var(--accent, #e0a45a) 60%, transparent);
+  background: color-mix(in srgb, var(--accent, #e0a45a) 15%, transparent);
+  color: var(--accent, #e0a45a);
+}
+
+.message-category-alerts {
+  border-color: color-mix(in srgb, var(--ok, #4ade80) 60%, transparent);
+  background: color-mix(in srgb, var(--ok, #4ade80) 15%, transparent);
+  color: color-mix(in srgb, var(--ok, #4ade80) 85%, #fff);
+}
+
 .message-kind {
   display: inline-block;
   font-size: 0.68rem;

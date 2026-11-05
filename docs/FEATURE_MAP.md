@@ -39,3 +39,7 @@ The highscore page has Commanders and Alliances tabs. The Alliances tab shows ra
 - Join requests do not expire.
 - Officer cap does not limit who may approve a request. Approval is independent of `ALLIANCE_MAX_OFFICERS`.
 - A pending request is kept when the alliance switches back to open. It is not auto-accepted. Approve still works. Switching to open still clears invites only.
+
+## Messages
+
+Messages in the inbox display category badges matching their filter bucket (`Combat`, `Spy`, `Alerts`) alongside the specific kind badge (`message-kind`), allowing players to identify message categories at a glance.
