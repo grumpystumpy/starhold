@@ -40,7 +40,8 @@ function nodeKey(el: Element): string | null {
     testId &&
     testId !== "cost-tip" &&
     testId !== "info-tip" &&
-    testId !== "message-kind"
+    testId !== "message-kind" &&
+    testId !== "message-category"
   ) {
     return `t:${testId}`;
   }
