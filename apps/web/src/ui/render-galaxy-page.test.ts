@@ -273,4 +273,39 @@ describe("galaxy page rendering", () => {
     assert.doesNotMatch(html, /\[<X&>\]/);
     assert.match(html, /<span class="galaxy-slot-label">Loner(?! \[)/);
   });
+
+  it("banners an active seasonal boss with a one-click raid prefill", () => {
+    const view = {
+      galaxy: { galaxy: 1, system: 1, slots: [], minis: [], asteroids: [] },
+      player: { id: "p1" },
+      pirateBoss: {
+        id: "boss-9",
+        coords: { galaxy: 4, system: 12, slot: 6 },
+        shipsLeft: 25,
+        hpPct: 64,
+        activeUntil: 1_700_086_400_000,
+        myDamage: 10,
+        myRank: 3,
+        totalDamage: 100,
+        myTier: "participant",
+        top: [],
+      },
+    } as unknown as PlayerView;
+    const html = pageHtml("galaxy", view, false, null);
+    assert.match(html, /data-testid="galaxy-boss-banner"/);
+    assert.match(html, /data-testid="galaxy-raid-boss"/);
+    assert.match(html, /data-galaxy-attack-pirates="4:12:6"/);
+    assert.match(html, /data-galaxy-pirate-base="boss-9"/);
+    assert.match(html, /64% hull/);
+    assert.match(html, />Raid boss</);
+
+    view.pirateBoss = {
+      ...view.pirateBoss!,
+      activeUntil: undefined,
+      nextSpawnAt: 1_700_086_400_000,
+      hpPct: 0,
+    };
+    const cooling = pageHtml("galaxy", view, false, null);
+    assert.doesNotMatch(cooling, /galaxy-boss-banner/);
+  });
 });

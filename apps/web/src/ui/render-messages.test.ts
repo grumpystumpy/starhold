@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { CombatReport, PlayerView } from "@starhold/game";
 import {
+  categoryLabel,
   closeReportWindow,
   collectInbox,
+  inboxBucket,
   messagesPageHtml,
   openReportWindow,
   setConfirmDelete,
@@ -123,6 +125,9 @@ describe("messages inbox", () => {
     const empty = messagesPageHtml(baseView(), { filter: "all" });
     assert.match(empty, /data-testid="messages-panel"/);
     assert.match(empty, /data-testid="messages-empty"/);
+    assert.match(empty, /data-testid="inbox-filter-all"/);
+    assert.match(empty, /data-testid="inbox-filter-combat"/);
+    assert.match(empty, /data-testid="inbox-filter-spy"/);
     assert.match(empty, /data-testid="inbox-filter-alerts"/);
     assert.doesNotMatch(empty, /messages-stub/);
 
@@ -174,6 +179,8 @@ describe("messages inbox", () => {
     assert.match(filled, /data-testid="mark-read-evt9"/);
     assert.doesNotMatch(filled, /message-combat-c9/);
     assert.match(filled, /Fleet returned to Home/);
+    assert.match(filled, /<span class="message-category message-category-alerts" data-testid="message-category">Alerts<\/span>/);
+    assert.match(filled, /<span class="message-kind" data-testid="message-kind">Fleet<\/span>/);
 
     const combat = messagesPageHtml(
       baseView({
@@ -205,6 +212,185 @@ describe("messages inbox", () => {
     );
     assert.match(combat, /Raid at 2:3:4 — victory/);
     assert.match(combat, /message-combat-c9/);
+    assert.match(combat, /<span class="message-category message-category-combat" data-testid="message-category">Combat<\/span>/);
+    assert.match(combat, /<span class="message-kind" data-testid="message-kind">Combat<\/span>/);
+  });
+
+  it("renders visible category badges matching filter buckets for all message kinds", () => {
+    const view = baseView({
+      reports: [
+        {
+          id: "c1",
+          at: 100,
+          missionId: "m1",
+          attackerPlayerId: "p1",
+          defenderPlayerId: "p2",
+          attackerName: "Alpha",
+          defenderName: "Bravo",
+          targetCoords: { galaxy: 1, system: 22, slot: 8 },
+          attackerBefore: {},
+          attackerAfter: {},
+          defenderBefore: {},
+          defenderAfter: {},
+          defensesBefore: {},
+          defensesAfter: {},
+          loot: { metal: 0, crystal: 0, deuterium: 0 },
+          debrisCreated: { metal: 0, crystal: 0, deuterium: 0 },
+          outcome: "attacker_win",
+          rounds: 1,
+          summary: "Raid won",
+        },
+      ] as PlayerView["reports"],
+      spyReports: [
+        {
+          id: "s1",
+          at: 200,
+          missionId: "m2",
+          spyPlayerId: "p1",
+          targetPlayerId: "p2",
+          targetName: "Bravo",
+          targetCoords: { galaxy: 1, system: 22, slot: 9 },
+          detail: 1,
+          resources: null,
+          buildings: null,
+          ships: null,
+          defenses: null,
+          research: null,
+          summary: "Spy report",
+        },
+      ] as PlayerView["spyReports"],
+      expeditionReports: [
+        {
+          id: "e1",
+          at: 300,
+          missionId: "m3",
+          playerId: "p1",
+          targetCoords: { galaxy: 1, system: 1, slot: 16 },
+          kind: "resources",
+          cargoGained: { metal: 10, crystal: 0, deuterium: 0 },
+          shipsDelta: {},
+          summary: "Expedition report",
+        },
+      ] as PlayerView["expeditionReports"],
+      player: {
+        id: "p1",
+        name: "Alpha",
+        eventLog: [
+          {
+            id: "evt1",
+            kind: "buildComplete",
+            createdAt: 400,
+            readAt: null,
+            title: "Build done",
+            body: "Done",
+          },
+          {
+            id: "evt2",
+            kind: "fleetReturn",
+            createdAt: 410,
+            readAt: null,
+            title: "Fleet returned",
+            body: "Returned",
+          },
+          {
+            id: "evt3",
+            kind: "raidAlert",
+            createdAt: 420,
+            readAt: null,
+            title: "Raid incoming",
+            body: "Alert",
+          },
+          {
+            id: "evt4",
+            kind: "miniNearby",
+            createdAt: 430,
+            readAt: null,
+            title: "Mini spotted",
+            body: "Spotted",
+          },
+        ],
+      } as PlayerView["player"],
+    });
+
+    const htmlAll = messagesPageHtml(view, { filter: "all" });
+
+    // Category label function
+    assert.equal(categoryLabel("combat"), "Combat");
+    assert.equal(categoryLabel("spy"), "Spy");
+    assert.equal(categoryLabel("alerts"), "Alerts");
+
+    // Buckets
+    assert.equal(inboxBucket("combat"), "combat");
+    assert.equal(inboxBucket("expedition"), "combat");
+    assert.equal(inboxBucket("spy"), "spy");
+    assert.equal(inboxBucket("buildComplete"), "alerts");
+    assert.equal(inboxBucket("fleetReturn"), "alerts");
+    assert.equal(inboxBucket("raidAlert"), "alerts");
+    assert.equal(inboxBucket("miniNearby"), "alerts");
+
+    // Message rows have category badges matching bucket
+    // Expedition row (kind = expedition, bucket = combat)
+    assert.match(
+      htmlAll,
+      /id="msg-expedition-e1"[^>]*data-bucket="combat"[^>]*>[\s\S]*?<span class="message-category message-category-combat" data-testid="message-category">Combat<\/span>[\s\S]*?<span class="message-kind" data-testid="message-kind">Expedition<\/span>/,
+    );
+
+    // Combat row (kind = combat, bucket = combat)
+    assert.match(
+      htmlAll,
+      /id="msg-combat-c1"[^>]*data-bucket="combat"[^>]*>[\s\S]*?<span class="message-category message-category-combat" data-testid="message-category">Combat<\/span>[\s\S]*?<span class="message-kind" data-testid="message-kind">Combat<\/span>/,
+    );
+
+    // Spy row (kind = spy, bucket = spy)
+    assert.match(
+      htmlAll,
+      /id="msg-spy-s1"[^>]*data-bucket="spy"[^>]*>[\s\S]*?<span class="message-category message-category-spy" data-testid="message-category">Spy<\/span>[\s\S]*?<span class="message-kind" data-testid="message-kind">Spy<\/span>/,
+    );
+
+    // Build row (kind = buildComplete, bucket = alerts)
+    assert.match(
+      htmlAll,
+      /id="msg-buildComplete-evt1"[^>]*data-bucket="alerts"[^>]*>[\s\S]*?<span class="message-category message-category-alerts" data-testid="message-category">Alerts<\/span>[\s\S]*?<span class="message-kind" data-testid="message-kind">Build<\/span>/,
+    );
+
+    // Fleet row (kind = fleetReturn, bucket = alerts)
+    assert.match(
+      htmlAll,
+      /id="msg-fleetReturn-evt2"[^>]*data-bucket="alerts"[^>]*>[\s\S]*?<span class="message-category message-category-alerts" data-testid="message-category">Alerts<\/span>[\s\S]*?<span class="message-kind" data-testid="message-kind">Fleet<\/span>/,
+    );
+
+    // Raid alert row (kind = raidAlert, bucket = alerts)
+    assert.match(
+      htmlAll,
+      /id="msg-raidAlert-evt3"[^>]*data-bucket="alerts"[^>]*>[\s\S]*?<span class="message-category message-category-alerts" data-testid="message-category">Alerts<\/span>[\s\S]*?<span class="message-kind" data-testid="message-kind">Raid<\/span>/,
+    );
+
+    // Mini nearby row (kind = miniNearby, bucket = alerts)
+    assert.match(
+      htmlAll,
+      /id="msg-miniNearby-evt4"[^>]*data-bucket="alerts"[^>]*>[\s\S]*?<span class="message-category message-category-alerts" data-testid="message-category">Alerts<\/span>[\s\S]*?<span class="message-kind" data-testid="message-kind">Mini<\/span>/,
+    );
+
+    // Test filter views isolate the expected buckets
+    const combatFilterHtml = messagesPageHtml(view, { filter: "combat" });
+    assert.match(combatFilterHtml, /id="msg-combat-c1"/);
+    assert.match(combatFilterHtml, /id="msg-expedition-e1"/);
+    assert.doesNotMatch(combatFilterHtml, /id="msg-spy-s1"/);
+    assert.doesNotMatch(combatFilterHtml, /id="msg-buildComplete-evt1"/);
+
+    const spyFilterHtml = messagesPageHtml(view, { filter: "spy" });
+    assert.match(spyFilterHtml, /id="msg-spy-s1"/);
+    assert.doesNotMatch(spyFilterHtml, /id="msg-combat-c1"/);
+    assert.doesNotMatch(spyFilterHtml, /id="msg-expedition-e1"/);
+    assert.doesNotMatch(spyFilterHtml, /id="msg-buildComplete-evt1"/);
+
+    const alertsFilterHtml = messagesPageHtml(view, { filter: "alerts" });
+    assert.match(alertsFilterHtml, /id="msg-buildComplete-evt1"/);
+    assert.match(alertsFilterHtml, /id="msg-fleetReturn-evt2"/);
+    assert.match(alertsFilterHtml, /id="msg-raidAlert-evt3"/);
+    assert.match(alertsFilterHtml, /id="msg-miniNearby-evt4"/);
+    assert.doesNotMatch(alertsFilterHtml, /id="msg-combat-c1"/);
+    assert.doesNotMatch(alertsFilterHtml, /id="msg-spy-s1"/);
   });
 
   it("renders debris and rebuilt defenses, and still renders legacy reports", () => {
@@ -440,19 +626,19 @@ describe("messages inbox", () => {
     assert.match(combatWinHtml, /Points lost:/);
     assert.match(combatWinHtml, /coord-link/);
     assert.match(combatWinHtml, /1\.2k metal, 800 crystal/);
-    assert.match(combatWinHtml, /<th scope="row">Recon Drone<\/th><td>10<\/td><td>2<\/td>/);
-    assert.match(combatWinHtml, /<th scope="row">Guided-Missile Cruiser<\/th><td>2<\/td><td>0<\/td>/);
-    assert.match(combatWinHtml, /<th scope="row">Strike Fighter<\/th><td>5<\/td><td>5<\/td>/);
+    assert.match(combatWinHtml, /<th scope="row">Recon Drone<\/th><td>10<\/td><td>8<\/td><td>2<\/td>/);
+    assert.match(combatWinHtml, /<th scope="row">Guided-Missile Cruiser<\/th><td>2<\/td><td>2<\/td><td>0<\/td>/);
+    assert.match(combatWinHtml, /<th scope="row">Strike Fighter<\/th><td>5<\/td><td>0<\/td><td>5<\/td>/);
     assert.match(combatWinHtml, /data-testid="battle-ship-totals-attacker"/);
     assert.match(combatWinHtml, /data-testid="battle-ship-totals-defender"/);
     assert.match(combatWinHtml, /data-copy-battle-share="c_test_1"/);
 
     const inboxDetails = messagesPageHtml(view);
     assert.match(inboxDetails, /data-testid="inbox-combat-details-c_test_1"/);
-    assert.match(inboxDetails, /<th scope="row">Recon Drone<\/th><td>10<\/td><td>2<\/td>/);
-    assert.match(inboxDetails, /<th scope="row">Strike Fighter<\/th><td>5<\/td><td>5<\/td>/);
+    assert.match(inboxDetails, /<th scope="row">Recon Drone<\/th><td>10<\/td><td>8<\/td><td>2<\/td>/);
+    assert.match(inboxDetails, /<th scope="row">Strike Fighter<\/th><td>5<\/td><td>0<\/td><td>5<\/td>/);
     assert.equal(
-      combatWinHtml.match(/<th scope="row">Recon Drone<\/th><td>10<\/td><td>2<\/td>/g)?.length,
+      combatWinHtml.match(/<th scope="row">Recon Drone<\/th><td>10<\/td><td>8<\/td><td>2<\/td>/g)?.length,
       2,
     );
     assert.match(

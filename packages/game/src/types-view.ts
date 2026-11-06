@@ -100,6 +100,8 @@ export interface CombatReport {
   acsGroupId?: string;
   /** All attacking player ids in an ACS resolve. */
   acsParticipantIds?: string[];
+  /** Resource value of pirate ships destroyed. Set on seasonal boss strikes. */
+  bossDamage?: number;
 }
 
 export interface PlayerCombatStats {
@@ -549,6 +551,11 @@ export interface PlayerState {
    * Lives on the player inside the universe document (no extra KV keys).
    */
   goals?: PlayerGoalState;
+  /**
+   * One-time commander tutorial. Missing on older saves.
+   * Steps are evaluated live; this object only stores claims and dismiss.
+   */
+  onboarding?: PlayerOnboardingState;
   /** Synthetic empire alerts. Missing on old saves — migrate to []. */
   eventLog?: EventLogEntry[];
   /** Open monthly season counters. Missing on older saves until the next read. */
@@ -592,6 +599,48 @@ export interface GoalView {
   target: number;
   claimed: boolean;
   reward: GoalRewardView;
+}
+
+/**
+ * One-time commander tutorial. Missing on older saves.
+ * `recon` is set when an expedition or spy scan resolves so the
+ * recon step still counts after reports are pruned.
+ */
+export interface PlayerOnboardingState {
+  claimed?: string[];
+  dismissed?: boolean;
+  recon?: boolean;
+}
+
+export type OnboardingNavPage =
+  | "buildings"
+  | "research"
+  | "shipyard"
+  | "fleets"
+  | "galaxy";
+
+export interface OnboardingRewardView {
+  starshards: number;
+  metal: number;
+  crystal: number;
+  deuterium: number;
+}
+
+export interface OnboardingStepView {
+  id: string;
+  title: string;
+  description: string;
+  targetNavPage: OnboardingNavPage;
+  completed: boolean;
+  claimed: boolean;
+  reward: OnboardingRewardView;
+}
+
+export interface OnboardingView {
+  steps: OnboardingStepView[];
+  dismissed: boolean;
+  allClaimed: boolean;
+  completedCount: number;
 }
 
 export interface UniverseSeedCursor {
@@ -657,6 +706,12 @@ export interface UniverseState {
   acsGroups?: Record<string, AcsGroup>;
   /** Sealed monthly snapshots. Absent until the first month roll. */
   seasons?: Record<string, SeasonSnapshot>;
+  /** Active seasonal pirate boss id; optional for older universe saves. */
+  pirateBossBaseId?: string;
+  /** Wall-clock end of the active seasonal boss window. */
+  pirateBossActiveUntil?: number;
+  /** Earliest wall-clock time at which the next boss may spawn. */
+  pirateBossNextSpawnAt?: number;
   /**
    * Set on a player-scoped request. NPC raids and growth run on the
    * maintenance pass instead of the page-load tick. Not persisted.
@@ -740,6 +795,25 @@ export interface GalaxyView {
   asteroids: AsteroidField[];
   pirateBase: PirateBasePublic | null;
   alienBase: AlienBasePublic | null;
+}
+
+export type PirateBossTierId = "top1" | "top10" | "participant";
+
+/** Seasonal boss snapshot for the seasons panel, events card, and galaxy banner. */
+export interface PirateBossView {
+  id: string;
+  coords: Coordinates;
+  shipsLeft: number;
+  hpPct: number;
+  activeUntil?: number;
+  nextSpawnAt?: number;
+  myDamage: number;
+  myRank: number | null;
+  /** Sum of every contribution, not just the top 10. */
+  totalDamage: number;
+  /** Rank 1, else share of total damage. Null when this commander is under 1%. */
+  myTier: PirateBossTierId | null;
+  top: { playerId: string; name: string; damage: number }[];
 }
 
 export interface PlayerView {
@@ -826,8 +900,20 @@ export interface PlayerView {
   openAcsGroups: AcsGroup[];
   /** Daily and weekly goals for the current UTC periods. */
   goals: GoalView[];
+  /** Commander tutorial. Always filled by playerView; older clients may omit it. */
+  onboarding?: OnboardingView;
+  /**
+   * Owned bodies for fleet-composer preset gating. Ships stay off
+   * `ownedPlanets` so existing planet-list comparisons stay stable.
+   */
+  presetUnlockPlanets?: Array<{
+    shipyard: number;
+    ships: FleetShips;
+  }>;
   /** Current month leaderboard plus sealed claim offers. */
   seasonLeaderboard: SeasonLeaderboardView;
+  /** Set while a seasonal boss is up, or during the cooldown after it ends. */
+  pirateBoss?: PirateBossView;
   /** Active 24h item buffs. */
   activeItemBuffs: ActiveItemBuffView[];
   /** Shop items catalog for UI. */

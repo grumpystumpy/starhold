@@ -1,6 +1,7 @@
 import type { FleetMission, PlayerView } from "@starhold/game";
-import { fmtCoords, fmtEta, remainingSeconds } from "./format";
+import { fmt, fmtCompact, fmtCoords, fmtCoordsLink, fmtEta, remainingSeconds } from "./format";
 import { escapeHtml } from "./render-escape";
+import { bossDamageCallout } from "./render-seasons";
 
 export interface EventPresentation {
   className: "event-outgoing" | "event-returning" | "event-hostile";
@@ -61,9 +62,36 @@ function renderCoordLink(c: { galaxy: number; system: number; slot: number } | s
   return `<a href="/galaxy?galaxy=${c.galaxy}&amp;system=${c.system}" class="coord-link" data-galaxy-coords="${formatted}">${formatted}</a>`;
 }
 
+function bossCountdown(until: number, now: number): string {
+  const seconds = Math.max(0, Math.ceil((until - now) / 1000));
+  const days = Math.floor(seconds / 86_400);
+  const hours = Math.floor((seconds % 86_400) / 3_600);
+  const minutes = Math.floor((seconds % 3_600) / 60);
+  if (days > 0) return `${fmt(days)}d ${fmt(hours)}h`;
+  if (hours > 0) return `${fmt(hours)}h ${fmt(minutes)}m`;
+  return fmtEta(seconds);
+}
+
+/** Compact boss status for the fleet-events strip. Empty when no boss is tracked. */
+export function pirateBossEventCard(view: PlayerView, now = view.now): string {
+  const boss = view.pirateBoss;
+  if (!boss) return "";
+  const active = boss.activeUntil != null;
+  const until = active ? boss.activeUntil : boss.nextSpawnAt;
+  const when =
+    until == null
+      ? ""
+      : active
+        ? ` · ends in ${bossCountdown(until, now)}`
+        : ` · next spawn ${bossCountdown(until, now)}`;
+  const rank = boss.myRank == null ? "unranked" : `#${fmt(boss.myRank)}`;
+  return `<section class="pirate-boss-card" data-testid="pirate-boss-event-card" aria-label="Seasonal pirate boss"><p><strong>Pirate mothership</strong> · ${active ? "Active" : "Cooldown"}${when} · ${fmtCoordsLink(boss.coords)} · ${fmt(boss.hpPct)}% hull</p><p class="hint" data-testid="pirate-boss-event-me">You ${fmtCompact(boss.myDamage)} · ${rank}</p>${bossDamageCallout(view)}</section>`;
+}
+
 export function eventsBannerHtml(view: PlayerView, now = Date.now()): string {
+  const card = pirateBossEventCard(view, now);
   const rows = eventRows(view);
-  if (rows.length === 0) return "";
+  if (rows.length === 0) return card;
 
   const renderRow = ({ fleet, hostile }: { fleet: FleetMission; hostile: boolean }, isSoonest = false) => {
     const presentation = eventPresentation(fleet, hostile);
@@ -95,7 +123,7 @@ export function eventsBannerHtml(view: PlayerView, now = Date.now()): string {
     ? `<ul class="events-dropdown-list" data-testid="events-dropdown-list">${remainingRows.map((r) => renderRow(r, false)).join("")}</ul>`
     : `<ul class="events-dropdown-list" data-testid="events-dropdown-list"></ul>`;
 
-  return `<section class="events-banner" aria-label="Fleet events" data-testid="events-banner"><details class="events-dropdown" data-testid="events-dropdown"><summary class="events-dropdown-summary" data-testid="events-dropdown-summary"><h2>Fleet events (${rows.length})</h2>${soonestHtml}</summary>${remainingHtml}</details></section>`;
+  return card + `<section class="events-banner" aria-label="Fleet events" data-testid="events-banner"><details class="events-dropdown" data-testid="events-dropdown"><summary class="events-dropdown-summary" data-testid="events-dropdown-summary"><h2>Fleet events (${rows.length})</h2>${soonestHtml}</summary>${remainingHtml}</details></section>`;
 }
 
 let timer: number | undefined;

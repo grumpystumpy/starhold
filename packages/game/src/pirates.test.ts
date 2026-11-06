@@ -31,8 +31,17 @@ import {
   SHIPS,
 } from "./catalog.js";
 import {
+  PIRATE_BOSS_COOLDOWN_MS,
+  PIRATE_BOSS_DURATION_MS,
+  PIRATE_BOSS_MOTHERSHIPS,
+  PIRATE_BOSS_RESOURCE_REWARD_MULT,
+  PIRATE_BOSS_STARSHARD_REWARD_MULT,
+  PIRATE_BOSS_TIER,
+} from "./data/tuning.js";
+import {
   emptyDefenses,
   defenseCombatPower,
+  computeRaidLoot,
   effectiveCombatResearch,
   emptyFleetShips,
   fleetCombatPower,
@@ -87,6 +96,7 @@ import {
   pirateCombatResearch,
   pirateCombatResearchForOpponent,
   scaleAlienRaidFleet,
+  resolvePirateRaidArrival,
 } from "./world-pirates.js";
 
 let restoreInputs: (() => void) | undefined;
@@ -149,6 +159,132 @@ describe("pirate balance helpers", () => {
 });
 
 describe("pirate density 200 + zero aliens", () => {
+  it("spawns one server-wide seasonal mothership boss with rare rewards", () => {
+    const universe = createUniverse("Seasonal boss", 8);
+    universe.skipNpcRaids = true;
+    const now = 1_800_000_000_000;
+    tickPirates(universe, now);
+    const boss = universe.pirateBases?.[universe.pirateBossBaseId!];
+    assert.ok(boss?.seasonalBoss);
+    assert.equal(boss.tier, PIRATE_BOSS_TIER);
+    assert.equal(boss.ships.swarmMothership, PIRATE_BOSS_MOTHERSHIPS);
+    assert.equal(universe.pirateBossActiveUntil, now + PIRATE_BOSS_DURATION_MS);
+    assert.equal(
+      boss.resources.metal,
+      (800 + PIRATE_BOSS_TIER * 400) * PIRATE_BOSS_RESOURCE_REWARD_MULT,
+    );
+
+    tickPirates(universe, now + 1);
+    assert.equal(
+      Object.values(universe.pirateBases ?? {}).filter(
+        (base) => base.seasonalBoss && base.destroyedAt == null,
+      ).length,
+      1,
+    );
+    const regular = pirateDestroyStarshards(PIRATE_BOSS_TIER, "pirate", "boss-test");
+    const rare = pirateDestroyStarshards(
+      PIRATE_BOSS_TIER,
+      "pirate",
+      "boss-test",
+      PIRATE_BOSS_STARSHARD_REWARD_MULT,
+    );
+    assert.ok(rare >= regular * 9);
+  });
+
+  it("pays 10x pirate destroy rewards when the mothership is defeated", () => {
+    const universe = createUniverse("Seasonal boss reward", 8);
+    universe.skipNpcRaids = true;
+    const now = 1_800_000_000_000;
+    tickPirates(universe, now);
+    const boss = universe.pirateBases?.[universe.pirateBossBaseId!];
+    assert.ok(boss?.seasonalBoss);
+    const { player, planet } = joinUniverse(universe, "Boss hunter", now + 1);
+    boss.ships = emptyFleetShips();
+    boss.defenses = emptyDefenses();
+    const fleet: FleetMission = {
+      id: "seasonal-boss-reward",
+      ownerPlayerId: player.id,
+      originPlanetId: planet.id,
+      targetPlanetId: null,
+      targetPlayerId: null,
+      targetCoords: boss.coords,
+      targetPirateBaseId: boss.id,
+      mission: "pirateRaid",
+      ships: { ...emptyFleetShips(), swarmMothership: 1 },
+      cargo: { metal: 0, crystal: 0, deuterium: 0 },
+      departedAt: now,
+      arrivesAt: now,
+      phase: "outbound",
+      reportId: null,
+    };
+    const normalLoot = computeRaidLoot(
+      {
+        metal: boss.resources.metal / PIRATE_BOSS_RESOURCE_REWARD_MULT,
+        crystal: boss.resources.crystal / PIRATE_BOSS_RESOURCE_REWARD_MULT,
+        deuterium: boss.resources.deuterium / PIRATE_BOSS_RESOURCE_REWARD_MULT,
+      },
+      fleet.ships,
+    );
+
+    resolvePirateRaidArrival(universe, fleet, now);
+
+    assert.equal(boss.destroyedAt, now);
+    assert.equal(
+      player.starshards,
+      pirateDestroyStarshards(
+        PIRATE_BOSS_TIER,
+        "pirate",
+        `${fleet.id}:destroy_shards:${now}`,
+        PIRATE_BOSS_STARSHARD_REWARD_MULT,
+      ),
+    );
+    assert.deepEqual(fleet.cargo, {
+      metal: normalLoot.metal * PIRATE_BOSS_RESOURCE_REWARD_MULT,
+      crystal: normalLoot.crystal * PIRATE_BOSS_RESOURCE_REWARD_MULT,
+      deuterium: normalLoot.deuterium * PIRATE_BOSS_RESOURCE_REWARD_MULT,
+    });
+    assert.equal(universe.pirateBossBaseId, undefined);
+    assert.equal(
+      universe.pirateBossNextSpawnAt,
+      now + PIRATE_BOSS_COOLDOWN_MS,
+    );
+  });
+
+  it("expires the boss and observes the cooldown before respawning", () => {
+    const universe = createUniverse("Seasonal boss expiry", 8);
+    universe.skipNpcRaids = true;
+    const now = 1_800_000_000_000;
+    tickPirates(universe, now);
+    const boss = universe.pirateBases?.[universe.pirateBossBaseId!];
+    assert.ok(boss);
+
+    const expiresAt = now + PIRATE_BOSS_DURATION_MS;
+    tickPirates(universe, expiresAt);
+    assert.equal(boss.destroyedAt, expiresAt);
+    assert.equal(universe.pirateBossBaseId, undefined);
+    assert.equal(
+      universe.pirateBossNextSpawnAt,
+      expiresAt + PIRATE_BOSS_COOLDOWN_MS,
+    );
+
+    tickPirates(universe, expiresAt + PIRATE_BOSS_COOLDOWN_MS - 1);
+    assert.equal(universe.pirateBossBaseId, undefined);
+    tickPirates(universe, expiresAt + PIRATE_BOSS_COOLDOWN_MS);
+    assert.ok(universe.pirateBossBaseId);
+  });
+
+  it("uses safe event defaults when loading a legacy universe save", () => {
+    const universe = createUniverse("Legacy seasonal boss", 8);
+    delete universe.pirateBossBaseId;
+    delete universe.pirateBossActiveUntil;
+    delete universe.pirateBossNextSpawnAt;
+    universe.skipNpcRaids = true;
+
+    tickPirates(universe, 1_800_000_000_000);
+    assert.ok(universe.pirateBossBaseId);
+    assert.equal(universe.pirateBossNextSpawnAt, 0);
+  });
+
   it("seeds exactly toward PIRATE_TARGET_BASE_COUNT=200", () => {
     assert.equal(PIRATE_TARGET_BASE_COUNT, 200);
     assert.equal(ALIEN_INITIAL_BASE_COUNT, 0);
@@ -195,7 +331,7 @@ describe("pirate density 200 + zero aliens", () => {
 
   it("advancing does not reseed or strengthen existing pirate bases", () => {
     const universe = createUniverse("Existing pirate bases", 8);
-    const bases = activePirateBases(universe);
+    const bases = activePirateBases(universe).filter((base) => !base.seasonalBoss);
     const before = bases.map((base) => ({
       id: base.id,
       ships: { ...base.ships },
@@ -203,7 +339,7 @@ describe("pirate density 200 + zero aliens", () => {
       level: base.level,
     }));
     advanceUniverse(universe, Date.now() + 1_000);
-    const after = activePirateBases(universe);
+    const after = activePirateBases(universe).filter((base) => !base.seasonalBoss);
     assert.equal(after.length, before.length);
     assert.deepEqual(
       after.map((base) => ({

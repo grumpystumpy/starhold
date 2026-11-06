@@ -187,6 +187,7 @@ export function grantPirateDestroyStarshards(
   tier: number,
   faction: "pirate" | "alien" = "pirate",
   seed?: string,
+  rewardMultiplier = 1,
 ): number {
   const t = Math.max(0, Math.floor(tier));
   const oldAmount =
@@ -195,7 +196,11 @@ export function grantPirateDestroyStarshards(
     faction === "alien"
       ? ALIEN_STARSHARD_REWARD_MULT
       : PIRATE_STARSHARD_REWARD_MULT;
-  const amount = applyStarshardMultiplier(oldAmount, mult, seed);
+  const amount = applyStarshardMultiplier(
+    oldAmount,
+    mult * Math.max(1, rewardMultiplier),
+    seed,
+  );
   grantStarshards(player, amount);
   return amount;
 }

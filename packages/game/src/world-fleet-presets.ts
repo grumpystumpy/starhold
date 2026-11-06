@@ -1,5 +1,6 @@
-import { SHIP_ORDER } from "./catalog.js";
+import { SHIP_ORDER, SHIPS } from "./catalog.js";
 import { normalizeFleetShips } from "./formulas.js";
+import { shipResearchReqMet } from "./formulas-round2.js";
 import type {
   FleetPreset,
   FleetPresetIntent,
@@ -215,6 +216,53 @@ export function deleteFleetPreset(
   }
   player.fleetPresets = next;
   return { ok: true, presets: next };
+}
+
+const COMPOSER_ALWAYS_VISIBLE = new Set<string>([
+  "expedition",
+  "raid",
+  "miniPlanetCapture",
+]);
+
+export interface PresetComposerUnlockContext {
+  research: Partial<Record<string, number>>;
+  planets: Array<{ shipyard: number; ships: Partial<FleetShips> }>;
+  fleets: Array<{ ships: Partial<FleetShips> }>;
+}
+
+function ownedHull(
+  ctx: PresetComposerUnlockContext,
+  shipId: ShipId,
+): number {
+  let total = 0;
+  for (const planet of ctx.planets) total += Math.max(0, Math.floor(planet.ships[shipId] ?? 0));
+  for (const fleet of ctx.fleets) total += Math.max(0, Math.floor(fleet.ships[shipId] ?? 0));
+  return total;
+}
+
+function endgameHullUnlocked(
+  ctx: PresetComposerUnlockContext,
+  shipId: "voidforgeTitan" | "worldEater",
+): boolean {
+  if (ownedHull(ctx, shipId) >= 1) return true;
+  if (!shipResearchReqMet(shipId, ctx.research).ok) return false;
+  const need = SHIPS[shipId].shipyardLevel;
+  return ctx.planets.some((planet) => planet.shipyard >= need);
+}
+
+/**
+ * Composer dropdown only. Does not remove presets from the save or
+ * from galaxy preset actions.
+ */
+export function isBuiltinPresetUnlockedForComposer(
+  preset: Pick<FleetPreset, "id" | "builtIn">,
+  ctx: PresetComposerUnlockContext,
+): boolean {
+  if (!preset.builtIn) return true;
+  if (COMPOSER_ALWAYS_VISIBLE.has(preset.id)) return true;
+  if (preset.id === "moonDestruction") return endgameHullUnlocked(ctx, "voidforgeTitan");
+  if (preset.id === "miniPlanetDestruction") return endgameHullUnlocked(ctx, "worldEater");
+  return true;
 }
 
 /** @internal test helper */

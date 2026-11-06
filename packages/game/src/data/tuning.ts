@@ -4,6 +4,7 @@ import type {
   DefenseDef,
   DefenseId,
   GoalCadence,
+  OnboardingNavPage,
   PlayerClassId,
   AllianceClassId,
   ResearchDef,
@@ -1603,6 +1604,36 @@ export const PIRATE_EXCLUDED_SHIP_IDS = [
 export const PIRATE_RESPAWN_DELAY_MIN_MS = 12 * 60 * 60 * 1000;
 export const PIRATE_RESPAWN_DELAY_MAX_MS = 36 * 60 * 60 * 1000;
 
+/** Seasonal pirate boss event timing and rewards. */
+export const PIRATE_BOSS_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+export const PIRATE_BOSS_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+export const PIRATE_BOSS_TIER = 50;
+export const PIRATE_BOSS_STARSHARD_REWARD_MULT = 10;
+export const PIRATE_BOSS_RESOURCE_REWARD_MULT = 10;
+export const PIRATE_BOSS_MOTHERSHIPS = 25;
+
+/** Share of total boss damage. Top 1 is also paid to rank 1 regardless of share. */
+export const PIRATE_BOSS_TIERS = {
+  top1: {
+    id: "top1",
+    minShare: 1,
+    starshards: 500,
+    resources: { metal: 100_000, crystal: 50_000, deuterium: 25_000 },
+  },
+  top10: {
+    id: "top10",
+    minShare: 0.1,
+    starshards: 150,
+    resources: { metal: 40_000, crystal: 20_000, deuterium: 10_000 },
+  },
+  participant: {
+    id: "participant",
+    minShare: 0.01,
+    starshards: 40,
+    resources: { metal: 10_000, crystal: 5_000, deuterium: 2_500 },
+  },
+} as const;
+
 /** Starshards: destroy base = base + per-tier; win defense vs pirate raid. */
 export const PIRATE_DESTROY_STARSHARDS_BASE = 40;
 export const PIRATE_DESTROY_STARSHARDS_PER_TIER = 5;
@@ -1931,6 +1962,104 @@ export const GOALS: readonly GoalTuning[] = [
     metal: GOAL_WEEKLY_EXPEDITION_METAL,
     crystal: GOAL_WEEKLY_EXPEDITION_CRYSTAL,
     deuterium: GOAL_WEEKLY_EXPEDITION_DEUTERIUM,
+  },
+];
+
+/**
+ * One-time commander tutorial. Order is the checklist order.
+ * Completion is evaluated live; these rows are rewards and copy only.
+ */
+export interface OnboardingStepTuning {
+  id: string;
+  title: string;
+  description: string;
+  targetNavPage: OnboardingNavPage;
+  metal: number;
+  crystal: number;
+  deuterium: number;
+  starshards: number;
+}
+
+export const ONBOARDING_STEPS: readonly OnboardingStepTuning[] = [
+  {
+    id: "metalMine1",
+    title: "Ore Mine",
+    description: "Raise an Ore Mine to level 1 on any world you own.",
+    targetNavPage: "buildings",
+    metal: 600,
+    crystal: 250,
+    deuterium: 0,
+    starshards: 0,
+  },
+  {
+    id: "solarPlant1",
+    title: "Solar Array",
+    description: "Raise a Solar Array to level 1 on any world you own.",
+    targetNavPage: "buildings",
+    metal: 700,
+    crystal: 300,
+    deuterium: 0,
+    starshards: 0,
+  },
+  {
+    id: "crystalMine1",
+    title: "Crystalizer",
+    description: "Raise a Crystalizer to level 1 on any world you own.",
+    targetNavPage: "buildings",
+    metal: 800,
+    crystal: 400,
+    deuterium: 0,
+    starshards: 0,
+  },
+  {
+    id: "deutSynth1",
+    title: "Deuterium Extractor",
+    description: "Raise a Deuterium Extractor to level 1 on any world you own.",
+    targetNavPage: "buildings",
+    metal: 900,
+    crystal: 500,
+    deuterium: 250,
+    starshards: 0,
+  },
+  {
+    id: "researchLab1",
+    title: "First research",
+    description: "Build a Research Lab to level 1 and finish any research at level 1.",
+    targetNavPage: "research",
+    metal: 1_200,
+    crystal: 800,
+    deuterium: 300,
+    starshards: 15,
+  },
+  {
+    id: "shipyardScout1",
+    title: "First hull",
+    description: "Build a Shipyard to level 1 and field at least one ship in orbit or in a fleet.",
+    targetNavPage: "shipyard",
+    metal: 1_500,
+    crystal: 1_000,
+    deuterium: 400,
+    starshards: 15,
+  },
+  {
+    id: "firstReconOrExpedition",
+    title: "Look outward",
+    description: "Finish an expedition, own a Spy Satellite, or complete a scan.",
+    targetNavPage: "galaxy",
+    metal: 2_000,
+    crystal: 1_200,
+    deuterium: 600,
+    starshards: 20,
+  },
+  {
+    id: "colonyFoundation",
+    title: "Colony foundation",
+    description: "On one world, reach Ore Mine 4, Crystalizer 3, and Solar Array 3.",
+    targetNavPage: "buildings",
+    metal: 3_000,
+    crystal: 2_000,
+    deuterium: 1_000,
+    starshards: 50,
   },
 ];
 

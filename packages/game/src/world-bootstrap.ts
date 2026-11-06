@@ -98,6 +98,7 @@ export function createUniverse(
     debris: {},
     asteroids: {},
     pirateBases: {},
+    pirateBossNextSpawnAt: 0,
     alienBases: {},
     occupations: {},
     alliances: {},

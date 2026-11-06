@@ -42,6 +42,8 @@ export {
 export {
   doClaimDaily,
   doClaimGoal,
+  doClaimOnboarding,
+  doDismissOnboarding,
   doTradeResources,
   doBuyShopItem,
   doActivateOfficer,

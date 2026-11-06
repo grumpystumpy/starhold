@@ -25,6 +25,7 @@
     "tuning-diff": "node scripts/tuning-diff.mjs",
     "start": "npm run start -w @starhold/server",
     "e2e:gate:alliances": "node scripts/quality-gate-alliances.mjs",
+    "e2e:gate:onboarding": "node scripts/quality-gate-onboarding.mjs",
     "cf:dev": "wrangler dev --local"
   },
   "dependencies": {

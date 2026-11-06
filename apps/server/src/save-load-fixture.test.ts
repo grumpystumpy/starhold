@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { DEFENSE_ORDER, SHIP_ORDER, UNIVERSE_SCHEMA_VERSION, playerView } from "@starhold/game";
+import { DEFENSE_ORDER, SHIP_ORDER, UNIVERSE_SCHEMA_VERSION, onboardingViewFor, playerView } from "@starhold/game";
 import { fileURLToPath } from "node:url";
 import { resetMemoryUniverse, withUniverseRead } from "./store.js";
 import { runWithScope } from "./request-context.js";
@@ -163,6 +163,119 @@ describe("catalog-complete old save fixture", () => {
       assert.equal(loaded.allianceId, "ally_old");
       assert.equal(loaded.tag, "OLD");
       assert.equal(loaded.role, "founder");
+    } finally {
+      resetMemoryUniverse();
+    }
+  });
+
+  it("loads a save with no onboarding field and keeps the empire", async () => {
+    const path = fileURLToPath(new URL("./fixtures/catalog-complete-save.json", import.meta.url));
+    const fixture = JSON.parse(readFileSync(path, "utf8")) as {
+      universe: {
+        id: string;
+        players: Record<string, {
+          id: string;
+          research: Record<string, number>;
+          researchQueue?: unknown;
+          officers?: unknown;
+          skillsUnlocked?: unknown;
+          starshards?: number;
+          onboarding?: unknown;
+        }>;
+        planets: Record<string, {
+          id: string;
+          resources: { metal: number; crystal: number; deuterium: number };
+          defenses: Record<string, number>;
+          ships: Record<string, number>;
+          buildQueue: unknown;
+          shipQueue: unknown;
+          defenseQueue: unknown;
+        }>;
+        fleets: Record<string, { ships: Record<string, number> }>;
+        alliances?: Record<string, unknown>;
+      };
+      planetId: string;
+    };
+    const universe = structuredClone(fixture.universe);
+    const player = Object.values(universe.players)[0]!;
+    assert.equal(player.onboarding, undefined);
+    const home = universe.planets[fixture.planetId]!;
+    const before = {
+      planetIds: Object.keys(universe.planets).sort(),
+      resources: { ...home.resources },
+      buildQueue: structuredClone(home.buildQueue),
+      shipQueue: structuredClone(home.shipQueue),
+      defenseQueue: structuredClone(home.defenseQueue),
+      researchQueue: structuredClone(player.researchQueue ?? []),
+      ships: { ...home.ships },
+      fleetShips: { ...universe.fleets["fixture-fleet"]!.ships },
+      defenses: { ...home.defenses },
+      research: structuredClone(player.research),
+      officers: structuredClone(player.officers ?? []),
+      skills: structuredClone(player.skillsUnlocked ?? []),
+      starshards: player.starshards ?? 0,
+      alliances: structuredClone(universe.alliances ?? {}),
+    };
+
+    const key = `starhold:universe:v${UNIVERSE_SCHEMA_VERSION}`;
+    const values = new Map<string, unknown>([[key, universe], [`${key}:ver`, "fixture-onboarding"]]);
+    const store: KvStore = {
+      async get<T>(requested: string) { return (values.get(requested) as T | undefined) ?? null; },
+      async set() { return "OK"; },
+      async del() {},
+    };
+    resetMemoryUniverse();
+    try {
+      const loaded = await runWithScope(
+        { kv: store, mode: "upstash", method: "GET", cpuMs: 0 },
+        () => withUniverseRead((live) => {
+          const livePlayer = live.players[player.id]!;
+          const liveHome = live.planets[fixture.planetId]!;
+          const checklist = onboardingViewFor(live, livePlayer);
+          return {
+            planetIds: Object.keys(live.planets).sort(),
+            resources: { ...liveHome.resources },
+            buildQueue: liveHome.buildQueue,
+            shipQueue: liveHome.shipQueue,
+            defenseQueue: liveHome.defenseQueue,
+            researchQueue: livePlayer.researchQueue ?? [],
+            ships: { ...liveHome.ships },
+            fleetShips: { ...live.fleets["fixture-fleet"]!.ships },
+            defenses: { ...liveHome.defenses },
+            research: { ...livePlayer.research },
+            officers: livePlayer.officers ?? [],
+            skills: livePlayer.skillsUnlocked ?? [],
+            starshards: livePlayer.starshards ?? 0,
+            alliances: live.alliances ?? {},
+            onboarding: livePlayer.onboarding,
+            steps: checklist.steps.length,
+          };
+        }),
+      );
+      for (const id of before.planetIds) {
+        assert.ok(loaded.planetIds.includes(id), `lost planet ${id}`);
+      }
+      assert.deepEqual(loaded.resources, before.resources);
+      assert.deepEqual(loaded.buildQueue, before.buildQueue);
+      assert.deepEqual(loaded.shipQueue, before.shipQueue);
+      assert.deepEqual(loaded.defenseQueue, before.defenseQueue);
+      assert.deepEqual(loaded.researchQueue, before.researchQueue);
+      for (const id of SHIP_ORDER) {
+        assert.equal(loaded.ships[id] ?? 0, before.ships[id] ?? 0, `planet ship ${id}`);
+        assert.equal(loaded.fleetShips[id] ?? 0, before.fleetShips[id] ?? 0, `fleet ship ${id}`);
+      }
+      for (const id of DEFENSE_ORDER) {
+        assert.equal(loaded.defenses[id] ?? 0, before.defenses[id] ?? 0, `defense ${id}`);
+      }
+      for (const [id, level] of Object.entries(before.research)) {
+        assert.equal(loaded.research[id], level, `lost research ${id}`);
+      }
+      assert.deepEqual(loaded.officers, before.officers);
+      assert.deepEqual(loaded.skills, before.skills);
+      assert.equal(loaded.starshards, before.starshards);
+      assert.deepEqual(loaded.alliances, before.alliances);
+      assert.equal(loaded.onboarding, undefined);
+      assert.equal(loaded.steps, 8);
     } finally {
       resetMemoryUniverse();
     }

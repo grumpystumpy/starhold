@@ -34,8 +34,54 @@ The */30 maintenance cron always fully rebuilds the commander board for every pl
 
 The highscore page has Commanders and Alliances tabs. The Alliances tab shows rank, `[TAG] name`, members, total points, and average points, top 100, sorted by total member points then tag. Each alliance contributes at most `ALLIANCE_MAX_MEMBERS` (16) members to that total.
 
+## Events / seasonal boss
+
+The seasonal pirate mothership is one marked `PirateBase` in `pirateBases`, tracked by optional universe fields `pirateBossBaseId`, `pirateBossActiveUntil`, and `pirateBossNextSpawnAt`. `tickPirates` spawns it at a bounded nearby open slot, expires it after seven days, and starts a seven-day cooldown after defeat or expiry. It reuses pirate combat, galaxy visibility, and loot reporting, with 10x Starshards and resources on defeat. Damage is stored on optional `PirateBase.bossDamage` and paid once via `bossRewardsPaid` (`world-pirate-boss.ts`): rank 1, then anyone at 10% or 1% of total damage, as Starshards plus resources on the home planet. Tuning lives in `packages/game/src/data/tuning.ts` (`PIRATE_BOSS_TIERS`). The player view adds optional `pirateBoss`. The Seasons page renders the command panel, the fleet-events strip renders a compact card (including the latest `bossDamage` report callout), and the galaxy page banners an active boss with a Raid boss button that reuses the pirate-raid prefill. Coverage is in `pirates.test.ts`, `pirate-boss.test.ts`, `render-seasons.test.ts`, `render-events.test.ts`, and `render-galaxy-page.test.ts`.
+
 ## Open questions
 
 - Join requests do not expire.
 - Officer cap does not limit who may approve a request. Approval is independent of `ALLIANCE_MAX_OFFICERS`.
 - A pending request is kept when the alliance switches back to open. It is not auto-accepted. Approve still works. Switching to open still clears invites only.
+
+## Messages
+
+Messages in the inbox display category badges matching their filter bucket (`Combat`, `Spy`, `Alerts`) alongside the specific kind badge (`message-kind`), allowing players to identify message categories at a glance.
+
+## Onboarding & Fleet Presets
+
+`player.onboarding` is optional (`claimed`, `dismissed`, `recon`). Older saves omit it and still load. `onboardingViewFor` does not write the field. Claiming or dismissing creates it.
+
+Steps, in order, live in `ONBOARDING_STEPS` (`packages/game/src/data/tuning.ts`):
+
+| Id | Done when | Reward |
+| --- | --- | --- |
+| `metalMine1` | Ore Mine ≥ 1 on any owned world | 600 metal, 250 crystal |
+| `solarPlant1` | Solar Array ≥ 1 | 700 metal, 300 crystal |
+| `crystalMine1` | Crystalizer ≥ 1 | 800 metal, 400 crystal |
+| `deutSynth1` | Deuterium Extractor ≥ 1 | 900 metal, 500 crystal, 250 deuterium |
+| `researchLab1` | Research Lab ≥ 1 and any research ≥ 1 | 1,200 metal, 800 crystal, 300 deuterium, 15 Starshards |
+| `shipyardScout1` | Shipyard ≥ 1 and at least one ship in orbit or in a fleet | 1,500 metal, 1,000 crystal, 400 deuterium, 15 Starshards |
+| `firstReconOrExpedition` | `onboarding.recon`, a Spy Satellite, expedition goal progress, or a spy/expedition report | 2,000 metal, 1,200 crystal, 600 deuterium, 20 Starshards |
+| `colonyFoundation` | One world has Ore Mine ≥ 4, Crystalizer ≥ 3, and Solar Array ≥ 3 | 3,000 metal, 2,000 crystal, 1,000 deuterium, 50 Starshards |
+
+Any completed step can be claimed in any order. A second claim is rejected. Cargo is clamped to free storage on the active world and the step still counts as claimed.
+
+| Action | Route |
+| --- | --- |
+| Claim | `POST /api/onboarding/claim` `{ playerId, stepId }` |
+| Dismiss or restore | `POST /api/onboarding/dismiss` `{ playerId, dismissed }` |
+
+Both routes use the shop session ownership check (401 without a cookie, 403 for another commander) and return the updated player view. They are not called on a normal page load.
+
+Overview shows `data-testid="onboarding-panel"` until the briefing is dismissed or every step is claimed. The Goals page shows `data-testid="onboarding-restore"` while it is dismissed with steps still unclaimed, and a compact claim list otherwise.
+
+Fleet composer hides built-in `moonDestruction` and `miniPlanetDestruction` until the player owns that hull or meets its research and shipyard level. `expedition`, `raid`, `miniPlanetCapture`, and custom presets stay visible. The presets remain on the save, and the galaxy preset buttons are unchanged.
+
+## Open questions
+
+- `joinUniverse` already builds Ore Mine, Crystalizer, and Solar Array to level 1, so a live new commander starts at 3/8 and can claim those rewards immediately. The rules still treat level 0 as incomplete.
+- Colony foundation is one planet with all three levels, not levels split across colonies.
+- Recon is marked when an expedition resolves or a spy report is written, including a blank Moving Fortress scan. Dismiss does not clear claims.
+- A full vault pays only what fits. The step is still claimed.
+

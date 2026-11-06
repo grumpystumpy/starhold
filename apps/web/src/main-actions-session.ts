@@ -1,4 +1,4 @@
-import { DEFENSES, MAP_GALAXIES, MAP_SYSTEMS, RESEARCH, SHIPS, type PlayerView } from "@starhold/game";
+import { MAP_GALAXIES, MAP_SYSTEMS, type PlayerView } from "@starhold/game";
 import {
   ApiError,
   authJoin,
@@ -31,7 +31,6 @@ import {
 import { syncSessionUrl } from "./ui/router";
 import { captureGameEvent, identifyCommander } from "./telemetry";
 import { settleMutation } from "./recover-action";
-import { fmt } from "./ui/format";
 
 /** Background refresh cadence. Actions apply their own response immediately. */
 export const POLL_INTERVAL_MS = 30_000;
@@ -126,78 +125,6 @@ let idleTimer: number | undefined;
 let idlePaused = false;
 let queueCompletionTimer: number | undefined;
 const completedQueueTimes = new Set<string>();
-let previousTrackedView: PlayerView | null = null;
-const notifiedQueueItemIds = new Set<string>();
-const cancelledQueueItemIds = new Set<string>();
-
-export function noteCancelledQueueItem(itemId: string): void {
-  cancelledQueueItemIds.add(itemId);
-}
-
-function checkAndNotifyQueueCompletions(): void {
-  const currentView = session.view;
-  if (!currentView) {
-    previousTrackedView = null;
-    return;
-  }
-  if (!previousTrackedView) {
-    previousTrackedView = currentView;
-    return;
-  }
-
-  if (previousTrackedView.player.id === currentView.player.id) {
-    const messages: string[] = [];
-    const now = currentView.now ?? Date.now();
-
-    // 1. Research Queue (player level)
-    for (const item of previousTrackedView.player.researchQueue ?? []) {
-      if (!currentView.player.researchQueue?.some((r) => r.id === item.id)) {
-        if (item.completesAt <= now && !cancelledQueueItemIds.has(item.id) && !notifiedQueueItemIds.has(item.id)) {
-          notifiedQueueItemIds.add(item.id);
-          const name = RESEARCH[item.researchId]?.name ?? item.researchId;
-          messages.push(`Research complete: ${name} → level ${item.targetLevel}`);
-        }
-      }
-    }
-
-    // Planet queues (only if same planet)
-    if (previousTrackedView.planet.id === currentView.planet.id) {
-      // 2. Ship Queue
-      for (const item of previousTrackedView.planet.shipQueue ?? []) {
-        if (!currentView.planet.shipQueue?.some((s) => s.id === item.id)) {
-          if (item.completesAt <= now && !cancelledQueueItemIds.has(item.id) && !notifiedQueueItemIds.has(item.id)) {
-            notifiedQueueItemIds.add(item.id);
-            const name = SHIPS[item.shipId]?.name ?? item.shipId;
-            const count = fmt(item.orderedCount ?? item.count);
-            messages.push(`Shipyard: ${name} × ${count} finished`);
-          }
-        }
-      }
-
-      // 3. Defense Queue
-      for (const item of previousTrackedView.planet.defenseQueue ?? []) {
-        if (!currentView.planet.defenseQueue?.some((d) => d.id === item.id)) {
-          if (item.completesAt <= now && !cancelledQueueItemIds.has(item.id) && !notifiedQueueItemIds.has(item.id)) {
-            notifiedQueueItemIds.add(item.id);
-            const name = DEFENSES[item.defenseId]?.name ?? item.defenseId;
-            const count = fmt(item.orderedCount ?? item.count);
-            messages.push(`Defense: ${name} × ${count} finished`);
-          }
-        }
-      }
-
-    }
-
-    if (messages.length > 0) {
-      if (!session.error || Date.now() >= session.flashUntil) {
-        setFlash("notice", messages.join(" · "));
-      }
-    }
-  }
-
-  previousTrackedView = currentView;
-}
-
 function tabHidden(): boolean {
   return typeof document !== "undefined" && document.visibilityState === "hidden";
 }
@@ -221,7 +148,6 @@ function clearQueueCompletionTimer(): void {
 }
 
 function scheduleQueueCompletionRefresh(): void {
-  checkAndNotifyQueueCompletions();
   clearQueueCompletionTimer();
   const view = session.view;
   if (!view) {
@@ -405,9 +331,6 @@ function ensureVisibilityListener(): void {
 export function startPolling(playerId: string): void {
   if (pollPlayerId !== playerId) {
     completedQueueTimes.clear();
-    previousTrackedView = null;
-    notifiedQueueItemIds.clear();
-    cancelledQueueItemIds.clear();
   }
   pollPlayerId = playerId;
   lastActivityAt = Date.now();
@@ -424,9 +347,6 @@ export function stopPolling(): void {
   clearPollTimer();
   clearQueueCompletionTimer();
   completedQueueTimes.clear();
-  previousTrackedView = null;
-  notifiedQueueItemIds.clear();
-  cancelledQueueItemIds.clear();
   clearIdleTimer();
 }
 

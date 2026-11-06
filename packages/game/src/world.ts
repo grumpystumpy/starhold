@@ -109,8 +109,10 @@ export {
   expeditionPresetShips,
   ensurePlayerFleetPresets,
   getFleetPreset,
+  isBuiltinPresetUnlockedForComposer,
   listFleetPresets,
   saveFleetPreset,
+  type PresetComposerUnlockContext,
 } from "./world-fleet-presets.js";
 export type { BatchFleetResult } from "./world-fleet-batch.js";
 export {
@@ -251,6 +253,13 @@ export {
   utcWeekKey,
   type GoalActionResult,
 } from "./world-goals.js";
+export {
+  claimOnboardingStep,
+  noteOnboardingRecon,
+  onboardingViewFor,
+  setOnboardingDismissed,
+  type OnboardingActionResult,
+} from "./world-onboarding.js";
 export {
   effectiveCombatResearch,
   ensurePlayerProgress,

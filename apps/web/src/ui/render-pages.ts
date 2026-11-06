@@ -52,6 +52,7 @@ import {
 import { alliancesPageHtml } from "./render-alliances";
 import { recommendedNext } from "./render-helpers";
 import { goalsPageHtml } from "./render-goals";
+import { onboardingPanelHtml } from "./render-onboarding";
 import { messagesPageHtml } from "./render-messages";
 import { shopPageHtml } from "./render-shop";
 import {
@@ -117,6 +118,7 @@ function overviewPage(view: PlayerView, busy: boolean): string {
   return `
     <section class="panel" data-testid="overview-panel">
       <h2>Overview</h2>
+      ${onboardingPanelHtml(view, busy)}
       <p class="hint" data-testid="overview-daily-missions-ready">
         Daily missions ready to claim: <a href="${escapeAttr(goalsHref)}" data-nav="goals" data-testid="overview-goals-link"><strong>${fmt(readyDailyMissions)}</strong></a>
       </p>
@@ -159,8 +161,9 @@ function overviewPage(view: PlayerView, busy: boolean): string {
         ${infoTooltip({
           title: "Position multipliers",
           lines: [
-            "Slot temperature changes mine and energy output.",
-            `Metal ×${pm.metal.toFixed(2)} · crystal ×${pm.crystal.toFixed(2)} · deuterium ×${pm.deuterium.toFixed(2)} · energy ×${pm.energy.toFixed(2)}`,
+            "Each orbital slot has its own temperature.",
+            "Hotter slots raise solar energy and metal. Colder slots raise deuterium. Crystal sits between them.",
+            "The line above is this colony's live multiplier.",
           ],
           testId: "position-mult-tip",
         }).html}

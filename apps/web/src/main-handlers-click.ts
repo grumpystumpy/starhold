@@ -32,6 +32,8 @@ import {
   doChooseClass,
   doClaimDaily,
   doClaimGoal,
+  doClaimOnboarding,
+  doDismissOnboarding,
   doTradeResources,
   doCreateAlliance,
   doDeleteAllianceIntel,
@@ -634,6 +636,23 @@ export function bindClickHandlers(): void {
         ev.preventDefault();
         const goalId = goalBtn.getAttribute("data-claim-goal");
         if (goalId) void doClaimGoal(goalId);
+        return;
+      }
+
+      const onboardingClaim = closestActionEl(target, "[data-onboarding-claim]");
+      if (onboardingClaim) {
+        ev.preventDefault();
+        const stepId = onboardingClaim.getAttribute("data-onboarding-claim");
+        if (stepId) void doClaimOnboarding(stepId);
+        return;
+      }
+
+      const onboardingDismiss = closestActionEl(target, "[data-onboarding-dismiss]");
+      if (onboardingDismiss) {
+        ev.preventDefault();
+        void doDismissOnboarding(
+          onboardingDismiss.getAttribute("data-onboarding-dismiss") !== "false",
+        );
         return;
       }
 

@@ -289,6 +289,43 @@
   gap: 0.75rem;
 }
 
+.message-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.message-category {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 0.05rem 0.45rem;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg2) 80%, transparent);
+  color: var(--fg);
+}
+
+.message-category-combat {
+  border-color: color-mix(in srgb, var(--bad, #f87171) 60%, transparent);
+  background: color-mix(in srgb, var(--bad, #f87171) 15%, transparent);
+  color: color-mix(in srgb, var(--bad, #f87171) 85%, #fff);
+}
+
+.message-category-spy {
+  border-color: color-mix(in srgb, var(--accent, #e0a45a) 60%, transparent);
+  background: color-mix(in srgb, var(--accent, #e0a45a) 15%, transparent);
+  color: var(--accent, #e0a45a);
+}
+
+.message-category-alerts {
+  border-color: color-mix(in srgb, var(--ok, #4ade80) 60%, transparent);
+  background: color-mix(in srgb, var(--ok, #4ade80) 15%, transparent);
+  color: color-mix(in srgb, var(--ok, #4ade80) 85%, #fff);
+}
+
 .message-kind {
   display: inline-block;
   font-size: 0.68rem;
@@ -997,7 +1034,50 @@ code {
 }
 
 .goal-actions .hint {
+  margin-top: 0;
   overflow-wrap: anywhere;
+}
+
+.onboarding-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.onboarding-step {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+  align-items: flex-start;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+}
+
+.onboarding-step.is-next {
+  padding-left: 0.45rem;
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.onboarding-step-copy,
+.onboarding-step-actions {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.onboarding-step-copy {
+  flex: 1 1 12rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.onboarding-step-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
 }
 
 .goal-meter {
@@ -1143,6 +1223,55 @@ code {
 .season-pickers select {
   width: 100%;
   max-width: 24rem;
+}
+
+.pirate-boss-panel {
+  margin: 0.75rem 0;
+}
+
+.boss-hp {
+  position: relative;
+  height: 1.15rem;
+  margin: 0.4rem 0;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.boss-hp-fill {
+  display: block;
+  height: 100%;
+  background: #c45c3e;
+}
+
+.boss-hp-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+}
+
+.pirate-boss-banner,
+.pirate-boss-card {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 1rem;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.55rem 0.75rem;
+  margin: 0 0 0.75rem;
+  min-width: 0;
+}
+
+.pirate-boss-banner p,
+.pirate-boss-card p {
+  margin: 0;
+  min-width: 0;
 }
 
 .skill-branch h3 {
