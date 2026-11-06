@@ -5,6 +5,7 @@ import {
   eventPresentation,
   eventsBannerHtml,
   formatEventCountdown,
+  pirateBossEventCard,
   startEventsCountdown,
   stopEventsCountdown,
   watchFleetLaunches,
@@ -52,6 +53,42 @@ afterEach(() => {
 });
 
 describe("events banner", () => {
+  it("hides the boss card when no seasonal boss is tracked", () => {
+    assert.equal(pirateBossEventCard(view()), "");
+    assert.equal(eventsBannerHtml(view(), 1_700_000_000_000), "");
+  });
+
+  it("shows a compact boss card with the latest strike", () => {
+    const html = eventsBannerHtml(
+      view({
+        now: 1_700_000_000_000,
+        pirateBoss: {
+          id: "boss-9",
+          coords: { galaxy: 3, system: 8, slot: 2 },
+          shipsLeft: 10,
+          hpPct: 40,
+          activeUntil: 1_700_000_000_000 + 90_000,
+          myDamage: 800,
+          myRank: 1,
+          totalDamage: 800,
+          myTier: "top1",
+          top: [{ playerId: "p1", name: "Hunter", damage: 800 }],
+        },
+        reports: [{ id: "hit", bossDamage: 800 } as PlayerView["reports"][number]],
+        fleets: [fleet()],
+      }),
+      1_700_000_000_000,
+    );
+    assert.match(html, /data-testid="pirate-boss-event-card"/);
+    assert.match(html, /Active · ends in 1m 30s/);
+    assert.match(html, /3:8:2/);
+    assert.match(html, /40% hull/);
+    assert.match(html, /data-testid="pirate-boss-event-me"/);
+    assert.match(html, /You 800 · #1/);
+    assert.match(html, /data-testid="pirate-boss-report"/);
+    assert.match(html, /data-testid="events-banner"/);
+  });
+
   it("formats a compact, non-negative countdown", () => {
     assert.equal(formatEventCountdown(1_700_000_061_000, 1_700_000_000_000), "1m 01s");
     assert.equal(formatEventCountdown(1_700_000_000_000, 1_700_000_001_000), "0s");

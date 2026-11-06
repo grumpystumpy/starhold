@@ -297,6 +297,14 @@ export function expeditionReportsHtml(
   `;
 }
 
+function pirateBossGalaxyBanner(view: PlayerView, busy: boolean): string {
+  const boss = view.pirateBoss;
+  if (!boss?.activeUntil) return "";
+  const coords = `${boss.coords.galaxy}:${boss.coords.system}:${boss.coords.slot}`;
+  const rank = boss.myRank == null ? "unranked" : `#${fmt(boss.myRank)}`;
+  return `<div class="pirate-boss-banner" data-testid="galaxy-boss-banner"><p>Seasonal mothership · ${fmtCoordsLink(boss.coords)} · ${fmt(boss.hpPct)}% hull · you ${rank}</p><button type="button" data-galaxy-attack-pirates="${coords}" data-galaxy-pirate-base="${escapeAttr(boss.id)}" data-testid="galaxy-raid-boss" ${busy ? "disabled" : ""}>Raid boss</button></div>`;
+}
+
 export function galaxyPanel(
   view: PlayerView,
   busy: boolean,
@@ -434,6 +442,7 @@ export function galaxyPanel(
   return `
     <section class="panel" data-testid="galaxy-panel">
       <h2>Galaxy Navigation</h2>
+      ${pirateBossGalaxyBanner(view, busy)}
       <div class="galaxy-system-bar" data-testid="galaxy-system-bar">
         <div class="galaxy-nav">
           <div class="galaxy-nav-row galaxy-nav-row-system" data-testid="galaxy-nav-row-system">
