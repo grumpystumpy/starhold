@@ -12,6 +12,7 @@ import { RESOURCE_ART } from "./assets";
 import { fmt, fmtBonusPct, fmtCoords } from "./format";
 import { planetDiscHtml } from "./planet-disc";
 import { NAV_LABELS, NAV_PAGES, type NavPage } from "./nav";
+import { accountNavHtml, securityHref } from "./render-security";
 import { flashHtml, resBlock } from "./render-chrome";
 import { escapeAttr, escapeHtml } from "./render-escape";
 import { hrefForPage } from "./router";
@@ -161,6 +162,10 @@ function planetDropdown(view: PlayerView, busy: boolean): string {
 
 function leftNav(view: PlayerView, active: NavPage): string {
   const q = navQuery(view);
+  const params = new URLSearchParams();
+  params.set("playerId", q.playerId);
+  params.set("planet", q.planetId);
+  const gameActive = session.accountMenu ? null : active;
   return `
     <nav class="side-nav" aria-label="Game menu" data-testid="side-nav">
       <ul>
@@ -171,8 +176,9 @@ function leftNav(view: PlayerView, active: NavPage): string {
             unread > 0
               ? `<span class="nav-badge" data-testid="nav-messages-badge">${fmt(unread)}</span>`
               : "";
-          return `<li><a href="${escapeAttr(href)}" class="nav-link${id === active ? " active" : ""}" data-nav="${id}" data-testid="nav-${id}">${NAV_LABELS[id]}${badge}</a></li>`;
+          return `<li><a href="${escapeAttr(href)}" class="nav-link${id === gameActive ? " active" : ""}" data-nav="${id}" data-testid="nav-${id}">${NAV_LABELS[id]}${badge}</a></li>`;
         }).join("")}
+        ${accountNavHtml(Boolean(session.account), session.accountMenu === "security", securityHref(`?${params.toString()}`))}
       </ul>
     </nav>`;
 }
@@ -245,7 +251,7 @@ export function shellHtml(
 
   const coordLink = `<a href="/galaxy?galaxy=${planet.coords.galaxy}&amp;system=${planet.coords.system}" class="coord-link" data-galaxy-coords="${fmtCoords(planet.coords)}">${fmtCoords(planet.coords)}</a>`;
   return `
-    <div class="game-shell" data-testid="game-shell" data-page="${activePage}" data-planet-id="${escapeAttr(planet.id)}" data-busy="${state.busy ? "1" : "0"}">
+    <div class="game-shell" data-testid="game-shell" data-page="${activePage}" data-account-menu="${session.accountMenu ?? ""}" data-planet-id="${escapeAttr(planet.id)}" data-busy="${state.busy ? "1" : "0"}">
       <header class="topbar shell-top">
         ${planetDropdown(view, state.busy)}
         <div class="topbar-brand">

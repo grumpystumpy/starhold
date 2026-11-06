@@ -12,6 +12,7 @@ import { BUILDING_ART, PLANET_ART } from "./assets";
 import { fmt, fmtCost, fmtEta } from "./format";
 import { escapeAttr, escapeHtml } from "./render-escape";
 import { costTooltip } from "./render-tooltips";
+import { recoverFormHtml } from "./render-security";
 
 export type JoinScreenState = {
   error: string | null;
@@ -55,6 +56,8 @@ export function joinScreenHtml(state: JoinScreenState): string {
           <button type="submit" id="auth-signup-btn" data-testid="auth-signup-btn" data-auth-action="signup" ${state.busy ? "disabled" : ""}>Sign up</button>
         </div>
       </form>
+      <p class="hint"><button type="button" data-testid="auth-forgot-link" data-auth-forgot>Forgot password?</button></p>
+      ${recoverFormHtml()}
       <p class="hint">Sign up with email and password to keep this commander after you close the tab. Guest play stays on this browser only.</p>
 `;
 

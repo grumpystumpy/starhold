@@ -1,5 +1,7 @@
 import {
+  ACCOUNT_MENU_PATHS,
   NAV_PAGES,
+  accountMenuFromPath,
   pageFromPath,
   pathForPage,
   shopTabFromUrl,
@@ -68,7 +70,10 @@ export function syncSessionUrl(opts: SessionUrlOpts = {}): void {
     url.pathname.replace(/\/+$/, "") === "/officers" ||
     url.pathname.replace(/\/+$/, "") === "/skills";
   const shopTab = shopTabFromUrl(url.pathname, url.search);
-  url.pathname = pathForPage(page);
+  url.pathname =
+    session.accountMenu === "security"
+      ? ACCOUNT_MENU_PATHS.security
+      : pathForPage(page);
   url.searchParams.delete("commander");
   if (page === "shop" && (legacyShopPath || url.searchParams.has("shopTab"))) {
     url.searchParams.set("shopTab", shopTab);
@@ -102,8 +107,17 @@ export function navigateTo(
   page: NavPage,
   opts: { replace?: boolean } = {},
 ): void {
+  let leftAccountMenu = false;
+  if (session.accountMenu) {
+    leftAccountMenu = true;
+    session.accountMenu = null;
+    session.recoveryCodes = null;
+    session.security = null;
+    session.securityFor = null;
+  }
   if (session.activePage === page) {
     syncSessionUrl({ replace: true, page });
+    if (leftAccountMenu) schedulePaint();
     return;
   }
   session.activePage = page;
@@ -111,9 +125,19 @@ export function navigateTo(
   schedulePaint();
 }
 
+export function openSecurity(): void {
+  session.accountMenu = "security";
+  session.security = null;
+  session.securityFor = null;
+  syncSessionUrl({ replace: false, page: session.activePage });
+  schedulePaint();
+}
+
 export function navigateShopTab(tab: ShopTab): void {
   if (typeof window === "undefined") return;
   session.activePage = "shop";
+  session.accountMenu = null;
+  session.recoveryCodes = null;
   const url = new URL(window.location.href);
   url.pathname = pathForPage("shop");
   url.searchParams.delete("commander");
@@ -129,8 +153,14 @@ export function ensurePopstateHandler(): void {
   if (popBound || typeof window === "undefined") return;
   popBound = true;
   window.addEventListener("popstate", () => {
-    const page = pageFromLocation();
-    session.activePage = page;
+    const account = accountMenuFromPath(window.location.pathname);
+    if (account !== session.accountMenu) {
+      session.accountMenu = account;
+      session.security = null;
+      session.securityFor = null;
+      if (!account) session.recoveryCodes = null;
+    }
+    session.activePage = pageFromLocation();
     schedulePaint();
   });
 }

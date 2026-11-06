@@ -1,10 +1,12 @@
 import type { PlayerView } from "@starhold/game";
 import { session } from "../session";
+import { loadSecurity } from "../main-actions-session";
 import { startCountdownTick } from "./countdown";
 import type { NavPage } from "./nav";
 import { morphHtml } from "./morph-dom";
 import { canPatchShell, patchLiveChrome } from "./patch-chrome";
 import { renderJoin, reconnectScreenHtml } from "./render-chrome";
+import { securityPageHtml } from "./render-security";
 import {
   fleetDraftWithAcsPrefill,
   salvageFleetForm,
@@ -57,18 +59,34 @@ export function renderApp(
   watchFleetLaunches(state.view, state.onEventsRefresh);
   startEventsCountdown(state.view, state.onEventsRefresh);
 
-  if (canPatchShell(root, state.view, state.activePage)) {
+  if (
+    session.accountMenu === "security" &&
+    session.account &&
+    session.securityFor !== session.account.id
+  ) {
+    session.securityFor = session.account.id;
+    void loadSecurity();
+  }
+
+  const shell = root.querySelector<HTMLElement>('[data-testid="game-shell"]');
+  const menu = session.accountMenu ?? "";
+  const menuMatches = (shell?.dataset.accountMenu ?? "") === menu;
+  const column =
+    session.accountMenu === "security"
+      ? securityPageHtml(session.security, session.recoveryCodes, state.busy)
+      : eventsBannerHtml(state.view) +
+        pageHtml(state.activePage, state.view, state.busy, fleetDraft);
+
+  if (menuMatches && canPatchShell(root, state.view, state.activePage)) {
     patchLiveChrome(root, state.view, state);
     const main = root.querySelector<HTMLElement>("#page-main");
     if (main) {
-      const page =
-        eventsBannerHtml(state.view) +
-        pageHtml(state.activePage, state.view, state.busy, fleetDraft);
       // Galaxy navigation is activated by a focused button. The generic DOM
       // morpher preserves focused stale nodes when the subtree shape changes,
       // which can leave an old galaxy nav beside its newly rendered copy.
-      if (state.activePage === "galaxy") main.innerHTML = page;
-      else morphHtml(main, page);
+      if (state.activePage === "galaxy" || session.accountMenu === "security") {
+        main.innerHTML = column;
+      } else morphHtml(main, column);
     }
     startCountdownTick();
     return;
@@ -80,9 +98,11 @@ export function renderApp(
     fleetDraft,
     state.activePage,
   );
-  root
-    .querySelector<HTMLElement>("#page-main")
-    ?.insertAdjacentHTML("afterbegin", eventsBannerHtml(state.view));
+  if (session.accountMenu !== "security") {
+    root
+      .querySelector<HTMLElement>("#page-main")
+      ?.insertAdjacentHTML("afterbegin", eventsBannerHtml(state.view));
+  }
   startCountdownTick();
 }
 
