@@ -662,6 +662,30 @@ export async function claimGoalReward(
   return parse<PlayerView>(res);
 }
 
+export async function claimOnboarding(
+  playerId: string,
+  stepId: string,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/onboarding/claim", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, stepId }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function dismissOnboarding(
+  playerId: string,
+  dismissed: boolean,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/onboarding/dismiss", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, dismissed }),
+  });
+  return parse<PlayerView>(res);
+}
+
 export async function claimDaily(playerId: string): Promise<PlayerView> {
   const res = await credFetch("/api/claim-daily", {
     method: "POST",
