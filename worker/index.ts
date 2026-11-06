@@ -31,6 +31,11 @@ const STRING_VARS = [
   "APP_URL",
   "CLAIM_MAIL_URL",
   "SENTRY_DSN",
+  "GOOGLE_CLIENT_ID",
+  "GOOGLE_CLIENT_SECRET",
+  "DISCORD_CLIENT_ID",
+  "DISCORD_CLIENT_SECRET",
+  "OAUTH_MOCK",
 ] as const;
 
 export interface WorkerEnv {
@@ -50,6 +55,12 @@ export interface WorkerEnv {
   CLAIM_MAIL_URL?: string;
   /** Public client key. Unset skips Sentry. Not a secret in git. */
   SENTRY_DSN?: string;
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+  DISCORD_CLIENT_ID?: string;
+  DISCORD_CLIENT_SECRET?: string;
+  /** Test/e2e only. Refused on Workers unless STARHOLD_E2E=1. */
+  OAUTH_MOCK?: string;
 }
 
 function applyEnv(env: WorkerEnv): void {
