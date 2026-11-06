@@ -22,9 +22,85 @@ export type JoinScreenState = {
   passwordDraft?: string;
   accountEmail?: string | null;
   claimablePlayerId?: string | null;
+  /** When set, OAuth buttons render for these provider ids. Omit to fetch once. */
+  oauthProviders?: string[];
 };
 
 /** Join / sign-in markup. Auth fields stay off once an account exists. */
+const OAUTH_BUTTON_LABEL: Record<string, string> = {
+  google: "Continue with Google",
+  discord: "Continue with Discord",
+  mock: "Continue with Mock",
+};
+
+let oauthProvidersCache: string[] | null = null;
+let oauthProvidersPromise: Promise<string[]> | null = null;
+
+export function resetOAuthProvidersCacheForTests(): void {
+  oauthProvidersCache = null;
+  oauthProvidersPromise = null;
+}
+
+export function peekOAuthProviders(): string[] | null {
+  return oauthProvidersCache;
+}
+
+/** Buttons for configured providers only. An empty list renders nothing. */
+export function oauthButtonsHtml(providers: readonly string[]): string {
+  const buttons = providers.filter((provider) => provider in OAUTH_BUTTON_LABEL);
+  if (buttons.length === 0) return "";
+  return `<div class="join-row oauth-row" data-testid="oauth-buttons">${buttons
+    .map(
+      (provider) =>
+        `<a class="oauth-btn" data-testid="oauth-${provider}" href="/api/auth/oauth/${provider}/start">${OAUTH_BUTTON_LABEL[provider]}</a>`,
+    )
+    .join("")}</div>`;
+}
+
+/** One fetch per page load. Failures hide the buttons. */
+export function loadOAuthProviders(): Promise<string[]> {
+  if (oauthProvidersCache) return Promise.resolve(oauthProvidersCache);
+  if (!oauthProvidersPromise) {
+    oauthProvidersPromise = fetch("/api/auth/providers", { credentials: "same-origin" })
+      .then(async (res) => {
+        if (!res.ok) return [] as string[];
+        const body = (await res.json()) as { providers?: unknown };
+        if (!Array.isArray(body.providers)) return [];
+        return body.providers.filter((item): item is string => typeof item === "string");
+      })
+      .catch(() => [] as string[])
+      .then((list) => {
+        oauthProvidersCache = list;
+        return list;
+      });
+  }
+  return oauthProvidersPromise;
+}
+
+function paintOAuthButtons(root: HTMLElement, providers: readonly string[]): void {
+  const html = oauthButtonsHtml(providers);
+  const existing = root.querySelector("[data-testid='oauth-buttons']");
+  if (!html) {
+    existing?.remove();
+    return;
+  }
+  if (existing) return;
+  root.querySelector("#auth-form")?.insertAdjacentHTML("afterend", html);
+}
+
+function queueOAuthButtons(root: HTMLElement, state: JoinScreenState): void {
+  if (state.accountEmail || state.oauthProviders) return;
+  const cached = peekOAuthProviders();
+  if (cached) {
+    paintOAuthButtons(root, cached);
+    return;
+  }
+  void loadOAuthProviders().then((list) => {
+    if (!root.querySelector("#auth-form")) return;
+    paintOAuthButtons(root, list);
+  });
+}
+
 export function joinScreenHtml(state: JoinScreenState): string {
   const signedIn = Boolean(state.accountEmail);
   const accountLine = state.accountEmail
@@ -55,6 +131,7 @@ export function joinScreenHtml(state: JoinScreenState): string {
           <button type="submit" id="auth-signup-btn" data-testid="auth-signup-btn" data-auth-action="signup" ${state.busy ? "disabled" : ""}>Sign up</button>
         </div>
       </form>
+      ${oauthButtonsHtml(state.oauthProviders ?? [])}
       <p class="hint">Sign up with email and password to keep this commander after you close the tab. Guest play stays on this browser only.</p>
 `;
 
@@ -155,10 +232,15 @@ export function renderJoin(root: HTMLElement, state: JoinScreenState): void {
     ) {
       passwordInput.value = state.passwordDraft ?? "";
     }
+    queueOAuthButtons(root, state);
     return;
   }
 
-  root.innerHTML = joinScreenHtml(state);
+  root.innerHTML = joinScreenHtml({
+    ...state,
+    oauthProviders: state.oauthProviders ?? peekOAuthProviders() ?? [],
+  });
+  queueOAuthButtons(root, state);
 
   const input = root.querySelector<HTMLInputElement>("#commander");
   input?.focus();
