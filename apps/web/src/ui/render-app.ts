@@ -1,6 +1,5 @@
 import type { PlayerView } from "@starhold/game";
 import { session } from "../session";
-import { loadSecurity } from "../main-actions-session";
 import { startCountdownTick } from "./countdown";
 import type { NavPage } from "./nav";
 import { morphHtml } from "./morph-dom";
@@ -65,7 +64,7 @@ export function renderApp(
     session.securityFor !== session.account.id
   ) {
     session.securityFor = session.account.id;
-    void loadSecurity();
+    void import("../main-actions-session").then((mod) => mod.loadSecurity());
   }
 
   const shell = root.querySelector<HTMLElement>('[data-testid="game-shell"]');

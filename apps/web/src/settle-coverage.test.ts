@@ -16,7 +16,15 @@ const nonPostActions = new Set([
 const delegatingActions = new Map([["doGalaxySpy", "doLaunchFleet"]]);
 
 // These POSTs create credentials or sessions; recovery is the user retrying.
-const postRecoveryExemptActions = new Set(["doJoin", "doLogin", "doSignup"]);
+const postRecoveryExemptActions = new Set([
+  "doJoin",
+  "doLogin",
+  "doSignup",
+  "doChangePassword",
+  "doRevokeOtherSessions",
+  "doGenerateRecoveryCodes",
+  "doRecover",
+]);
 
 function exportedDoNames(source: string): string[] {
   return [...source.matchAll(/export\s+(?:async\s+)?function\s+(do\w+)\s*\(/g)].map(([, name]) => name!);
