@@ -126,6 +126,21 @@ function kindLabel(kind: InboxKind): string {
   }
 }
 
+export function categoryLabel(bucket: "combat" | "spy" | "alerts"): string {
+  switch (bucket) {
+    case "combat":
+      return "Combat";
+    case "spy":
+      return "Spy";
+    case "alerts":
+      return "Alerts";
+    default: {
+      const _exhaustive: never = bucket;
+      return _exhaustive;
+    }
+  }
+}
+
 export function inboxBucket(kind: InboxKind): "combat" | "spy" | "alerts" {
   switch (kind) {
     case "combat":
@@ -206,12 +221,12 @@ function shipTotalsTable(
   const rows = SHIP_ORDER.filter((id) => (before?.[id] ?? 0) > 0)
     .map(
       (id) =>
-        `<tr><th scope="row">${escapeHtml(SHIPS[id].name)}</th><td>${fmt(before?.[id] ?? 0)}</td><td>${fmt(Math.max(0, (before?.[id] ?? 0) - (after?.[id] ?? 0)))}</td></tr>`,
+        `<tr><th scope="row">${escapeHtml(SHIPS[id].name)}</th><td>${fmt(before?.[id] ?? 0)}</td><td>${fmt(after?.[id] ?? 0)}</td><td>${fmt(Math.max(0, (before?.[id] ?? 0) - (after?.[id] ?? 0)))}</td></tr>`,
     )
     .join("");
   return `<div class="battle-ship-totals" data-testid="battle-ship-totals-${side.toLowerCase()}"><h4>${side} ships</h4>${
     rows
-      ? `<table><thead><tr><th>Ship</th><th>Total (before)</th><th>Lost</th></tr></thead><tbody>${rows}</tbody></table>`
+      ? `<table><thead><tr><th>Ship</th><th>Before</th><th>After</th><th>Lost</th></tr></thead><tbody>${rows}</tbody></table>`
       : `<p class="meta">None</p>`
   }</div>`;
 }
@@ -609,9 +624,13 @@ export function messagesPageHtml(
               item.kind === "combat" || item.kind === "spy" || item.kind === "expedition"
                 ? `<button type="button" class="ghost open-report-btn" data-open-report="${escapeAttr(item.kind)}:${escapeAttr(item.id)}" data-testid="open-report-${escapeAttr(item.kind)}-${escapeAttr(item.id)}">Open report</button>`
                 : "";
-            return `<li class="message-row${item.unread ? " message-unread" : ""}${combatClasses}" id="msg-${escapeAttr(item.kind)}-${escapeAttr(item.id)}" data-testid="message-${escapeAttr(item.kind)}-${escapeAttr(item.id)}" data-kind="${escapeAttr(item.kind)}" data-bucket="${inboxBucket(item.kind)}"${combatAttr}${item.unread ? ' data-unread="1"' : ""}>
+            const bucket = inboxBucket(item.kind);
+            return `<li class="message-row${item.unread ? " message-unread" : ""}${combatClasses}" id="msg-${escapeAttr(item.kind)}-${escapeAttr(item.id)}" data-testid="message-${escapeAttr(item.kind)}-${escapeAttr(item.id)}" data-kind="${escapeAttr(item.kind)}" data-bucket="${bucket}"${combatAttr}${item.unread ? ' data-unread="1"' : ""}>
               <div class="message-head">
-                <span class="message-kind" data-testid="message-kind">${escapeHtml(kindLabel(item.kind))}</span>
+                <span class="message-badges">
+                  <span class="message-category message-category-${escapeAttr(bucket)}" data-testid="message-category">${escapeHtml(categoryLabel(bucket))}</span>
+                  <span class="message-kind" data-testid="message-kind">${escapeHtml(kindLabel(item.kind))}</span>
+                </span>
                 <time class="message-when meta" datetime="${escapeAttr(new Date(item.at).toISOString())}">${escapeHtml(fmtWhen(item.at))}</time>
               </div>
               ${title}
