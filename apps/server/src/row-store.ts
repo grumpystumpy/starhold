@@ -225,6 +225,19 @@ async function all<T>(db: D1Like, sql: string, ...values: unknown[]): Promise<T[
   return rows.results ?? [];
 }
 
+async function batchAll<T>(
+  db: D1Like,
+  queries: Array<{ sql: string; values?: unknown[] }>,
+): Promise<T[][]> {
+  if (!queries.length) return [];
+  const results = await db.batch(
+    queries.map(({ sql, values = [] }) => db.prepare(sql).bind(...values)),
+  );
+  return results.map(
+    (result) => (result as D1RunResult & { results?: T[] }).results ?? [],
+  );
+}
+
 const schemaReady = new WeakSet<object>();
 const migrationReady = new WeakSet<object>();
 /** After a done check, skip D1 until this time. One re-check per minute per database. */
@@ -1268,6 +1281,172 @@ async function loadOccupancy(db: D1Like, loaded: LoadedRows): Promise<void> {
   }
 }
 
+function applyFleetRows(
+  into: LoadedRows,
+  rows: Array<{ id: string; version: number; doc: string }>,
+): void {
+  for (const row of rows) {
+    const fleet = timedParse(row.doc) as FleetMission;
+    into.universe.fleets[fleet.id] = fleet;
+    into.fleetVersions.set(fleet.id, row.version);
+    into.fleetSnapshots.set(fleet.id, structuredClone(fleet));
+    into.fingerprints.set(`fleet:${fleet.id}`, stable(fleet));
+  }
+}
+
+function applyMessageRows(
+  into: LoadedRows,
+  rows: Array<{
+    id: string;
+    version: number;
+    kind: string;
+    doc: string;
+    owner_id: string;
+  }>,
+): void {
+  for (const row of rows) {
+    into.messageVersions.set(row.id, row.version);
+    into.fingerprints.set(`message:${row.id}`, row.doc);
+    const doc = timedParse(row.doc) as { id: string };
+    if (row.kind === "report") into.universe.reports[doc.id] = doc as CombatReport;
+    else if (row.kind === "spy") into.universe.spyReports[doc.id] = doc as EspionageReport;
+    else if (row.kind === "expedition") {
+      into.universe.expeditionReports[doc.id] = doc as ExpeditionReport;
+    } else if (row.kind === "event") {
+      const player = into.universe.players[row.owner_id];
+      if (player) {
+        player.eventLog = player.eventLog ?? [];
+        player.eventLog.push(doc as EventLogEntry);
+      }
+    }
+  }
+  for (const player of Object.values(into.universe.players)) {
+    player.eventLog?.sort((a, b) => a.createdAt - b.createdAt);
+  }
+}
+
+function applyOccupancyRows(
+  loaded: LoadedRows,
+  rows: Array<{
+    id: string;
+    owner_id: string;
+    galaxy: number;
+    system: number;
+    slot: number;
+    kind: string;
+  }>,
+): void {
+  for (const row of rows) {
+    if (loaded.fullPlanetIds.has(row.id) || loaded.universe.planets[row.id]) continue;
+    loaded.universe.planets[row.id] = stubPlanet(row);
+    loaded.stubPlanetIds.add(row.id);
+  }
+}
+
+async function loadScheduledRows(
+  db: D1Like,
+  loaded: LoadedRows,
+  systems: Array<[number, number]>,
+  includeDetails: boolean,
+  includeOccupancy: boolean,
+): Promise<void> {
+  const queries: Array<{ sql: string; values?: unknown[] }> = [];
+  const planetGroups = includeDetails ? chunkRows(systems, 40) : [];
+  for (const group of planetGroups) {
+    const clause = group.map(() => "(galaxy = ? AND system = ?)").join(" OR ");
+    queries.push({
+      sql: `SELECT id, version, doc FROM save_planets WHERE ${clause}`,
+      values: group.flatMap(([galaxy, system]) => [galaxy, system]),
+    });
+  }
+  const fleetIndex = includeDetails
+    ? queries.push({ sql: "SELECT id, version, doc FROM save_fleets" }) - 1
+    : -1;
+  const messageIndex = includeDetails
+    ? queries.push({
+        sql: "SELECT id, version, kind, doc, owner_id FROM save_messages",
+      }) - 1
+    : -1;
+  const pendingSystems = systems.filter(
+    ([galaxy, system]) => !loaded.systemVersions.has(`${galaxy}:${system}`),
+  );
+  const systemGroups = chunkRows(pendingSystems, 40);
+  for (const group of systemGroups) {
+    const clause = group.map(() => "(galaxy = ? AND system = ?)").join(" OR ");
+    queries.push({
+      sql: `SELECT galaxy, system, version, asteroids, debris FROM save_systems WHERE ${clause}`,
+      values: group.flatMap(([galaxy, system]) => [galaxy, system]),
+    });
+  }
+  const occupancyIndex = includeOccupancy
+    ? queries.push({
+        sql: "SELECT id, owner_id, galaxy, system, slot, kind FROM save_planets",
+      }) - 1
+    : -1;
+  if (!queries.length) return;
+
+  const results = await batchAll<Record<string, unknown>>(db, queries);
+  for (let index = 0; index < planetGroups.length; index += 1) {
+    applyPlanetRows(
+      loaded,
+      results[index] as Array<{ id: string; version: number; doc: string }>,
+    );
+  }
+  if (fleetIndex >= 0) {
+    applyFleetRows(
+      loaded,
+      results[fleetIndex] as Array<{ id: string; version: number; doc: string }>,
+    );
+  }
+  if (messageIndex >= 0) {
+    applyMessageRows(
+      loaded,
+      results[messageIndex] as Array<{
+        id: string;
+        version: number;
+        kind: string;
+        doc: string;
+        owner_id: string;
+      }>,
+    );
+  }
+  const systemStart = planetGroups.length + (includeDetails ? 2 : 0);
+  for (let index = 0; index < systemGroups.length; index += 1) {
+    const rows = results[systemStart + index] as Array<{
+      galaxy: number;
+      system: number;
+      version: number;
+      asteroids: string;
+      debris: string;
+    }>;
+    const byKey = new Map(rows.map((row) => [`${row.galaxy}:${row.system}`, row]));
+    for (const [galaxy, system] of systemGroups[index]!) {
+      const row = byKey.get(`${galaxy}:${system}`);
+      applySystemRow(
+        loaded,
+        galaxy,
+        system,
+        row?.version ?? 0,
+        row ? (timedParse(row.asteroids) as Record<string, AsteroidField>) : {},
+        row ? (timedParse(row.debris) as Record<string, DebrisField>) : {},
+      );
+    }
+  }
+  if (occupancyIndex >= 0) {
+    applyOccupancyRows(
+      loaded,
+      results[occupancyIndex] as Array<{
+        id: string;
+        owner_id: string;
+        galaxy: number;
+        system: number;
+        slot: number;
+        kind: string;
+      }>,
+    );
+  }
+}
+
 export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined): Promise<LoadedRows> {
   const requestedIds = [...new Set((work?.playerIds ?? []).filter(Boolean))] as string[];
   const planetIds = [...new Set((work?.planetIds ?? []).filter((id): id is string => Boolean(id)))];
@@ -1323,6 +1502,8 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
   if (playerRows) applyPlayerRows(loaded, playerRows);
   else await loadPlayers(db, loaded);
   if (planetRows) applyPlanetRows(loaded, planetRows);
+  const placePirates = Boolean(work?.npc) || pirateSitesNeeded(loaded.universe);
+  let occupancyLoaded = false;
 
   if (work?.full) {
     if (!planetRows) await loadPlanetDocs(db, loaded, "SELECT id, version, doc FROM save_planets", []);
@@ -1330,7 +1511,14 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
     await loadMessages(db, loaded, "", []);
     await loadAllSystems(db, loaded);
   } else if (work?.npc) {
-    await loadSystems(db, loaded, systemPairs(Object.values(loaded.universe.planets)));
+    await loadScheduledRows(
+      db,
+      loaded,
+      systemPairs(Object.values(loaded.universe.planets)),
+      false,
+      placePirates,
+    );
+    occupancyLoaded = placePirates;
     // Raids need owned bodies. Placement also needs every occupied slot, below.
   } else if (work?.catalog) {
     const stubs = await all<{
@@ -1363,10 +1551,8 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
       );
     }
     const systems = systemPairs(Object.values(loaded.universe.planets));
-    await loadPlanetsAt(db, loaded, systems);
-    await loadFleets(db, loaded, "", []);
-    await loadMessages(db, loaded, "", []);
-    await loadSystems(db, loaded, systems);
+    await loadScheduledRows(db, loaded, systems, true, placePirates);
+    occupancyLoaded = placePirates;
   } else {
     const ids = inList(requestedIds);
     if (requestedIds.length) {
@@ -1449,9 +1635,11 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
   }
 
   if (!work?.npc) loaded.universe.skipNpcRaids = true;
-  const placePirates = Boolean(work?.npc) || pirateSitesNeeded(loaded.universe);
-  if (placePirates) await loadOccupancy(db, loaded);
-  else loaded.universe.skipPirateTopUp = true;
+  if (placePirates) {
+    if (!occupancyLoaded) await loadOccupancy(db, loaded);
+  } else {
+    loaded.universe.skipPirateTopUp = true;
+  }
   const now = Date.now();
   if (!work?.npc && !work?.full) {
     if (work?.galaxy && work.system) ensureSystemVisited(loaded.universe, work.galaxy, work.system, now);
@@ -1518,20 +1706,26 @@ export async function planSystemWrites(db: D1Like, loaded: LoadedRows): Promise<
       merge.push(draft);
     }
   }
-  for (const group of chunkRows(merge, 40)) {
-    const clause = group.map(() => "(galaxy = ? AND system = ?)").join(" OR ");
-    const values = group.flatMap((row) => [row.galaxy, row.system]);
-    const stored = await all<{
-      galaxy: number;
-      system: number;
-      version: number;
-      asteroids: string;
-      debris: string;
-    }>(
-      db,
-      `SELECT galaxy, system, version, asteroids, debris FROM save_systems WHERE ${clause}`,
-      ...values,
-    );
+  const mergeGroups = chunkRows(merge, 40);
+  const storedGroups = await batchAll<{
+    galaxy: number;
+    system: number;
+    version: number;
+    asteroids: string;
+    debris: string;
+  }>(
+    db,
+    mergeGroups.map((group) => {
+      const clause = group.map(() => "(galaxy = ? AND system = ?)").join(" OR ");
+      return {
+        sql: `SELECT galaxy, system, version, asteroids, debris FROM save_systems WHERE ${clause}`,
+        values: group.flatMap((row) => [row.galaxy, row.system]),
+      };
+    }),
+  );
+  for (let index = 0; index < mergeGroups.length; index += 1) {
+    const group = mergeGroups[index]!;
+    const stored = storedGroups[index]!;
     const byKey = new Map(stored.map((row) => [`${row.galaxy}:${row.system}`, row]));
     for (const draft of group) {
       const row = byKey.get(`${draft.galaxy}:${draft.system}`);

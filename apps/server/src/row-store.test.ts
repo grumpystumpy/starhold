@@ -290,7 +290,15 @@ describe("row save migration", () => {
     for (const work of [{ npc: true }, { maintenance: true }] as const) {
       batchSql.length = 0;
       const loaded = await loadWorkingSet(db, work);
+      assert.equal(batchSql.length, 2, "scheduled load uses one core and one follow-up D1 batch");
       assert.deepEqual(batchSql[0], coreReads);
+      assert.ok(batchSql[1]?.some((sql) => sql.includes("FROM save_systems")));
+      if ("maintenance" in work) {
+        assert.ok(batchSql[1]?.some((sql) => sql.includes("FROM save_fleets")));
+        assert.ok(batchSql[1]?.some((sql) => sql.includes("FROM save_messages")));
+      } else {
+        assert.ok(batchSql[1]?.some((sql) => sql.includes("FROM save_planets")));
+      }
       assert.deepEqual(
         Object.keys(loaded.universe.players).sort(),
         Object.keys(baseline.universe.players).sort(),
