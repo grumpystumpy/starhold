@@ -7,6 +7,7 @@ import type {
 } from "./types.js";
 import { playerBoosts } from "./world-boosts.js";
 import { isMovingFortress } from "./world-mini.js";
+import { noteOnboardingRecon } from "./world-onboarding.js";
 
 export function resolveEspionage(
   universe: UniverseState,
@@ -40,6 +41,7 @@ export function resolveEspionage(
     };
     universe.spyReports[reportId] = blank;
     fleet.reportId = reportId;
+    noteOnboardingRecon(spy);
     return;
   }
 
@@ -77,4 +79,5 @@ export function resolveEspionage(
   };
   universe.spyReports[reportId] = report;
   fleet.reportId = reportId;
+  noteOnboardingRecon(spy);
 }
