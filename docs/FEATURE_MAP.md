@@ -78,6 +78,27 @@ Overview shows `data-testid="onboarding-panel"` until the briefing is dismissed 
 
 Fleet composer hides built-in `moonDestruction` and `miniPlanetDestruction` until the player owns that hull or meets its research and shipyard level. `expedition`, `raid`, `miniPlanetCapture`, and custom presets stay visible. The presets remain on the save, and the galaxy preset buttons are unchanged.
 
+## OAuth sign-in
+
+Email + password signup, login, claim, logout, and `/api/auth/me` are unchanged. Google and Discord are optional and env-gated. If a provider's client id and secret are unset, its button is omitted and its routes return `404 { error: "provider not configured" }`. `GET /api/auth/providers` always includes `passwordAuth: true`.
+
+| Route | Behavior |
+| --- | --- |
+| `GET /api/auth/providers` | `{ providers, passwordAuth: true }` |
+| `GET /api/auth/oauth/:provider/start` | 302 to the provider (PKCE S256 + state) |
+| `GET /api/auth/oauth/:provider/callback` | session cookie, 302 to `/` |
+| `POST /api/auth/oauth/:provider/unlink` | session required; refuses the only sign-in method |
+| `GET /api/auth/oauth/mock/authorize` | local mock only, when `OAUTH_MOCK=1` |
+
+KV keys (10-minute TTL on state): `oauth:state:<hash>`, `oauth:link:<provider>:<subject>` → account id, `oauth:acct:<accountId>` → `[{ provider, subject, email, linkedAt }]`. Account rows are not given new fields.
+
+Collision rule: a verified email that already belongs to an account is not auto-linked while signed out. The player must sign in with their password first, then start the provider again to attach it. A new email creates an account whose `passwordHash` is `oauth$none`. Existing `authenticateEmailPassword` rejects that marker (`verifyPassword` only accepts `pbkdf2$` and `scrypt$`), so the password form cannot be used on that account until a real password exists.
+
+`OAUTH_MOCK=1` lists provider `mock` for tests. It is refused when `STARHOLD_RUNTIME=workers` unless `STARHOLD_E2E=1`. Do not set it in production.
+
+Env: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`. Redirect URI: `https://starhold.stumpysgarage.workers.dev/api/auth/oauth/<provider>/callback`.
+
+
 ## Open questions
 
 - `joinUniverse` already builds Ore Mine, Crystalizer, and Solar Array to level 1, so a live new commander starts at 3/8 and can claim those rewards immediately. The rules still treat level 0 as incomplete.
