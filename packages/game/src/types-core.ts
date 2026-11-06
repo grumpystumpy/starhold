@@ -427,6 +427,12 @@ export interface PirateBase {
   splitDone: boolean;
   /** Seasonal server-wide boss; excluded from normal pirate respawn/growth. */
   seasonalBoss?: boolean;
+  /** Resource-value of ships this commander has destroyed on this boss. */
+  bossDamage?: Record<string, number>;
+  /** Set once participation rewards have been paid. */
+  bossRewardsPaid?: boolean;
+  /** Ship count at spawn, used for the HP bar. Absent on older bosses. */
+  bossShipsAtSpawn?: number;
 }
 
 /**

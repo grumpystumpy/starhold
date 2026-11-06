@@ -131,6 +131,10 @@ import { noteGoalMetric } from "./world-goals.js";
 import { emptyCargo, planetAtCoords } from "./world-bootstrap.js";
 import { consumeTickBudget, syncPlanetForTick, tickBudget } from "./tick-budget.js";
 import { pushEventLog } from "./world-event-log.js";
+import {
+  payBossParticipation,
+  recordBossDamage,
+} from "./world-pirate-boss.js";
 import { tryFormMoon } from "./world-moons.js";
 import {
   isNewbieBonusActive,
@@ -1366,6 +1370,7 @@ function finishSeasonalPirateBoss(
   now: number,
 ): void {
   if (!base.seasonalBoss || universe.pirateBossBaseId !== base.id) return;
+  payBossParticipation(universe, base.id, now);
   universe.pirateBossBaseId = undefined;
   universe.pirateBossActiveUntil = undefined;
   universe.pirateBossNextSpawnAt = now + PIRATE_BOSS_COOLDOWN_MS;
@@ -1436,6 +1441,7 @@ function tickSeasonalPirateBoss(
   boss.name = "Seasonal Pirate Mothership";
   boss.seasonalBoss = true;
   boss.ships.swarmMothership = PIRATE_BOSS_MOTHERSHIPS;
+  boss.bossShipsAtSpawn = fleetShipCount(boss.ships);
   boss.resources = {
     metal: boss.resources.metal * PIRATE_BOSS_RESOURCE_REWARD_MULT,
     crystal: boss.resources.crystal * PIRATE_BOSS_RESOURCE_REWARD_MULT,
@@ -2196,6 +2202,11 @@ function resolveNpcRaidArrival(
   const killed = resourcesCostTotal(
     destroyedShipResources(defenderBefore, combat.defenderAfter),
   );
+  const bossStrike =
+    kind === "pirate" && (base as PirateBase).seasonalBoss === true;
+  if (bossStrike) {
+    recordBossDamage(universe, base.id, fleet.ownerPlayerId, killed, now);
+  }
   let loot = emptyCargo();
   let attackerXp = 0;
   let starshardsGained = 0;
@@ -2278,6 +2289,7 @@ function resolveNpcRaidArrival(
     moonFormed: false,
     roundLog: combat.roundLog.length ? combat.roundLog : undefined,
     xpAwarded: { attacker: attackerXp, defender: 0 },
+    bossDamage: bossStrike ? killed : undefined,
   });
   fleet.ships = combat.attackerAfter;
   fleet.cargo = loot;

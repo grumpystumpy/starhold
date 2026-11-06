@@ -1611,6 +1611,28 @@ export const PIRATE_BOSS_STARSHARD_REWARD_MULT = 10;
 export const PIRATE_BOSS_RESOURCE_REWARD_MULT = 10;
 export const PIRATE_BOSS_MOTHERSHIPS = 25;
 
+/** Share of total boss damage. Top 1 is also paid to rank 1 regardless of share. */
+export const PIRATE_BOSS_TIERS = {
+  top1: {
+    id: "top1",
+    minShare: 1,
+    starshards: 500,
+    resources: { metal: 100_000, crystal: 50_000, deuterium: 25_000 },
+  },
+  top10: {
+    id: "top10",
+    minShare: 0.1,
+    starshards: 150,
+    resources: { metal: 40_000, crystal: 20_000, deuterium: 10_000 },
+  },
+  participant: {
+    id: "participant",
+    minShare: 0.01,
+    starshards: 40,
+    resources: { metal: 10_000, crystal: 5_000, deuterium: 2_500 },
+  },
+} as const;
+
 /** Starshards: destroy base = base + per-tier; win defense vs pirate raid. */
 export const PIRATE_DESTROY_STARSHARDS_BASE = 40;
 export const PIRATE_DESTROY_STARSHARDS_PER_TIER = 5;

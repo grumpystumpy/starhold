@@ -100,6 +100,8 @@ export interface CombatReport {
   acsGroupId?: string;
   /** All attacking player ids in an ACS resolve. */
   acsParticipantIds?: string[];
+  /** Resource value of pirate ships destroyed. Set on seasonal boss strikes. */
+  bossDamage?: number;
 }
 
 export interface PlayerCombatStats {
@@ -748,6 +750,25 @@ export interface GalaxyView {
   alienBase: AlienBasePublic | null;
 }
 
+export type PirateBossTierId = "top1" | "top10" | "participant";
+
+/** Seasonal boss snapshot for the seasons panel, events card, and galaxy banner. */
+export interface PirateBossView {
+  id: string;
+  coords: Coordinates;
+  shipsLeft: number;
+  hpPct: number;
+  activeUntil?: number;
+  nextSpawnAt?: number;
+  myDamage: number;
+  myRank: number | null;
+  /** Sum of every contribution, not just the top 10. */
+  totalDamage: number;
+  /** Rank 1, else share of total damage. Null when this commander is under 1%. */
+  myTier: PirateBossTierId | null;
+  top: { playerId: string; name: string; damage: number }[];
+}
+
 export interface PlayerView {
   now: number;
   newbieBonusEndsAt?: number | null;
@@ -834,6 +855,8 @@ export interface PlayerView {
   goals: GoalView[];
   /** Current month leaderboard plus sealed claim offers. */
   seasonLeaderboard: SeasonLeaderboardView;
+  /** Set while a seasonal boss is up, or during the cooldown after it ends. */
+  pirateBoss?: PirateBossView;
   /** Active 24h item buffs. */
   activeItemBuffs: ActiveItemBuffView[];
   /** Shop items catalog for UI. */
