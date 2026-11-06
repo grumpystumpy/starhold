@@ -620,6 +620,10 @@ export function messagesPageHtml(
                 ? (view.spyReports ?? []).find((r) => r.id === item.id)
                 : undefined;
             const spyDetail = spy ? spyReportDetailsHtml(spy) : "";
+            const spyShareBtn =
+              spy && view.alliance
+                ? `<span class="spy-share">&nbsp;<button type="button" data-share-intel="${escapeAttr(spy.id)}" data-testid="share-intel-${escapeAttr(spy.id)}">Share with alliance</button></span>`
+                : "";
             const openReportBtn =
               item.kind === "combat" || item.kind === "spy" || item.kind === "expedition"
                 ? `<button type="button" class="ghost open-report-btn" data-open-report="${escapeAttr(item.kind)}:${escapeAttr(item.id)}" data-testid="open-report-${escapeAttr(item.kind)}-${escapeAttr(item.id)}">Open report</button>`
@@ -637,6 +641,7 @@ export function messagesPageHtml(
               <span class="meta message-body">${escapeHtml(item.body)}</span>
               ${openReportBtn}
               ${shareBtn}
+              ${spyShareBtn}
               ${combatDetails}
               ${spyDetail}
               ${readBtn}

@@ -775,7 +775,7 @@ async function uiSmoke() {
     `planet:${rivalMeta.planetId}`,
   );
   await page.click('[data-testid="launch-fleet"]');
-  await page.waitForSelector('[data-testid="fleets-live"], [data-testid="flash-ok"]', {
+  await page.waitForSelector('[data-testid="events-banner"], [data-testid="flash-ok"]', {
     timeout: 10_000,
   });
   const launchErr = await page.locator('[data-testid="flash-error"]').count();

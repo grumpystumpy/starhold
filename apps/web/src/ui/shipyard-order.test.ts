@@ -14,7 +14,7 @@ import {
   type ShipId,
 } from "@starhold/game";
 import { defenseRow, shipRow } from "./render-chrome-rows";
-import { reportsHtml } from "./render-fleets-panels";
+import { messagesPageHtml } from "./render-messages";
 import {
   WEAKEST_FIRST_DEFENSES,
   WEAKEST_FIRST_SHIPS,
@@ -109,7 +109,12 @@ describe("Shipyard and Defenses owned count and weakest-first ordering", () => {
       rounds: 1,
       summary: "Legacy report",
     } as unknown as CombatReport;
-    const html = reportsHtml([oldReport], "p1");
+    const html = messagesPageHtml({
+      ...dummyView(dummyPlanet()),
+      reports: [oldReport],
+      spyReports: [],
+      expeditionReports: [],
+    });
 
     assert.match(html, /Legacy report/);
     assert.doesNotMatch(html, /Armor/);

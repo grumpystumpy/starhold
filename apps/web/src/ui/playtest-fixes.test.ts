@@ -12,7 +12,6 @@ import {
 import { buildingRow, joinScreenHtml } from "./render-chrome-join";
 import { defenseRow, researchRow, shipRow } from "./render-chrome-rows";
 import { fleetComposer } from "./render-fleets-composer";
-import { spyReportsHtml } from "./render-fleets-panels";
 import { messagesPageHtml } from "./render-messages";
 import { seasonsPage } from "./render-seasons";
 
@@ -365,9 +364,14 @@ describe("playtest fixes", () => {
     assert.match(spyFilter, /spy-detail-s1/);
   });
 
-  it("separates Share with alliance from the preceding number", () => {
-    const html = spyReportsHtml(
-      [
+  it("renders spy reports in the Messages inbox", () => {
+    const html = messagesPageHtml({
+      now: 1_700_000_000_000,
+      player: player(),
+      planet: planet(),
+      alliance: { id: "ally_1", tag: "SOL" },
+      reports: [],
+      spyReports: [
         {
           id: "s9",
           at: 1,
@@ -385,8 +389,11 @@ describe("playtest fixes", () => {
           summary: "Resource scan",
         },
       ],
-      true,
-    );
+      expeditionReports: [],
+    } as unknown as PlayerView);
+    assert.match(html, /data-testid="message-spy-s9"/);
+    assert.match(html, /data-testid="spy-detail-s9"/);
+    assert.match(html, /Resource scan/);
     assert.match(html, /spy-share">&nbsp;<button/);
     assert.match(html, /Share with alliance/);
     assert.doesNotMatch(html, /100Share/);
