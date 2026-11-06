@@ -425,6 +425,8 @@ export interface PirateBase {
   coalitionId: string;
   /** True after the one-time split at PIRATE_SPLIT_LEVEL. */
   splitDone: boolean;
+  /** Seasonal server-wide boss; excluded from normal pirate respawn/growth. */
+  seasonalBoss?: boolean;
 }
 
 /**

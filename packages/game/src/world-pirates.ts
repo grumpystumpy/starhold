@@ -68,6 +68,12 @@ import {
 import {
   PIRATE_RAID_POWER_FACTOR_PLAYER,
   PIRATE_TECH_OFFSET,
+  PIRATE_BOSS_COOLDOWN_MS,
+  PIRATE_BOSS_DURATION_MS,
+  PIRATE_BOSS_MOTHERSHIPS,
+  PIRATE_BOSS_RESOURCE_REWARD_MULT,
+  PIRATE_BOSS_STARSHARD_REWARD_MULT,
+  PIRATE_BOSS_TIER,
 } from "./data/tuning.js";
 import { recordCombatReport } from "./combat-share.js";
 import {
@@ -342,12 +348,28 @@ function defensesLookNormalized(stock: DefenseStock | undefined): boolean {
   return true;
 }
 
-function stripExcludedShips(ships: FleetShips, alien = false): FleetShips {
+function stripExcludedShips(
+  ships: FleetShips,
+  alien = false,
+  seasonalBoss = false,
+): FleetShips {
   const banned = alien ? ALIEN_EXCLUDED : PIRATE_EXCLUDED;
-  if (shipsLookStripped(ships, banned)) return ships;
+  const eligible = (id: ShipId) =>
+    PIRATE_ELIGIBLE.has(id) || (seasonalBoss && id === "swarmMothership");
+  if (!seasonalBoss && shipsLookStripped(ships, banned)) return ships;
+  if (
+    SHIP_ORDER.every((id) =>
+      (banned.has(id) && !(seasonalBoss && id === "swarmMothership")) ||
+      eligible(id) ||
+      (ships[id] ?? 0) === 0,
+    )
+  ) return ships;
   const out = normalizeFleetShips(ships);
   for (const id of SHIP_ORDER) {
-    if (banned.has(id) || !PIRATE_ELIGIBLE.has(id)) out[id] = 0;
+    if (
+      (banned.has(id) && !(seasonalBoss && id === "swarmMothership")) ||
+      !eligible(id)
+    ) out[id] = 0;
   }
   return out;
 }
@@ -374,7 +396,7 @@ export function ensurePirateBaseShape(
     base.defenses = normalizeDefenses(base.defenses);
   }
   const ships = base.ships ?? emptyFleetShips();
-  base.ships = stripExcludedShips(ships, false);
+  base.ships = stripExcludedShips(ships, false, base.seasonalBoss === true);
   if (base.nextRaidAt == null || base.nextRaidAt <= 0) {
     base.nextRaidAt = rollNextRaidAt(base.id, now, PIRATE_RAID_PERIOD_MS);
   }
@@ -430,6 +452,7 @@ export function pirateDestroyStarshards(
   tier: number,
   faction: "pirate" | "alien" = "pirate",
   seed?: string,
+  rewardMultiplier = 1,
 ): number {
   const oldAmount =
     PIRATE_DESTROY_STARSHARDS_BASE +
@@ -438,7 +461,11 @@ export function pirateDestroyStarshards(
     faction === "alien"
       ? ALIEN_STARSHARD_REWARD_MULT
       : PIRATE_STARSHARD_REWARD_MULT;
-  return applyStarshardMultiplier(oldAmount, mult, seed);
+  return applyStarshardMultiplier(
+    oldAmount,
+    mult * Math.max(1, rewardMultiplier),
+    seed,
+  );
 }
 
 function rollInRange(seed: string, min: number, max: number): number {
@@ -1027,10 +1054,12 @@ export function seedUniversePirates(
   void ALIEN_INITIAL_BASE_COUNT; // documented zero — do not seed
 
   const kept: Record<string, PirateBase> = {};
+  const seasonalBosses: Record<string, PirateBase> = {};
   for (const [id, base] of Object.entries(universe.pirateBases)) {
     if (base.destroyedAt != null) kept[id] = ensurePirateBaseShape(base, now);
+    else if (base.seasonalBoss) seasonalBosses[id] = base;
   }
-  universe.pirateBases = { ...kept };
+  universe.pirateBases = { ...kept, ...seasonalBosses };
   const living: Record<string, PirateBase> = {};
   for (const site of collectPirateSpawnSites(
     universe,
@@ -1047,7 +1076,7 @@ export function seedUniversePirates(
     );
     living[base.id] = base;
   }
-  universe.pirateBases = { ...kept, ...living };
+  universe.pirateBases = { ...kept, ...living, ...seasonalBosses };
 }
 
 /** Additive top-up to 200 living pirates — never removes players/living bases. */
@@ -1331,6 +1360,96 @@ function markPirateDestroyed(base: PirateBase, now: number): void {
   base.resources = emptyCargo();
 }
 
+function finishSeasonalPirateBoss(
+  universe: UniverseState,
+  base: PirateBase,
+  now: number,
+): void {
+  if (!base.seasonalBoss || universe.pirateBossBaseId !== base.id) return;
+  universe.pirateBossBaseId = undefined;
+  universe.pirateBossActiveUntil = undefined;
+  universe.pirateBossNextSpawnAt = now + PIRATE_BOSS_COOLDOWN_MS;
+}
+
+function tickSeasonalPirateBoss(
+  universe: UniverseState,
+  now: number,
+  allowSpawn: boolean,
+): void {
+  const bossId = universe.pirateBossBaseId;
+  const savedBoss = bossId ? universe.pirateBases?.[bossId] : undefined;
+  const activeBoss =
+    savedBoss?.seasonalBoss && savedBoss.destroyedAt == null
+      ? savedBoss
+      : Object.values(universe.pirateBases ?? {}).find(
+          (base) => base.seasonalBoss && base.destroyedAt == null,
+        );
+  if (activeBoss) {
+    const alreadyTracked = universe.pirateBossBaseId === activeBoss.id;
+    universe.pirateBossBaseId = activeBoss.id;
+    const activeUntil = alreadyTracked
+      ? universe.pirateBossActiveUntil ??
+        activeBoss.lastGrewAt + PIRATE_BOSS_DURATION_MS
+      : activeBoss.lastGrewAt + PIRATE_BOSS_DURATION_MS;
+    universe.pirateBossActiveUntil = activeUntil;
+    if (now < activeUntil) return;
+    markPirateDestroyed(activeBoss, activeUntil);
+    finishSeasonalPirateBoss(universe, activeBoss, activeUntil);
+    return;
+  }
+
+  if (bossId) {
+    universe.pirateBossBaseId = undefined;
+    universe.pirateBossActiveUntil = undefined;
+    universe.pirateBossNextSpawnAt = Math.max(
+      universe.pirateBossNextSpawnAt ?? 0,
+      (savedBoss?.destroyedAt ?? now) + PIRATE_BOSS_COOLDOWN_MS,
+    );
+  }
+  if (!allowSpawn || now < (universe.pirateBossNextSpawnAt ?? 0)) return;
+
+  const seed = universe.seed ?? universe.id;
+  const origin = {
+    galaxy: 1 + (hashSeed(`${seed}:pirate-boss-origin:galaxy`) % MAP_GALAXIES),
+    system: 1 + (hashSeed(`${seed}:pirate-boss-origin:system`) % MAP_SYSTEMS),
+    slot: 1,
+  };
+  const site = findNearbyEmptySlots(
+    universe,
+    origin,
+    1,
+    `${seed}:pirate-boss:${now}`,
+    5,
+  )[0];
+  if (!site) return;
+
+  const id = pirateBaseId(site.galaxy, site.system, site.slot);
+  if (universe.pirateBases?.[id]) return;
+  const boss = createPirateBase(
+    seed,
+    site.galaxy,
+    site.system,
+    site.slot,
+    now,
+    PIRATE_BOSS_TIER,
+  );
+  boss.name = "Seasonal Pirate Mothership";
+  boss.seasonalBoss = true;
+  boss.ships.swarmMothership = PIRATE_BOSS_MOTHERSHIPS;
+  boss.resources = {
+    metal: boss.resources.metal * PIRATE_BOSS_RESOURCE_REWARD_MULT,
+    crystal: boss.resources.crystal * PIRATE_BOSS_RESOURCE_REWARD_MULT,
+    deuterium: boss.resources.deuterium * PIRATE_BOSS_RESOURCE_REWARD_MULT,
+  };
+  ensurePirateBaseShape(boss, now);
+  universe.pirateBases ??= {};
+  universe.pirateBases[boss.id] = boss;
+  boss.nextRaidAt = Number.MAX_SAFE_INTEGER;
+  universe.pirateBossBaseId = boss.id;
+  universe.pirateBossActiveUntil = now + PIRATE_BOSS_DURATION_MS;
+  universe.pirateBossNextSpawnAt = 0;
+}
+
 function markAlienDestroyed(base: AlienBase, now: number): void {
   base.destroyedAt = now;
   base.ships = emptyFleetShips();
@@ -1367,6 +1486,7 @@ function respawnDestroyedPirates(universe: UniverseState, now: number): void {
   const bases = universe.pirateBases ?? {};
   for (const id of Object.keys(bases)) {
     const base = bases[id]!;
+    if (base.seasonalBoss) continue;
     if (base.destroyedAt == null) continue;
     if (now < pirateRespawnAt(base.destroyedAt, base.id)) continue;
     const site = findRespawnSite(universe, `${seed}:respawn:${base.id}:${now}`);
@@ -1520,7 +1640,10 @@ export function pickRaidTarget(
     if (planet) return { kind: "planet", planet };
   }
   const pirateOthers = activePirateBases(universe).filter(
-    (b) => b.id !== base.id && b.coalitionId !== base.coalitionId,
+    (b) =>
+      !b.seasonalBoss &&
+      b.id !== base.id &&
+      b.coalitionId !== base.coalitionId,
   );
   const alienOthers = activeAlienBases(universe).filter(
     (b) => b.id !== base.id && b.coalitionId !== base.coalitionId,
@@ -1867,6 +1990,7 @@ function catchUpRaidsAlien(universe: UniverseState, base: AlienBase, now: number
 export function tickPirates(universe: UniverseState, now: number): void {
   if (!universe.pirateBases) universe.pirateBases = {};
   if (!universe.alienBases) universe.alienBases = {};
+  tickSeasonalPirateBoss(universe, now, false);
   // Page loads skip raids, but a destroyed base still has to come back and a
   // short universe still has to fill to 200 when this request loaded occupancy.
   if (universe.skipNpcRaids) {
@@ -1874,6 +1998,7 @@ export function tickPirates(universe: UniverseState, now: number): void {
     if (!universe.skipPirateTopUp) {
       ensurePiratePopulation(universe, now);
       respawnDestroyedPirates(universe, now);
+      tickSeasonalPirateBoss(universe, now, true);
     }
     universe.lastAiSimAt = now;
     return;
@@ -1888,6 +2013,7 @@ export function tickPirates(universe: UniverseState, now: number): void {
       : savedCursor;
   ensureAlienDailySeed(universe, targetAt);
   ensurePiratePopulation(universe, targetAt);
+  tickSeasonalPirateBoss(universe, now, !universe.skipPirateTopUp);
   const entries = [
     ...Object.values(universe.pirateBases).map((base) => ({
       id: base.id,
@@ -1911,6 +2037,11 @@ export function tickPirates(universe: UniverseState, now: number): void {
     if (entry.faction === "pirate") {
       const base = entry.base;
       ensurePirateBaseShape(base, targetAt);
+      if (base.seasonalBoss) {
+        base.nextRaidAt = Number.MAX_SAFE_INTEGER;
+        processed += 1;
+        continue;
+      }
       // Level-up budget can run out mid-wave. Still spawn and raid; the next
       // job applies the missed levels at their own timestamps.
       growPirateBase(universe, base, targetAt);
@@ -1936,6 +2067,7 @@ export function tickPirates(universe: UniverseState, now: number): void {
     const pending = entries.find((entry) => {
       const base = entry.base;
       if (base.destroyedAt != null) return false;
+      if (entry.faction === "pirate" && entry.base.seasonalBoss) return false;
       if (entry.faction === "alien") {
         if (targetAt >= entry.base.buildupEndsAt && base.nextRaidAt <= targetAt) return true;
       } else if (base.nextRaidAt <= targetAt) {
@@ -2081,7 +2213,10 @@ function resolveNpcRaidArrival(
       crystal: loot.crystal + skim.skimmed.crystal,
       deuterium: loot.deuterium,
     };
-    if (kind === "pirate") markPirateDestroyed(base as PirateBase, now);
+    if (kind === "pirate") {
+      markPirateDestroyed(base as PirateBase, now);
+      finishSeasonalPirateBoss(universe, base as PirateBase, now);
+    }
     else markAlienDestroyed(base as AlienBase, now);
     if (owner) {
       awardSeasonPveWin(universe, owner, now);
@@ -2091,6 +2226,9 @@ function resolveNpcRaidArrival(
         tierAtFight,
         kind,
         `${fleet.id}:destroy_shards:${now}`,
+        kind === "pirate" && (base as PirateBase).seasonalBoss
+          ? PIRATE_BOSS_STARSHARD_REWARD_MULT
+          : 1,
       );
       if (kind === "pirate") noteGoalMetric(owner, "pirateWin", 1, now);
       attackerXp =

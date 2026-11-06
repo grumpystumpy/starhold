@@ -1603,6 +1603,14 @@ export const PIRATE_EXCLUDED_SHIP_IDS = [
 export const PIRATE_RESPAWN_DELAY_MIN_MS = 12 * 60 * 60 * 1000;
 export const PIRATE_RESPAWN_DELAY_MAX_MS = 36 * 60 * 60 * 1000;
 
+/** Seasonal pirate boss event timing and rewards. */
+export const PIRATE_BOSS_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+export const PIRATE_BOSS_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+export const PIRATE_BOSS_TIER = 50;
+export const PIRATE_BOSS_STARSHARD_REWARD_MULT = 10;
+export const PIRATE_BOSS_RESOURCE_REWARD_MULT = 10;
+export const PIRATE_BOSS_MOTHERSHIPS = 25;
+
 /** Starshards: destroy base = base + per-tier; win defense vs pirate raid. */
 export const PIRATE_DESTROY_STARSHARDS_BASE = 40;
 export const PIRATE_DESTROY_STARSHARDS_PER_TIER = 5;
