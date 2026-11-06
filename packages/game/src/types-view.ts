@@ -100,6 +100,8 @@ export interface CombatReport {
   acsGroupId?: string;
   /** All attacking player ids in an ACS resolve. */
   acsParticipantIds?: string[];
+  /** Resource value of pirate ships destroyed. Set on seasonal boss strikes. */
+  bossDamage?: number;
 }
 
 export interface PlayerCombatStats {
@@ -704,6 +706,12 @@ export interface UniverseState {
   acsGroups?: Record<string, AcsGroup>;
   /** Sealed monthly snapshots. Absent until the first month roll. */
   seasons?: Record<string, SeasonSnapshot>;
+  /** Active seasonal pirate boss id; optional for older universe saves. */
+  pirateBossBaseId?: string;
+  /** Wall-clock end of the active seasonal boss window. */
+  pirateBossActiveUntil?: number;
+  /** Earliest wall-clock time at which the next boss may spawn. */
+  pirateBossNextSpawnAt?: number;
   /**
    * Set on a player-scoped request. NPC raids and growth run on the
    * maintenance pass instead of the page-load tick. Not persisted.
@@ -787,6 +795,25 @@ export interface GalaxyView {
   asteroids: AsteroidField[];
   pirateBase: PirateBasePublic | null;
   alienBase: AlienBasePublic | null;
+}
+
+export type PirateBossTierId = "top1" | "top10" | "participant";
+
+/** Seasonal boss snapshot for the seasons panel, events card, and galaxy banner. */
+export interface PirateBossView {
+  id: string;
+  coords: Coordinates;
+  shipsLeft: number;
+  hpPct: number;
+  activeUntil?: number;
+  nextSpawnAt?: number;
+  myDamage: number;
+  myRank: number | null;
+  /** Sum of every contribution, not just the top 10. */
+  totalDamage: number;
+  /** Rank 1, else share of total damage. Null when this commander is under 1%. */
+  myTier: PirateBossTierId | null;
+  top: { playerId: string; name: string; damage: number }[];
 }
 
 export interface PlayerView {
@@ -885,6 +912,8 @@ export interface PlayerView {
   }>;
   /** Current month leaderboard plus sealed claim offers. */
   seasonLeaderboard: SeasonLeaderboardView;
+  /** Set while a seasonal boss is up, or during the cooldown after it ends. */
+  pirateBoss?: PirateBossView;
   /** Active 24h item buffs. */
   activeItemBuffs: ActiveItemBuffView[];
   /** Shop items catalog for UI. */

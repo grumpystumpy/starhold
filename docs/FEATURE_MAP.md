@@ -34,6 +34,10 @@ The */30 maintenance cron always fully rebuilds the commander board for every pl
 
 The highscore page has Commanders and Alliances tabs. The Alliances tab shows rank, `[TAG] name`, members, total points, and average points, top 100, sorted by total member points then tag. Each alliance contributes at most `ALLIANCE_MAX_MEMBERS` (16) members to that total.
 
+## Events / seasonal boss
+
+The seasonal pirate mothership is one marked `PirateBase` in `pirateBases`, tracked by optional universe fields `pirateBossBaseId`, `pirateBossActiveUntil`, and `pirateBossNextSpawnAt`. `tickPirates` spawns it at a bounded nearby open slot, expires it after seven days, and starts a seven-day cooldown after defeat or expiry. It reuses pirate combat, galaxy visibility, and loot reporting, with 10x Starshards and resources on defeat. Damage is stored on optional `PirateBase.bossDamage` and paid once via `bossRewardsPaid` (`world-pirate-boss.ts`): rank 1, then anyone at 10% or 1% of total damage, as Starshards plus resources on the home planet. Tuning lives in `packages/game/src/data/tuning.ts` (`PIRATE_BOSS_TIERS`). The player view adds optional `pirateBoss`. The Seasons page renders the command panel, the fleet-events strip renders a compact card (including the latest `bossDamage` report callout), and the galaxy page banners an active boss with a Raid boss button that reuses the pirate-raid prefill. Coverage is in `pirates.test.ts`, `pirate-boss.test.ts`, `render-seasons.test.ts`, `render-events.test.ts`, and `render-galaxy-page.test.ts`.
+
 ## Open questions
 
 - Join requests do not expire.

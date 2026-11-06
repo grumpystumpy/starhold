@@ -1,12 +1,13 @@
 import {
   SEASON_BOARDS,
   SEASON_ECONOMY_SPEND_DIV,
+  type PirateBossTierId,
   type PlayerView,
   type SeasonBoardId,
   type SeasonClaimView,
   type SeasonStanding,
 } from "@starhold/game";
-import { fmt, fmtCompact } from "./format";
+import { fmt, fmtCompact, fmtCoordsLink, fmtEta } from "./format";
 import { escapeAttr, escapeHtml } from "./render-escape";
 import { infoTooltip } from "./render-tooltips";
 
@@ -110,6 +111,68 @@ function claimCard(
   </section>`;
 }
 
+function bossCountdown(until: number, now: number): string {
+  const seconds = Math.max(0, Math.ceil((until - now) / 1000));
+  const days = Math.floor(seconds / 86_400);
+  const hours = Math.floor((seconds % 86_400) / 3_600);
+  const minutes = Math.floor((seconds % 3_600) / 60);
+  if (days > 0) return `${fmt(days)}d ${fmt(hours)}h`;
+  if (hours > 0) return `${fmt(hours)}h ${fmt(minutes)}m`;
+  return fmtEta(seconds);
+}
+
+function tierLabel(tier: PirateBossTierId | null): string {
+  if (tier === "top1") return "Top strike";
+  if (tier === "top10") return "Top 10%";
+  if (tier === "participant") return "Participant";
+  return "Under 1%";
+}
+
+/** Latest boss strike, for the seasons panel and the events card. */
+export function bossDamageCallout(view: PlayerView): string {
+  const report = (view.reports ?? []).find(
+    (row) => typeof row.bossDamage === "number" && row.bossDamage > 0,
+  );
+  if (!report || report.bossDamage == null) return "";
+  return `<p class="hint" data-testid="pirate-boss-report">Last strike destroyed ${fmtCompact(report.bossDamage)} in hull value.</p>`;
+}
+
+export function pirateBossPanel(view: PlayerView): string {
+  const boss = view.pirateBoss;
+  if (!boss) return "";
+  const active = boss.activeUntil != null;
+  const until = active ? boss.activeUntil : boss.nextSpawnAt;
+  const status = active ? "Active" : "Cooldown";
+  const when =
+    until == null
+      ? "—"
+      : `${active ? "ends in" : "next spawn"} ${bossCountdown(until, view.now)}`;
+  const rank = boss.myRank == null ? "unranked" : `#${fmt(boss.myRank)}`;
+  const rows =
+    boss.top.length === 0
+      ? `<p class="hint" data-testid="pirate-boss-board-empty">No damage yet.</p>`
+      : `<ol class="season-list" data-testid="pirate-boss-board">${boss.top
+          .map(
+            (row, index) =>
+              `<li data-testid="pirate-boss-row-${index + 1}"><span>#${fmt(index + 1)} ${escapeHtml(row.name)}${row.playerId === view.player.id ? " (you)" : ""}</span><span>${fmtCompact(row.damage)}</span></li>`,
+          )
+          .join("")}</ol>`;
+  const hp = Math.max(0, Math.min(100, Math.round(boss.hpPct)));
+  return `<section class="season-claim pirate-boss-panel" data-testid="pirate-boss-panel">
+    <h3>Seasonal pirate mothership</h3>
+    <p data-testid="pirate-boss-status">${status} · ${when}</p>
+    <p class="hint" data-testid="pirate-boss-coords">${fmtCoordsLink(boss.coords)} · ${fmt(boss.shipsLeft)} ships</p>
+    <div class="boss-hp" data-testid="pirate-boss-hp" role="meter" aria-valuenow="${hp}" aria-valuemin="0" aria-valuemax="100" aria-label="Boss hull">
+      <span class="boss-hp-fill" style="width:${hp}%"></span>
+      <span class="boss-hp-label">${fmt(hp)}% hull</span>
+    </div>
+    <p data-testid="pirate-boss-me">Your damage ${fmtCompact(boss.myDamage)} · ${rank} · ${escapeHtml(tierLabel(boss.myTier))}</p>
+    ${bossDamageCallout(view)}
+    <h3 class="subhead">Damage leaderboard</h3>
+    ${rows}
+  </section>`;
+}
+
 export function seasonsPage(view: PlayerView, busy: boolean): string {
   const board = view.seasonLeaderboard;
   const cosmetics = view.player.cosmetics;
@@ -160,6 +223,7 @@ export function seasonsPage(view: PlayerView, busy: boolean): string {
   return `<section class="panel" data-testid="seasons-panel">
     <h2>Seasons</h2>
     <p class="hint" data-testid="season-id">${escapeHtml(monthLabel(board.seasonId))} · titles and planet skins from placement.</p>
+    ${pirateBossPanel(view)}
     <div class="season-boards">${boards}</div>
     <h3 class="subhead">Claim</h3>
     ${claims}
@@ -174,3 +238,4 @@ export function seasonsPage(view: PlayerView, busy: boolean): string {
     </div>
   </section>`;
 }
+

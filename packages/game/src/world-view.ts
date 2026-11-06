@@ -69,6 +69,7 @@ import { stampQueueView } from "./world-queue-manage.js";
 import { inSensorPhalanxRange, ownedPlanetCount } from "./world-moons.js";
 import { goalsView } from "./world-goals.js";
 import { onboardingViewFor } from "./world-onboarding.js";
+import { pirateBossSummary } from "./world-pirate-boss.js";
 import { occupationForPlanet } from "./world-occupation.js";
 import { empireDriftBeaconCount, empireRelicResearchTimeFactor, playerKnowsMini } from "./world-mini.js";
 import { seasonLeaderboardView } from "./world-seasons.js";
@@ -584,6 +585,7 @@ export function playerView(
         ships: planet.ships,
       })),
     seasonLeaderboard: seasonLeaderboardView(universe, player, now),
+    pirateBoss: pirateBossSummary(universe, playerId, now),
     activeItemBuffs,
     shopCatalog,
   };
