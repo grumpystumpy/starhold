@@ -328,6 +328,40 @@ async function main() {
   }
   logs.push("read_persisted");
 
+  await page.getByTestId("nav-seasons").click();
+  await page.getByTestId("seasons-panel").waitFor({ timeout: 15_000 });
+  await page.getByTestId("pirate-boss-panel").waitFor({ timeout: 15_000 });
+  await page.getByTestId("pirate-boss-event-card").waitFor({ timeout: 5_000 });
+  const bossStatus = await page.getByTestId("pirate-boss-status").innerText();
+  if (!/Active|Cooldown/.test(bossStatus)) {
+    throw new Error(`unexpected boss status: ${bossStatus}`);
+  }
+  await page.getByTestId("pirate-boss-hp").waitFor({ timeout: 5_000 });
+  await assertFitsViewport(page, "pirate-boss-panel");
+  await assertFitsViewport(page, "pirate-boss-event-card");
+  logs.push("seasons_boss_panel");
+
+  await page.getByTestId("nav-galaxy").click();
+  await page.getByTestId("galaxy-panel").waitFor({ timeout: 15_000 });
+  await page.getByTestId("galaxy-boss-banner").waitFor({ timeout: 15_000 });
+  const raid = page.getByTestId("galaxy-raid-boss");
+  const raidCoords = await raid.getAttribute("data-galaxy-attack-pirates");
+  const raidBase = await raid.getAttribute("data-galaxy-pirate-base");
+  if (!raidCoords || !/^\d+:\d+:\d+$/.test(raidCoords) || !raidBase) {
+    throw new Error(`raid boss prefill missing: ${raidCoords} ${raidBase}`);
+  }
+  await assertFitsViewport(page, "galaxy-boss-banner");
+  logs.push(`galaxy_boss_banner_${raidCoords}`);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByTestId("nav-seasons").click();
+  await page.getByTestId("pirate-boss-panel").waitFor({ timeout: 10_000 });
+  await assertFitsViewport(page, "pirate-boss-panel");
+  await page.getByTestId("nav-galaxy").click();
+  await page.getByTestId("galaxy-boss-banner").waitFor({ timeout: 10_000 });
+  await assertFitsViewport(page, "galaxy-boss-banner");
+  logs.push("boss_phone_ok");
+
   await browser.close();
   console.log("QUALITY_GATE_EVENTS_OK", logs.join(","));
 }
