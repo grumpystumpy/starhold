@@ -379,7 +379,16 @@ async function runViewport(browser, viewport, ids) {
     await page.goto(spyMessages, { waitUntil: "domcontentloaded" });
     await page.waitForSelector('[data-testid="messages-panel"]');
     await page.waitForSelector('[data-testid^="spy-detail-"]');
-    const reportText = await page.locator('[data-testid^="spy-detail-"]').first().innerText();
+    const spyDetail = page.locator('[data-testid^="spy-detail-"]').first();
+    // Closed <details> only shows "Full report"; open it for Metal/buildings body.
+    if ((await spyDetail.getAttribute("open")) == null) {
+      await spyDetail.locator("summary").click();
+      await page.waitForFunction(() => {
+        const el = document.querySelector('[data-testid^="spy-detail-"]');
+        return el instanceof HTMLDetailsElement && el.open;
+      });
+    }
+    const reportText = await spyDetail.innerText();
     assert(reportText.includes("Metal"), `${tag} missing spy report details: ${reportText}`);
     assert(!/solarPlant/.test(reportText), `${tag} internal key in spy report: ${reportText}`);
     const spyRow = await page.locator('[data-testid^="message-spy-"]').first().innerText();
