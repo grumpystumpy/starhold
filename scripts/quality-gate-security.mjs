@@ -35,10 +35,13 @@ async function main() {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   const page = await context.newPage();
   const errors = [];
-  page.on("pageerror", (err) => errors.push(`pageerror:${err.message}`));
-  page.on("console", (msg) => {
-    if (msg.type() === "error") errors.push(`console:${msg.text()}`);
-  });
+  function watch(target) {
+    target.on("pageerror", (err) => errors.push(`pageerror:${err.message}`));
+    target.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(`console:${msg.text()}`);
+    });
+  }
+  watch(page);
 
   const stamp = Date.now().toString(36);
   const email = `gate_sec_${stamp}@example.com`;
@@ -96,38 +99,48 @@ async function main() {
     return res.ok;
   });
   if (!loggedOut) throw new Error("logout failed");
-  await page.goto(WEB, { waitUntil: "networkidle" });
-  await page.getByTestId("auth-email").fill(email);
-  await page.getByTestId("auth-password").fill(nextPassword);
+
+  // Same-tab reload resumes the empire from localStorage. A clean context is
+  // a signed-out device: no cookie and no saved commander.
+  const loginCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const loginPage = await loginCtx.newPage();
+  watch(loginPage);
+  await loginPage.goto(WEB, { waitUntil: "networkidle" });
+  await loginPage.getByTestId("auth-email").fill(email);
+  await loginPage.getByTestId("auth-password").fill(nextPassword);
   await Promise.all([
-    page.waitForResponse(
+    loginPage.waitForResponse(
       (response) => response.url().includes("/api/auth/login") && response.ok(),
       { timeout: 20_000 },
     ),
-    page.getByTestId("auth-login-btn").click(),
+    loginPage.getByTestId("auth-login-btn").click(),
   ]);
-  await page.getByTestId("game-shell").waitFor({ timeout: 20_000 });
+  await loginPage.getByTestId("game-shell").waitFor({ timeout: 20_000 });
   logs.push("login_new_password");
 
-  const loggedOutAgain = await page.evaluate(async () => {
+  const loggedOutAgain = await loginPage.evaluate(async () => {
     const res = await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
     return res.ok;
   });
   if (!loggedOutAgain) throw new Error("second logout failed");
-  await page.goto(WEB, { waitUntil: "networkidle" });
-  await page.getByTestId("auth-forgot-link").click();
-  await page.getByTestId("recover-form").waitFor({ timeout: 10_000 });
-  await page.getByTestId("recover-email").fill(email);
-  await page.getByTestId("recover-code").fill(code);
-  await page.getByTestId("recover-password").fill(recoveredPassword);
+
+  const recoverCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const recoverPage = await recoverCtx.newPage();
+  watch(recoverPage);
+  await recoverPage.goto(WEB, { waitUntil: "networkidle" });
+  await recoverPage.getByTestId("auth-forgot-link").click();
+  await recoverPage.getByTestId("recover-form").waitFor({ timeout: 10_000 });
+  await recoverPage.getByTestId("recover-email").fill(email);
+  await recoverPage.getByTestId("recover-code").fill(code);
+  await recoverPage.getByTestId("recover-password").fill(recoveredPassword);
   await Promise.all([
-    page.waitForResponse(
+    recoverPage.waitForResponse(
       (response) => response.url().includes("/api/auth/recover") && response.ok(),
       { timeout: 20_000 },
     ),
-    page.getByTestId("recover-submit").click(),
+    recoverPage.getByTestId("recover-submit").click(),
   ]);
-  await page.waitForFunction(
+  await recoverPage.waitForFunction(
     () =>
       document.querySelector('[data-testid="game-shell"], [data-testid="account-email"]'),
     undefined,
