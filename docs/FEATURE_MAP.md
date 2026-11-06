@@ -85,3 +85,20 @@ Fleet composer hides built-in `moonDestruction` and `miniPlanetDestruction` unti
 - Recon is marked when an expedition resolves or a spy report is written, including a blank Moving Fortress scan. Dismiss does not clear claims.
 - A full vault pays only what fits. The step is still claimed.
 
+## Account security
+
+Signed-in commanders open Security from the account menu (`/security`). Guests do not see that link. Email reset is not sent; recovery is one-time codes until a mail domain exists.
+
+Optional save fields (older rows omit them and still load): `account.sessionEpoch` (missing = 0), `account.recoveryCodeHashes` (sha256 via `hashToken`, never plaintext), `session.epoch` (missing = 0). `getSession` rejects a session whose epoch is lower than the account epoch.
+
+| Route | Body | Effect |
+| --- | --- | --- |
+| `GET /api/account/security` | session cookie | `{ email, hasPassword, recoveryCodesRemaining, createdAt, lastLoginAt }` |
+| `POST /api/account/password` | `{ current, next }` | Verifies the current password, rehashes, bumps the epoch, re-issues this session. Wrong current password is 403. |
+| `POST /api/account/sessions/revoke-others` | session cookie | Bumps the epoch and re-issues this session. Other devices are signed out. |
+| `POST /api/account/recovery-codes` | `{ current }` | Returns 10 `XXXX-XXXX` codes once and stores only hashes. Regenerating replaces the old set. |
+| `POST /api/auth/recover` | `{ email, code, next }` | Public. Consumes one code, sets the password, clears `needsPasswordReset`, bumps the epoch, and signs in. Unknown email and bad code share one error. |
+
+Password change and recover are rate-limited. The join screen's Forgot password? link opens the recover form. It does not replace email + password signup or login.
+
+
