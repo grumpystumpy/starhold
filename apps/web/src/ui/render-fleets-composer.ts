@@ -7,11 +7,13 @@ import {
   fleetCargoCapacity,
   fuelCostOneWay,
   flightSecondsOneWay,
+  isBuiltinPresetUnlockedForComposer,
   normalizeFleetShips,
   validateSwarmCarry,
   type Coordinates,
   type MissionType,
   type PlayerView,
+  type PresetComposerUnlockContext,
 } from "@starhold/game";
 import { SHIP_ART } from "./assets";
 import { fmt, fmtCoords, fmtCoordsLink, fmtEta } from "./format";
@@ -362,8 +364,8 @@ export function fleetComposer(
     { label: string; detail: string; requires?: string[] }
   > = {
     deploy: {
-      label: "Deploy (park own / attack rival)",
-      detail: "Park ships on your worlds or strike a rival colony.",
+      label: "Station / Deploy (one-way)",
+      detail: "Station ships on your own colony/moon, or send a one-way strike to a foreign target.",
     },
     raid: {
       label: "Raid / attack",
@@ -432,7 +434,19 @@ export function fleetComposer(
   }).join("");
 
   const presets = view.player.fleetPresets ?? [];
+  const presetUnlock: PresetComposerUnlockContext = {
+    research: view.player.research ?? {},
+    planets:
+      view.presetUnlockPlanets && view.presetUnlockPlanets.length > 0
+        ? view.presetUnlockPlanets
+        : [{
+            shipyard: view.planet?.buildings?.shipyard ?? 0,
+            ships: view.planet?.ships ?? {},
+          }],
+    fleets: (view.fleets ?? []).map((fleet) => ({ ships: fleet.ships ?? {} })),
+  };
   const presetOptions = presets
+    .filter((preset) => isBuiltinPresetUnlockedForComposer(preset, presetUnlock))
     .map((p) => {
       const ships = SHIP_ORDER.filter((id) => (p.ships[id] ?? 0) > 0)
         .map((id) => `${fmt(p.ships[id] ?? 0)}×${SHIPS[id].name}`)

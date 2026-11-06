@@ -4,6 +4,7 @@ import type {
   DefenseDef,
   DefenseId,
   GoalCadence,
+  OnboardingNavPage,
   PlayerClassId,
   AllianceClassId,
   ResearchDef,
@@ -1931,6 +1932,104 @@ export const GOALS: readonly GoalTuning[] = [
     metal: GOAL_WEEKLY_EXPEDITION_METAL,
     crystal: GOAL_WEEKLY_EXPEDITION_CRYSTAL,
     deuterium: GOAL_WEEKLY_EXPEDITION_DEUTERIUM,
+  },
+];
+
+/**
+ * One-time commander tutorial. Order is the checklist order.
+ * Completion is evaluated live; these rows are rewards and copy only.
+ */
+export interface OnboardingStepTuning {
+  id: string;
+  title: string;
+  description: string;
+  targetNavPage: OnboardingNavPage;
+  metal: number;
+  crystal: number;
+  deuterium: number;
+  starshards: number;
+}
+
+export const ONBOARDING_STEPS: readonly OnboardingStepTuning[] = [
+  {
+    id: "metalMine1",
+    title: "Ore Mine",
+    description: "Raise an Ore Mine to level 1 on any world you own.",
+    targetNavPage: "buildings",
+    metal: 600,
+    crystal: 250,
+    deuterium: 0,
+    starshards: 0,
+  },
+  {
+    id: "solarPlant1",
+    title: "Solar Array",
+    description: "Raise a Solar Array to level 1 on any world you own.",
+    targetNavPage: "buildings",
+    metal: 700,
+    crystal: 300,
+    deuterium: 0,
+    starshards: 0,
+  },
+  {
+    id: "crystalMine1",
+    title: "Crystalizer",
+    description: "Raise a Crystalizer to level 1 on any world you own.",
+    targetNavPage: "buildings",
+    metal: 800,
+    crystal: 400,
+    deuterium: 0,
+    starshards: 0,
+  },
+  {
+    id: "deutSynth1",
+    title: "Deuterium Extractor",
+    description: "Raise a Deuterium Extractor to level 1 on any world you own.",
+    targetNavPage: "buildings",
+    metal: 900,
+    crystal: 500,
+    deuterium: 250,
+    starshards: 0,
+  },
+  {
+    id: "researchLab1",
+    title: "First research",
+    description: "Build a Research Lab to level 1 and finish any research at level 1.",
+    targetNavPage: "research",
+    metal: 1_200,
+    crystal: 800,
+    deuterium: 300,
+    starshards: 15,
+  },
+  {
+    id: "shipyardScout1",
+    title: "First hull",
+    description: "Build a Shipyard to level 1 and field at least one ship in orbit or in a fleet.",
+    targetNavPage: "shipyard",
+    metal: 1_500,
+    crystal: 1_000,
+    deuterium: 400,
+    starshards: 15,
+  },
+  {
+    id: "firstReconOrExpedition",
+    title: "Look outward",
+    description: "Finish an expedition, own a Spy Satellite, or complete a scan.",
+    targetNavPage: "galaxy",
+    metal: 2_000,
+    crystal: 1_200,
+    deuterium: 600,
+    starshards: 20,
+  },
+  {
+    id: "colonyFoundation",
+    title: "Colony foundation",
+    description: "On one world, reach Ore Mine 4, Crystalizer 3, and Solar Array 3.",
+    targetNavPage: "buildings",
+    metal: 3_000,
+    crystal: 2_000,
+    deuterium: 1_000,
+    starshards: 50,
   },
 ];
 

@@ -1034,7 +1034,50 @@ code {
 }
 
 .goal-actions .hint {
+  margin-top: 0;
   overflow-wrap: anywhere;
+}
+
+.onboarding-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.onboarding-step {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+  align-items: flex-start;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+}
+
+.onboarding-step.is-next {
+  padding-left: 0.45rem;
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.onboarding-step-copy,
+.onboarding-step-actions {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.onboarding-step-copy {
+  flex: 1 1 12rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.onboarding-step-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
 }
 
 .goal-meter {

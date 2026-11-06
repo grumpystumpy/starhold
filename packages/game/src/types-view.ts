@@ -549,6 +549,11 @@ export interface PlayerState {
    * Lives on the player inside the universe document (no extra KV keys).
    */
   goals?: PlayerGoalState;
+  /**
+   * One-time commander tutorial. Missing on older saves.
+   * Steps are evaluated live; this object only stores claims and dismiss.
+   */
+  onboarding?: PlayerOnboardingState;
   /** Synthetic empire alerts. Missing on old saves — migrate to []. */
   eventLog?: EventLogEntry[];
   /** Open monthly season counters. Missing on older saves until the next read. */
@@ -592,6 +597,48 @@ export interface GoalView {
   target: number;
   claimed: boolean;
   reward: GoalRewardView;
+}
+
+/**
+ * One-time commander tutorial. Missing on older saves.
+ * `recon` is set when an expedition or spy scan resolves so the
+ * recon step still counts after reports are pruned.
+ */
+export interface PlayerOnboardingState {
+  claimed?: string[];
+  dismissed?: boolean;
+  recon?: boolean;
+}
+
+export type OnboardingNavPage =
+  | "buildings"
+  | "research"
+  | "shipyard"
+  | "fleets"
+  | "galaxy";
+
+export interface OnboardingRewardView {
+  starshards: number;
+  metal: number;
+  crystal: number;
+  deuterium: number;
+}
+
+export interface OnboardingStepView {
+  id: string;
+  title: string;
+  description: string;
+  targetNavPage: OnboardingNavPage;
+  completed: boolean;
+  claimed: boolean;
+  reward: OnboardingRewardView;
+}
+
+export interface OnboardingView {
+  steps: OnboardingStepView[];
+  dismissed: boolean;
+  allClaimed: boolean;
+  completedCount: number;
 }
 
 export interface UniverseSeedCursor {
@@ -826,6 +873,16 @@ export interface PlayerView {
   openAcsGroups: AcsGroup[];
   /** Daily and weekly goals for the current UTC periods. */
   goals: GoalView[];
+  /** Commander tutorial. Always filled by playerView; older clients may omit it. */
+  onboarding?: OnboardingView;
+  /**
+   * Owned bodies for fleet-composer preset gating. Ships stay off
+   * `ownedPlanets` so existing planet-list comparisons stay stable.
+   */
+  presetUnlockPlanets?: Array<{
+    shipyard: number;
+    ships: FleetShips;
+  }>;
   /** Current month leaderboard plus sealed claim offers. */
   seasonLeaderboard: SeasonLeaderboardView;
   /** Active 24h item buffs. */

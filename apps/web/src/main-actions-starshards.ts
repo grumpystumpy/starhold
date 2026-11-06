@@ -6,12 +6,20 @@ import {
   chooseClass,
   claimDaily,
   claimGoalReward,
+  claimOnboarding,
+  dismissOnboarding,
   raiseOfficerLevel,
   tradeResources,
   unlockSkillNode,
 } from "./api";
 import { clearFlash, schedulePaint, session, setFlash } from "./session";
 import { settleMutation } from "./recover-action";
+
+function releaseActionFocus(): void {
+  const active = globalThis.document?.activeElement;
+  if (typeof HTMLElement === "undefined") return;
+  if (active instanceof HTMLElement) active.blur();
+}
 
 export async function doClaimDaily(): Promise<void> {
   if (!session.view || session.busy) return;
@@ -85,6 +93,53 @@ export async function doClaimGoal(goalId: string): Promise<void> {
     });
   } finally {
     session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doClaimOnboarding(stepId: string): Promise<void> {
+  if (!session.view || session.busy) return;
+  const title =
+    session.view.onboarding?.steps.find((step) => step.id === stepId)?.title ??
+    "Briefing";
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    session.view = await claimOnboarding(session.view.player.id, stepId);
+    setFlash("notice", `Claimed ${title}.`);
+  } catch (err) {
+    await settleMutation({
+      err,
+      failureFallback: "Briefing claim failed.",
+      applied: (view) => view.player.onboarding?.claimed?.includes(stepId) ?? false,
+      successNotice: () => `Claimed ${title}.`,
+    });
+  } finally {
+    session.busy = false;
+    releaseActionFocus();
+    schedulePaint();
+  }
+}
+
+export async function doDismissOnboarding(dismissed: boolean): Promise<void> {
+  if (!session.view || session.busy) return;
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    session.view = await dismissOnboarding(session.view.player.id, dismissed);
+    setFlash("notice", dismissed ? "Tutorial hidden." : "Tutorial restored.");
+  } catch (err) {
+    await settleMutation({
+      err,
+      failureFallback: "Tutorial update failed.",
+      applied: (view) => Boolean(view.onboarding?.dismissed) === dismissed,
+      successNotice: () => dismissed ? "Tutorial hidden." : "Tutorial restored.",
+    });
+  } finally {
+    session.busy = false;
+    releaseActionFocus();
     schedulePaint();
   }
 }

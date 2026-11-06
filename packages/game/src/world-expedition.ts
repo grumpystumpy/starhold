@@ -102,6 +102,7 @@ export function expeditionPlayerEncounterRoll(
 }
 
 import { noteGoalMetric } from "./world-goals.js";
+import { noteOnboardingRecon } from "./world-onboarding.js";
 import { addDebris } from "./world-tick.js";
 import {
   discoverMiniPlanet,
@@ -666,6 +667,7 @@ export function resolveExpeditionArrival(
     // Outbound arrival counts as a run, including an empty find.
     // `now` is the lazy catch-up clock, so offline flights credit the open period.
     noteGoalMetric(owner, "expedition", 1, now);
+    noteOnboardingRecon(owner);
     universe.players[owner.id] = owner;
   }
 

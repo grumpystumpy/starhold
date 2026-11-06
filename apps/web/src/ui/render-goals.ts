@@ -1,6 +1,7 @@
 import type { GoalCadence, GoalRewardView, GoalView, PlayerView } from "@starhold/game";
 import { fmt } from "./format";
 import { escapeAttr, escapeHtml } from "./render-escape";
+import { onboardingGoalsHtml } from "./render-onboarding";
 
 /** Reward line for a goal. Numbers use thousands separators. */
 export function goalRewardText(reward: GoalRewardView): string {
@@ -77,6 +78,7 @@ function goalSection(
 export function goalsPageHtml(view: PlayerView, busy: boolean): string {
   const goals = view.goals ?? [];
   return `<div data-testid="goals-panel">
+    ${onboardingGoalsHtml(view, busy)}
     ${goalSection(
       "Today",
       "Resets at 00:00 UTC. Progress from flights that resolve while you are away counts in the open day.",
