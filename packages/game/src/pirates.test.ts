@@ -88,6 +88,7 @@ import {
   alienRaidPowerFactor,
   applyNpcRaidOnPlanet,
   applyStrongShipCap,
+  collectPirateSpawnSites,
   createPirateBase,
   findNearestOpenSlot1,
   resolveAlienRaidArrival,
@@ -1194,6 +1195,75 @@ describe("pirate spread across galaxies", () => {
       for (let g = 1; g <= MAP_GALAXIES; g++) {
         assert.ok(per[g] >= 5, `universe ${i} galaxy ${g}: ${per[g]} pirates (${per.slice(1).join(",")})`);
       }
+    }
+  });
+
+  it("round-robin site picker ensures every galaxy has >= 1 pirate base when target >= MAP_GALAXIES across seeds", () => {
+    const seeds = ["seed-alpha", "seed-beta", "universe-42", "commander-origin", "flaky-108-test"];
+    for (const seed of seeds) {
+      const universe = createUniverse(`RoundRobin-${seed}`, 8);
+      // Test with target = MAP_GALAXIES (exact 1 per galaxy)
+      const sitesExact = collectPirateSpawnSites(universe, seed, MAP_GALAXIES);
+      assert.equal(sitesExact.length, MAP_GALAXIES);
+      const galaxiesExact = new Set(sitesExact.map((s) => s.galaxy));
+      assert.equal(galaxiesExact.size, MAP_GALAXIES, `Expected all ${MAP_GALAXIES} galaxies, got ${galaxiesExact.size}`);
+      for (let g = 1; g <= MAP_GALAXIES; g++) {
+        assert.ok(galaxiesExact.has(g), `Seed ${seed} target=${MAP_GALAXIES} missing galaxy ${g}`);
+      }
+
+      // Test with target = PIRATE_TARGET_BASE_COUNT (200)
+      const sites200 = collectPirateSpawnSites(universe, seed, PIRATE_TARGET_BASE_COUNT);
+      assert.equal(sites200.length, PIRATE_TARGET_BASE_COUNT);
+      const perGalaxy = new Array<number>(MAP_GALAXIES + 1).fill(0);
+      for (const site of sites200) perGalaxy[site.galaxy] += 1;
+      for (let g = 1; g <= MAP_GALAXIES; g++) {
+        assert.ok(perGalaxy[g] >= 1, `Seed ${seed} target=200 has 0 pirates in galaxy ${g}`);
+      }
+    }
+  });
+
+  it("fills lowest galaxies first when target < MAP_GALAXIES so galaxy 1 always has one", () => {
+    const seeds = ["seed-1", "seed-2", "seed-3", "seed-4"];
+    for (const seed of seeds) {
+      const universe = createUniverse(`LowTarget-${seed}`, 8);
+      // target = 1
+      const sites1 = collectPirateSpawnSites(universe, seed, 1);
+      assert.equal(sites1.length, 1);
+      assert.equal(sites1[0]!.galaxy, 1, `Seed ${seed} target=1 should pick galaxy 1`);
+
+      // target = 3
+      const sites3 = collectPirateSpawnSites(universe, seed, 3);
+      assert.equal(sites3.length, 3);
+      assert.equal(sites3[0]!.galaxy, 1);
+      assert.equal(sites3[1]!.galaxy, 2);
+      assert.equal(sites3[2]!.galaxy, 3);
+    }
+  });
+
+  it("is fully deterministic for a given seed", () => {
+    const universe1 = createUniverse("Determinism Test", 8);
+    const universe2 = createUniverse("Determinism Test", 8);
+    const seed = "fixed-seed-determinism";
+    const sitesA = collectPirateSpawnSites(universe1, seed, PIRATE_TARGET_BASE_COUNT);
+    const sitesB = collectPirateSpawnSites(universe2, seed, PIRATE_TARGET_BASE_COUNT);
+    assert.deepEqual(sitesA, sitesB);
+  });
+
+  it("preserves coordinates of existing bases in a loaded save without moving or deleting them", () => {
+    const universe = createUniverse("Existing Base Save", 8);
+    const active = activePirateBases(universe);
+    assert.ok(active.length > 0);
+    const existingCoords = active.map((b) => ({ id: b.id, coords: { ...b.coords } }));
+
+    // Re-run population top-up / seeding
+    ensurePiratePopulation(universe, Date.now());
+
+    // All original bases must still exist with the exact same coordinates
+    for (const original of existingCoords) {
+      const current = universe.pirateBases?.[original.id];
+      assert.ok(current, `Base ${original.id} was deleted`);
+      assert.deepEqual(current!.coords, original.coords, `Base ${original.id} coords moved`);
+      assert.equal(current!.destroyedAt, null);
     }
   });
 });

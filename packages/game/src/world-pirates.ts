@@ -950,7 +950,7 @@ export function pirateRankKey(seed: string, galaxy: number, system: number): num
   return h >>> 0;
 }
 
-function collectPirateSpawnSites(
+export function collectPirateSpawnSites(
   universe: UniverseState,
   seed: string,
   target: number,
@@ -968,27 +968,49 @@ function collectPirateSpawnSites(
     taken.add(`${base.coords.galaxy}:${base.coords.system}:${base.coords.slot}`);
   }
   type Ranked = { key: number; galaxy: number; system: number };
-  const ranked: Ranked[] = [];
+  const byGalaxy: Ranked[][] = [];
   for (let galaxy = 1; galaxy <= MAP_GALAXIES; galaxy++) {
+    const systems: Ranked[] = [];
     for (let system = 1; system <= MAP_SYSTEMS; system++) {
-      ranked.push({
+      systems.push({
         key: pirateRankKey(seed, galaxy, system),
         galaxy,
         system,
       });
     }
+    systems.sort((a, b) => a.key - b.key || a.system - b.system);
+    byGalaxy.push(systems);
   }
-  ranked.sort((a, b) => a.key - b.key || a.galaxy - b.galaxy || a.system - b.system);
+
+  const pointers = new Array<number>(MAP_GALAXIES).fill(0);
   const sites: Coordinates[] = [];
-  for (const row of ranked) {
-    if (sites.length >= target) break;
-    if (occupied.has(`${row.galaxy}:${row.system}`)) continue;
-    const slot = pickEmptySlotFrom(universe, row.galaxy, row.system, `${seed}:pirate-slot:${row.galaxy}:${row.system}`, taken);
-    if (slot == null) continue;
-    sites.push({ galaxy: row.galaxy, system: row.system, slot });
-    taken.add(`${row.galaxy}:${row.system}:${slot}`);
-    occupied.add(`${row.galaxy}:${row.system}`);
+
+  while (sites.length < target) {
+    let placedAnyInRound = false;
+    for (let gIndex = 0; gIndex < MAP_GALAXIES; gIndex++) {
+      if (sites.length >= target) break;
+      const galaxyList = byGalaxy[gIndex]!;
+      while (pointers[gIndex]! < galaxyList.length) {
+        const row = galaxyList[pointers[gIndex]!++]!;
+        if (occupied.has(`${row.galaxy}:${row.system}`)) continue;
+        const slot = pickEmptySlotFrom(
+          universe,
+          row.galaxy,
+          row.system,
+          `${seed}:pirate-slot:${row.galaxy}:${row.system}`,
+          taken,
+        );
+        if (slot == null) continue;
+        sites.push({ galaxy: row.galaxy, system: row.system, slot });
+        taken.add(`${row.galaxy}:${row.system}:${slot}`);
+        occupied.add(`${row.galaxy}:${row.system}`);
+        placedAnyInRound = true;
+        break;
+      }
+    }
+    if (!placedAnyInRound) break;
   }
+
   return sites;
 }
 
