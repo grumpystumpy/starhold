@@ -1,6 +1,7 @@
 import type { PlayerView } from "@starhold/game";
 import {
   ApiError,
+  COULD_NOT_CONFIRM_MESSAGE,
   fetchState,
   NOT_APPLIED_MESSAGE,
   OVERLOAD_MESSAGE,
@@ -50,11 +51,11 @@ export async function settleMutation(args: {
       try {
         view = await tryFetch();
       } catch {
-        setFlash("error", NOT_APPLIED_MESSAGE);
+        setFlash("error", COULD_NOT_CONFIRM_MESSAGE);
         return;
       }
     } else {
-      setFlash("error", NOT_APPLIED_MESSAGE);
+      setFlash("error", COULD_NOT_CONFIRM_MESSAGE);
       return;
     }
   }

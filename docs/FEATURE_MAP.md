@@ -126,4 +126,8 @@ Optional save fields (older rows omit them and still load): `account.sessionEpoc
 
 Password change and recover are rate-limited. The join screen's Forgot password? link opens the recover form. It does not replace email + password signup or login.
 
+## Action recovery copy
+
+A failed order re-checks state once. If that read times out or never returns a view, the flash is "Couldn't confirm. Check and tap again if needed." "Not applied — tap again." is only used when a view proves the order did not land. Account actions (join, login, signup, password, recovery codes) never show the overload "checking" line unless a state read follows. The galaxy jump field uses `inputmode="decimal"`.
+
 
