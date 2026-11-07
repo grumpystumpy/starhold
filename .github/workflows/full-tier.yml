@@ -48,6 +48,9 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      - name: Deliberate-break proof
+        run: npm run test:break
+
       - name: Typecheck
         run: npm run typecheck
 
