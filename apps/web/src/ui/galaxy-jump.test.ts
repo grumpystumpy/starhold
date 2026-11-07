@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import type { PlayerView } from "@starhold/game";
+import "../test-dom";
 import { galaxyPanel } from "./render-fleets-panels";
 
 const mainSource = readFileSync(
@@ -149,7 +150,7 @@ describe("galaxy jump controls", () => {
     } as unknown as PlayerView;
     const html = galaxyPanel(view, false);
     assert.match(html, /<form data-galaxy-jump-form>/);
-    assert.match(html, /inputmode="text" enterkeyhint="go" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/);
+    assert.match(html, /inputmode="decimal" enterkeyhint="go" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/);
     assert.match(html, /data-testid="galaxy-nav-row-galaxy"[^>]*>[\s\S]*?data-testid="galaxy-galaxy-prev"[\s\S]*?data-testid="galaxy-galaxy-next"/);
     assert.match(html, /data-testid="galaxy-nav-row-coords"[^>]*>[\s\S]*?#galaxy-jump|id="galaxy-jump"/);
     assert.match(html, /data-testid="galaxy-nav-row-system"[^>]*>[\s\S]*?data-testid="galaxy-prev"[\s\S]*?data-testid="galaxy-next"/);
@@ -159,10 +160,10 @@ describe("galaxy jump controls", () => {
       html,
       /data-testid="galaxy-nav-row-system"[\s\S]*?data-testid="galaxy-nav-row-coords"[\s\S]*?data-testid="galaxy-nav-row-galaxy"/,
     );
-    // Assert placeholder is x:xxx and maintains type=text and inputmode=text
+    // Assert placeholder is x:xxx and maintains type=text and inputmode=decimal
     assert.match(html, /placeholder="x:xxx"/);
     assert.match(html, /type="text"/);
-    assert.match(html, /inputmode="text"/);
+    assert.match(html, /inputmode="decimal"/);
   });
 
   it("handles jump form submit with valid 9:143 coordinates and invalid ab:cd input", async () => {
@@ -261,5 +262,126 @@ describe("galaxy jump controls", () => {
       resumePlayer,
       /session\.galaxySystem = session\.view\.planet\.coords\.system;\s*session\.galaxyGalaxy = null;/,
     );
+  });
+
+  it("jumps with one state GET and keeps coordinates through polls and actions", async () => {
+    const handlerSource = readFileSync(
+      fileURLToPath(new URL("../main-handlers-click.ts", import.meta.url)),
+      "utf8",
+    );
+    assert.match(
+      handlerSource,
+      /data-galaxy-jump-form[\s\S]*?submitGalaxyJump\(raw\)/,
+    );
+
+    const { session, setPaintImpl } = await import("../session");
+    const { submitGalaxyJump } = await import("../main-handlers-click");
+    const { doRefresh, silentRefresh } = await import("../main-actions-session");
+    const { doUpgrade } = await import("../main-actions-build");
+
+    function located(galaxy: number, system: number): PlayerView {
+      return {
+        now: 1_700_000_000_000,
+        player: { id: "p1", name: "Commander", research: {}, researchQueue: [] },
+        planet: {
+          id: "pl1",
+          name: "Home",
+          coords: { galaxy: 1, system: 4, slot: 1 },
+          buildings: {},
+          buildQueue: [],
+          shipQueue: [],
+          defenseQueue: [],
+          ships: {},
+          defenses: {},
+        },
+        galaxy: { galaxy, system },
+        fleets: [],
+      } as unknown as PlayerView;
+    }
+
+    const urls: string[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      urls.push(`${method} ${url}`);
+      if (method === "POST") {
+        return new Response(JSON.stringify(located(1, 4)), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      const query = new URL(url, "http://127.0.0.1");
+      return new Response(
+        JSON.stringify(
+          located(
+            Number(query.searchParams.get("galaxy") ?? "1"),
+            Number(query.searchParams.get("system") ?? "4"),
+          ),
+        ),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+    setPaintImpl(() => {});
+    session.view = located(1, 4);
+    session.galaxyGalaxy = null;
+    session.galaxySystem = null;
+    session.busy = false;
+    session.error = null;
+    session.notice = null;
+
+    const stateGets = () => urls.filter((line) => line.startsWith("GET ") && line.includes("/api/state"));
+
+    try {
+      await submitGalaxyJump("ab:cd");
+      assert.deepEqual(urls, []);
+      assert.equal(
+        session.error,
+        "Use galaxy:system, like 9:143 (galaxy 1–10, system 1–399)",
+      );
+
+      session.error = null;
+      await submitGalaxyJump("1:4");
+      assert.deepEqual(stateGets(), []);
+      assert.equal(session.galaxyGalaxy, null);
+      assert.equal(session.galaxySystem, null);
+
+      await submitGalaxyJump("9:143");
+      const jumpGets = stateGets();
+      assert.equal(jumpGets.length, 1);
+      assert.match(jumpGets[0], /[?&]galaxy=9(?:&|$)/);
+      assert.match(jumpGets[0], /[?&]system=143(?:&|$)/);
+      assert.equal(urls.filter((line) => line.startsWith("POST ")).length, 0);
+      assert.equal(session.galaxyGalaxy, 9);
+      assert.equal(session.galaxySystem, 143);
+
+      urls.length = 0;
+      await silentRefresh(session.view.player.id);
+      const pollGets = stateGets();
+      assert.equal(pollGets.length, 1);
+      assert.match(pollGets[0], /[?&]galaxy=9(?:&|$)/);
+      assert.match(pollGets[0], /[?&]system=143(?:&|$)/);
+      assert.equal(session.galaxyGalaxy, 9);
+      assert.equal(session.galaxySystem, 143);
+
+      urls.length = 0;
+      await doUpgrade("metalMine");
+      assert.equal(session.view.galaxy.galaxy, 1);
+      assert.equal(session.view.galaxy.system, 4);
+      assert.equal(session.galaxyGalaxy, 9);
+      assert.equal(session.galaxySystem, 143);
+      assert.equal(stateGets().length, 0);
+
+      urls.length = 0;
+      await doRefresh();
+      const afterAction = stateGets();
+      assert.equal(afterAction.length, 1);
+      assert.match(afterAction[0], /[?&]galaxy=9(?:&|$)/);
+      assert.match(afterAction[0], /[?&]system=143(?:&|$)/);
+      assert.equal(session.galaxyGalaxy, 9);
+      assert.equal(session.galaxySystem, 143);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });

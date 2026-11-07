@@ -4,6 +4,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import type { PlayerView } from "@starhold/game";
+import { OVERLOAD_MESSAGE } from "./api";
 
 const sourceDir = fileURLToPath(new URL(".", import.meta.url));
 
@@ -178,6 +179,65 @@ describe("settleMutation coverage for exported POST actions", () => {
       globalThis.fetch = originalFetch;
       globalThis.localStorage = originalLocalStorage;
       root.querySelector = originalQuerySelector;
+      window.setTimeout = originalTimeout;
+    }
+  });
+
+  it("exempt auth POSTs never show OVERLOAD_MESSAGE unless a state read follows", async () => {
+    const { session, setPaintImpl } = await import("./session");
+    const actions = await import("./main-actions-session");
+    const calls: Record<string, () => Promise<void>> = {
+      doJoin: () => actions.doJoin("Commander"),
+      doLogin: () => actions.doLogin("a@example.com", "password1"),
+      doSignup: () => actions.doSignup("a@example.com", "password1"),
+      doChangePassword: () => actions.doChangePassword("oldpassword", "newpassword1"),
+      doRevokeOtherSessions: () => actions.doRevokeOtherSessions(),
+      doGenerateRecoveryCodes: () => actions.doGenerateRecoveryCodes("password1"),
+      doRecover: () => actions.doRecover("a@example.com", "ABCD-EFGH", "password1"),
+    };
+    assert.deepEqual(
+      Object.keys(calls).sort(),
+      [...postRecoveryExemptActions].sort(),
+    );
+    const originalFetch = globalThis.fetch;
+    const originalTimeout = window.setTimeout;
+    const originalLocalStorage = globalThis.localStorage;
+    window.setTimeout = (() => 0) as typeof window.setTimeout;
+    globalThis.localStorage = {
+      getItem: () => null, setItem() {}, removeItem() {}, clear() {}, key: () => null, length: 0,
+    } as Storage;
+    setPaintImpl(() => {});
+    try {
+      for (const name of postRecoveryExemptActions) {
+        let posts = 0;
+        let stateGets = 0;
+        session.view = null;
+        session.account = null;
+        session.busy = false;
+        session.error = null;
+        session.notice = null;
+        session.holdJoin = false;
+        globalThis.fetch = async (input, init) => {
+          const method = (init?.method ?? "GET").toUpperCase();
+          const url = String(input);
+          if (method === "GET" && url.includes("/api/state")) stateGets += 1;
+          if (method !== "GET") posts += 1;
+          return new Response("<html>Error 503</html>", {
+            status: 503,
+            headers: { "content-type": "text/html" },
+          });
+        };
+        await calls[name]!();
+        const flashed = [session.error, session.notice].filter(Boolean).join(" | ");
+        assert.ok(posts >= 1, `${name} did not POST`);
+        assert.ok(
+          !(flashed.includes(OVERLOAD_MESSAGE) && stateGets === 0),
+          `${name} showed OVERLOAD_MESSAGE without a state read (${flashed})`,
+        );
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+      globalThis.localStorage = originalLocalStorage;
       window.setTimeout = originalTimeout;
     }
   });

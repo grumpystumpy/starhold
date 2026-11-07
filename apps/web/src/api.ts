@@ -23,6 +23,10 @@ export const OVERLOAD_MESSAGE =
 
 export const NOT_APPLIED_MESSAGE = "Not applied — tap again.";
 
+/** State re-check timed out or never returned a view. Not proof the order missed. */
+export const COULD_NOT_CONFIRM_MESSAGE =
+  "Couldn't confirm. Check and tap again if needed.";
+
 export const GET_TIMEOUT_MS = 15000;
 export const POST_TIMEOUT_MS = 20000;
 export const TIMEOUT_MESSAGE =
