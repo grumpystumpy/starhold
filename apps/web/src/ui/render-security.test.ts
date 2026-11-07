@@ -75,5 +75,50 @@ describe("security page", () => {
     });
     assert.doesNotMatch(signedIn, /data-testid="auth-forgot-link"/);
     assert.doesNotMatch(signedIn, /data-testid="recover-form"/);
+    assert.doesNotMatch(guest, /data-testid="auth-email-reset-link"/);
+  });
+
+  it("shows the email reset link only when the provider is on", () => {
+    const off = joinScreenHtml({
+      error: null,
+      notice: null,
+      busy: false,
+      joinDraft: "",
+      emailReset: false,
+    });
+    assert.match(off, /data-testid="auth-forgot-link"/);
+    assert.match(off, /data-testid="recover-form"/);
+    assert.doesNotMatch(off, /data-testid="auth-email-reset-link"/);
+    assert.doesNotMatch(off, /Email me a reset link/);
+
+    const on = joinScreenHtml({
+      error: null,
+      notice: null,
+      busy: false,
+      joinDraft: "",
+      emailReset: true,
+      oauthProviders: ["google"],
+    });
+    assert.match(on, /data-testid="oauth-google"/);
+    assert.match(on, /data-testid="auth-forgot-link"/);
+    assert.match(on, /Forgot password\?/);
+    assert.match(on, /data-testid="recover-form"/);
+    assert.match(on, /data-testid="auth-email-reset-link"/);
+    assert.match(on, /Email me a reset link/);
+    assert.match(on, /data-testid="email-reset-request-form"/);
+    assert.match(on, /hidden/);
+
+    const landing = joinScreenHtml({
+      error: null,
+      notice: null,
+      busy: false,
+      joinDraft: "",
+      passwordResetToken: "tok_123",
+    });
+    assert.match(landing, /data-testid="password-reset-form"/);
+    assert.match(landing, /data-testid="password-reset-password"/);
+    assert.match(landing, /data-testid="password-reset-submit"/);
+    assert.match(landing, /value="tok_123"/);
+    assert.match(landing, /data-testid="auth-form"/);
   });
 });

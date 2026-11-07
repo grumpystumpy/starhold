@@ -25,6 +25,10 @@ export type JoinScreenState = {
   claimablePlayerId?: string | null;
   /** When set, OAuth buttons render for these provider ids. Omit to fetch once. */
   oauthProviders?: string[];
+  /** Email reset link. Omitted until GET /api/auth/providers says it is on. */
+  emailReset?: boolean;
+  /** `?reset=` token. Renders the one-time password form. */
+  passwordResetToken?: string | null;
 };
 
 /** Join / sign-in markup. Auth fields stay off once an account exists. */
@@ -36,14 +40,20 @@ const OAUTH_BUTTON_LABEL: Record<string, string> = {
 
 let oauthProvidersCache: string[] | null = null;
 let oauthProvidersPromise: Promise<string[]> | null = null;
+let emailResetCache = false;
 
 export function resetOAuthProvidersCacheForTests(): void {
   oauthProvidersCache = null;
   oauthProvidersPromise = null;
+  emailResetCache = false;
 }
 
 export function peekOAuthProviders(): string[] | null {
   return oauthProvidersCache;
+}
+
+export function peekEmailReset(): boolean {
+  return emailResetCache;
 }
 
 /** Buttons for configured providers only. An empty list renders nothing. */
@@ -65,8 +75,9 @@ export function loadOAuthProviders(): Promise<string[]> {
     oauthProvidersPromise = fetch("/api/auth/providers", { credentials: "same-origin" })
       .then(async (res) => {
         if (!res.ok) return [] as string[];
-        const body = (await res.json()) as { providers?: unknown };
+        const body = (await res.json()) as { providers?: unknown; emailReset?: unknown };
         if (!Array.isArray(body.providers)) return [];
+        emailResetCache = body.emailReset === true;
         return body.providers.filter((item): item is string => typeof item === "string");
       })
       .catch(() => [] as string[])
@@ -90,16 +101,58 @@ function paintOAuthButtons(root: HTMLElement, providers: readonly string[]): voi
 }
 
 function queueOAuthButtons(root: HTMLElement, state: JoinScreenState): void {
-  if (state.accountEmail || state.oauthProviders) return;
+  if (state.accountEmail || state.oauthProviders) {
+    paintEmailResetOffer(root, Boolean(state.emailReset));
+    return;
+  }
   const cached = peekOAuthProviders();
   if (cached) {
     paintOAuthButtons(root, cached);
+    paintEmailResetOffer(root, Boolean(state.emailReset));
     return;
   }
   void loadOAuthProviders().then((list) => {
     if (!root.querySelector("#auth-form")) return;
     paintOAuthButtons(root, list);
+    paintEmailResetOffer(root, Boolean(state.emailReset));
   });
+}
+
+/** Shown only when email reset is configured. Hidden form until the button is used. */
+export function emailResetOfferHtml(): string {
+  return `<div data-testid="email-reset-offer">
+      <p class="hint"><button type="button" data-testid="auth-email-reset-link" data-auth-email-reset>Email me a reset link</button></p>
+      <form id="email-reset-request-form" data-testid="email-reset-request-form" hidden>
+        <label for="email-reset-address">Email</label>
+        <div class="join-row" style="margin-top:0.5rem;flex-wrap:wrap;gap:0.5rem">
+          <input id="email-reset-address" name="email" type="email" maxlength="254" placeholder="you@example.com" autocomplete="email" data-testid="email-reset-address" />
+          <button type="submit" data-testid="email-reset-request-submit">Send reset link</button>
+        </div>
+      </form>
+    </div>`;
+}
+
+export function passwordResetFormHtml(token: string): string {
+  return `<form id="password-reset-form" data-testid="password-reset-form">
+      <h2>Choose a new password</h2>
+      <p class="hint">This reset link works once.</p>
+      <input type="hidden" data-testid="password-reset-token" value="${escapeAttr(token)}" />
+      <div class="join-row" style="margin-top:0.5rem;flex-wrap:wrap;gap:0.5rem">
+        <input id="password-reset-password" name="password" type="password" minlength="8" maxlength="128" placeholder="new password (8+)" autocomplete="new-password" data-testid="password-reset-password" />
+        <button type="submit" data-testid="password-reset-submit">Set new password</button>
+      </div>
+    </form>`;
+}
+
+function paintEmailResetOffer(root: HTMLElement, enabled = false): void {
+  const existing = root.querySelector("[data-testid='email-reset-offer']");
+  if (!enabled && !peekEmailReset()) {
+    existing?.remove();
+    return;
+  }
+  if (existing) return;
+  const forgot = root.querySelector("[data-testid='auth-forgot-link']");
+  forgot?.insertAdjacentHTML("afterend", emailResetOfferHtml());
 }
 
 export function joinScreenHtml(state: JoinScreenState): string {
@@ -118,6 +171,9 @@ export function joinScreenHtml(state: JoinScreenState): string {
     ? "Commander name (linked to your account)"
     : "Commander name (guest)";
   const joinBtn = signedIn ? "Enter as signed-in" : "Enter universe";
+  const resetBlock = state.passwordResetToken
+    ? passwordResetFormHtml(state.passwordResetToken)
+    : "";
   const authBlock = signedIn
     ? ""
     : `<hr style="margin:1.25rem 0;border:none;border-top:1px solid rgba(255,255,255,0.12)" />
@@ -134,6 +190,7 @@ export function joinScreenHtml(state: JoinScreenState): string {
       </form>
       ${oauthButtonsHtml(state.oauthProviders ?? [])}
       <p class="hint"><button type="button" data-testid="auth-forgot-link" data-auth-forgot>Forgot password?</button></p>
+      ${state.emailReset ? emailResetOfferHtml() : ""}
       ${recoverFormHtml()}
       <p class="hint">Sign up with email and password to keep this commander after you close the tab. Guest play stays on this browser only.</p>
 `;
@@ -149,6 +206,7 @@ export function joinScreenHtml(state: JoinScreenState): string {
     <div data-flash-slot>${flashHtml(state.error, state.notice)}</div>
     <section class="join-panel">
       ${accountLine}
+      ${resetBlock}
       <form id="join-form" data-testid="join-form">
         <label for="commander">${joinLabel}</label>
         <div class="join-row" style="margin-top:0.5rem">
@@ -195,12 +253,15 @@ export function renderJoin(root: HTMLElement, state: JoinScreenState): void {
   const hasClaimBtn = Boolean(root.querySelector("#claim-btn"));
   const wantClaim = Boolean(state.accountEmail && state.claimablePlayerId);
   const wantAuth = !state.accountEmail;
+  const hasReset = Boolean(root.querySelector("#password-reset-form"));
+  const wantReset = Boolean(state.passwordResetToken);
   const structureOk =
     existingForm &&
     existingInput &&
     hasAuthForm === wantAuth &&
     Boolean(state.accountEmail) === hasAccountLine &&
-    wantClaim === hasClaimBtn;
+    wantClaim === hasClaimBtn &&
+    hasReset === wantReset;
 
   if (structureOk) {
     patchFlash(root, state.error, state.notice);
