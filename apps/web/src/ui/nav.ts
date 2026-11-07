@@ -72,6 +72,24 @@ export const NAV_PATHS: Record<NavPage, string> = {
   messages: "/messages",
 };
 
+/** Signed-in account pages. Not part of the game nav union. */
+export const ACCOUNT_MENU = ["security"] as const;
+export type AccountMenuPage = (typeof ACCOUNT_MENU)[number];
+
+export const ACCOUNT_MENU_LABELS: Record<AccountMenuPage, string> = {
+  security: "Security",
+};
+
+export const ACCOUNT_MENU_PATHS: Record<AccountMenuPage, string> = {
+  security: "/security",
+};
+
+export function accountMenuFromPath(pathname: string): AccountMenuPage | null {
+  const raw = pathname.replace(/\/+$/, "") || "/";
+  if (raw === ACCOUNT_MENU_PATHS.security) return "security";
+  return null;
+}
+
 /** Legacy panel ids / paths → current page (Round 1 → Round 2). */
 const LEGACY_PAGE_ALIASES: Record<string, NavPage> = {
   resources: "buildings",

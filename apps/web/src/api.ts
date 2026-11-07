@@ -398,6 +398,62 @@ export async function logoutAccount(): Promise<void> {
   await credFetch("/api/auth/logout", { method: "POST" });
 }
 
+export interface SecurityStatus {
+  email: string;
+  hasPassword: boolean;
+  recoveryCodesRemaining: number;
+  createdAt: number;
+  lastLoginAt: number;
+}
+
+export async function fetchSecurity(): Promise<SecurityStatus> {
+  const res = await credFetch("/api/account/security");
+  return parse<SecurityStatus>(res);
+}
+
+export async function changeAccountPassword(
+  current: string,
+  next: string,
+): Promise<{ ok: true }> {
+  const res = await credFetch("/api/account/password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ current, next }),
+  });
+  return parse(res);
+}
+
+export async function revokeOtherSessions(): Promise<{ ok: true }> {
+  const res = await credFetch("/api/account/sessions/revoke-others", {
+    method: "POST",
+  });
+  return parse(res);
+}
+
+export async function generateRecoveryCodes(
+  current: string,
+): Promise<{ ok: true; codes: string[]; recoveryCodesRemaining: number }> {
+  const res = await credFetch("/api/account/recovery-codes", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ current }),
+  });
+  return parse(res);
+}
+
+export async function recoverAccount(
+  email: string,
+  code: string,
+  next: string,
+): Promise<{ ok: true; account: AuthAccount }> {
+  const res = await credFetch("/api/auth/recover", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, code, next }),
+  });
+  return parse(res);
+}
+
 export async function joinGame(name: string): Promise<PlayerView> {
   const res = await credFetch("/api/join", {
     method: "POST",

@@ -34,6 +34,10 @@ import {
   doClaimGoal,
   doClaimOnboarding,
   doDismissOnboarding,
+  doGenerateRecoveryCodes,
+  doChangePassword,
+  doRecover,
+  doRevokeOtherSessions,
   doTradeResources,
   doCreateAlliance,
   doDeleteAllianceIntel,
@@ -104,7 +108,7 @@ import {
   salvageFleetForm,
 } from "./ui/render-fleets-draft";
 import { resolveNavPage } from "./ui/nav";
-import { navigateShopTab, navigateTo } from "./ui/router";
+import { navigateShopTab, navigateTo, openSecurity } from "./ui/router";
 import { battleShareUrl } from "./ui/shared-report";
 
 function parseGalaxyFleetCoords(raw: string | null): Coordinates | null {
@@ -248,6 +252,26 @@ export function bindClickHandlers(): void {
         ev.preventDefault();
         const page = resolveNavPage(navBtn.getAttribute("data-nav"));
         if (page) navigateTo(page);
+        return;
+      }
+
+      const accountNav = closestActionEl(target, "[data-account-nav]");
+      if (accountNav) {
+        ev.preventDefault();
+        openSecurity();
+        return;
+      }
+
+      if (closestActionEl(target, "[data-auth-forgot]")) {
+        ev.preventDefault();
+        const recover = root.querySelector<HTMLFormElement>("#recover-form");
+        if (recover) recover.hidden = false;
+        return;
+      }
+
+      if (closestActionEl(target, "[data-security-revoke]")) {
+        ev.preventDefault();
+        void doRevokeOtherSessions();
         return;
       }
 
@@ -1039,6 +1063,33 @@ export function bindClickHandlers(): void {
       } else {
         void doLogin(email, password);
       }
+      return;
+    }
+
+    if (form.id === "recover-form") {
+      ev.preventDefault();
+      if (session.busy) return;
+      const email = form.querySelector<HTMLInputElement>("#recover-email")?.value ?? "";
+      const code = form.querySelector<HTMLInputElement>("#recover-code")?.value ?? "";
+      const next = form.querySelector<HTMLInputElement>("#recover-password")?.value ?? "";
+      void doRecover(email, code, next);
+      return;
+    }
+
+    if (form.id === "security-password-form") {
+      ev.preventDefault();
+      if (session.busy) return;
+      const current = form.querySelector<HTMLInputElement>("[data-testid='security-current-password']")?.value ?? "";
+      const next = form.querySelector<HTMLInputElement>("[data-testid='security-next-password']")?.value ?? "";
+      void doChangePassword(current, next);
+      return;
+    }
+
+    if (form.id === "security-recovery-form") {
+      ev.preventDefault();
+      if (session.busy) return;
+      const current = form.querySelector<HTMLInputElement>("[data-testid='security-recovery-current']")?.value ?? "";
+      void doGenerateRecoveryCodes(current);
       return;
     }
 

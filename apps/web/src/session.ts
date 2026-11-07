@@ -6,7 +6,7 @@ import type {
   ResearchId,
   ShipId,
 } from "@starhold/game";
-import type { AuthAccount } from "./api";
+import type { AuthAccount, SecurityStatus } from "./api";
 import type { NavPage } from "./ui/nav";
 import type { FleetDraft } from "./ui/render-fleets-draft";
 
@@ -37,6 +37,13 @@ export const session = {
   passwordDraft: "",
   /** Cookie session account (null = guest / anonymous). */
   account: null as AuthAccount | null,
+  /** Signed-in account page. Null stays on the game nav. */
+  accountMenu: null as "security" | null,
+  security: null as SecurityStatus | null,
+  /** Account id the security panel was loaded for. */
+  securityFor: null as string | null,
+  /** Plaintext recovery codes from the latest generate. Shown once. */
+  recoveryCodes: null as string[] | null,
   /** Pending anonymous playerId offer for guest-save linking. */
   claimablePlayerId: null as string | null,
   pollTimer: undefined as number | undefined,

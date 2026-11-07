@@ -5,12 +5,17 @@ import {
   claimAnonymousPlayer,
   fetchAuthMe,
   fetchAllianceChat,
+  fetchSecurity,
   fetchState,
+  changeAccountPassword,
+  generateRecoveryCodes,
   invalidateCachedState,
   joinGame,
   loginAccount,
+  recoverAccount,
   relocateMiniFortress,
   renamePlanet,
+  revokeOtherSessions,
   selectPlanet,
   setAfterPlayerMutation,
   signupAccount,
@@ -597,6 +602,108 @@ export async function doLogin(
         err instanceof Error ? err.message : "Log in failed.",
       );
     }
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function loadSecurity(): Promise<void> {
+  if (!session.account) return;
+  try {
+    session.security = await fetchSecurity();
+  } catch (err) {
+    setFlash("error", err instanceof Error ? err.message : "Could not load security.");
+  } finally {
+    schedulePaint();
+  }
+}
+
+export async function doChangePassword(current: string, next: string): Promise<void> {
+  if (session.busy) return;
+  if (!current || !next || next.length < 8) {
+    setFlash("error", "Enter your current password and a new one (8+ characters).");
+    schedulePaint();
+    return;
+  }
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    await changeAccountPassword(current, next);
+    setFlash("notice", "Password updated. Other devices were signed out.");
+  } catch (err) {
+    setFlash("error", err instanceof Error ? err.message : "Could not change password.");
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doRevokeOtherSessions(): Promise<void> {
+  if (session.busy) return;
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    await revokeOtherSessions();
+    setFlash("notice", "Other devices were signed out.");
+  } catch (err) {
+    setFlash("error", err instanceof Error ? err.message : "Could not sign out other devices.");
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doGenerateRecoveryCodes(current: string): Promise<void> {
+  if (session.busy) return;
+  if (!current) {
+    setFlash("error", "Enter your current password to generate recovery codes.");
+    schedulePaint();
+    return;
+  }
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    const res = await generateRecoveryCodes(current);
+    session.recoveryCodes = res.codes;
+    if (session.security) {
+      session.security = {
+        ...session.security,
+        recoveryCodesRemaining: res.recoveryCodesRemaining,
+      };
+    }
+    setFlash("notice", "Recovery codes generated. Copy them now.");
+  } catch (err) {
+    setFlash("error", err instanceof Error ? err.message : "Could not generate recovery codes.");
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doRecover(email: string, code: string, next: string): Promise<void> {
+  if (session.busy) return;
+  const trimmed = email.trim();
+  if (!trimmed || !code.trim() || next.length < 8) {
+    setFlash("error", "Email, recovery code, and a new password (8+) are required.");
+    schedulePaint();
+    return;
+  }
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    const res = await recoverAccount(trimmed, code.trim(), next);
+    await applyAuthSuccess({
+      account: res.account,
+      view: null,
+      notice: "Password reset. You are signed in.",
+    });
+  } catch (err) {
+    setFlash("error", err instanceof Error ? err.message : "Recovery failed.");
   } finally {
     session.busy = false;
     schedulePaint();
