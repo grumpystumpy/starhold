@@ -126,4 +126,14 @@ Optional save fields (older rows omit them and still load): `account.sessionEpoc
 
 Password change and recover are rate-limited. The join screen's Forgot password? link opens the recover form. It does not replace email + password signup or login.
 
+## Test safety nets
+
+Cross-version fixtures live in `apps/server/src/fixtures/`. `pre-row-save.json` is a schema-2 universe blob (the pre-row-save shape) with single-object build and research queues. `pre-onboarding-boss-save.json` is a schema-4 universe with no `player.onboarding` and no `pirateBoss*` fields. `pre-oauth-account.json` is an account row with email, peppered password hash, and `playerId` only — no `sessionEpoch`, `recoveryCodeHashes`, or OAuth fields. Both universes keep an unfinished `seedCursor` so normalize does not reseed the full map. `packages/game/src/cross-version-save.test.ts` loads each universe through `migrateOrResetUniverse`, asserts `didReset` is false, and checks resources, buildings, research, the in-flight fleet, and queues. One short tick must not throw. `apps/server/src/cross-version-account.test.ts` loads the same blobs through the KV universe reader and the account through `getAccountById` / `authenticateEmailPassword`.
+
+To add a fixture for the next save shape: commit a sanitized JSON snapshot from before that migration (no live emails or raw passwords), keep `seedCursor` unfinished when the blob is not a full map, and extend the two tests so the new fields survive with `didReset === false`.
+
+`npm run test:break` runs `scripts/deliberate-break-check.mjs`. It hardlink-copies the tree, then breaks only the copy: resource production, combat resolution, save normalize, password verify, and the occupied-planet queue guard. The script fails if any of those focused tests still pass. It does not edit the working tree. Full-tier runs it after unit tests.
+
+`noImplicitOverride`, `noFallthroughCasesInSwitch`, and `noImplicitReturns` are on in `tsconfig.base.json`. `noUncheckedIndexedAccess` stays off: the fixes are not small and include `packages/game/src/world-mini.ts`. Lint also rejects `debugger`, `eval(`, `fit(`, `fdescribe(`, `xit(`, and `xdescribe(`.
+
 
