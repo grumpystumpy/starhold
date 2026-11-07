@@ -17,6 +17,11 @@ export {
   doSignup,
   doLogin,
   doClaimAnonymous,
+  loadSecurity,
+  doChangePassword,
+  doRevokeOtherSessions,
+  doGenerateRecoveryCodes,
+  doRecover,
   resumeFromCookie,
   scheduleReconnect,
 } from "./main-actions-session.js";

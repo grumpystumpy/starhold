@@ -37,6 +37,13 @@ export interface AccountRecord {
   passwordHashPbkdf2?: string;
   /** Set on import. Login is refused until an admin resets the password. */
   needsPasswordReset?: boolean;
+  /**
+   * Bumped to invalidate other sessions. Missing means 0.
+   * A session whose epoch is lower than this is rejected.
+   */
+  sessionEpoch?: number;
+  /** sha256 hashes of one-time recovery codes (`hashToken`). Plaintext is never stored. */
+  recoveryCodeHashes?: string[];
   playerId: string | null;
   createdAt: number;
   lastLoginAt: number;
@@ -47,6 +54,8 @@ export interface SessionRecord {
   accountId: string;
   createdAt: number;
   expiresAt: number;
+  /** Copied from the account epoch at issue. Missing means 0. */
+  epoch?: number;
 }
 
 const memAccounts = new Map<string, AccountRecord>();
@@ -188,12 +197,21 @@ export async function verifyPassword(
   return false;
 }
 
+/** True when email+password login can succeed for this record. */
+export function accountHasPassword(account: AccountRecord): boolean {
+  if (account.needsPasswordReset) return false;
+  return (
+    account.passwordHash.startsWith("pbkdf2$") ||
+    account.passwordHash.startsWith("scrypt$")
+  );
+}
+
 /**
  * Rate-limit auth attempts. Keyed by action + email + optional IP.
  * Returns remaining wait seconds when blocked, else null.
  */
 export async function checkAuthRateLimit(
-  action: "signup" | "login",
+  action: "signup" | "login" | "recover" | "password",
   email: string,
   ip?: string | null,
 ): Promise<{ limited: boolean; retryAfterSec: number }> {
@@ -354,16 +372,30 @@ export async function setAccountPlayerId(
   return account;
 }
 
+/** Apply a sync mutation and write the account. Missing id returns null. */
+export async function updateAccount(
+  accountId: string,
+  mutate: (account: AccountRecord) => void,
+): Promise<AccountRecord | null> {
+  const account = await getAccountById(accountId);
+  if (!account) return null;
+  mutate(account);
+  await saveAccount(account);
+  return account;
+}
+
 export async function createSession(
   accountId: string,
   now = Date.now(),
 ): Promise<SessionRecord> {
+  const account = await getAccountById(accountId);
   const id = newToken(32);
   const record: SessionRecord = {
     id,
     accountId,
     createdAt: now,
     expiresAt: now + SESSION_TTL_SEC * 1000,
+    epoch: account?.sessionEpoch ?? 0,
   };
   const client = getKvClient();
   if (!client) {
@@ -388,6 +420,11 @@ export async function getSession(
   }
   if (!record) return null;
   if (record.expiresAt < now) {
+    await deleteSession(sessionId);
+    return null;
+  }
+  const account = await getAccountById(record.accountId);
+  if (account && (record.epoch ?? 0) < (account.sessionEpoch ?? 0)) {
     await deleteSession(sessionId);
     return null;
   }

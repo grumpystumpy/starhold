@@ -28,6 +28,7 @@ import {
 } from "./cookies.js";
 import { withUniverse, withUniverseRead, isUniverseBusy } from "./store.js";
 import { reportServerError } from "./request-context.js";
+import { mountSecurityRoutes } from "./security-routes.js";
 
 async function sessionAccount(c: Context) {
   const sessionId = readSessionId(c);
@@ -401,4 +402,6 @@ export function mountAuthRoutes(app: Hono): void {
       );
     }
   });
+
+  mountSecurityRoutes(app);
 }

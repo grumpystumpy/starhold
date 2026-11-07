@@ -93,6 +93,7 @@ import {
 import { readSessionId } from "./cookies.js";
 import { mountAllianceIntelRoutes } from "./alliance-intel-routes.js";
 import { mountAuthRoutes } from "./auth-routes.js";
+import { mountOAuthRoutes } from "./oauth-routes.js";
 import { mountCpuRoutes } from "./cpu-routes.js";
 import { readCpuMs, reportServerError, currentScope } from "./request-context.js";
 import { respondWithPlayerView } from "./state-response.js";
@@ -190,6 +191,7 @@ export function createApp(): Hono {
     }
   });
   mountAuthRoutes(app);
+  mountOAuthRoutes(app);
   mountCpuRoutes(app);
 
   app.notFound((c) =>

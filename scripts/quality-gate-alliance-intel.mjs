@@ -269,6 +269,9 @@ async function main() {
       }
     }, value),
   ]);
+  // Spy share moved off Fleet onto Messages (B7-52 declutter).
+  await pageA.getByTestId("nav-messages").click();
+  await pageA.waitForSelector('[data-testid="messages-panel"]', { timeout: 15_000 });
   const share = pageA.locator('[data-testid^="share-intel-"]').first();
   await share.waitFor({ timeout: 30_000 });
   await Promise.all([

@@ -15,49 +15,6 @@ import { planetDiscHtml } from "./planet-disc";
 import { escapeAttr, escapeHtml } from "./render-escape";
 import { infoTooltip } from "./render-tooltips";
 
-export function fleetsInFlight(
-  fleets: PlayerView["fleets"],
-  roster: PlayerView["roster"],
-  now: number,
-): string {
-  if (!fleets.length) {
-    return `<p class="hint">No fleets in flight.</p>`;
-  }
-  const nameFor = (playerId: string | null) =>
-    playerId
-      ? (roster.find((r) => r.id === playerId)?.name ?? "commander")
-      : "empty slot";
-  return `
-    <ul class="roster fleets-live" data-testid="fleets-live">
-      ${fleets
-        .map((f) => {
-          const ships = SHIP_ORDER.filter((id) => (f.ships[id] ?? 0) > 0)
-            .map((id) => `${fmt(f.ships[id] ?? 0)}× ${SHIPS[id].name}`)
-            .join(", ");
-          const eta = fmtEta(remainingSeconds(f.arrivesAt, now));
-          let phase: string;
-          switch (f.phase) {
-            case "outbound":
-              phase = `→ ${escapeHtml(nameFor(f.targetPlayerId))} @ ${fmtCoordsLink(f.targetCoords)} (${f.mission}${f.acsGroupId ? " · ACS" : ""})`;
-              break;
-            case "holding":
-              phase = `◎ holding ACS @ ${fmtCoordsLink(f.targetCoords)}`;
-              break;
-            case "returning":
-              phase = `← returning home`;
-              break;
-            default: {
-              const _exhaustive: never = f.phase;
-              phase = _exhaustive;
-            }
-          }
-          return `<li data-testid="fleet-${f.id}"><span>${phase}<br/><span class="meta">${escapeHtml(ships)}</span></span><span>${eta}</span></li>`;
-        })
-        .join("")}
-    </ul>
-  `;
-}
-
 function unitLossLine(
   ships: Partial<FleetShips> | undefined,
   defenses?: Partial<DefenseStock>,
@@ -147,47 +104,6 @@ export function combatBattleExtrasHtml(report: CombatReport): string {
   `;
 }
 
-export function reportsHtml(
-  reports: PlayerView["reports"],
-  selfId: string,
-): string {
-  if (!reports.length) {
-    return `<p class="hint">No combat reports yet.</p>`;
-  }
-  return `
-    <h3 class="subhead">Combat reports</h3>
-    <ul class="reports" data-testid="combat-reports">
-      ${reports
-        .map((r) => {
-          const role = r.attackerPlayerId === selfId ? "Attack" : "Defense";
-          const loot =
-            r.loot.metal + r.loot.crystal + r.loot.deuterium > 0
-              ? ` · loot ${fmt(r.loot.metal)}/${fmt(r.loot.crystal)}/${fmt(r.loot.deuterium)}`
-              : "";
-          const debris =
-            (r.debrisCreated?.metal ?? 0) + (r.debrisCreated?.crystal ?? 0) > 0
-              ? ` · debris ${fmt(r.debrisCreated.metal)}/${fmt(r.debrisCreated.crystal)}`
-              : "";
-          const moon = r.moonFormed ? " · moon formed" : "";
-          const xp =
-            r.xpAwarded != null
-              ? ` · XP atk +${fmt(r.xpAwarded.attacker)} / def +${fmt(r.xpAwarded.defender)}`
-              : "";
-          const share =
-            r.shareCode != null
-              ? ` · share ${escapeHtml(r.shareCode)}`
-              : "";
-          return `<li data-testid="report-${r.id}" data-report-id="${escapeAttr(r.id)}">
-            <strong>${role}: ${escapeHtml(r.outcome)}</strong>${typeof r.rounds === "number" ? ` · ${fmt(r.rounds)}r` : ""} vs ${escapeHtml(r.attackerPlayerId === selfId ? r.defenderName : r.attackerName)} @ ${fmtCoordsLink(r.targetCoords)}${loot}${debris}${moon}${xp}${share}
-            <br/><span class="meta">${escapeHtml(r.summary)}</span>
-            ${combatBattleExtrasHtml(r)}
-          </li>`;
-        })
-        .join("")}
-    </ul>
-  `;
-}
-
 export function sensorContactsHtml(
   contacts: PlayerView["sensorContacts"],
   roster: PlayerView["roster"],
@@ -232,65 +148,6 @@ export function hostileInboundHtml(
             .map((id) => `${fmt(f.ships[id] ?? 0)}× ${SHIPS[id].name}`)
             .join(", ");
           return `<li data-testid="inbound-${f.id}"><span>${escapeHtml(nameFor(f.ownerPlayerId))} ${escapeHtml(f.mission)} → ${fmtCoordsLink(f.targetCoords)}<br/><span class="meta">${escapeHtml(ships)}</span></span><span>${fmtEta(remainingSeconds(f.arrivesAt, now))}</span></li>`;
-        })
-        .join("")}
-    </ul>
-  `;
-}
-
-export function spyReportsHtml(
-  reports: PlayerView["spyReports"],
-  inAlliance = false,
-): string {
-  if (!reports?.length) {
-    return `<p class="hint">No espionage reports yet.</p>`;
-  }
-  return `
-    <h3 class="subhead">Spy reports</h3>
-    <ul class="reports" data-testid="spy-reports">
-      ${reports
-        .map((r) => {
-          const bits: string[] = [];
-          if (r.resources) {
-            bits.push(
-              `res ${fmt(r.resources.metal)}/${fmt(r.resources.crystal)}/${fmt(r.resources.deuterium)}`,
-            );
-          }
-          if (r.ships) {
-            const ships = SHIP_ORDER.filter((id) => (r.ships?.[id] ?? 0) > 0)
-              .map((id) => `${fmt(r.ships![id] ?? 0)}×${SHIPS[id].name}`)
-              .join(", ");
-            if (ships) bits.push(ships);
-          }
-          const share = inAlliance
-            ? `<button type="button" data-share-intel="${escapeAttr(r.id)}" data-testid="share-intel-${escapeAttr(r.id)}">Share with alliance</button>`
-            : "";
-          return `<li data-testid="spy-${r.id}"><strong>Spy L${fmt(r.detail)}</strong> ${escapeHtml(r.targetName)} @ ${fmtCoordsLink(r.targetCoords)}<br/><span class="meta">${escapeHtml(r.summary)}${bits.length ? ` · ${escapeHtml(bits.join(" · "))}` : ""}</span>${share ? `<span class="spy-share">&nbsp;${share}</span>` : ""}</li>`;
-        })
-        .join("")}
-    </ul>
-  `;
-}
-
-export function expeditionReportsHtml(
-  reports: PlayerView["expeditionReports"],
-): string {
-  if (!reports?.length) {
-    return `<p class="hint">No expedition reports yet.</p>`;
-  }
-  return `
-    <h3 class="subhead">Expedition reports</h3>
-    <ul class="reports" data-testid="expedition-reports">
-      ${reports
-        .map((r) => {
-          const cargo =
-            r.cargoGained.metal +
-              r.cargoGained.crystal +
-              r.cargoGained.deuterium >
-            0
-              ? ` · ${fmt(r.cargoGained.metal)}/${fmt(r.cargoGained.crystal)}/${fmt(r.cargoGained.deuterium)}`
-              : "";
-          return `<li data-testid="expedition-${r.id}"><strong>${escapeHtml(r.kind)}</strong> @ ${fmtCoordsLink(r.targetCoords)}${cargo}<br/><span class="meta">${escapeHtml(r.summary)}</span></li>`;
         })
         .join("")}
     </ul>
