@@ -159,6 +159,18 @@ button:hover:not(:disabled) {
   filter: brightness(1.06);
 }
 
+a.oauth-btn {
+  font: inherit;
+  font-weight: 600;
+  color: #1a1208;
+  background: linear-gradient(180deg, #efc07a, var(--accent));
+  border: 1px solid var(--accent-dim);
+  border-radius: 3px;
+  padding: 0.55rem 0.9rem;
+  cursor: pointer;
+  text-decoration: none;
+}
+
 button:disabled {
   opacity: 0.45;
   cursor: not-allowed;

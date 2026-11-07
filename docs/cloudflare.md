@@ -54,6 +54,20 @@ Optional integrations documented in the project:
 
 `SESSION_SECRET` and `CLAIM_MAIL_URL` are Worker secrets when those features are configured. `CLAIM_MAIL_URL`, when set, receives `{ email, code, expiresInMinutes }` for claim-code delivery. When unset, the import script writes `claim-codes.txt` instead; do not commit that file.
 
+Optional Google and Discord sign-in stays off until these secrets exist. Password login is unchanged either way. Do not set `OAUTH_MOCK` on the production Worker.
+
+```bash
+npx wrangler secret put GOOGLE_CLIENT_ID
+npx wrangler secret put GOOGLE_CLIENT_SECRET
+npx wrangler secret put DISCORD_CLIENT_ID
+npx wrangler secret put DISCORD_CLIENT_SECRET
+```
+
+Register this redirect URI with each provider (the provider name is `google` or `discord`):
+
+`https://starhold.stumpysgarage.workers.dev/api/auth/oauth/<provider>/callback`
+
+
 ## Passwords
 
 Workers free plan allows 10 ms of CPU per request. A full scrypt verify (N=16384, r=8, p=1) is about 30 ms in Node and does not fit in one request. PBKDF2-SHA-256 at **10,000** iterations is about 2 ms. OWASP’s 600,000 iterations do not fit in 10 ms.

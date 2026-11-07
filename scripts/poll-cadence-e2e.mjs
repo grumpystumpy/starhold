@@ -101,7 +101,13 @@ async function runViewport(browser, viewport) {
   const joinPosts = log.filter(
     (entry) => entry.method === "POST" && entry.url.includes("/api/join"),
   );
-  if (joinPosts.length !== 1 || log.length !== 1) {
+  // Join chrome may also GET /api/auth/providers once for optional OAuth buttons.
+  const unexpected = log.filter(
+    (entry) =>
+      !(entry.method === "POST" && entry.url.includes("/api/join")) &&
+      !(entry.method === "GET" && entry.url.includes("/api/auth/providers")),
+  );
+  if (joinPosts.length !== 1 || unexpected.length !== 0) {
     throw new Error(`${viewport.name} join was not one request: ${JSON.stringify(log)}`);
   }
 
