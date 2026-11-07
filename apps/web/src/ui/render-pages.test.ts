@@ -36,3 +36,38 @@ describe("highscore combat halls", () => {
     assert.match(html, /9\.8k ship value lost/);
   });
 });
+
+describe("fleet tab", () => {
+  it("shows fleet controls and links to Messages without inline fleets or reports", () => {
+    const view = {
+      now: 1_700_000_000_000,
+      player: { id: "p1", name: "Alpha", research: {} },
+      planet: {
+        id: "pl1",
+        name: "Home",
+        kind: "planet",
+        coords: { galaxy: 1, system: 1, slot: 8 },
+        ships: {},
+        buildings: {},
+      },
+      roster: [],
+      ownedPlanets: [],
+      galaxy: { galaxy: 1, system: 1, slots: [] },
+      fleets: [],
+      hostileInbound: [],
+      sensorContacts: [],
+      fleetSlotCap: 5,
+      expeditionSlotCap: 2,
+      universe: { speed: 1, fleetSpeed: 1 },
+    } as unknown as PlayerView;
+
+    const html = pageHtml("fleet", view, false, null);
+    assert.match(html, /data-testid="fleets-panel"/);
+    assert.match(html, /data-testid="fleet-form"/);
+    assert.match(html, /data-testid="fleet-messages-link"/);
+    assert.doesNotMatch(html, /data-testid="fleets-live"/);
+    assert.doesNotMatch(html, /data-testid="combat-reports"/);
+    assert.doesNotMatch(html, /data-testid="spy-reports"/);
+    assert.doesNotMatch(html, /data-testid="expedition-reports"/);
+  });
+});

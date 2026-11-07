@@ -48,6 +48,10 @@ The seasonal pirate mothership is one marked `PirateBase` in `pirateBases`, trac
 
 Messages in the inbox display category badges matching their filter bucket (`Combat`, `Spy`, `Alerts`) alongside the specific kind badge (`message-kind`), allowing players to identify message categories at a glance.
 
+## Fleet tab
+
+The Fleet tab shows the composer, hostile inbound fleets, sensor contacts, and a link to Messages. In-flight fleets are in the top fleet events banner; combat, spy, and expedition reports are in Messages.
+
 ## Onboarding & Fleet Presets
 
 `player.onboarding` is optional (`claimed`, `dismissed`, `recon`). Older saves omit it and still load. `onboardingViewFor` does not write the field. Claiming or dismissing creates it.

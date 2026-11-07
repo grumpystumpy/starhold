@@ -137,7 +137,7 @@ async function runViewport(width, height) {
       throw error;
     }
     await page.waitForSelector(
-      '[data-testid="fleets-live"], [data-testid="flash-ok"]',
+      '[data-testid="events-banner"], [data-testid="flash-ok"]',
       { timeout: 15_000 },
     );
     const launchErr = await page.locator('[data-testid="flash-error"]').count();

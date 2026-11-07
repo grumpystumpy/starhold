@@ -375,13 +375,26 @@ async function runViewport(browser, viewport, ids) {
     assert(!detailText.includes("solarPlant"), `${tag} internal key in spy detail`);
     await noOverflow(page, `${tag} messages`);
 
-    const fleetReports = `${WEB}/fleet?playerId=${encodeURIComponent(ids.spy.player.id)}`;
-    await page.goto(fleetReports, { waitUntil: "domcontentloaded" });
-    await page.waitForSelector('[data-testid="spy-reports"]');
-    const reportText = await page.locator('[data-testid="spy-reports"]').innerText();
-    assert(reportText.includes("Share with alliance"), `${tag} missing share button`);
-    assert(!/\dShare/.test(reportText), `${tag} glued share label: ${reportText}`);
-    await noOverflow(page, `${tag} spy share`);
+    const spyMessages = `${WEB}/messages?playerId=${encodeURIComponent(ids.spy.player.id)}`;
+    await page.goto(spyMessages, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector('[data-testid="messages-panel"]');
+    await page.waitForSelector('[data-testid^="spy-detail-"]');
+    const spyDetail = page.locator('[data-testid^="spy-detail-"]').first();
+    // Closed <details> only shows "Full report"; open it for Metal/buildings body.
+    if ((await spyDetail.getAttribute("open")) == null) {
+      await spyDetail.locator("summary").click();
+      await page.waitForFunction(() => {
+        const el = document.querySelector('[data-testid^="spy-detail-"]');
+        return el instanceof HTMLDetailsElement && el.open;
+      });
+    }
+    const reportText = await spyDetail.innerText();
+    assert(reportText.includes("Metal"), `${tag} missing spy report details: ${reportText}`);
+    assert(!/solarPlant/.test(reportText), `${tag} internal key in spy report: ${reportText}`);
+    const spyRow = await page.locator('[data-testid^="message-spy-"]').first().innerText();
+    assert(spyRow.includes("Share with alliance"), `${tag} missing share button: ${spyRow}`);
+    assert(!/\dShare/.test(spyRow), `${tag} glued share label: ${spyRow}`);
+    await noOverflow(page, `${tag} spy messages`);
 
     const seasonsUrl = `${WEB}/seasons?playerId=${encodeURIComponent(ids.econ.player.id)}`;
     await page.goto(seasonsUrl, { waitUntil: "domcontentloaded" });
