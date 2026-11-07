@@ -63,13 +63,13 @@ describe("seasonal pirate boss panel", () => {
     assert.match(html, /aria-valuenow="80"/);
     assert.match(html, /80% hull/);
     assert.match(html, /2:14:9/);
-    assert.match(html, /Your damage 12.5k · #2 · Top 10%/);
+    assert.match(html, /Your damage 12.5K · #2 · Top 10%/);
     assert.match(html, /data-testid="pirate-boss-board"/);
     assert.match(html, /data-testid="pirate-boss-row-1"/);
     assert.match(html, /Alpha/);
     assert.match(html, /You \(you\)/);
     assert.match(html, /data-testid="pirate-boss-report"/);
-    assert.match(html, /Last strike destroyed 4.2k/);
+    assert.match(html, /Last strike destroyed 4.2K/);
   });
 
   it("counts down to the next spawn after the mothership falls", () => {

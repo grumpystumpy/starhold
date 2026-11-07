@@ -9,7 +9,7 @@ import {
   type PlayerView,
 } from "@starhold/game";
 import { RESOURCE_ART } from "./assets";
-import { fmt, fmtBonusPct, fmtCoords } from "./format";
+import { fmt, fmtBonusPct, fmtCompact, fmtCoords } from "./format";
 import { planetDiscHtml } from "./planet-disc";
 import { NAV_LABELS, NAV_PAGES, type NavPage } from "./nav";
 import { accountNavHtml, securityHref } from "./render-security";
@@ -262,12 +262,12 @@ export function shellHtml(
           </div>
         </div>
         ${view.newbieBonusEndsAt != null && view.newbieBonusEndsAt - view.now > 0 ? `<div class="topbar-newbie-badge" data-testid="newbie-bonus-badge">Newbie bonus: +50% prod · +100% def (${Math.ceil((view.newbieBonusEndsAt - view.now) / (60 * 60 * 1000))}h left)</div>` : ""}
-        <div class="topbar-progress" data-testid="player-level" title="Lifetime XP ${fmt(progress.xpTotal)}">
+        <div class="topbar-progress" data-testid="player-level" title="Lifetime XP ${fmtCompact(progress.xpTotal)}">
           <span class="level-label"><span class="level-text">Lv ${fmt(progress.level)}</span> ${infoTooltip({
             title: `Commander level ${fmt(progress.level)}`,
             lines: [
               `Progress ${fmt(progress.xp)} / ${fmt(progress.xpToNext)} XP to next level.`,
-              `Lifetime XP ${fmt(progress.xpTotal)}.`,
+              `Lifetime XP ${fmtCompact(progress.xpTotal)}.`,
               "XP comes from buildings, fleets, defenses, and research.",
             ],
             testId: "level-tip",

@@ -26,20 +26,21 @@ describe("fmtCompact", () => {
   });
 
   it("abbreviates thousands, millions and billions", () => {
-    assert.equal(fmtCompact(1_250), "1.2k");
+    assert.equal(fmtCompact(1_250), "1.3K");
     assert.equal(fmtCompact(1_234_567), "1.2M");
     assert.equal(fmtCompact(3_400_000_000), "3.4B");
   });
 
-  it("drops a trailing .0 and promotes rounded values", () => {
-    assert.equal(fmtCompact(2_000), "2k");
-    assert.equal(fmtCompact(999_999), "999.9k");
+  it("drops a trailing .0 and promotes values rounded to the next tier", () => {
+    assert.equal(fmtCompact(2_000), "2K");
+    assert.equal(fmtCompact(999_499), "999.5K");
+    assert.equal(fmtCompact(999_950), "1M");
     assert.equal(fmtCompact(1_000_000_000_000), "1T");
   });
 
   it("keeps the sign for negatives", () => {
     assert.equal(fmtCompact(-999), "-999");
-    assert.equal(fmtCompact(-1_250), "-1.2k");
+    assert.equal(fmtCompact(-1_250), "-1.3K");
   });
 
   it("renders non-finite values as a dash", () => {

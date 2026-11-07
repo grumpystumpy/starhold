@@ -7,7 +7,7 @@ import {
   unreadEventCount,
   type PlayerView,
 } from "@starhold/game";
-import { fmt, fmtCoords } from "./format";
+import { fmt, fmtCompact, fmtCoords } from "./format";
 import { NAV_LABELS } from "./nav";
 import { session } from "../session";
 import { patchFlash } from "./render-chrome-join.js";
@@ -114,7 +114,7 @@ export function patchLiveChrome(
         title: `Commander level ${fmt(progress.level)}`,
         lines: [
           `Progress ${fmt(progress.xp)} / ${fmt(progress.xpToNext)} XP to next level.`,
-          `Lifetime XP ${fmt(progress.xpTotal)}.`,
+          `Lifetime XP ${fmtCompact(progress.xpTotal)}.`,
           "XP comes from buildings, fleets, defenses, and research.",
         ],
         testId: "level-tip",
@@ -132,7 +132,7 @@ export function patchLiveChrome(
 
   const levelWrap = root.querySelector<HTMLElement>('[data-testid="player-level"]');
   if (levelWrap) {
-    levelWrap.title = `Lifetime XP ${fmt(progress.xpTotal)}`;
+    levelWrap.title = `Lifetime XP ${fmtCompact(progress.xpTotal)}`;
   }
 
   const xpBar = root.querySelector<HTMLElement>('[data-testid="xp-bar"]');
