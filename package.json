@@ -28,6 +28,7 @@
     "e2e:gate:alliances": "node scripts/quality-gate-alliances.mjs",
     "e2e:gate:onboarding": "node scripts/quality-gate-onboarding.mjs",
     "e2e:gate:oauth": "node scripts/quality-gate-oauth.mjs",
+    "e2e:gate:email-reset": "node scripts/quality-gate-email-reset.mjs",
     "cf:dev": "wrangler dev --local"
   },
   "dependencies": {

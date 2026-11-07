@@ -44,6 +44,13 @@ export interface AccountRecord {
   sessionEpoch?: number;
   /** sha256 hashes of one-time recovery codes (`hashToken`). Plaintext is never stored. */
   recoveryCodeHashes?: string[];
+  /**
+   * sha256 of a one-time email reset token (`hashToken`). Plaintext is never stored.
+   * Missing on older rows.
+   */
+  resetTokenHash?: string;
+  /** Wall-clock ms when `resetTokenHash` stops working. */
+  resetTokenExpiresAt?: number;
   playerId: string | null;
   createdAt: number;
   lastLoginAt: number;
@@ -211,7 +218,7 @@ export function accountHasPassword(account: AccountRecord): boolean {
  * Returns remaining wait seconds when blocked, else null.
  */
 export async function checkAuthRateLimit(
-  action: "signup" | "login" | "recover" | "password",
+  action: "signup" | "login" | "recover" | "password" | "reset",
   email: string,
   ip?: string | null,
 ): Promise<{ limited: boolean; retryAfterSec: number }> {
