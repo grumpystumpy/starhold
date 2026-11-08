@@ -156,4 +156,14 @@ A failed order re-checks state once. If that read times out or never returns a v
 
 `npm run perf:cpu-burst` posts 10 `POST /api/build-ship` calls and 10 `POST /api/build-defense` calls back to back. On `wrangler dev --local` with `STARHOLD_CPU_PROFILE=1`, the warm run's `x-starhold-cpu-ms` max was 69 ms for both bursts, over the 10 ms free-plan limit. Build rules are unchanged. Numbers and the method are in `docs/cloudflare.md`. The UI smoke signs up a fresh commander, up to 5 times, when the home galaxy has no pirate. It logs `pirate-home-retries:N`, still requires the galaxy page to show `galaxy-pirate`, and fails with a different message when a pirate exists only outside those home galaxies or when no pirate base was found. State reads for that search stay within 5×399.
 
+## Installable app
+
+Starhold can be added to an iPhone or Android home screen. It is not a store app. `apps/web/public/manifest.webmanifest` is the identity (`id` `/`, standalone, theme `#0f1a24`) with 192 and 512 icons plus a maskable 512. Apple uses `/icons/apple-touch-icon.png`. The page pads `env(safe-area-inset-*)` and keeps form text at 16px on narrow screens so the keyboard does not zoom the layout.
+
+The install note explains Share → Add to Home Screen on iPhone. Android shows Install app only after the browser fires `beforeinstallprompt`. Other browsers get written steps and no Install button. Dismiss stores `starhold-pwa-install-dismissed` and does not ask again. Standalone display, including iOS `navigator.standalone`, hides the note.
+
+A shell service worker (`/sw.js`) caches only the public document, manifest, icons, and hashed `/assets/*.js|css` files, capped at 24 entries. The document and manifest use separate cache keys; it does not cache `/api`, auth, or player data, and it does not reload the page. While the fleet screen is open the update control will not reload. Offline copy says the game is not playable and that orders are not queued. Coming back online does not replay them.
+
+No save fields were added. `packages/game/src/fixtures/in-flight-fleet-save.json` is a main-branch universe with one deploy still in flight; `migrateOrResetUniverse` keeps that fleet.
+
 
