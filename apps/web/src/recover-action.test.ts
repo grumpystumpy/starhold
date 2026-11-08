@@ -299,7 +299,7 @@ describe("failed actions check state", () => {
     assert.equal(session.error, NOT_APPLIED_MESSAGE);
   });
 
-  it("does not fetch state after a 400", async () => {
+  it("refreshes state after a rejected upgrade", async () => {
     setPaintImpl(() => {});
     session.view = view([]);
     session.busy = false;
@@ -319,7 +319,12 @@ describe("failed actions check state", () => {
       }
       if (url.includes("/api/state")) {
         states += 1;
-        return new Response("{}", { status: 200 });
+        const fresh = view([]);
+        fresh.planet.resources = { metal: 0, crystal: 0, deuterium: 0 };
+        return new Response(JSON.stringify(fresh), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
       }
       throw new Error(`unexpected ${url}`);
     };
@@ -329,7 +334,12 @@ describe("failed actions check state", () => {
       globalThis.fetch = original;
     }
     assert.equal(posts, 1);
-    assert.equal(states, 0);
+    assert.equal(states, 1);
+    assert.deepEqual(session.view?.planet.resources, {
+      metal: 0,
+      crystal: 0,
+      deuterium: 0,
+    });
     assert.equal(session.error, "Not enough metal.");
   });
 
@@ -1032,4 +1042,5 @@ describe("failed actions check state", () => {
     assert.equal(session.error, null);
     assert.match(session.notice ?? "", /Queued 5× Light Laser Turret/);
   });
+
 });

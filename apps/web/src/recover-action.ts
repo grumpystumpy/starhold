@@ -19,6 +19,23 @@ export async function settleMutation(args: {
   successNotice: (view: PlayerView) => string | null;
 }): Promise<void> {
   const err = args.err;
+  if (err instanceof ApiError && err.status === 400 && session.view) {
+    const playerId = session.view.player.id;
+    const galaxy = session.galaxyGalaxy ?? session.view.galaxy?.galaxy;
+    const system = session.galaxySystem ?? session.view.galaxy?.system;
+    try {
+      session.view = await fetchState(playerId, galaxy, system, { fresh: true });
+    } catch (refreshErr) {
+      const detail =
+        refreshErr instanceof Error ? refreshErr.message : "unknown error";
+      setFlash("error", `${err.message} State refresh failed: ${detail}`);
+      schedulePaint();
+      return;
+    }
+    setFlash("error", err.message);
+    schedulePaint();
+    return;
+  }
   if (!(err instanceof ApiError) || !err.retryable || !session.view) {
     setFlash(
       "error",

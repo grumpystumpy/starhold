@@ -529,6 +529,17 @@ async function uiSmoke() {
     }, 80);
     return id;
   });
+  let shipyardRejections = 0;
+  const countShipyardRejection = (response) => {
+    if (
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname === "/api/upgrade" &&
+      response.status() >= 400
+    ) {
+      shipyardRejections += 1;
+    }
+  };
+  page.on("response", countShipyardRejection);
   try {
     for (let i = 0; i < 8; i++) {
       await yardBtn.click({ timeout: 5_000 });
@@ -565,6 +576,11 @@ async function uiSmoke() {
       undefined,
       { timeout: 15_000 },
     );
+    if (shipyardRejections > 0) {
+      throw new Error(
+        `Shipyard retries returned ${shipyardRejections} rejected upgrade request(s)`,
+      );
+    }
     // pollUntil asks the server each loop (tick-on-read); background polls
     // are 30 s apart, which a fresh, still-seeding Workers universe can miss.
     await pollUntil(
@@ -581,6 +597,7 @@ async function uiSmoke() {
       90_000,
     );
   } finally {
+    page.off("response", countShipyardRejection);
     await page.evaluate((id) => window.clearInterval(id), pollHammer);
   }
   const yardLevelAfter = await page.textContent(

@@ -440,8 +440,9 @@ async function main() {
           `occupied non-mini ${route} was not blocked (${response.status}): ${JSON.stringify(result)}`,
         );
       }
+      const action = route === "/api/upgrade" ? "building" : route === "/api/build-ship" ? "ship" : "defense";
+      console.log(`non-mini occupation blocked: ${action}`);
     }
-    console.log("occupied non-mini: building, ship, and defense queues blocked");
 
     const seeded = await fetch(`${API}/api/e2e/grant`, {
       method: "POST",
@@ -490,6 +491,7 @@ async function main() {
     if (!queued) {
       throw new Error("occupied mini build queue missing metal mine");
     }
+    console.log("mini occupier building allowed");
     const ship = await fetch(`${API}/api/build-ship`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -499,6 +501,7 @@ async function main() {
     if (!ship.ok || !shipView.planet?.shipQueue?.some((item) => item.shipId === "scout")) {
       throw new Error(`occupier could not queue a ship (${ship.status}): ${JSON.stringify(shipView)}`);
     }
+    console.log("mini occupier ship allowed");
     const defense = await fetch(`${API}/api/build-defense`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -508,6 +511,7 @@ async function main() {
     if (!defense.ok || !defenseView.planet?.defenseQueue?.some((item) => item.defenseId === "laserBattery")) {
       throw new Error(`occupier could not queue a defense (${defense.status}): ${JSON.stringify(defenseView)}`);
     }
+    console.log("mini occupier defense allowed");
     console.log("occupied mini: occupier queued building, ship, and defense", miniId);
   } finally {
     await browser.close();

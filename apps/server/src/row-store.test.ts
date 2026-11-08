@@ -1121,6 +1121,38 @@ describe("row save review fixes", () => {
     }
   });
 
+  it("does not expose e2e grant in Workers when e2e hooks are off", async () => {
+    const previousRuntime = process.env.STARHOLD_RUNTIME;
+    const previousE2E = process.env.STARHOLD_E2E;
+    const previousHooks = process.env.ALLOW_E2E_HOOKS;
+    process.env.STARHOLD_RUNTIME = "workers";
+    delete process.env.STARHOLD_E2E;
+    delete process.env.ALLOW_E2E_HOOKS;
+    try {
+      const response = await createApp().request("/api/e2e/grant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          playerId: "player",
+          occupyNonMini: true,
+          occupierPlayerId: "occupier",
+        }),
+      });
+      assert.equal(response.status, 404);
+      assert.deepEqual(await response.json(), {
+        error: "Not found",
+        path: "/api/e2e/grant",
+      });
+    } finally {
+      if (previousRuntime == null) delete process.env.STARHOLD_RUNTIME;
+      else process.env.STARHOLD_RUNTIME = previousRuntime;
+      if (previousE2E == null) delete process.env.STARHOLD_E2E;
+      else process.env.STARHOLD_E2E = previousE2E;
+      if (previousHooks == null) delete process.env.ALLOW_E2E_HOOKS;
+      else process.env.ALLOW_E2E_HOOKS = previousHooks;
+    }
+  });
+
   it("writes the loot a raid takes from a victim planet that is otherwise untouched", async () => {
     const { db } = sqliteD1();
     const source = fixture();
