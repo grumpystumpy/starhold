@@ -40,6 +40,14 @@ export function documentCacheUrl(origin) {
   return `${origin}/index.html`;
 }
 
+export function networkFirstCacheUrl(rawUrl, origin) {
+  const url = new URL(rawUrl, origin);
+  if (url.pathname === "/manifest.webmanifest") {
+    return `${origin}/manifest.webmanifest`;
+  }
+  return documentCacheUrl(origin);
+}
+
 export function obsoleteCacheNames(names, current = CACHE_NAME) {
   return names.filter((name) => name.startsWith(CACHE_PREFIX) && name !== current);
 }
@@ -67,13 +75,16 @@ async function store(cache, key, response) {
 
 async function networkFirst(request, origin) {
   const cache = await caches.open(CACHE_NAME);
-  const key = documentCacheUrl(origin);
+  const url = new URL(request.url);
+  const isDocument = url.pathname === "/" || url.pathname === "/index.html";
+  const key = networkFirstCacheUrl(request.url, origin);
   try {
     const response = await fetch(request);
     await store(cache, key, response);
     return response;
   } catch {
-    const cached = (await cache.match(key)) ?? (await cache.match("/index.html"));
+    const cached =
+      (await cache.match(key)) ?? (isDocument ? await cache.match("/index.html") : undefined);
     if (cached) return cached;
     return new Response(
       "Offline. Starhold needs a connection and does not play from this device.",
@@ -81,6 +92,8 @@ async function networkFirst(request, origin) {
     );
   }
 }
+
+export { networkFirst };
 
 async function cacheFirst(request) {
   const cache = await caches.open(CACHE_NAME);

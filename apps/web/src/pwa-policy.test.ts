@@ -15,6 +15,8 @@ import {
   CACHE_PREFIX,
   classifyRequest,
   documentCacheUrl,
+  networkFirst,
+  networkFirstCacheUrl,
   obsoleteCacheNames,
 } from "../public/sw.js";
 
@@ -125,6 +127,68 @@ describe("service worker allowlist", () => {
     assert.equal(source.includes("location.reload"), false);
     assert.equal(source.includes("clients.claim"), false);
     assert.match(source, /\/api\//);
+  });
+
+  it("isolates manifest responses from cached HTML and skips cookie-setting responses", async () => {
+    const entries = new Map();
+    const cacheKey = (request) =>
+      new URL(request instanceof Request ? request.url : String(request), ORIGIN).href;
+    const cache = {
+      match: async (request) => entries.get(cacheKey(request))?.clone(),
+      put: async (request, response) => entries.set(cacheKey(request), response.clone()),
+      keys: async () => [...entries.keys()].map((url) => new Request(url)),
+      delete: async (request) => entries.delete(cacheKey(request)),
+    };
+    const htmlKey = documentCacheUrl(ORIGIN);
+    const html = new Response("cached HTML", { headers: { "Content-Type": "text/html" } });
+    const manifestUrl = `${ORIGIN}/manifest.webmanifest?version=2`;
+    const manifestKey = `${ORIGIN}/manifest.webmanifest`;
+    entries.set(htmlKey, html);
+
+    const originalCaches = Object.getOwnPropertyDescriptor(globalThis, "caches");
+    const originalFetch = globalThis.fetch;
+    Object.defineProperty(globalThis, "caches", {
+      configurable: true,
+      value: { open: async () => cache },
+    });
+    try {
+      globalThis.fetch = async () => {
+        const response = new Response("manifest response with cookie", {
+          headers: { "Set-Cookie": "test-cookie=redacted" },
+        });
+        Object.defineProperty(response, "type", { value: "basic" });
+        return response;
+      };
+      assert.equal(networkFirstCacheUrl(manifestUrl, ORIGIN), manifestKey);
+      assert.equal(networkFirstCacheUrl(`${ORIGIN}/?playerId=private`, ORIGIN), htmlKey);
+      await networkFirst(new Request(manifestUrl), ORIGIN);
+      assert.equal(await (await cache.match(htmlKey)).text(), "cached HTML");
+      assert.equal(await cache.match(manifestKey), undefined);
+
+      globalThis.fetch = async () => {
+        const response = new Response("fresh manifest");
+        Object.defineProperty(response, "type", { value: "basic" });
+        return response;
+      };
+      await networkFirst(new Request(manifestUrl), ORIGIN);
+      assert.equal(await (await cache.match(htmlKey)).text(), "cached HTML");
+      assert.equal(await (await cache.match(manifestKey)).text(), "fresh manifest");
+
+      await cache.delete(manifestKey);
+      globalThis.fetch = async () => {
+        throw new Error("offline");
+      };
+      const offlineManifest = await networkFirst(new Request(manifestUrl), ORIGIN);
+      assert.equal(offlineManifest.status, 503);
+      assert.equal(
+        await offlineManifest.text(),
+        "Offline. Starhold needs a connection and does not play from this device.",
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (originalCaches) Object.defineProperty(globalThis, "caches", originalCaches);
+      else Reflect.deleteProperty(globalThis, "caches");
+    }
   });
 
   it("ships a linked manifest with 192 and 512 icons", () => {
