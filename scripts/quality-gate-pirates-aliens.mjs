@@ -398,6 +398,49 @@ async function main() {
       results.push(result);
       console.log(`${vp.name}: PASS`, result.pass);
     }
+
+    const playerId = results[0]?.playerId;
+    if (!playerId) throw new Error("missing player for occupied-mini build check");
+    const seeded = await fetch(`${API}/api/e2e/grant`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId, occupyMini: true }),
+    });
+    const seededView = await seeded.json().catch(() => ({}));
+    if (!seeded.ok) {
+      throw new Error(
+        `occupyMini grant failed (${seeded.status}): ${JSON.stringify(seededView)}`,
+      );
+    }
+    const miniId = seededView.planet?.id;
+    if (!miniId || !seededView.planet?.flags?.mini) {
+      throw new Error("occupyMini grant did not activate a mini planet");
+    }
+    if (seededView.occupation?.occupierPlayerId !== playerId) {
+      throw new Error("occupied mini is not owned by the occupier");
+    }
+    const upgrade = await fetch(`${API}/api/upgrade`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        playerId,
+        buildingId: "metalMine",
+        planetId: miniId,
+      }),
+    });
+    const upgraded = await upgrade.json().catch(() => ({}));
+    if (!upgrade.ok) {
+      throw new Error(
+        `occupier could not queue a building (${upgrade.status}): ${JSON.stringify(upgraded)}`,
+      );
+    }
+    const queued = (upgraded.planet?.buildQueue ?? []).some(
+      (item) => item.buildingId === "metalMine",
+    );
+    if (!queued) {
+      throw new Error("occupied mini build queue missing metal mine");
+    }
+    console.log("occupied mini: occupier queued metal mine", miniId);
   } finally {
     await browser.close();
   }

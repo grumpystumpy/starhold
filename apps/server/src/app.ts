@@ -54,6 +54,7 @@ import {
   launchMaxExpeditions,
   leaveAlliance,
   markEventsRead,
+  OCCUPATION_DURATION_MS,
   playerView,
   publicCombatReport,
   pushEventLog,
@@ -1559,6 +1560,7 @@ export function createApp(): Hono {
         starshards?: number;
         colonySlot?: number;
         inbox?: boolean;
+        occupyMini?: boolean;
       };
       if (!body.playerId) {
         return c.json({ error: "playerId required." }, 400);
@@ -1622,6 +1624,28 @@ export function createApp(): Hono {
             universe.planets[id] = colony;
             if (!player.planetIds.includes(id)) player.planetIds.push(id);
           }
+        }
+        if (body.occupyMini) {
+          const now = Date.now();
+          const miniId = (universe.miniPlanetIds ?? []).find((id) => {
+            const candidate = universe.planets[id];
+            return Boolean(candidate?.flags?.mini && !candidate.ownerPlayerId);
+          });
+          const mini = miniId ? universe.planets[miniId] : undefined;
+          if (!mini) return c.json({ error: "No free mini planet." }, 500);
+          mini.ownerPlayerId = player.id;
+          if (!player.planetIds.includes(mini.id)) player.planetIds.push(mini.id);
+          mini.resources = { metal: 100_000, crystal: 100_000, deuterium: 20_000 };
+          mini.lastTickAt = now;
+          if (!universe.occupations) universe.occupations = {};
+          universe.occupations[mini.id] = {
+            planetId: mini.id,
+            occupierPlayerId: player.id,
+            mothershipFleetId: `e2e_occ_${mini.id}`,
+            startedAt: now,
+            endsAt: now + OCCUPATION_DURATION_MS,
+          };
+          player.activePlanetId = mini.id;
         }
         if (body.inbox) {
           const now = Date.now();

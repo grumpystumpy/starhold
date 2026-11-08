@@ -26,6 +26,7 @@ import type {
 } from "./types.js";
 import { advanceUniverse } from "./world-arrival.js";
 import { isPlanetOccupied } from "./world-occupation.js";
+import { isMiniPlanet } from "./world-mini.js";
 import { yardQueueCap } from "./world-queue-caps.js";
 import {
   ensureQueueFrontStarted,
@@ -50,6 +51,20 @@ export function naniteFactoryLevel(planet: PlanetState): number {
 
 /** Alias for call sites / tests that prefer the Chrono Lathe name. */
 export const chronoLatheLevel = naniteFactoryLevel;
+
+/**
+ * Non-mini occupation blocks every yard. A mini planet's occupier is already
+ * its owner (`captureMiniPlanet` sets `ownerPlayerId`), so that owner builds.
+ */
+function occupationBlocksQueues(
+  universe: UniverseState,
+  planet: PlanetState,
+  playerId: string,
+  now: number,
+): boolean {
+  if (!isPlanetOccupied(universe, planet.id, now)) return false;
+  return !(isMiniPlanet(planet) && planet.ownerPlayerId === playerId);
+}
 
 export function resolveActionPlanet(
   universe: UniverseState,
@@ -94,7 +109,7 @@ export function queueBuildingUpgrade(
   advanceUniverse(universe, now);
   const planet = resolveActionPlanet(universe, player, planetId);
   if (!planet) return { ok: false, error: "Planet missing." };
-  if (isPlanetOccupied(universe, planet.id, now)) {
+  if (occupationBlocksQueues(universe, planet, playerId, now)) {
     return { ok: false, error: "Construction blocked while planet is occupied." };
   }
 
@@ -163,7 +178,7 @@ export function queueShipBuild(
   advanceUniverse(universe, now);
   const planet = resolveActionPlanet(universe, player, planetId);
   if (!planet) return { ok: false, error: "Planet missing." };
-  if (isPlanetOccupied(universe, planet.id, now)) {
+  if (occupationBlocksQueues(universe, planet, playerId, now)) {
     return { ok: false, error: "Shipyard blocked while planet is occupied." };
   }
 
@@ -254,7 +269,7 @@ export function queueDefenseBuild(
   advanceUniverse(universe, now);
   const planet = resolveActionPlanet(universe, player, planetId);
   if (!planet) return { ok: false, error: "Planet missing." };
-  if (isPlanetOccupied(universe, planet.id, now)) {
+  if (occupationBlocksQueues(universe, planet, playerId, now)) {
     return { ok: false, error: "Defense yard blocked while planet is occupied." };
   }
 
