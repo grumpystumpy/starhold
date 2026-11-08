@@ -1,6 +1,7 @@
 import { MAP_GALAXIES, MAP_SYSTEMS, type PlayerView } from "@starhold/game";
 import {
   ApiError,
+  OVERLOAD_MESSAGE,
   authJoin,
   claimAnonymousPlayer,
   fetchAuthMe,
@@ -15,6 +16,8 @@ import {
   recoverAccount,
   relocateMiniFortress,
   renamePlanet,
+  requestPasswordReset,
+  confirmPasswordReset,
   revokeOtherSessions,
   selectPlanet,
   setAfterPlayerMutation,
@@ -49,6 +52,18 @@ let reconnectTimer: number | undefined;
 
 function httpStatus(err: unknown): number {
   return err instanceof ApiError ? err.status : 0;
+}
+
+/**
+ * Join, login, and account POSTs are not checked against empire state.
+ * Don't tell the player we are "checking whether the order went through".
+ */
+function authFlashMessage(err: unknown, fallback: string): string {
+  const message = err instanceof Error ? err.message : fallback;
+  if (message === OVERLOAD_MESSAGE) {
+    return "The server hiccuped. Try again in a moment.";
+  }
+  return message;
 }
 
 export function scheduleReconnect(): void {
@@ -454,10 +469,7 @@ export async function doJoin(name: string): Promise<void> {
     const status = err instanceof ApiError ? err.status : 0;
     session.holdJoin = status === 0 || status >= 500;
     session.error = null;
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Could not join.",
-    );
+    setFlash("error", authFlashMessage(err, "Could not join."));
     session.view = null;
   } finally {
     session.busy = false;
@@ -554,10 +566,7 @@ export async function doSignup(
         : "Account created — enter a commander name.",
     });
   } catch (err) {
-    setFlash(
-      "error",
-      err instanceof Error ? err.message : "Sign up failed.",
-    );
+    setFlash("error", authFlashMessage(err, "Sign up failed."));
   } finally {
     session.busy = false;
     schedulePaint();
@@ -633,7 +642,7 @@ export async function doChangePassword(current: string, next: string): Promise<v
     await changeAccountPassword(current, next);
     setFlash("notice", "Password updated. Other devices were signed out.");
   } catch (err) {
-    setFlash("error", err instanceof Error ? err.message : "Could not change password.");
+    setFlash("error", authFlashMessage(err, "Could not change password."));
   } finally {
     session.busy = false;
     schedulePaint();
@@ -649,7 +658,7 @@ export async function doRevokeOtherSessions(): Promise<void> {
     await revokeOtherSessions();
     setFlash("notice", "Other devices were signed out.");
   } catch (err) {
-    setFlash("error", err instanceof Error ? err.message : "Could not sign out other devices.");
+    setFlash("error", authFlashMessage(err, "Could not sign out other devices."));
   } finally {
     session.busy = false;
     schedulePaint();
@@ -677,7 +686,7 @@ export async function doGenerateRecoveryCodes(current: string): Promise<void> {
     }
     setFlash("notice", "Recovery codes generated. Copy them now.");
   } catch (err) {
-    setFlash("error", err instanceof Error ? err.message : "Could not generate recovery codes.");
+    setFlash("error", authFlashMessage(err, "Could not generate recovery codes."));
   } finally {
     session.busy = false;
     schedulePaint();
@@ -703,7 +712,57 @@ export async function doRecover(email: string, code: string, next: string): Prom
       notice: "Password reset. You are signed in.",
     });
   } catch (err) {
-    setFlash("error", err instanceof Error ? err.message : "Recovery failed.");
+    setFlash("error", authFlashMessage(err, "Recovery failed."));
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doRequestEmailReset(email: string): Promise<void> {
+  if (session.busy) return;
+  const trimmed = email.trim();
+  if (!trimmed) {
+    setFlash("error", "Email required.");
+    schedulePaint();
+    return;
+  }
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    const res = await requestPasswordReset(trimmed);
+    setFlash("notice", res.message);
+  } catch (err) {
+    setFlash("error", authFlashMessage(err, "Could not send a reset link."));
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doConfirmEmailReset(token: string, newPassword: string): Promise<void> {
+  if (session.busy) return;
+  if (!token || newPassword.length < 8) {
+    setFlash("error", "Enter a new password (8+ characters).");
+    schedulePaint();
+    return;
+  }
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    await confirmPasswordReset(token, newPassword);
+    session.passwordResetToken = null;
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("reset")) {
+      url.searchParams.delete("reset");
+      const next = `${url.pathname}${url.search}${url.hash}`;
+      window.history.replaceState({}, "", next || "/");
+    }
+    setFlash("notice", "Password updated. Log in with the new password.");
+  } catch (err) {
+    setFlash("error", authFlashMessage(err, "Reset failed."));
   } finally {
     session.busy = false;
     schedulePaint();

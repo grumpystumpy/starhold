@@ -54,6 +54,7 @@ import {
   launchMaxExpeditions,
   leaveAlliance,
   markEventsRead,
+  OCCUPATION_DURATION_MS,
   playerView,
   publicCombatReport,
   pushEventLog,
@@ -166,6 +167,7 @@ export function createApp(): Hono {
         503,
       );
     }
+    return;
   });
 
   // Gzip JSON when the caller asks. Browsers send Accept-Encoding; unit
@@ -1559,6 +1561,9 @@ export function createApp(): Hono {
         starshards?: number;
         colonySlot?: number;
         inbox?: boolean;
+        occupyMini?: boolean;
+        occupyNonMini?: boolean;
+        occupierPlayerId?: string;
       };
       if (!body.playerId) {
         return c.json({ error: "playerId required." }, 400);
@@ -1622,6 +1627,48 @@ export function createApp(): Hono {
             universe.planets[id] = colony;
             if (!player.planetIds.includes(id)) player.planetIds.push(id);
           }
+        }
+        if (body.occupyMini) {
+          const now = Date.now();
+          const miniId = (universe.miniPlanetIds ?? []).find((id) => {
+            const candidate = universe.planets[id];
+            return Boolean(candidate?.flags?.mini && !candidate.ownerPlayerId);
+          });
+          const mini = miniId ? universe.planets[miniId] : undefined;
+          if (!mini) return c.json({ error: "No free mini planet." }, 500);
+          mini.ownerPlayerId = player.id;
+          if (!player.planetIds.includes(mini.id)) player.planetIds.push(mini.id);
+          mini.resources = { metal: 100_000, crystal: 100_000, deuterium: 20_000 };
+          mini.lastTickAt = now;
+          if (!universe.occupations) universe.occupations = {};
+          universe.occupations[mini.id] = {
+            planetId: mini.id,
+            occupierPlayerId: player.id,
+            mothershipFleetId: `e2e_occ_${mini.id}`,
+            startedAt: now,
+            endsAt: now + OCCUPATION_DURATION_MS,
+          };
+          player.activePlanetId = mini.id;
+        }
+        if (body.occupyNonMini) {
+          const occupierId = body.occupierPlayerId;
+          if (
+            planet.flags?.mini ||
+            !occupierId ||
+            occupierId === player.id ||
+            !universe.players[occupierId]
+          ) {
+            return c.json({ error: "A distinct occupier and non-mini planet are required." }, 400);
+          }
+          const now = Date.now();
+          if (!universe.occupations) universe.occupations = {};
+          universe.occupations[planet.id] = {
+            planetId: planet.id,
+            occupierPlayerId: occupierId,
+            mothershipFleetId: `e2e_occ_${planet.id}`,
+            startedAt: now,
+            endsAt: now + OCCUPATION_DURATION_MS,
+          };
         }
         if (body.inbox) {
           const now = Date.now();

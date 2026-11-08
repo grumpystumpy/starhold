@@ -9,6 +9,7 @@ import { createActiveWaitClock } from "./active-wait-clock.mjs";
  *   STARHOLD_E2E=1 must be set on the server for /api/e2e/discover-mini
  */
 import { createRequire } from "node:module";
+import { captureBrowserErrors } from "./browser-error-capture.mjs";
 
 const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:3001";
 const API = process.env.STARHOLD_API ?? "http://127.0.0.1:3001";
@@ -147,6 +148,7 @@ async function browserFlows(email, password, playerId) {
   const browser = await playwright.chromium.launch({ headless: true });
   const context = await browser.newContext();
   const page = await context.newPage();
+  captureBrowserErrors(page, "e2e-quality-gate");
   try {
     await page.goto(WEB, { waitUntil: "networkidle" });
 

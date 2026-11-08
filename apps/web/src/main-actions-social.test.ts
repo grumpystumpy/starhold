@@ -1,8 +1,8 @@
 import "./test-dom";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it, mock } from "node:test";
 import type { PlayerView } from "@starhold/game";
-import { NOT_APPLIED_MESSAGE } from "./api";
+import { COULD_NOT_CONFIRM_MESSAGE, NOT_APPLIED_MESSAGE, OVERLOAD_MESSAGE } from "./api";
 
 const { doPostAllianceChat } = await import("./main-actions-alliances");
 const { doSetSeasonTitle } = await import("./main-actions-seasons");
@@ -250,5 +250,47 @@ describe("social and season actions settleMutation recovery", () => {
     assert.equal(states, 1);
     assert.equal(session.error, null);
     assert.equal(session.notice, "Alert marked read.");
+  });
+
+  it("event action: state re-check that never returns a view says couldn't-confirm", async () => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    setPaintImpl(() => {});
+    session.view = baseView();
+    session.busy = false;
+    session.error = null;
+    session.notice = null;
+
+    let posts = 0;
+    let states = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      if (url.includes("/api/events/read")) {
+        posts += 1;
+        return new Response("<html>Error 503</html>", { status: 503 });
+      }
+      if (url.includes("/api/state")) {
+        states += 1;
+        return new Response("<html>Error 503</html>", { status: 503 });
+      }
+      throw new Error(`unexpected ${url}`);
+    };
+
+    try {
+      const promise = doMarkEventsRead(["e1"]);
+      await new Promise((r) => setImmediate(r));
+      assert.equal(states, 1);
+      mock.timers.tick(1500);
+      await promise;
+    } finally {
+      globalThis.fetch = originalFetch;
+      mock.timers.reset();
+    }
+
+    assert.equal(posts, 1);
+    assert.equal(states, 2);
+    assert.equal(session.error, COULD_NOT_CONFIRM_MESSAGE);
+    assert.notEqual(session.error, OVERLOAD_MESSAGE);
+    assert.notEqual(session.error, NOT_APPLIED_MESSAGE);
   });
 });

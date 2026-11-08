@@ -12,7 +12,7 @@ import {
   type EventLogEntry,
   type PlayerView,
 } from "@starhold/game";
-import { fmt, fmtCoords } from "./format";
+import { fmt, fmtCompact, fmtCoords } from "./format";
 import { escapeAttr, escapeHtml } from "./render-escape";
 import { battleReplayRound, combatBattleExtrasHtml } from "./render-fleets-panels";
 
@@ -331,8 +331,8 @@ function renderReportSubwindow(view: PlayerView): string {
           </div>
           <div class="report-section">
             <p class="meta"><strong>Result:</strong> ${pres.label} (${escapeHtml(report.outcome.replace("_", " "))})</p>
-            <p class="meta"><strong>Attacker:</strong> ${escapeHtml(report.attackerName)} ${atkCoords ? `(${atkCoords})` : ""} — Total ships lost: ${fmt(loss.attackerShipsLost)} · Points lost: ${fmt(loss.attackerPointsLost)}</p>
-            <p class="meta"><strong>Defender:</strong> ${escapeHtml(report.defenderName)} (${defCoords}) — Total ships lost: ${fmt(loss.defenderShipsLost)} · Points lost: ${fmt(loss.defenderPointsLost)}</p>
+            <p class="meta"><strong>Attacker:</strong> ${escapeHtml(report.attackerName)} ${atkCoords ? `(${atkCoords})` : ""} — Total ships lost: ${fmt(loss.attackerShipsLost)} · Points lost: ${fmtCompact(loss.attackerPointsLost)}</p>
+            <p class="meta"><strong>Defender:</strong> ${escapeHtml(report.defenderName)} (${defCoords}) — Total ships lost: ${fmt(loss.defenderShipsLost)} · Points lost: ${fmtCompact(loss.defenderPointsLost)}</p>
           </div>
           <div class="report-section">
             <h4>Debris & Summary</h4>

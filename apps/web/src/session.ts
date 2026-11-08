@@ -75,6 +75,8 @@ export const session = {
   pendingGalaxyFleetDraft: null as FleetDraft | null,
   /** Ignore duplicate click after pointerup already dispatched the armed action. */
   suppressClickUntil: 0,
+  /** `?reset=` token for the email password-reset landing. Null hides the form. */
+  passwordResetToken: null as string | null,
   /** A 5xx or network failure must not offer a new commander. */
   holdJoin: false,
 };

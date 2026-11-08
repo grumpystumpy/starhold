@@ -126,4 +126,34 @@ Optional save fields (older rows omit them and still load): `account.sessionEpoc
 
 Password change and recover are rate-limited. The join screen's Forgot password? link opens the recover form. It does not replace email + password signup or login.
 
+## Mini-planet occupation
+
+An occupy win on a mini planet already captures it: `ownerPlayerId` and `planetIds` move to the occupier. While that occupation is active, occupied means owned. The occupier can queue buildings, ships, and defenses there (field caps and mini-kind limits still apply), and mine income stays on the mini instead of the 30/70 split. A non-mini occupation is unchanged, including the yard blocks and the split. When the occupation ends, the capturer keeps the mini until a later capture or vacate. No new save fields.
+
+## Test safety nets
+
+Cross-version fixtures live in `apps/server/src/fixtures/`. `pre-row-save.json` is a schema-2 universe blob (the pre-row-save shape) with single-object build and research queues. `pre-onboarding-boss-save.json` is a schema-4 universe with no `player.onboarding` and no `pirateBoss*` fields. `pre-oauth-account.json` is an account row with email, peppered password hash, and `playerId` only — no `sessionEpoch`, `recoveryCodeHashes`, or OAuth fields. Both universes keep an unfinished `seedCursor` so normalize does not reseed the full map. `packages/game/src/cross-version-save.test.ts` loads each universe through `migrateOrResetUniverse`, asserts `didReset` is false, and checks resources, buildings, research, the in-flight fleet, and queues. One short tick must not throw. `apps/server/src/cross-version-account.test.ts` loads the same blobs through the KV universe reader and the account through `getAccountById` / `authenticateEmailPassword`.
+
+To add a fixture for the next save shape: commit a sanitized JSON snapshot from before that migration (no live emails or raw passwords), keep `seedCursor` unfinished when the blob is not a full map, and extend the two tests so the new fields survive with `didReset === false`.
+
+`npm run test:break` runs `scripts/deliberate-break-check.mjs`. It hardlink-copies the tree, then breaks only the copy: resource production, combat resolution, save normalize, password verify, and the occupied-planet queue guard. The script fails if any of those focused tests still pass. It does not edit the working tree. Full-tier runs it after unit tests.
+
+`noImplicitOverride`, `noFallthroughCasesInSwitch`, and `noImplicitReturns` are on in `tsconfig.base.json`. `noUncheckedIndexedAccess` stays off: the fixes are not small and include `packages/game/src/world-mini.ts`. Lint also rejects `debugger`, `eval(`, `fit(`, `fdescribe(`, `xit` and `xdescribe` calls.
+
+
+## Email password reset
+
+Email reset is off until a provider is configured. Set `EMAIL_PROVIDER=resend`, `RESEND_API_KEY`, and `EMAIL_FROM` (and `PUBLIC_URL` for the link origin). `GET /api/auth/providers` then returns `emailReset: true`, and the join screen shows "Email me a reset link" next to Forgot password? Recovery codes are unchanged.
+
+`POST /api/auth/reset/request` always answers 200 with the same body, rate-limited per email and IP. The token is 32 random bytes, stored only as `hashToken` on optional `account.resetTokenHash` plus `resetTokenExpiresAt` (30 minutes), and indexed at `starhold:reset:<hash>` so confirm does not scan accounts. `POST /api/auth/reset/confirm` `{ token, newPassword }` is single-use, sets the password, bumps `sessionEpoch` (other devices are signed out), and clears the token. `EMAIL_MOCK=1` keeps the last message in memory (`GET /api/auth/reset/mock`) and is refused on Workers unless `STARHOLD_E2E=1`. The landing page is `/?reset=<token>`.
+
+## Action recovery copy
+
+A failed order re-checks state once. If that read times out or never returns a view, the flash is "Couldn't confirm. Check and tap again if needed." "Not applied — tap again." is only used when a view proves the order did not land. Account actions (join, login, signup, password, recovery codes) never show the overload "checking" line unless a state read follows. The galaxy jump field uses `inputmode="decimal"`.
+
+
+## CPU bursts and pirate smoke retries
+
+`npm run perf:cpu-burst` posts 10 `POST /api/build-ship` calls and 10 `POST /api/build-defense` calls back to back. On `wrangler dev --local` with `STARHOLD_CPU_PROFILE=1`, the warm run's `x-starhold-cpu-ms` max was 69 ms for both bursts, over the 10 ms free-plan limit. Build rules are unchanged. Numbers and the method are in `docs/cloudflare.md`. The UI smoke signs up a fresh commander, up to 5 times, when the home galaxy has no pirate. It logs `pirate-home-retries:N`, still requires the galaxy page to show `galaxy-pirate`, and fails with a different message when a pirate exists only outside those home galaxies or when no pirate base was found. State reads for that search stay within 5×399.
+
 

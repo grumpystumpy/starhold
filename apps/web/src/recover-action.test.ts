@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import type { PlayerView } from "@starhold/game";
 import {
+  COULD_NOT_CONFIRM_MESSAGE,
   GET_TIMEOUT_MS,
   NOT_APPLIED_MESSAGE,
   OVERLOAD_MESSAGE,
@@ -298,7 +299,7 @@ describe("failed actions check state", () => {
     assert.equal(session.error, NOT_APPLIED_MESSAGE);
   });
 
-  it("does not fetch state after a 400", async () => {
+  it("refreshes state after a rejected upgrade", async () => {
     setPaintImpl(() => {});
     session.view = view([]);
     session.busy = false;
@@ -318,7 +319,12 @@ describe("failed actions check state", () => {
       }
       if (url.includes("/api/state")) {
         states += 1;
-        return new Response("{}", { status: 200 });
+        const fresh = view([]);
+        fresh.planet.resources = { metal: 0, crystal: 0, deuterium: 0 };
+        return new Response(JSON.stringify(fresh), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
       }
       throw new Error(`unexpected ${url}`);
     };
@@ -328,7 +334,12 @@ describe("failed actions check state", () => {
       globalThis.fetch = original;
     }
     assert.equal(posts, 1);
-    assert.equal(states, 0);
+    assert.equal(states, 1);
+    assert.deepEqual(session.view?.planet.resources, {
+      metal: 0,
+      crystal: 0,
+      deuterium: 0,
+    });
     assert.equal(session.error, "Not enough metal.");
   });
 
@@ -539,7 +550,7 @@ describe("failed actions check state", () => {
     assert.match(session.notice ?? "", /Queued upgrade/);
   });
 
-  it("does not retry state check on non-retryable failure (e.g. 400), showing NOT_APPLIED_MESSAGE", async () => {
+  it("does not retry state check on non-retryable failure (e.g. 400), showing couldn't-confirm", async () => {
     setPaintImpl(() => {});
     session.view = view([]);
     session.busy = false;
@@ -570,10 +581,16 @@ describe("failed actions check state", () => {
     }
     assert.equal(posts, 1);
     assert.equal(states, 1);
-    assert.equal(session.error, NOT_APPLIED_MESSAGE);
+    assert.equal(session.error, COULD_NOT_CONFIRM_MESSAGE);
+    assert.equal(
+      COULD_NOT_CONFIRM_MESSAGE,
+      "Couldn't confirm. Check and tap again if needed.",
+    );
+    assert.notEqual(session.error, OVERLOAD_MESSAGE);
+    assert.notEqual(session.error, NOT_APPLIED_MESSAGE);
   });
 
-  it("shows 'Not applied — tap again' when state check fails twice", async () => {
+  it("shows couldn't-confirm when the state check fails twice", async () => {
     mock.timers.enable({ apis: ["setTimeout"] });
     setPaintImpl(() => {});
     session.view = view([]);
@@ -609,7 +626,9 @@ describe("failed actions check state", () => {
     }
     assert.equal(posts, 1);
     assert.equal(states, 2);
-    assert.equal(session.error, NOT_APPLIED_MESSAGE);
+    assert.equal(session.error, COULD_NOT_CONFIRM_MESSAGE);
+    assert.notEqual(session.error, OVERLOAD_MESSAGE);
+    assert.notEqual(session.error, NOT_APPLIED_MESSAGE);
   });
 
   it("build-ship gets 503 while older batch finishes: reports applied if new batch saved, 1 POST made", async () => {
@@ -1023,4 +1042,5 @@ describe("failed actions check state", () => {
     assert.equal(session.error, null);
     assert.match(session.notice ?? "", /Queued 5× Light Laser Turret/);
   });
+
 });

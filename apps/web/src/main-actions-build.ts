@@ -73,6 +73,13 @@ function queueItems(
   return view.planet.buildQueue;
 }
 
+async function waitForPendingPaint(): Promise<void> {
+  while (session.paintQueued) {
+    const remaining = Math.max(0, session.gestureGraceUntil - Date.now());
+    await new Promise<void>((resolve) => window.setTimeout(resolve, remaining + 5));
+  }
+}
+
 export async function doUpgrade(buildingId: BuildingId): Promise<void> {
   if (!session.view) return;
   if (session.busy) {
@@ -114,6 +121,8 @@ export async function doUpgrade(buildingId: BuildingId): Promise<void> {
       successNotice: upgradeNotice,
     });
   } finally {
+    schedulePaint();
+    await waitForPendingPaint();
     session.busy = false;
     schedulePaint();
   }

@@ -37,6 +37,8 @@ import {
   doGenerateRecoveryCodes,
   doChangePassword,
   doRecover,
+  doRequestEmailReset,
+  doConfirmEmailReset,
   doRevokeOtherSessions,
   doTradeResources,
   doCreateAlliance,
@@ -121,6 +123,23 @@ function parseGalaxyFleetCoords(raw: string | null): Coordinates | null {
     return null;
   }
   return { galaxy: parts[0]!, system: parts[1]!, slot: parts[2]! };
+}
+
+export async function submitGalaxyJump(raw: string): Promise<void> {
+  const currentGalaxy = session.galaxyGalaxy ?? session.view?.galaxy.galaxy ?? 1;
+  const parsed = parseGalaxyCoords(raw, currentGalaxy);
+  if ("error" in parsed) {
+    setFlash("error", parsed.error);
+    schedulePaint();
+    return;
+  }
+  if (
+    session.view?.galaxy.galaxy === parsed.galaxy &&
+    session.view.galaxy.system === parsed.system
+  ) {
+    return;
+  }
+  await doGalaxyJump(parsed.galaxy, parsed.system);
 }
 
 export function bindClickHandlers(): void {
@@ -266,6 +285,13 @@ export function bindClickHandlers(): void {
         ev.preventDefault();
         const recover = root.querySelector<HTMLFormElement>("#recover-form");
         if (recover) recover.hidden = false;
+        return;
+      }
+
+      if (closestActionEl(target, "[data-auth-email-reset]")) {
+        ev.preventDefault();
+        const reset = root.querySelector<HTMLFormElement>("#email-reset-request-form");
+        if (reset) reset.hidden = false;
         return;
       }
 
@@ -1022,15 +1048,8 @@ export function bindClickHandlers(): void {
     if (!(form instanceof HTMLFormElement)) return;
     if (form.matches("[data-galaxy-jump-form]")) {
       ev.preventDefault();
-      const currentGalaxy = session.galaxyGalaxy ?? session.view?.galaxy.galaxy ?? 1;
-      const parsed = parseGalaxyCoords(form.querySelector<HTMLInputElement>("#galaxy-jump")?.value ?? "", currentGalaxy);
-      if ("error" in parsed) {
-        setFlash("error", parsed.error);
-        schedulePaint();
-        return;
-      }
-      if (session.view?.galaxy.galaxy === parsed.galaxy && session.view.galaxy.system === parsed.system) return;
-      void doGalaxyJump(parsed.galaxy, parsed.system);
+      const raw = form.querySelector<HTMLInputElement>("#galaxy-jump")?.value ?? "";
+      void submitGalaxyJump(raw);
       return;
     }
 
@@ -1073,6 +1092,26 @@ export function bindClickHandlers(): void {
       const code = form.querySelector<HTMLInputElement>("#recover-code")?.value ?? "";
       const next = form.querySelector<HTMLInputElement>("#recover-password")?.value ?? "";
       void doRecover(email, code, next);
+      return;
+    }
+
+    if (form.id === "email-reset-request-form") {
+      ev.preventDefault();
+      if (session.busy) return;
+      const email = form.querySelector<HTMLInputElement>("#email-reset-address")?.value ?? "";
+      void doRequestEmailReset(email);
+      return;
+    }
+
+    if (form.id === "password-reset-form") {
+      ev.preventDefault();
+      if (session.busy) return;
+      const token =
+        session.passwordResetToken ||
+        form.querySelector<HTMLInputElement>("[data-testid='password-reset-token']")?.value ||
+        "";
+      const next = form.querySelector<HTMLInputElement>("#password-reset-password")?.value ?? "";
+      void doConfirmEmailReset(token, next);
       return;
     }
 

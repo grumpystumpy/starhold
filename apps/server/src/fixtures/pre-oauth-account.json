@@ -1,0 +1,8 @@
+{
+  "id": "acct_fixture_pre_oauth",
+  "email": "old.commander@example.test",
+  "passwordHash": "scrypt$Q3QnZLw2q6hre42ROx_pIA$A1AiIEOWgYPADBjFUnpyIjtSI1cF1eKHJQ--5GkvTl5q_UQb8eA40J3ONJCQxyWrNIkI0R1nMZrwmIISpe2Zog",
+  "playerId": "plyr_fixture_row",
+  "createdAt": 1700000000000,
+  "lastLoginAt": 1700000060000
+}

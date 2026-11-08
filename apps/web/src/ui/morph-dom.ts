@@ -53,7 +53,6 @@ function skipAttr(current: Element, name: string): boolean {
   if (name === "value" || name === "checked" || name === "selected") {
     return keepValue(current);
   }
-  if (name === "disabled") return document.activeElement === current;
   return false;
 }
 

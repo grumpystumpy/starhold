@@ -1,6 +1,7 @@
 import type { PlayerView } from "@starhold/game";
 import {
   ApiError,
+  COULD_NOT_CONFIRM_MESSAGE,
   fetchState,
   NOT_APPLIED_MESSAGE,
   OVERLOAD_MESSAGE,
@@ -18,6 +19,23 @@ export async function settleMutation(args: {
   successNotice: (view: PlayerView) => string | null;
 }): Promise<void> {
   const err = args.err;
+  if (err instanceof ApiError && err.status === 400 && session.view) {
+    const playerId = session.view.player.id;
+    const galaxy = session.galaxyGalaxy ?? session.view.galaxy?.galaxy;
+    const system = session.galaxySystem ?? session.view.galaxy?.system;
+    try {
+      session.view = await fetchState(playerId, galaxy, system, { fresh: true });
+    } catch (refreshErr) {
+      const detail =
+        refreshErr instanceof Error ? refreshErr.message : "unknown error";
+      setFlash("error", `${err.message} State refresh failed: ${detail}`);
+      schedulePaint();
+      return;
+    }
+    setFlash("error", err.message);
+    schedulePaint();
+    return;
+  }
   if (!(err instanceof ApiError) || !err.retryable || !session.view) {
     setFlash(
       "error",
@@ -50,11 +68,11 @@ export async function settleMutation(args: {
       try {
         view = await tryFetch();
       } catch {
-        setFlash("error", NOT_APPLIED_MESSAGE);
+        setFlash("error", COULD_NOT_CONFIRM_MESSAGE);
         return;
       }
     } else {
-      setFlash("error", NOT_APPLIED_MESSAGE);
+      setFlash("error", COULD_NOT_CONFIRM_MESSAGE);
       return;
     }
   }

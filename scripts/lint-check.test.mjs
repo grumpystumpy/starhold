@@ -20,3 +20,11 @@ test("reports forbidden pattern violations", () => {
     assert.ok(issues[0].includes(`Found forbidden pattern '${pattern}'`), `Expected issue for pattern ${pattern}`);
   }
 });
+
+test("rejects disabled test calls", () => {
+  const files = [
+    { path: "packages/game/src/test.ts", content: ["x", "it("].join("") },
+    { path: "apps/server/src/test.ts", content: ["x", "describe("].join("") },
+  ];
+  assert.equal(findLintIssues(files).length, 2);
+});

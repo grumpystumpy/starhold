@@ -10,7 +10,7 @@ import {
   type FleetShips,
   type PlayerView,
 } from "@starhold/game";
-import { fmt, fmtCoords, fmtCoordsLink, fmtEta, remainingSeconds } from "./format";
+import { fmt, fmtCompact, fmtCoords, fmtCoordsLink, fmtEta, remainingSeconds } from "./format";
 import { planetDiscHtml } from "./planet-disc";
 import { escapeAttr, escapeHtml } from "./render-escape";
 import { infoTooltip } from "./render-tooltips";
@@ -187,7 +187,7 @@ export function galaxyPanel(
       const tag = s.allianceTag ? ` [${escapeHtml(s.allianceTag)}]` : "";
       const points =
         s.playerId && typeof s.empirePoints === "number"
-          ? ` · ${fmt(s.empirePoints)} pts`
+          ? ` · ${fmtCompact(s.empirePoints)} pts`
           : "";
       const who = s.playerName
         ? `${escapeHtml(s.playerName)}${tag}${s.isOwn ? " (you)" : ""}${s.isMini ? " · Mini" : ""}${points}${moon}`
@@ -307,7 +307,7 @@ export function galaxyPanel(
             <button type="button" data-galaxy-nav="next" data-testid="galaxy-next" ${busy ? "disabled" : ""}>System ▶</button>
           </div>
           <div class="galaxy-nav-row galaxy-nav-row-coords" data-testid="galaxy-nav-row-coords">
-            <form data-galaxy-jump-form><input id="galaxy-jump" data-testid="galaxy-jump" type="text" inputmode="text" enterkeyhint="go" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="Galaxy and system" placeholder="x:xxx" /></form>
+            <form data-galaxy-jump-form><input id="galaxy-jump" data-testid="galaxy-jump" type="text" inputmode="decimal" enterkeyhint="go" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="Galaxy and system" placeholder="x:xxx" /></form>
             <span data-testid="galaxy-label">${galaxy.galaxy}:${galaxy.system} / ${MAP_SYSTEMS}</span>
           </div>
           <div class="galaxy-nav-row galaxy-nav-row-galaxy" data-testid="galaxy-nav-row-galaxy">

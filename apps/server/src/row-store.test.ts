@@ -1094,9 +1094,62 @@ describe("row save review fixes", () => {
       const state = await request("GET", `/api/state?playerId=${encodeURIComponent(joined.player.id)}`);
       const view = (await state.json()) as PlayerView;
       assert.ok(view.planet.resources.metal >= 800, `grant lost: metal ${view.planet.resources.metal}`);
+
+      const occupierJoin = await request("POST", "/api/join", { name: "Occupier" });
+      assert.equal(occupierJoin.status, 200);
+      const occupier = (await occupierJoin.json()) as PlayerView;
+      const occupied = await request("POST", "/api/e2e/grant", {
+        playerId: joined.player.id,
+        occupyNonMini: true,
+        occupierPlayerId: occupier.player.id,
+      });
+      assert.equal(occupied.status, 200);
+      const occupiedView = (await occupied.json()) as PlayerView;
+      assert.equal(occupiedView.planet.flags?.mini, undefined);
+      assert.equal(occupiedView.occupation?.occupierPlayerId, occupier.player.id);
+      const blocked = await request("POST", "/api/upgrade", {
+        playerId: joined.player.id,
+        planetId: occupiedView.planet.id,
+        buildingId: "metalMine",
+      });
+      assert.equal(blocked.status, 400);
+      const blockedBody = (await blocked.json()) as { error: string };
+      assert.equal(blockedBody.error, "Construction blocked while planet is occupied.");
     } finally {
       if (previous == null) delete process.env.STARHOLD_E2E;
       else process.env.STARHOLD_E2E = previous;
+    }
+  });
+
+  it("does not expose e2e grant in Workers when e2e hooks are off", async () => {
+    const previousRuntime = process.env.STARHOLD_RUNTIME;
+    const previousE2E = process.env.STARHOLD_E2E;
+    const previousHooks = process.env.ALLOW_E2E_HOOKS;
+    process.env.STARHOLD_RUNTIME = "workers";
+    delete process.env.STARHOLD_E2E;
+    delete process.env.ALLOW_E2E_HOOKS;
+    try {
+      const response = await createApp().request("/api/e2e/grant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          playerId: "player",
+          occupyNonMini: true,
+          occupierPlayerId: "occupier",
+        }),
+      });
+      assert.equal(response.status, 404);
+      assert.deepEqual(await response.json(), {
+        error: "Not found",
+        path: "/api/e2e/grant",
+      });
+    } finally {
+      if (previousRuntime == null) delete process.env.STARHOLD_RUNTIME;
+      else process.env.STARHOLD_RUNTIME = previousRuntime;
+      if (previousE2E == null) delete process.env.STARHOLD_E2E;
+      else process.env.STARHOLD_E2E = previousE2E;
+      if (previousHooks == null) delete process.env.ALLOW_E2E_HOOKS;
+      else process.env.ALLOW_E2E_HOOKS = previousHooks;
     }
   });
 

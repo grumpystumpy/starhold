@@ -525,8 +525,14 @@ describe("fleet send result", () => {
     });
 
     const original = globalThis.fetch;
-    globalThis.fetch = async (_input, init) => {
-      posted = String(init?.body ?? "");
+    globalThis.fetch = async (input, init) => {
+      if (init?.method === "POST") posted = String(init.body ?? "");
+      if (String(input).includes("/api/state")) {
+        return new Response(JSON.stringify(session.view), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
       return new Response(JSON.stringify({ error: "Not enough deuterium" }), {
         status: 400,
         headers: { "content-type": "application/json" },

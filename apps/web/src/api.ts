@@ -23,6 +23,10 @@ export const OVERLOAD_MESSAGE =
 
 export const NOT_APPLIED_MESSAGE = "Not applied — tap again.";
 
+/** State re-check timed out or never returned a view. Not proof the order missed. */
+export const COULD_NOT_CONFIRM_MESSAGE =
+  "Couldn't confirm. Check and tap again if needed.";
+
 export const GET_TIMEOUT_MS = 15000;
 export const POST_TIMEOUT_MS = 20000;
 export const TIMEOUT_MESSAGE =
@@ -450,6 +454,29 @@ export async function recoverAccount(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, code, next }),
+  });
+  return parse(res);
+}
+
+export async function requestPasswordReset(
+  email: string,
+): Promise<{ ok: true; message: string }> {
+  const res = await credFetch("/api/auth/reset/request", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  return parse(res);
+}
+
+export async function confirmPasswordReset(
+  token: string,
+  newPassword: string,
+): Promise<{ ok: true }> {
+  const res = await credFetch("/api/auth/reset/confirm", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, newPassword }),
   });
   return parse(res);
 }
