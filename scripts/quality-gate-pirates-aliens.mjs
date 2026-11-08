@@ -15,6 +15,7 @@ import { createActiveWaitClock } from "./active-wait-clock.mjs";
 import { createRequire } from "node:module";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { captureBrowserErrors } from "./browser-error-capture.mjs";
 
 const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:3001";
 const API = process.env.STARHOLD_API ?? WEB;
@@ -77,6 +78,7 @@ async function runViewport(browser, vp, email, password, commander) {
     viewport: { width: vp.width, height: vp.height },
   });
   const page = await context.newPage();
+  captureBrowserErrors(page, `pirates-${vp.name}`);
   const dir = path.join(OUT, vp.name);
   const pass = [];
 
@@ -129,6 +131,7 @@ async function runViewport(browser, vp, email, password, commander) {
     viewport: { width: vp.width, height: vp.height },
   });
   const loginPage = await loginCtx.newPage();
+  captureBrowserErrors(loginPage, `pirates-login-${vp.name}`);
   await loginPage.goto(WEB, { waitUntil: "networkidle" });
   await loginPage.waitForSelector('[data-testid="auth-form"]', {
     timeout: 15_000,
@@ -400,7 +403,46 @@ async function main() {
     }
 
     const playerId = results[0]?.playerId;
-    if (!playerId) throw new Error("missing player for occupied-mini build check");
+    const occupierPlayerId = results[1]?.playerId;
+    if (!playerId || !occupierPlayerId) {
+      throw new Error("missing players for occupation yard checks");
+    }
+
+    const occupiedPlanet = await fetch(`${API}/api/e2e/grant`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId, occupyNonMini: true, occupierPlayerId }),
+    });
+    const occupiedPlanetView = await occupiedPlanet.json().catch(() => ({}));
+    if (!occupiedPlanet.ok) {
+      throw new Error(
+        `non-mini occupation grant failed (${occupiedPlanet.status}): ${JSON.stringify(occupiedPlanetView)}`,
+      );
+    }
+    const homeId = occupiedPlanetView.planet?.id;
+    if (!homeId || occupiedPlanetView.planet?.flags?.mini) {
+      throw new Error("occupyNonMini grant did not activate a non-mini planet");
+    }
+    const nonMiniChecks = [
+      ["/api/upgrade", { playerId, buildingId: "metalMine", planetId: homeId }, "Construction blocked while planet is occupied."],
+      ["/api/build-ship", { playerId, shipId: "scout", count: 1, planetId: homeId }, "Shipyard blocked while planet is occupied."],
+      ["/api/build-defense", { playerId, defenseId: "laserBattery", count: 1, planetId: homeId }, "Defense yard blocked while planet is occupied."],
+    ];
+    for (const [route, body, expectedError] of nonMiniChecks) {
+      const response = await fetch(`${API}${route}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (response.status !== 400 || result.error !== expectedError) {
+        throw new Error(
+          `occupied non-mini ${route} was not blocked (${response.status}): ${JSON.stringify(result)}`,
+        );
+      }
+    }
+    console.log("occupied non-mini: building, ship, and defense queues blocked");
+
     const seeded = await fetch(`${API}/api/e2e/grant`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -418,6 +460,14 @@ async function main() {
     }
     if (seededView.occupation?.occupierPlayerId !== playerId) {
       throw new Error("occupied mini is not owned by the occupier");
+    }
+    const miniYard = await fetch(`${API}/api/e2e/grant`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId, buildings: { shipyard: 1 } }),
+    });
+    if (!miniYard.ok) {
+      throw new Error(`occupied mini shipyard grant failed (${miniYard.status})`);
     }
     const upgrade = await fetch(`${API}/api/upgrade`, {
       method: "POST",
@@ -440,7 +490,25 @@ async function main() {
     if (!queued) {
       throw new Error("occupied mini build queue missing metal mine");
     }
-    console.log("occupied mini: occupier queued metal mine", miniId);
+    const ship = await fetch(`${API}/api/build-ship`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId, shipId: "scout", count: 1, planetId: miniId }),
+    });
+    const shipView = await ship.json().catch(() => ({}));
+    if (!ship.ok || !shipView.planet?.shipQueue?.some((item) => item.shipId === "scout")) {
+      throw new Error(`occupier could not queue a ship (${ship.status}): ${JSON.stringify(shipView)}`);
+    }
+    const defense = await fetch(`${API}/api/build-defense`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId, defenseId: "laserBattery", count: 1, planetId: miniId }),
+    });
+    const defenseView = await defense.json().catch(() => ({}));
+    if (!defense.ok || !defenseView.planet?.defenseQueue?.some((item) => item.defenseId === "laserBattery")) {
+      throw new Error(`occupier could not queue a defense (${defense.status}): ${JSON.stringify(defenseView)}`);
+    }
+    console.log("occupied mini: occupier queued building, ship, and defense", miniId);
   } finally {
     await browser.close();
   }

@@ -14,8 +14,8 @@ export const FORBIDDEN_PATTERNS = [
   "eval(",
   "fit(",
   "fdescribe(",
-  "xit(",
-  "xdescribe(",
+  "x" + "it(",
+  "x" + "describe(",
 ];
 
 export function findLintIssues(files) {

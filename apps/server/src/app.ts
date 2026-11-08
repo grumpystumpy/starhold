@@ -1562,6 +1562,8 @@ export function createApp(): Hono {
         colonySlot?: number;
         inbox?: boolean;
         occupyMini?: boolean;
+        occupyNonMini?: boolean;
+        occupierPlayerId?: string;
       };
       if (!body.playerId) {
         return c.json({ error: "playerId required." }, 400);
@@ -1647,6 +1649,26 @@ export function createApp(): Hono {
             endsAt: now + OCCUPATION_DURATION_MS,
           };
           player.activePlanetId = mini.id;
+        }
+        if (body.occupyNonMini) {
+          const occupierId = body.occupierPlayerId;
+          if (
+            planet.flags?.mini ||
+            !occupierId ||
+            occupierId === player.id ||
+            !universe.players[occupierId]
+          ) {
+            return c.json({ error: "A distinct occupier and non-mini planet are required." }, 400);
+          }
+          const now = Date.now();
+          if (!universe.occupations) universe.occupations = {};
+          universe.occupations[planet.id] = {
+            planetId: planet.id,
+            occupierPlayerId: occupierId,
+            mothershipFleetId: `e2e_occ_${planet.id}`,
+            startedAt: now,
+            endsAt: now + OCCUPATION_DURATION_MS,
+          };
         }
         if (body.inbox) {
           const now = Date.now();

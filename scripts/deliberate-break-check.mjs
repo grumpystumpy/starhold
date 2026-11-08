@@ -109,12 +109,12 @@ const CHECKS = [
     file: "packages/game/src/world-queues.ts",
     apply(text) {
       const pattern =
-        /  if \(isPlanetOccupied\(universe, planet\.id, now\)\) \{\n    return \{ ok: false, error: "[^"]+" \};\n  \}\n/g;
+        /return !\(isMiniPlanet\(planet\) && planet\.ownerPlayerId === playerId\);/g;
       const matches = text.match(pattern);
-      if (!matches || matches.length !== 3) {
-        throw new Error(`expected 3 occupation guards, found ${matches?.length ?? 0}`);
+      if (!matches || matches.length !== 1) {
+        throw new Error(`expected 1 occupation guard helper, found ${matches?.length ?? 0}`);
       }
-      return text.replace(pattern, "");
+      return text.replace(pattern, "return false;");
     },
   },
 ];

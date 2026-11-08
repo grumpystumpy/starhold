@@ -138,7 +138,7 @@ To add a fixture for the next save shape: commit a sanitized JSON snapshot from 
 
 `npm run test:break` runs `scripts/deliberate-break-check.mjs`. It hardlink-copies the tree, then breaks only the copy: resource production, combat resolution, save normalize, password verify, and the occupied-planet queue guard. The script fails if any of those focused tests still pass. It does not edit the working tree. Full-tier runs it after unit tests.
 
-`noImplicitOverride`, `noFallthroughCasesInSwitch`, and `noImplicitReturns` are on in `tsconfig.base.json`. `noUncheckedIndexedAccess` stays off: the fixes are not small and include `packages/game/src/world-mini.ts`. Lint also rejects `debugger`, `eval(`, `fit(`, `fdescribe(`, `xit(`, and `xdescribe(`.
+`noImplicitOverride`, `noFallthroughCasesInSwitch`, and `noImplicitReturns` are on in `tsconfig.base.json`. `noUncheckedIndexedAccess` stays off: the fixes are not small and include `packages/game/src/world-mini.ts`. Lint also rejects `debugger`, `eval(`, `fit(`, `fdescribe(`, `xit` and `xdescribe` calls.
 
 
 ## Email password reset

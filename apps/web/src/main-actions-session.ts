@@ -734,7 +734,7 @@ export async function doRequestEmailReset(email: string): Promise<void> {
     const res = await requestPasswordReset(trimmed);
     setFlash("notice", res.message);
   } catch (err) {
-    setFlash("error", err instanceof Error ? err.message : "Could not send a reset link.");
+    setFlash("error", authFlashMessage(err, "Could not send a reset link."));
   } finally {
     session.busy = false;
     schedulePaint();
@@ -762,7 +762,7 @@ export async function doConfirmEmailReset(token: string, newPassword: string): P
     }
     setFlash("notice", "Password updated. Log in with the new password.");
   } catch (err) {
-    setFlash("error", err instanceof Error ? err.message : "Reset failed.");
+    setFlash("error", authFlashMessage(err, "Reset failed."));
   } finally {
     session.busy = false;
     schedulePaint();

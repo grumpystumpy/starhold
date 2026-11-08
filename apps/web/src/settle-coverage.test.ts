@@ -196,6 +196,8 @@ describe("settleMutation coverage for exported POST actions", () => {
       doRevokeOtherSessions: () => actions.doRevokeOtherSessions(),
       doGenerateRecoveryCodes: () => actions.doGenerateRecoveryCodes("password1"),
       doRecover: () => actions.doRecover("a@example.com", "ABCD-EFGH", "password1"),
+      doRequestEmailReset: () => actions.doRequestEmailReset("a@example.com"),
+      doConfirmEmailReset: () => actions.doConfirmEmailReset("test-token", "password1"),
     };
     assert.deepEqual(
       Object.keys(calls).sort(),

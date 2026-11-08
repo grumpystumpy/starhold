@@ -17,6 +17,7 @@ import { createActiveWaitClock } from "./active-wait-clock.mjs";
 import { createRequire } from "node:module";
 import { runPollCadence } from "./poll-cadence-e2e.mjs";
 import { fleetToStep2 } from "./lib/fleet-two-step.mjs";
+import { captureBrowserErrors } from "./browser-error-capture.mjs";
 
 const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:5173";
 const API = process.env.STARHOLD_API ?? "http://127.0.0.1:3001";
@@ -290,6 +291,7 @@ const PIRATE_READ_CAP = PIRATE_ATTEMPTS * PIRATE_SYSTEMS;
 
 async function signupFreshCommander(browser, stamp) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  captureBrowserErrors(page, "ui-smoke-signup");
   const email = `pirate${stamp}@example.com`;
   const password = "starhold-pirate";
   const name = `Pir${stamp.slice(-6)}`;
@@ -364,6 +366,7 @@ async function uiSmoke() {
 
   const urlName = `Url${Date.now().toString(36).slice(-4)}`;
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  captureBrowserErrors(page, "ui-smoke");
   await page.goto(`${WEB}/?commander=${encodeURIComponent(urlName)}`, {
     waitUntil: "networkidle",
   });
@@ -638,6 +641,7 @@ async function uiSmoke() {
   logs.push("p1-unaffordable-or-full-flash");
 
   const typedPage = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  captureBrowserErrors(typedPage, "ui-smoke-typed");
   await typedPage.goto(WEB, { waitUntil: "networkidle" });
   await typedPage.waitForSelector('[data-testid="commander-input"]');
   const typed = `Type${Date.now().toString(36).slice(-4)}`;
@@ -653,6 +657,7 @@ async function uiSmoke() {
   logs.push(`typed-join:${typed}`);
 
   const helpPage = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  captureBrowserErrors(helpPage, "ui-smoke-help");
   await helpPage.goto(WEB, { waitUntil: "networkidle" });
   const helperName = `Help${Date.now().toString(36).slice(-4)}`;
   await helpPage.evaluate(async (n) => {
@@ -814,6 +819,7 @@ async function uiSmoke() {
 
   const rivalName = `Riv${Date.now().toString(36).slice(-4)}`;
   const rivalPage = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  captureBrowserErrors(rivalPage, "ui-smoke-rival");
   await rivalPage.goto(`${WEB}/?commander=${encodeURIComponent(rivalName)}`, {
     waitUntil: "networkidle",
   });
@@ -955,6 +961,7 @@ async function authAndGoalsSmoke() {
   const playwright = require("playwright");
   const browser = await playwright.chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  captureBrowserErrors(page, "auth-goals-smoke");
   const stamp = Date.now().toString(36);
   const email = `goals${stamp}@example.com`;
   const password = "starhold-goals";

@@ -9,6 +9,7 @@ import { createActiveWaitClock } from "./active-wait-clock.mjs";
  */
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
+import { captureBrowserErrors } from "./browser-error-capture.mjs";
 
 const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:3001";
 const VIEWPORTS = [
@@ -50,6 +51,7 @@ async function runViewport(browser, viewport) {
     viewport: { width: viewport.width, height: viewport.height },
   });
   const page = await context.newPage();
+  captureBrowserErrors(page, `poll-cadence-${viewport.name}`);
   await page.addInitScript(() => {
     const state = { hidden: false };
     window.__vis = state;
@@ -276,6 +278,7 @@ async function runIdlePause(browser, viewport) {
     viewport: { width: viewport.width, height: viewport.height },
   });
   const page = await context.newPage();
+  captureBrowserErrors(page, `poll-cadence-idle-${viewport.name}`);
   await installProbe(page);
   const name = `Idle${viewport.name}${Date.now().toString(36).slice(-4)}`;
   await page.goto(`${WEB}/?commander=${encodeURIComponent(name)}`, {
