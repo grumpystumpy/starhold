@@ -147,4 +147,8 @@ Email reset is off until a provider is configured. Set `EMAIL_PROVIDER=resend`, 
 
 `POST /api/auth/reset/request` always answers 200 with the same body, rate-limited per email and IP. The token is 32 random bytes, stored only as `hashToken` on optional `account.resetTokenHash` plus `resetTokenExpiresAt` (30 minutes), and indexed at `starhold:reset:<hash>` so confirm does not scan accounts. `POST /api/auth/reset/confirm` `{ token, newPassword }` is single-use, sets the password, bumps `sessionEpoch` (other devices are signed out), and clears the token. `EMAIL_MOCK=1` keeps the last message in memory (`GET /api/auth/reset/mock`) and is refused on Workers unless `STARHOLD_E2E=1`. The landing page is `/?reset=<token>`.
 
+## Action recovery copy
+
+A failed order re-checks state once. If that read times out or never returns a view, the flash is "Couldn't confirm. Check and tap again if needed." "Not applied — tap again." is only used when a view proves the order did not land. Account actions (join, login, signup, password, recovery codes) never show the overload "checking" line unless a state read follows. The galaxy jump field uses `inputmode="decimal"`.
+
 

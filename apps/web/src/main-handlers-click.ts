@@ -125,6 +125,23 @@ function parseGalaxyFleetCoords(raw: string | null): Coordinates | null {
   return { galaxy: parts[0]!, system: parts[1]!, slot: parts[2]! };
 }
 
+export async function submitGalaxyJump(raw: string): Promise<void> {
+  const currentGalaxy = session.galaxyGalaxy ?? session.view?.galaxy.galaxy ?? 1;
+  const parsed = parseGalaxyCoords(raw, currentGalaxy);
+  if ("error" in parsed) {
+    setFlash("error", parsed.error);
+    schedulePaint();
+    return;
+  }
+  if (
+    session.view?.galaxy.galaxy === parsed.galaxy &&
+    session.view.galaxy.system === parsed.system
+  ) {
+    return;
+  }
+  await doGalaxyJump(parsed.galaxy, parsed.system);
+}
+
 export function bindClickHandlers(): void {
   root.addEventListener(
     "click",
@@ -1031,15 +1048,8 @@ export function bindClickHandlers(): void {
     if (!(form instanceof HTMLFormElement)) return;
     if (form.matches("[data-galaxy-jump-form]")) {
       ev.preventDefault();
-      const currentGalaxy = session.galaxyGalaxy ?? session.view?.galaxy.galaxy ?? 1;
-      const parsed = parseGalaxyCoords(form.querySelector<HTMLInputElement>("#galaxy-jump")?.value ?? "", currentGalaxy);
-      if ("error" in parsed) {
-        setFlash("error", parsed.error);
-        schedulePaint();
-        return;
-      }
-      if (session.view?.galaxy.galaxy === parsed.galaxy && session.view.galaxy.system === parsed.system) return;
-      void doGalaxyJump(parsed.galaxy, parsed.system);
+      const raw = form.querySelector<HTMLInputElement>("#galaxy-jump")?.value ?? "";
+      void submitGalaxyJump(raw);
       return;
     }
 
