@@ -67,6 +67,12 @@ test("vercel functions pattern matches the committed api stub the build overwrit
   );
   assert.equal(cacheHeader("/"), staticCacheControl("/"));
   assert.equal(cacheHeader("/fleet"), staticCacheControl("/fleet"));
+  assert.equal(
+    staticCacheControl("/manifest.webmanifest"),
+    "public, max-age=0, must-revalidate",
+  );
+  assert.equal(staticCacheControl("/sw.js"), "public, max-age=0, must-revalidate");
+  assert.match(staticCacheControl("/icons/icon-192.png") ?? "", /max-age=2592000/);
 
   const pkg = JSON.parse(
     fs.readFileSync(path.join(root, "package.json"), "utf8"),

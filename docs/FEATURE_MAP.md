@@ -126,4 +126,14 @@ Optional save fields (older rows omit them and still load): `account.sessionEpoc
 
 Password change and recover are rate-limited. The join screen's Forgot password? link opens the recover form. It does not replace email + password signup or login.
 
+## Installable app
+
+Starhold can be added to an iPhone or Android home screen. It is not a store app. `apps/web/public/manifest.webmanifest` is the identity (`id` `/`, standalone, theme `#0f1a24`) with 192 and 512 icons plus a maskable 512. Apple uses `/icons/apple-touch-icon.png`. The page pads `env(safe-area-inset-*)` and keeps form text at 16px on narrow screens so the keyboard does not zoom the layout.
+
+The install note explains Share → Add to Home Screen on iPhone. Android shows Install app only after the browser fires `beforeinstallprompt`. Other browsers get written steps and no Install button. Dismiss stores `starhold-pwa-install-dismissed` and does not ask again. Standalone display, including iOS `navigator.standalone`, hides the note.
+
+A shell service worker (`/sw.js`) caches only the public document, manifest, icons, and hashed `/assets/*.js|css` files, capped at 24 entries. It does not cache `/api`, auth, or player data, and it does not reload the page. While the fleet screen is open the update control will not reload. Offline copy says the game is not playable and that orders are not queued. Coming back online does not replay them.
+
+No save fields were added. `packages/game/src/fixtures/in-flight-fleet-save.json` is a main-branch universe with one deploy still in flight; `migrateOrResetUniverse` keeps that fleet.
+
 

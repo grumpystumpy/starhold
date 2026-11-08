@@ -41,6 +41,12 @@ body {
   /* scroll — fixed attachment leaves white gutters in full-page screenshots / some mobile browsers */
   background-attachment: scroll;
   background-color: var(--bg0);
+  min-height: 100dvh;
+  padding:
+    env(safe-area-inset-top)
+    env(safe-area-inset-right)
+    env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
 }
 
 #app {
@@ -180,6 +186,45 @@ button.ghost {
   background: transparent;
   color: var(--text);
   border-color: var(--line);
+}
+
+#pwa-chrome {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0.4rem 0.75rem 0;
+}
+
+#pwa-chrome:empty {
+  display: none;
+}
+
+.pwa-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--bg2) 88%, black);
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.pwa-note p {
+  margin: 0;
+  flex: 1 1 14rem;
+}
+
+@media (max-width: 640px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
 }
 
 .topbar {

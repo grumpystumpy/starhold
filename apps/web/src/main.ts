@@ -49,6 +49,7 @@ import {
 import { wireJointStrikeForm } from "./main-actions-alliances";
 import { ensureDelegatedHandlers } from "./main-handlers";
 import { initTelemetry } from "./telemetry";
+import { startPwa } from "./pwa";
 import {
   sharedReportCodeFromSearch,
   sharedCombatReportError,
@@ -153,6 +154,7 @@ async function resumePlayer(
 }
 
 async function boot(): Promise<void> {
+  startPwa();
   void initTelemetry();
   ensureDelegatedHandlers();
   ensurePopstateHandler();

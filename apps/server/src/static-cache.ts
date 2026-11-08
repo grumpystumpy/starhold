@@ -20,6 +20,9 @@ export function staticCacheControl(pathname: string): string | null {
   if (path === "/" || path.endsWith(".html") || !path.includes(".")) {
     return "public, max-age=0, must-revalidate";
   }
+  if (path === "/sw.js" || path.endsWith(".webmanifest")) {
+    return "public, max-age=0, must-revalidate";
+  }
   return null;
 }
 
