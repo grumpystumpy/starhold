@@ -167,6 +167,7 @@ export function createApp(): Hono {
         503,
       );
     }
+    return;
   });
 
   // Gzip JSON when the caller asks. Browsers send Accept-Encoding; unit

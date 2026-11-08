@@ -10,6 +10,12 @@ export const FORBIDDEN_PATTERNS = [
   ".only(",
   "test.todo(",
   "it.todo(",
+  "debugger",
+  "eval(",
+  "fit(",
+  "fdescribe(",
+  "xit(",
+  "xdescribe(",
 ];
 
 export function findLintIssues(files) {
