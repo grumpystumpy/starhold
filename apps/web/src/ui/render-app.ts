@@ -39,6 +39,8 @@ export function renderApp(
     passwordDraft?: string;
           accountEmail?: string | null;
     claimablePlayerId?: string | null;
+    emailReset?: boolean;
+    passwordResetToken?: string | null;
     activePage: NavPage;
     onEventsRefresh: () => void;
   },

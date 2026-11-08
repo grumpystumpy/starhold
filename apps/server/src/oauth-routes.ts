@@ -25,6 +25,7 @@ import {
   type OAuthProfile,
   type OAuthProviderId,
 } from "./oauth.js";
+import { emailResetEnabled } from "./email.js";
 
 function providerNotConfigured(c: Context) {
   return c.json({ error: "provider not configured" }, 404);
@@ -48,7 +49,11 @@ async function limited(c: Context, bucket: string): Promise<Response | null> {
 
 export function mountOAuthRoutes(app: Hono): void {
   app.get("/api/auth/providers", (c) => {
-    return c.json({ providers: configuredProviders(), passwordAuth: true });
+    return c.json({
+      providers: configuredProviders(),
+      passwordAuth: true,
+      emailReset: emailResetEnabled(),
+    });
   });
 
   app.get("/api/auth/oauth/:provider/start", async (c) => {

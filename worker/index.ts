@@ -36,6 +36,11 @@ const STRING_VARS = [
   "DISCORD_CLIENT_ID",
   "DISCORD_CLIENT_SECRET",
   "OAUTH_MOCK",
+  "EMAIL_PROVIDER",
+  "RESEND_API_KEY",
+  "EMAIL_FROM",
+  "EMAIL_MOCK",
+  "PUBLIC_URL",
 ] as const;
 
 export interface WorkerEnv {
@@ -61,6 +66,14 @@ export interface WorkerEnv {
   DISCORD_CLIENT_SECRET?: string;
   /** Test/e2e only. Refused on Workers unless STARHOLD_E2E=1. */
   OAUTH_MOCK?: string;
+  /** `resend` turns on email password reset. Unset keeps the feature off. */
+  EMAIL_PROVIDER?: string;
+  RESEND_API_KEY?: string;
+  EMAIL_FROM?: string;
+  /** Test/e2e only. Refused on Workers unless STARHOLD_E2E=1. */
+  EMAIL_MOCK?: string;
+  /** Public origin used in reset links. Defaults to the workers host. */
+  PUBLIC_URL?: string;
 }
 
 function applyEnv(env: WorkerEnv): void {

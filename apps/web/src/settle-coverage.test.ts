@@ -24,6 +24,8 @@ const postRecoveryExemptActions = new Set([
   "doRevokeOtherSessions",
   "doGenerateRecoveryCodes",
   "doRecover",
+  "doRequestEmailReset",
+  "doConfirmEmailReset",
 ]);
 
 function exportedDoNames(source: string): string[] {

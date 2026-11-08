@@ -59,6 +59,7 @@ import {
   pageFromLocation,
   syncSessionUrl,
 } from "./ui/router";
+import { peekEmailReset } from "./ui/render-chrome-join";
 
 function paint(): void {
   renderApp(
@@ -73,6 +74,8 @@ function paint(): void {
       passwordDraft: session.passwordDraft,
       accountEmail: session.account?.email ?? null,
       claimablePlayerId: session.claimablePlayerId,
+      emailReset: peekEmailReset(),
+      passwordResetToken: session.passwordResetToken,
       activePage: session.activePage,
       onEventsRefresh: () => {
         if (session.view) void silentRefresh(session.view.player.id);
@@ -157,6 +160,9 @@ async function boot(): Promise<void> {
   ensureDelegatedHandlers();
   ensurePopstateHandler();
   session.activePage = pageFromLocation();
+  const bootParams = new URLSearchParams(window.location.search);
+  const resetParam = bootParams.get("reset")?.trim() ?? "";
+  if (resetParam) session.passwordResetToken = resetParam;
   const reportCode = sharedReportCodeFromSearch(window.location.search);
   if (reportCode) {
     root.innerHTML = `<main class="panel" data-testid="shared-combat-report-loading">Loading battle report…</main>`;
@@ -172,6 +178,8 @@ async function boot(): Promise<void> {
     return;
   }
   paint();
+
+  if (session.passwordResetToken) return;
 
   const params = new URLSearchParams(window.location.search);
   const playerIdParam = params.get("playerId")?.trim();

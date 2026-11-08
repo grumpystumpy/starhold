@@ -15,6 +15,8 @@ import {
   recoverAccount,
   relocateMiniFortress,
   renamePlanet,
+  requestPasswordReset,
+  confirmPasswordReset,
   revokeOtherSessions,
   selectPlanet,
   setAfterPlayerMutation,
@@ -704,6 +706,56 @@ export async function doRecover(email: string, code: string, next: string): Prom
     });
   } catch (err) {
     setFlash("error", err instanceof Error ? err.message : "Recovery failed.");
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doRequestEmailReset(email: string): Promise<void> {
+  if (session.busy) return;
+  const trimmed = email.trim();
+  if (!trimmed) {
+    setFlash("error", "Email required.");
+    schedulePaint();
+    return;
+  }
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    const res = await requestPasswordReset(trimmed);
+    setFlash("notice", res.message);
+  } catch (err) {
+    setFlash("error", err instanceof Error ? err.message : "Could not send a reset link.");
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doConfirmEmailReset(token: string, newPassword: string): Promise<void> {
+  if (session.busy) return;
+  if (!token || newPassword.length < 8) {
+    setFlash("error", "Enter a new password (8+ characters).");
+    schedulePaint();
+    return;
+  }
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    await confirmPasswordReset(token, newPassword);
+    session.passwordResetToken = null;
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("reset")) {
+      url.searchParams.delete("reset");
+      const next = `${url.pathname}${url.search}${url.hash}`;
+      window.history.replaceState({}, "", next || "/");
+    }
+    setFlash("notice", "Password updated. Log in with the new password.");
+  } catch (err) {
+    setFlash("error", err instanceof Error ? err.message : "Reset failed.");
   } finally {
     session.busy = false;
     schedulePaint();

@@ -22,6 +22,8 @@ export {
   doRevokeOtherSessions,
   doGenerateRecoveryCodes,
   doRecover,
+  doRequestEmailReset,
+  doConfirmEmailReset,
   resumeFromCookie,
   scheduleReconnect,
 } from "./main-actions-session.js";

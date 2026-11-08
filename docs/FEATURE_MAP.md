@@ -141,3 +141,10 @@ To add a fixture for the next save shape: commit a sanitized JSON snapshot from 
 `noImplicitOverride`, `noFallthroughCasesInSwitch`, and `noImplicitReturns` are on in `tsconfig.base.json`. `noUncheckedIndexedAccess` stays off: the fixes are not small and include `packages/game/src/world-mini.ts`. Lint also rejects `debugger`, `eval(`, `fit(`, `fdescribe(`, `xit(`, and `xdescribe(`.
 
 
+## Email password reset
+
+Email reset is off until a provider is configured. Set `EMAIL_PROVIDER=resend`, `RESEND_API_KEY`, and `EMAIL_FROM` (and `PUBLIC_URL` for the link origin). `GET /api/auth/providers` then returns `emailReset: true`, and the join screen shows "Email me a reset link" next to Forgot password? Recovery codes are unchanged.
+
+`POST /api/auth/reset/request` always answers 200 with the same body, rate-limited per email and IP. The token is 32 random bytes, stored only as `hashToken` on optional `account.resetTokenHash` plus `resetTokenExpiresAt` (30 minutes), and indexed at `starhold:reset:<hash>` so confirm does not scan accounts. `POST /api/auth/reset/confirm` `{ token, newPassword }` is single-use, sets the password, bumps `sessionEpoch` (other devices are signed out), and clears the token. `EMAIL_MOCK=1` keeps the last message in memory (`GET /api/auth/reset/mock`) and is refused on Workers unless `STARHOLD_E2E=1`. The landing page is `/?reset=<token>`.
+
+

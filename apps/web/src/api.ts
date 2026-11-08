@@ -454,6 +454,29 @@ export async function recoverAccount(
   return parse(res);
 }
 
+export async function requestPasswordReset(
+  email: string,
+): Promise<{ ok: true; message: string }> {
+  const res = await credFetch("/api/auth/reset/request", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  return parse(res);
+}
+
+export async function confirmPasswordReset(
+  token: string,
+  newPassword: string,
+): Promise<{ ok: true }> {
+  const res = await credFetch("/api/auth/reset/confirm", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, newPassword }),
+  });
+  return parse(res);
+}
+
 export async function joinGame(name: string): Promise<PlayerView> {
   const res = await credFetch("/api/join", {
     method: "POST",

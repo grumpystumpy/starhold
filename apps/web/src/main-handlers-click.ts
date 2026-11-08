@@ -37,6 +37,8 @@ import {
   doGenerateRecoveryCodes,
   doChangePassword,
   doRecover,
+  doRequestEmailReset,
+  doConfirmEmailReset,
   doRevokeOtherSessions,
   doTradeResources,
   doCreateAlliance,
@@ -266,6 +268,13 @@ export function bindClickHandlers(): void {
         ev.preventDefault();
         const recover = root.querySelector<HTMLFormElement>("#recover-form");
         if (recover) recover.hidden = false;
+        return;
+      }
+
+      if (closestActionEl(target, "[data-auth-email-reset]")) {
+        ev.preventDefault();
+        const reset = root.querySelector<HTMLFormElement>("#email-reset-request-form");
+        if (reset) reset.hidden = false;
         return;
       }
 
@@ -1073,6 +1082,26 @@ export function bindClickHandlers(): void {
       const code = form.querySelector<HTMLInputElement>("#recover-code")?.value ?? "";
       const next = form.querySelector<HTMLInputElement>("#recover-password")?.value ?? "";
       void doRecover(email, code, next);
+      return;
+    }
+
+    if (form.id === "email-reset-request-form") {
+      ev.preventDefault();
+      if (session.busy) return;
+      const email = form.querySelector<HTMLInputElement>("#email-reset-address")?.value ?? "";
+      void doRequestEmailReset(email);
+      return;
+    }
+
+    if (form.id === "password-reset-form") {
+      ev.preventDefault();
+      if (session.busy) return;
+      const token =
+        session.passwordResetToken ||
+        form.querySelector<HTMLInputElement>("[data-testid='password-reset-token']")?.value ||
+        "";
+      const next = form.querySelector<HTMLInputElement>("#password-reset-password")?.value ?? "";
+      void doConfirmEmailReset(token, next);
       return;
     }
 
