@@ -141,6 +141,22 @@ Node `performance.now()` on the synchronous game work (one commander, Workers bu
 | Seed catch-up, ~900 slices | usually 2–8 ms, one slice 10 ms | 13–29 ms |
 | `GET /api/state` after join | 1–3 ms | — |
 
+Build bursts (`POST /api/build-ship`, `POST /api/build-defense`), measured 2026-11-07 by `npm run perf:cpu-burst` (`scripts/cpu-burst.mjs`) against `wrangler dev --local` on port 8787 with `STARHOLD_CPU_PROFILE=1`. CPU is the `x-starhold-cpu-ms` header (game work inside the request scope). Wall is the client clock. One warm isolate, a new commander, then 10 calls back to back. The yard queue cap is 2, so calls 3–10 return 400 queue-full and are still timed. Free-plan limit is **10 ms per request**. Every build call was over that limit. A cold burst on the same server spiked to 107 ms (build-ship) and 116 ms (build-defense). Product behavior was not changed.
+
+| Request | Attributed CPU | Wall |
+| --- | --- | --- |
+| Join | 72 ms | 138 ms |
+| `build-ship` #1 (200) | 66 ms | 117 ms |
+| `build-ship` #2 (200) | 69 ms | 136 ms |
+| `build-ship` #3–#10 (queue full) | 58–64 ms | 104–118 ms |
+| `build-ship` burst total / max | 620 ms / 69 ms | 1147 ms |
+| `build-defense` #1 (200) | 62 ms | 103 ms |
+| `build-defense` #2 (200) | 66 ms | 122 ms |
+| `build-defense` #3–#10 (queue full) | 58–69 ms | 98–123 ms |
+| `build-defense` burst total / max | 617 ms / 69 ms | 1084 ms |
+
+The Node production server prints `x-starhold-cpu-ms` only when a request scope exists. It does not open one, so the header stays `0.00` and is not a measurement. Use the wrangler command above.
+
 A quiet poll no longer writes the universe or the lock. A 200-player cold highscore board (8.7 ms on Node) still does not fit beside a tick. The warm board (2.2 ms) does. Steady polls are the cheap path.
 
 Budgets (per request, then the next request continues): 2 raids, 40 pirate level-ups, 2 fleets, 8 drift steps, 8 systems / 1 new mini of bootstrap, 4 pirate placements. The retired Vercel implementation did not use these caps.
