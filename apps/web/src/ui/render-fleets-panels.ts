@@ -10,7 +10,7 @@ import {
   type FleetShips,
   type PlayerView,
 } from "@starhold/game";
-import { fmt, fmtCoords, fmtCoordsLink, fmtEta, remainingSeconds } from "./format";
+import { fmt, fmtCompact, fmtCoords, fmtCoordsLink, fmtEta, remainingSeconds } from "./format";
 import { planetDiscHtml } from "./planet-disc";
 import { escapeAttr, escapeHtml } from "./render-escape";
 import { infoTooltip } from "./render-tooltips";
@@ -187,7 +187,7 @@ export function galaxyPanel(
       const tag = s.allianceTag ? ` [${escapeHtml(s.allianceTag)}]` : "";
       const points =
         s.playerId && typeof s.empirePoints === "number"
-          ? ` · ${fmt(s.empirePoints)} pts`
+          ? ` · ${fmtCompact(s.empirePoints)} pts`
           : "";
       const who = s.playerName
         ? `${escapeHtml(s.playerName)}${tag}${s.isOwn ? " (you)" : ""}${s.isMini ? " · Mini" : ""}${points}${moon}`

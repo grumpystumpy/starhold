@@ -33,7 +33,7 @@ describe("highscore combat halls", () => {
     assert.match(html, /href="\/\?report=sh_hall"/);
     assert.match(html, /data-testid="hall-of-shame"/);
     assert.match(html, /Lost/);
-    assert.match(html, /9\.8k ship value lost/);
+    assert.match(html, /9\.9K ship value lost/);
   });
 });
 

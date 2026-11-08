@@ -116,7 +116,7 @@ describe("galaxy page rendering", () => {
     assert.match(html, /data-testid="galaxy-debris-1"/);
     assert.match(html, /debris 500\/200/);
     assert.doesNotMatch(html, /500M/);
-    assert.match(html, /1\.2k pts/);
+    assert.match(html, /1\.2K pts/);
     assert.match(html, /class="[^"]*galaxy-slot-occupied[^"]*galaxy-slot-marked[^"]*"[^>]*data-testid="galaxy-slot-2"/);
     assert.match(html, /data-testid="galaxy-marker-2"/);
     assert.match(html, /data-testid="galaxy-spy-2"/);
@@ -124,7 +124,7 @@ describe("galaxy page rendering", () => {
     assert.match(html, /data-testid="galaxy-preset-raid-2"/);
     assert.match(html, /class="[^"]*galaxy-slot-empty[^"]*"[^>]*data-testid="galaxy-slot-3"/);
     assert.match(html, /data-testid="galaxy-colonize-3"/);
-    assert.match(html, /3\.4k pts/);
+    assert.match(html, /3\.4K pts/);
 
     // Spec B7-17: No Mark button in any slot row
     assert.doesNotMatch(html, /data-testid="galaxy-mark-\d+"/);

@@ -26,9 +26,31 @@ export function fmt(n: number): string {
   return `${sign}${abs}`;
 }
 
-/** Compact point totals — alias to fmt. */
+/** Compact point totals rounded to one decimal place with half-up rounding. */
 export function fmtCompact(n: number): string {
-  return fmt(n);
+  if (!Number.isFinite(n)) return "—";
+  const sign = n < 0 ? "-" : "";
+  const abs = Math.floor(Math.abs(n));
+  if (abs < 1000) return `${sign}${abs}`;
+
+  const tiers: Array<[number, string]> = [
+    [1_000_000_000_000, "T"],
+    [1_000_000_000, "B"],
+    [1_000_000, "M"],
+    [1_000, "K"],
+  ];
+  let tierIndex = tiers.findIndex(([base]) => abs >= base);
+  let [base, suffix] = tiers[tierIndex]!;
+  let tenths = Math.floor(abs / (base / 10) + 0.5);
+  if (tenths >= 10_000 && tierIndex > 0) {
+    [base, suffix] = tiers[--tierIndex]!;
+    tenths = Math.floor(abs / (base / 10) + 0.5);
+  }
+  const whole = Math.floor(tenths / 10);
+  const frac = tenths % 10;
+  return frac === 0
+    ? `${sign}${whole}${suffix}`
+    : `${sign}${whole}.${frac}${suffix}`;
 }
 
 export function fmtCost(cost: Resources): string {
