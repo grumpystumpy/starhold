@@ -1541,6 +1541,13 @@ export const PIRATE_BASES_PER_GALAXY = 75;
 
 /** A base will not raid the same target again until this elapses. */
 export const PIRATE_SAME_TARGET_COOLDOWN_MS = 4 * 60 * 60 * 1000;
+/**
+ * Distance reference for pirate raid target weight.
+ * pickWeight *= 1 / (1 + (coordDistance / PIRATE_RAID_DISTANCE_REF)^2).
+ * coordDistance is |Δgalaxy|×100 + |Δsystem|×10 + |Δslot|.
+ * Aliens do not use this factor. The factor itself is never 0.
+ */
+export const PIRATE_RAID_DISTANCE_REF = 400;
 
 /** Once per 180 minutes; each base rolls nextRaidAt = periodStart + offset. */
 export const PIRATE_RAID_PERIOD_MS = 180 * 60 * 1000;

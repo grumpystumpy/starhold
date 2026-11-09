@@ -53,6 +53,7 @@ import { ownedPlanetCount } from "./world-moons.js";
 import { playerBoosts } from "./world-boosts.js";
 import {
   resolveAlienRaidArrival,
+  resolveNpcPiratePlayerFleet,
   resolvePirateRaidArrival,
   tickPirates,
 } from "./world-pirates.js";
@@ -104,6 +105,11 @@ export function resolveFleetArrival(
   fleet: FleetMission,
   now: number,
 ): void {
+  // Pirate bases are not planets. Handle npc raids before the origin-planet delete.
+  if (fleet.ownerPlayerId === "npc_pirates" && fleet.mission === "raid") {
+    resolveNpcPiratePlayerFleet(universe, fleet, now);
+    return;
+  }
   advancePlanetNow(universe, fleet.originPlanetId, now);
   if (fleet.targetPlanetId) advancePlanetNow(universe, fleet.targetPlanetId, now);
   const origin = universe.planets[fleet.originPlanetId];

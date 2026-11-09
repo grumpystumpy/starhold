@@ -348,6 +348,12 @@ export interface FleetMission {
   id: string;
   ownerPlayerId: string;
   originPlanetId: string;
+  /**
+   * Pirate base that launched an npc_pirates raid.
+   * Arrival and the return leg use this instead of a player planet.
+   * Absent on player fleets and older saves.
+   */
+  originPirateBaseId?: string | null;
   /** Set when targeting an occupied planet; null for empty-slot colonize/harvest */
   targetPlanetId: string | null;
   targetPlayerId: string | null;
