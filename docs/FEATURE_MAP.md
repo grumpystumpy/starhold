@@ -82,7 +82,7 @@ Any completed step can be claimed in any order. A second claim is rejected. Carg
 
 Both routes use the shop session ownership check (401 without a cookie, 403 for another commander) and return the updated player view. They are not called on a normal page load.
 
-Overview shows `data-testid="onboarding-panel"` until the briefing is dismissed or every step is claimed. The Goals page shows `data-testid="onboarding-restore"` while it is dismissed with steps still unclaimed, and a compact claim list otherwise.
+Overview shows `data-testid="onboarding-panel"` until the briefing is dismissed or every step is claimed. The Goals page shows `data-testid="onboarding-restore"` while it is dismissed with steps still unclaimed, and a compact claim list otherwise. Both are rendered by `render-onboarding.ts`.
 
 A finished step that is not claimed yet says "Ready to claim", adds `data-testid="onboarding-claim-hint-<stepId>"` ("Already done. Claim the reward."), and the progress line counts those rewards (`data-testid="onboarding-progress"`). The step rule in `ONBOARDING_STEPS` stays the level check. `scripts/first-hour-audit.mjs` (`npm run e2e:gate:first-hour`, from `package.json`) walks a new commander through that panel, the starter claims, Goals, the extractor, Research Lab, Power Discipline, the Shipyard, a Recon Drone, a Spy Satellite, Galaxy, and the fleet review on a local production build. Larger follow-ups are listed in `docs/FIRST_HOUR_AUDIT.md` and are not implemented here.
 
