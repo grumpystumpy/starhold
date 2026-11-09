@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   activePirateBases,
   advanceUniverse,
@@ -11,11 +13,13 @@ import {
   empirePoints,
   joinUniverse,
   launchFleet,
+  migrateOrResetUniverse,
   MAP_GALAXIES,
   MAP_SLOTS,
   MAP_SYSTEMS,
   NEWBIE_PROTECTION_POINTS,
   PIRATE_TARGET_BASE_COUNT,
+  pickRaidTarget,
   playerView,
   queueBuildingUpgrade,
   queueResearch,
@@ -40,6 +44,7 @@ import {
   HIGHSCORE_TTL_MS,
   highscoreCacheExpired,
   loadWorkingSet,
+  NPC_PLAYER_PAGE,
   migrateAll,
   migrateChunk,
   migrationDone,
@@ -269,9 +274,11 @@ describe("row save migration", () => {
     await migrateAll(inner, source);
     const baseline = await loadWorkingSet(inner, { full: true });
     const batchSql: string[][] = [];
+    const seenSql: string[] = [];
     const sqlByStatement = new WeakMap<D1Stmt, string>();
     const db: D1Like = {
       prepare(sql: string) {
+        seenSql.push(sql);
         const statement = inner.prepare(sql);
         sqlByStatement.set(statement, sql);
         return statement;
@@ -286,18 +293,25 @@ describe("row save migration", () => {
       "SELECT id, version, doc FROM save_players",
       "SELECT id, version, doc FROM save_planets WHERE owner_id != ''",
     ];
+    const npcPlayerPageSql = "SELECT id FROM save_players WHERE id > ? ORDER BY id ASC LIMIT ?";
 
     for (const work of [{ npc: true }, { maintenance: true }] as const) {
       batchSql.length = 0;
+      seenSql.length = 0;
       const loaded = await loadWorkingSet(db, work);
-      assert.equal(batchSql.length, 2, "scheduled load uses one core and one follow-up D1 batch");
-      assert.deepEqual(batchSql[0], coreReads);
-      assert.ok(batchSql[1]?.some((sql) => sql.includes("FROM save_systems")));
       if ("maintenance" in work) {
+        assert.equal(batchSql.length, 2, "scheduled load uses one core and one follow-up D1 batch");
+        assert.deepEqual(batchSql[0], coreReads);
+        assert.ok(batchSql[1]?.some((sql) => sql.includes("FROM save_systems")));
         assert.ok(batchSql[1]?.some((sql) => sql.includes("FROM save_fleets")));
         assert.ok(batchSql[1]?.some((sql) => sql.includes("FROM save_messages")));
       } else {
-        assert.ok(batchSql[1]?.some((sql) => sql.includes("FROM save_planets")));
+        assert.equal(seenSql.includes("SELECT id, version, doc FROM save_players"), false);
+        assert.equal(seenSql.includes(npcPlayerPageSql), true);
+        assert.ok(seenSql.some((sql) => sql.includes("SELECT id, version, doc FROM save_players WHERE id IN")));
+        assert.ok(seenSql.some((sql) => sql.includes("FROM save_systems")));
+        assert.ok(seenSql.some((sql) => sql.includes("FROM save_planets")));
+        assert.equal(loaded.universe.npcPlayerPageCursor, undefined);
       }
       assert.deepEqual(
         Object.keys(loaded.universe.players).sort(),
@@ -905,6 +919,213 @@ describe("row save review fixes", () => {
     );
     const loaded = await loadWorkingSet(db, { full: true });
     assert.equal(loaded.universe.aiCatchUpCursor, cursor);
+  });
+
+  it("pages NPC players, keeps full maintenance loads, and still resolves raid targets", async () => {
+    const { db: inner, raw } = sqliteD1();
+    const source = fixture();
+    const alpha = Object.values(source.players).find((player) => player.name === "OldHand")!;
+    const home = source.planets[alpha.homePlanetId]!;
+    source.debris = {
+      ...(source.debris ?? {}),
+      "deb-page": { coords: { galaxy: home.coords.galaxy, system: home.coords.system, slot: 16 }, metal: 77, crystal: 3 },
+    };
+    await migrateAll(inner, source);
+    const extraIds: string[] = [];
+    const insert = raw.prepare("INSERT INTO save_players (id, version, doc) VALUES (?, 1, ?)");
+    for (let index = 0; index < NPC_PLAYER_PAGE + 15; index += 1) {
+      const id = `a_page_${String(index).padStart(3, "0")}`;
+      extraIds.push(id);
+      insert.run(
+        id,
+        JSON.stringify({
+          id,
+          name: id,
+          planetIds: [],
+          homePlanetId: "",
+          activePlanetId: "",
+          eventLog: [],
+        }),
+      );
+    }
+    const allIds = (
+      raw.prepare("SELECT id FROM save_players ORDER BY id ASC").all() as Array<{ id: string }>
+    ).map((row) => row.id);
+    assert.equal(extraIds.length, NPC_PLAYER_PAGE + 15);
+    assert.ok(allIds.length > NPC_PLAYER_PAGE);
+    const firstPage = allIds.slice(0, NPC_PLAYER_PAGE);
+    assert.equal(firstPage.includes(alpha.id), false);
+
+    const calls: Array<{ sql: string; values: unknown[] }> = [];
+    const db: D1Like = {
+      prepare(sql: string): D1Stmt {
+        const stmt = inner.prepare(sql);
+        let bound: D1Stmt = stmt;
+        let values: unknown[] = [];
+        const api: D1Stmt = {
+          bind(...next: unknown[]) {
+            values = next;
+            bound = stmt.bind(...next);
+            return api;
+          },
+          async first<T>() {
+            calls.push({ sql, values });
+            return bound.first<T>();
+          },
+          async all<T>() {
+            calls.push({ sql, values });
+            return bound.all<T>();
+          },
+          async run() {
+            calls.push({ sql, values });
+            return bound.run();
+          },
+        };
+        return api;
+      },
+      batch(statements) {
+        return inner.batch(statements);
+      },
+    };
+    const unbounded = "SELECT id, version, doc FROM save_players";
+    const pageSql = "SELECT id FROM save_players WHERE id > ? ORDER BY id ASC LIMIT ?";
+
+    calls.length = 0;
+    const paged = await loadWorkingSet(db, { npc: true });
+    const npcSql = calls.map((call) => call.sql);
+    assert.equal(npcSql.includes(unbounded), false);
+    const pageCall = calls.find((call) => call.sql === pageSql);
+    assert.ok(pageCall);
+    assert.equal(pageCall.values[1], NPC_PLAYER_PAGE);
+    assert.equal(Object.keys(paged.universe.players).length, NPC_PLAYER_PAGE);
+    assert.deepEqual(Object.keys(paged.universe.players).sort(), [...firstPage].sort());
+    assert.equal(paged.universe.npcPlayerPageCursor, firstPage[firstPage.length - 1]);
+    assert.equal(paged.universe.id, source.id);
+    assert.equal(paged.universe.players[alpha.id], undefined);
+    assert.equal(paged.fullPlanetIds.has(alpha.homePlanetId), false);
+    assert.equal(paged.universe.debris?.["deb-page"], undefined);
+
+    calls.length = 0;
+    const maintained = await loadWorkingSet(db, { maintenance: true });
+    assert.equal(calls.some((call) => call.sql === unbounded), true);
+    assert.deepEqual(Object.keys(maintained.universe.players).sort(), [...allIds].sort());
+    calls.length = 0;
+    const full = await loadWorkingSet(db, { full: true });
+    assert.equal(calls.some((call) => call.sql === unbounded), true);
+    assert.deepEqual(Object.keys(full.universe.players).sort(), [...allIds].sort());
+    assert.equal(full.universe.fleets["fleet-old"]?.ships.scout, 1);
+    assert.equal(full.universe.planets[alpha.homePlanetId]?.resources.metal, 4321);
+    assert.equal(full.universe.planets[alpha.homePlanetId]?.buildings.metalMine, 4);
+
+    const store = createD1Store(db);
+    const seen: string[][] = [];
+    const pass = async () => {
+      await runWithScope(
+        { kv: store, db, mode: "d1", method: "POST", cpuMs: 0 },
+        () =>
+          withUniverse((universe) => {
+            const ids = Object.keys(universe.players).sort();
+            seen.push(ids);
+            const onPage = Boolean(universe.players[alpha.id]);
+            const body = universe.planets[alpha.homePlanetId];
+            if (onPage) {
+              assert.equal(universe.id, source.id);
+              assert.equal(body?.resources.metal, 4321);
+              assert.equal(body?.buildings.metalMine, 4);
+              assert.equal(universe.debris?.["deb-page"]?.metal, 77);
+              assert.equal(Boolean(universe.players[body?.ownerPlayerId ?? ""]), true);
+              const scratch = structuredClone(universe);
+              const scratchHome = scratch.planets[alpha.homePlanetId]!;
+              scratch.players[alpha.id]!.createdAt = 1;
+              scratchHome.buildings = { ...scratchHome.buildings, metalMine: 30, crystalMine: 30, solarPlant: 30 };
+              const now = scratchHome.lastTickAt + 60_000;
+              let planetHit = false;
+              for (let n = 0; n < 60 && !planetHit; n += 1) {
+                const base = createPirateBase(scratch.seed ?? scratch.id, home.coords.galaxy, home.coords.system, 8, now, n);
+                base.lastRaidAt = now - 1;
+                const target = pickRaidTarget(scratch, base, now, "pirate");
+                if (target?.kind !== "planet") continue;
+                planetHit = true;
+                assert.equal(Boolean(scratch.players[target.planet.ownerPlayerId]), true);
+                assert.equal(scratch.players[alpha.id] != null, true);
+              }
+              assert.equal(planetHit, true);
+            } else if (body) {
+              assert.equal(body.resources.metal, 0);
+              assert.equal(universe.debris?.["deb-page"], undefined);
+            }
+          }, { npc: true }),
+      );
+    };
+    await pass();
+    await pass();
+    await pass();
+    assert.deepEqual(seen[0], [...firstPage].sort());
+    assert.equal(seen[1]?.includes(alpha.id), true);
+    assert.ok((seen[1]?.length ?? 0) < NPC_PLAYER_PAGE);
+    assert.deepEqual(seen[2], [...firstPage].sort());
+    const union = new Set(seen.flat());
+    for (const id of allIds) assert.equal(union.has(id), true, id);
+    const stored = await loadWorkingSet(inner, { full: true });
+    assert.equal(stored.universe.npcPlayerPageCursor, firstPage[firstPage.length - 1]);
+    assert.equal(stored.universe.fleets["fleet-old"]?.ships.scout, 1);
+    assert.equal(stored.universe.planets[alpha.homePlanetId]?.resources.metal, 4321);
+  });
+
+  it("loads an old row save through the NPC page without resetting progress", async () => {
+    const raw = JSON.parse(
+      readFileSync(fileURLToPath(new URL("./fixtures/pre-row-save.json", import.meta.url)), "utf8"),
+    ) as UniverseState;
+    assert.equal(raw.npcPlayerPageCursor, undefined);
+    const migrated = migrateOrResetUniverse(structuredClone(raw));
+    assert.equal(migrated.didReset, false);
+    assert.equal(migrated.universe.fleets.flt_fixture_outbound?.ships.scout, 4);
+    assert.equal(migrated.universe.fleets.flt_fixture_outbound?.phase, "outbound");
+    assert.equal(migrated.universe.planets.plnt_fixture_row?.resources.metal, 123456);
+    assert.equal(migrated.universe.planets.plnt_fixture_row?.buildings.metalMine, 7);
+    assert.equal(migrated.universe.players.plyr_fixture_row?.research.energyTech, 3);
+
+    const { db } = sqliteD1();
+    await migrateAll(db, migrated.universe);
+    const store = createD1Store(db);
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "POST", cpuMs: 0 },
+      () =>
+        withUniverse((universe) => {
+          assert.equal(universe.id, "uni_fixture_pre_row");
+          assert.equal(universe.players.plyr_fixture_row?.research.energyTech, 3);
+          assert.equal(universe.planets.plnt_fixture_row?.resources.metal, 123456);
+          assert.equal(universe.planets.plnt_fixture_row?.buildings.metalMine, 7);
+          const scratch = structuredClone(universe);
+          const owner = scratch.players.plyr_fixture_row!;
+          const planet = scratch.planets.plnt_fixture_row!;
+          owner.createdAt = 1;
+          planet.buildings = { ...planet.buildings, metalMine: 30, crystalMine: 30, solarPlant: 30 };
+          const now = planet.lastTickAt + 60_000;
+          let planetHit = false;
+          for (let n = 0; n < 60; n += 1) {
+            const base = createPirateBase(scratch.seed ?? scratch.id, 1, 1, 8, now, n);
+            base.lastRaidAt = now - 1;
+            const target = pickRaidTarget(scratch, base, now, "pirate");
+            if (target?.kind !== "planet") continue;
+            planetHit = true;
+            assert.equal(target.planet.ownerPlayerId, owner.id);
+            assert.equal(Boolean(scratch.players[target.planet.ownerPlayerId]), true);
+            assert.equal(target.planet.id, planet.id);
+            break;
+          }
+          assert.equal(planetHit, true);
+          assert.equal(universe.planets.plnt_fixture_row?.buildings.metalMine, 7);
+        }, { npc: true }),
+    );
+    const kept = await loadWorkingSet(db, { full: true });
+    const again = migrateOrResetUniverse(structuredClone(kept.universe));
+    assert.equal(again.didReset, false);
+    assert.equal(again.universe.fleets.flt_fixture_outbound?.ships.scout, 4);
+    assert.equal(again.universe.fleets.flt_fixture_outbound?.phase, "outbound");
+    assert.equal(again.universe.planets.plnt_fixture_row?.resources.metal, 123456);
+    assert.equal(again.universe.planets.plnt_fixture_row?.buildings.metalMine, 7);
+    assert.equal(again.universe.players.plyr_fixture_row?.research.energyTech, 3);
   });
 
   it("saves battle debris for npc and player fights without blowing the query budget", async () => {
