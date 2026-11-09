@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { PIRATE_BOSS_TIERS } from "./data/tuning.js";
+import { PIRATE_BOSS_COOLDOWN_MS, PIRATE_BOSS_TIERS } from "./data/tuning.js";
 import { emptyDefenses, emptyFleetShips } from "./formulas.js";
 import type { FleetMission } from "./types.js";
 import {
@@ -13,8 +13,10 @@ import {
 import {
   createUniverse,
   joinUniverse,
+  pirateBossSeasonFlavor,
   playerView,
   resolvePirateRaidArrival,
+  seasonIdFromTime,
   tickPirates,
 } from "./world.js";
 
@@ -52,6 +54,19 @@ describe("seasonal pirate boss damage and rewards", () => {
     const betaView = pirateBossSummary(universe, beta.id, now);
     assert.equal(betaView?.myTier, "top10");
     assert.equal(betaView?.myRank, 2);
+    const seasonId = seasonIdFromTime(now);
+    const schedule = view.seasonLeaderboard.bossSchedule;
+    assert.equal(schedule?.phase, "active");
+    assert.equal(schedule?.seasonId, seasonId);
+    assert.equal(schedule?.title, pirateBossSeasonFlavor(seasonId).title);
+    assert.equal(
+      schedule?.nextSpawnAt,
+      universe.pirateBossActiveUntil! + PIRATE_BOSS_COOLDOWN_MS,
+    );
+    assert.equal(universe.pirateBossNextSpawnAt, 0);
+    assert.equal(view.pirateBoss?.seasonId, seasonId);
+    assert.equal(view.pirateBoss?.flavorTitle, schedule?.title);
+    assert.equal(view.pirateBoss?.projectedSpawnAt, schedule?.nextSpawnAt);
   });
 
   it("maps share to a tier and pays rank 1 plus share tiers once", () => {
@@ -132,6 +147,15 @@ describe("seasonal pirate boss damage and rewards", () => {
     assert.equal(cooling.pirateBoss?.activeUntil, undefined);
     assert.equal(cooling.pirateBoss?.nextSpawnAt, universe.pirateBossNextSpawnAt);
     assert.equal(cooling.pirateBoss?.hpPct, 0);
+    assert.equal(cooling.seasonLeaderboard.bossSchedule?.phase, "cooldown");
+    assert.equal(
+      cooling.seasonLeaderboard.bossSchedule?.activeUntil,
+      undefined,
+    );
+    assert.equal(
+      cooling.seasonLeaderboard.bossSchedule?.nextSpawnAt,
+      universe.pirateBossNextSpawnAt,
+    );
   });
 
   it("omits the boss summary on an old save with no boss and no cooldown", () => {
@@ -143,7 +167,26 @@ describe("seasonal pirate boss damage and rewards", () => {
     const { player } = joinUniverse(universe, "Old", 10);
     const view = playerView(universe, player.id, 10);
     assert.equal(view.pirateBoss, undefined);
+    assert.equal(view.seasonLeaderboard.bossSchedule?.phase, "due");
+    assert.equal(view.seasonLeaderboard.bossSchedule?.nextSpawnAt, 10);
+    assert.equal(view.seasonLeaderboard.bossSchedule?.activeUntil, undefined);
+    assert.equal(universe.pirateBossBaseId, undefined);
+    assert.equal(universe.pirateBossActiveUntil, undefined);
+    assert.equal(universe.pirateBossNextSpawnAt, undefined);
     assert.equal(view.player.allianceId ?? null, null);
     assert.equal(view.player.name, "Old");
+  });
+
+  it("keys hunt copy to the month without changing tier pay", () => {
+    const january = pirateBossSeasonFlavor("2026-01");
+    const november = pirateBossSeasonFlavor("2026-11");
+    assert.equal(january.title, "January Frost Hunt");
+    assert.equal(november.title, "November Veil Hunt");
+    assert.notEqual(january.line, november.line);
+    assert.match(january.line, /same three tiers/);
+    assert.match(november.line, /same three tiers/);
+    assert.equal(bossParticipationTier(0.1), "top10");
+    assert.equal(PIRATE_BOSS_TIERS.top10.minShare, 0.1);
+    assert.equal(PIRATE_BOSS_TIERS.participant.minShare, 0.01);
   });
 });

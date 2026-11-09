@@ -1,4 +1,4 @@
-import { PIRATE_BOSS_TIERS } from "./data/tuning.js";
+import { PIRATE_BOSS_COOLDOWN_MS, PIRATE_BOSS_TIERS } from "./data/tuning.js";
 import { fleetShipCount } from "./formulas.js";
 import type {
   PirateBossTierId,
@@ -8,6 +8,7 @@ import type {
   UniverseState,
 } from "./types.js";
 import { grantStarshards } from "./world-boosts.js";
+import { pirateBossSeasonFlavor, seasonIdFromTime } from "./world-seasons.js";
 import { addCargoToPlanet } from "./world-tick.js";
 
 export type BossLeaderboardRow = {
@@ -158,6 +159,14 @@ export function pirateBossSummary(
       ? "top1"
       : bossParticipationTier(Math.min(share, 0.999));
   const coords = base?.coords ?? { galaxy: 1, system: 1, slot: 1 };
+  const seasonId = seasonIdFromTime(now);
+  const flavor = pirateBossSeasonFlavor(seasonId);
+  const windowEnd = universe.pirateBossActiveUntil;
+  const projectedSpawnAt = living
+    ? (windowEnd ?? now) + PIRATE_BOSS_COOLDOWN_MS
+    : cooling
+      ? cooldownAt
+      : undefined;
   return {
     id: base?.id ?? "",
     coords: { ...coords },
@@ -174,5 +183,9 @@ export function pirateBossSummary(
       name: universe.players[row.playerId]?.name ?? row.playerId,
       damage: row.damage,
     })),
+    seasonId,
+    flavorTitle: flavor.title,
+    flavorLine: flavor.line,
+    projectedSpawnAt,
   };
 }

@@ -278,12 +278,15 @@ describe("galaxy page rendering", () => {
     const view = {
       galaxy: { galaxy: 1, system: 1, slots: [], minis: [], asteroids: [] },
       player: { id: "p1" },
+      now: 1_700_000_000_000,
       pirateBoss: {
         id: "boss-9",
         coords: { galaxy: 4, system: 12, slot: 6 },
         shipsLeft: 25,
         hpPct: 64,
         activeUntil: 1_700_086_400_000,
+        projectedSpawnAt: 1_700_000_000_000 + 8 * 86_400_000,
+        flavorTitle: "November Veil Hunt",
         myDamage: 10,
         myRank: 3,
         totalDamage: 100,
@@ -298,6 +301,9 @@ describe("galaxy page rendering", () => {
     assert.match(html, /data-galaxy-pirate-base="boss-9"/);
     assert.match(html, /64% hull/);
     assert.match(html, />Raid boss</);
+    assert.match(html, /November Veil Hunt/);
+    assert.match(html, /window ends in 1d 0h/);
+    assert.match(html, /next spawn 8d 0h/);
 
     view.pirateBoss = {
       ...view.pirateBoss!,

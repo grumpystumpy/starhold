@@ -72,6 +72,8 @@ describe("events banner", () => {
           myRank: 1,
           totalDamage: 800,
           myTier: "top1",
+          flavorTitle: "November Veil Hunt",
+          projectedSpawnAt: 1_700_000_000_000 + 8 * 86_400_000,
           top: [{ playerId: "p1", name: "Hunter", damage: 800 }],
         },
         reports: [{ id: "hit", bossDamage: 800 } as PlayerView["reports"][number]],
@@ -86,6 +88,9 @@ describe("events banner", () => {
     assert.match(html, /data-testid="pirate-boss-event-me"/);
     assert.match(html, /You 800 · #1/);
     assert.match(html, /data-testid="pirate-boss-report"/);
+    assert.match(html, /November Veil Hunt/);
+    assert.match(html, /data-testid="pirate-boss-event-next"/);
+    assert.match(html, /Next spawn 8d 0h/);
     assert.match(html, /data-testid="events-banner"/);
   });
 
