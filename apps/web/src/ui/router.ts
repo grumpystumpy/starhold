@@ -5,6 +5,7 @@ import {
   pageFromPath,
   pathForPage,
   shopTabFromUrl,
+  type AccountMenuPage,
   type ShopTab,
   type NavPage,
 } from "./nav";
@@ -70,10 +71,9 @@ export function syncSessionUrl(opts: SessionUrlOpts = {}): void {
     url.pathname.replace(/\/+$/, "") === "/officers" ||
     url.pathname.replace(/\/+$/, "") === "/skills";
   const shopTab = shopTabFromUrl(url.pathname, url.search);
-  url.pathname =
-    session.accountMenu === "security"
-      ? ACCOUNT_MENU_PATHS.security
-      : pathForPage(page);
+  url.pathname = session.accountMenu
+    ? ACCOUNT_MENU_PATHS[session.accountMenu]
+    : pathForPage(page);
   url.searchParams.delete("commander");
   if (page === "shop" && (legacyShopPath || url.searchParams.has("shopTab"))) {
     url.searchParams.set("shopTab", shopTab);
@@ -125,10 +125,38 @@ export function navigateTo(
   schedulePaint();
 }
 
+export function openAccountMenu(page: AccountMenuPage): void {
+  if (session.accountMenu === "security" && page !== "security") {
+    session.recoveryCodes = null;
+  }
+  session.accountMenu = page;
+  switch (page) {
+    case "security":
+      session.security = null;
+      session.securityFor = null;
+      break;
+    case "credits":
+      break;
+    default: {
+      const exhaustive: never = page;
+      return exhaustive;
+    }
+  }
+  syncSessionUrl({ replace: false, page: session.activePage });
+  schedulePaint();
+}
+
 export function openSecurity(): void {
-  session.accountMenu = "security";
-  session.security = null;
-  session.securityFor = null;
+  openAccountMenu("security");
+}
+
+export function openCredits(): void {
+  openAccountMenu("credits");
+}
+
+export function closeAccountMenu(): void {
+  session.accountMenu = null;
+  session.recoveryCodes = null;
   syncSessionUrl({ replace: false, page: session.activePage });
   schedulePaint();
 }

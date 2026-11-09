@@ -20,6 +20,7 @@ import {
 } from "@starhold/game";
 import {
   DEFENSE_ART,
+  RESEARCH_ART,
   SHIP_ART,
 } from "./assets";
 import { fmt, fmtCost, fmtEta } from "./format";
@@ -154,7 +155,7 @@ export function shipRow(
   // Unlocked Build stays enabled during client busy (same reason as Upgrade).
   return `
     <article class="item item-thumb" data-testid="ship-${id}">
-      <img class="thumb" src="${SHIP_ART[id]}" alt="" width="48" height="48" />
+      <img class="thumb" src="${SHIP_ART[id]}" alt="${escapeAttr(def.name)}" width="48" height="48" />
       <div>
         <h3>${escapeHtml(def.name)} <span class="meta">Owned ${fmt(count)}</span> ${tip.html}</h3>
         <p>${escapeHtml(def.description)}</p>
@@ -223,7 +224,7 @@ export function defenseRow(
   });
   return `
     <article class="item item-thumb" data-testid="defense-${id}">
-      <img class="thumb" src="${DEFENSE_ART[id]}" alt="" width="48" height="48" />
+      <img class="thumb" src="${DEFENSE_ART[id]}" alt="${escapeAttr(def.name)}" width="48" height="48" />
       <div>
         <h3>${escapeHtml(def.name)} <span class="meta">Owned ${fmt(have)}</span> ${tip.html}</h3>
         <p>${escapeHtml(def.description)}</p>
@@ -330,7 +331,8 @@ export function researchRow(
     blocked,
   });
   return `
-    <article class="item" data-testid="research-${id}">
+    <article class="item item-thumb" data-testid="research-${id}">
+      <img class="thumb" src="${RESEARCH_ART[id]}" alt="${escapeAttr(def.name)}" width="48" height="48" />
       <div>
         <h3>${escapeHtml(def.name)} <span class="meta" data-testid="research-level-${id}">L${fmt(level)}</span> ${tip.html}</h3>
         <p>${escapeHtml(def.description)}</p>

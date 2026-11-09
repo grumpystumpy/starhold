@@ -111,7 +111,7 @@ import {
   salvageFleetForm,
 } from "./ui/render-fleets-draft";
 import { resolveNavPage } from "./ui/nav";
-import { navigateShopTab, navigateTo, openSecurity } from "./ui/router";
+import { closeAccountMenu, navigateShopTab, navigateTo, openCredits, openSecurity } from "./ui/router";
 import { battleShareUrl } from "./ui/shared-report";
 
 function parseGalaxyFleetCoords(raw: string | null): Coordinates | null {
@@ -278,7 +278,22 @@ export function bindClickHandlers(): void {
       const accountNav = closestActionEl(target, "[data-account-nav]");
       if (accountNav) {
         ev.preventDefault();
-        openSecurity();
+        const which = accountNav.getAttribute("data-account-nav");
+        switch (which) {
+          case "security":
+            openSecurity();
+            return;
+          case "credits":
+            openCredits();
+            return;
+          default:
+            return;
+        }
+      }
+
+      if (closestActionEl(target, "[data-credits-back]")) {
+        ev.preventDefault();
+        closeAccountMenu();
         return;
       }
 

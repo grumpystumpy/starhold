@@ -273,7 +273,7 @@ export function fleetComposer(
           });
           return `
       <label class="fleet-ship">
-        <img class="thumb" src="${SHIP_ART[id]}" alt="" width="36" height="36" />
+        <img class="thumb" src="${SHIP_ART[id]}" alt="${escapeAttr(def.name)}" width="36" height="36" />
         <span>${escapeHtml(def.name)} ${tip.html} <span class="meta">(in orbit ${fmt(have)})</span></span>
         <input type="number" min="0" max="${have}" value="${value}" data-fleet-count="${id}" data-testid="fleet-count-${id}" ${busy ? "disabled" : ""} />
       </label>`;

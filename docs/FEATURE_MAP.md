@@ -176,4 +176,12 @@ A shell service worker (`/sw.js`) caches only the public document, manifest, ico
 
 No save fields were added. `packages/game/src/fixtures/in-flight-fleet-save.json` is a main-branch universe with one deploy still in flight; `migrateOrResetUniverse` keeps that fleet.
 
+## Credits and art pass
+
+The Credits page is an account route, `/credits`, linked from the side nav (`data-testid="nav-credits"`) and from the join screen (`data-testid="join-credits"`). It is not a game-nav page. Guests can open it. Security stays signed-in only.
+
+Plates are mapped in `apps/web/src/ui/assets.ts` (`BUILDING_ART`, `SHIP_ART`, `DEFENSE_ART`, `RESOURCE_ART`, `PLANET_ART`, `planetArtFor`, `UI_ART`, `RESEARCH_ART`, `BACKGROUND_ART`). Research rows use `RESEARCH_ART`. Ship, defense, building, and hangar thumbs use the existing img slots. The galaxy page uses the Kenney sky file as a full-bleed backdrop. The join screen uses the NASA photograph as a full-bleed backdrop. Galaxy slot discs stay on `/planet-art/`.
+
+Every referenced file is listed in `docs/ART_CREDITS.md`. game-icons.net lines on the Credits page use the required CC BY 3.0 credit. Capital hulls, shield-style defenses, Jump Gate, Chrono Lathe, Mantle Loom, the deuterium chip, and officer portraits stay on the original plates. No save fields were added.
+
 
