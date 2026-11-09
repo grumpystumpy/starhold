@@ -212,4 +212,9 @@ Plates are mapped in `apps/web/src/ui/assets.ts` (`BUILDING_ART`, `SHIP_ART`, `D
 
 Every referenced file is listed in `docs/ART_CREDITS.md`. game-icons.net lines on the Credits page use the required CC BY 3.0 credit. Capital hulls, shield-style defenses, Jump Gate, Chrono Lathe, Mantle Loom, the deuterium chip, and officer portraits stay on the original plates. No save fields were added.
 
+## Research tree map
+
+The Research tab includes a visual prerequisite tree map (`data-testid="research-tree-map"`) rendered directly above the research project rows via `researchTreeMapHtml` in `apps/web/src/ui/render-research-tree.ts`. The tree maps all 17 technologies in `RESEARCH_ORDER` across progression tiers, displaying current research levels, research art thumbs, lab level requirements, and prerequisite status pills (met vs unmet).
+
+Each node is interactive and wired to the client's research action handlers via `data-research` and `data-locked`. Clicking or tapping an available node triggers the existing research action (`doResearch`), while clicking a locked node provides user feedback indicating missing prerequisites and lab level requirements. The layout fits the dark UI styling in `apps/web/src/ui/styles-panels.css` across mobile (390px) and desktop (1280px) viewports without horizontal overflow. All existing research rows remain intact. No new techs, balance changes, save fields, or server routes are added.
 
