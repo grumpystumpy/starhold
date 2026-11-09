@@ -10,6 +10,7 @@ import {
   galaxyViewFor,
   joinUniverse,
   launchFleet,
+  playerView,
   queueBuildingUpgrade,
   queueDefenseBuild,
   queueShipBuild,
@@ -109,6 +110,18 @@ describe("Occupation fleet mission (B7-12)", () => {
 
     advanceUniverse(universe, launch.fleet.arrivesAt);
 
+    for (const recipient of [a, b]) {
+      const view = playerView(universe, recipient.player.id, launch.fleet.arrivesAt + 1);
+      assert.ok(
+        view.reports.some((report) => report.missionId === launch.fleet.id),
+        `${recipient.player.name} receives the occupy combat report`,
+      );
+      assert.equal(
+        view.player.eventLog?.some((entry) => entry.kind === "raidAlert") ?? false,
+        false,
+        `${recipient.player.name} does not get a duplicate raid alert`,
+      );
+    }
     // Mini should be captured by attacker
     assert.equal(universe.planets[mini.id]?.ownerPlayerId, a.player.id);
     // Occupation state should be set
@@ -145,6 +158,17 @@ describe("Occupation fleet mission (B7-12)", () => {
 
     advanceUniverse(universe, launch.fleet.arrivesAt);
 
+    for (const recipient of [a, b]) {
+      const view = playerView(universe, recipient.player.id, launch.fleet.arrivesAt + 1);
+      assert.ok(
+        view.reports.some((report) => report.missionId === launch.fleet.id),
+        `${recipient.player.name} receives the losing occupy combat report`,
+      );
+      assert.equal(
+        view.player.eventLog?.some((entry) => entry.kind === "raidAlert") ?? false,
+        false,
+      );
+    }
     // Owner should still be defender
     assert.equal(universe.planets[mini.id]?.ownerPlayerId, b.player.id);
     // Occupation should not exist

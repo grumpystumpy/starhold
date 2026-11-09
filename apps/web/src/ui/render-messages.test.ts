@@ -179,6 +179,24 @@ describe("messages inbox", () => {
             meta: { pirateBaseId: "pir:1:2:3" },
           },
           {
+            id: "missing-report-alert",
+            kind: "raidAlert",
+            createdAt: 150,
+            readAt: null,
+            title: "Report not in inbox",
+            body: "Keep when the report is hidden",
+            meta: { reportId: "missing-report" },
+          },
+          {
+            id: "stale-npc-alert",
+            kind: "raidAlert",
+            createdAt: 201,
+            readAt: null,
+            title: "Pirate raid later",
+            body: "Timestamp does not match the report",
+            meta: { pirateBaseId: "pir:1:2:3" },
+          },
+          {
             id: "other-alert",
             kind: "raidAlert",
             createdAt: 300,
@@ -200,9 +218,38 @@ describe("messages inbox", () => {
 
     assert.deepEqual(
       collectInbox(view).map((item) => item.id),
-      ["fleet-warning", "other-alert", "npc-report", "pvp-report"],
+      [
+        "fleet-warning",
+        "other-alert",
+        "stale-npc-alert",
+        "npc-report",
+        "missing-report-alert",
+        "pvp-report",
+      ],
     );
-    assert.equal(inboxUnreadCount(view), 2);
+    assert.equal(inboxUnreadCount(view), 4);
+    const bystander = baseView({
+      reports: [npcReport],
+      player: {
+        id: "p9",
+        name: "Other",
+        eventLog: [
+          {
+            id: "npc-alert",
+            kind: "raidAlert",
+            createdAt: 200,
+            readAt: null,
+            title: "Hostile raid resolved",
+            body: "Pirate raid",
+            meta: { pirateBaseId: "pir:1:2:3" },
+          },
+        ],
+      } as PlayerView["player"],
+    });
+    assert.deepEqual(
+      collectInbox(bystander).map((item) => item.id),
+      ["npc-alert", "npc-report"],
+    );
   });
 
   it("renders filters, unread rows, and an empty state", () => {
@@ -850,6 +897,15 @@ describe("messages inbox", () => {
     assert.match(debris, /Debris/);
     assert.match(debris, /9\.9M metal, 0 crystal, 1\.5k deuterium/);
     assert.doesNotMatch(debris, /<h4>Loot<\/h4>/);
+    assert.equal(lossHtml.match(/data-testid="combat-side-compare"/g)?.length, 2);
+    assert.equal(lossHtml.match(/data-testid="combat-loot"/g)?.length, 2);
+    assert.equal(lossHtml.match(/data-testid="combat-debris"/g)?.length, 2);
+    assert.equal(lossHtml.match(/Ships before: 2\.5M/g)?.length, 2);
+    assert.equal(lossHtml.match(/9\.9M metal, 0 crystal, 1\.5k deuterium/g)?.length, 2);
+    assert.equal(
+      lossHtml.match(/data-testid="combat-side-defender"[^>]*data-viewer="self"/g)?.length,
+      2,
+    );
 
     const draw = {
       ...win,
@@ -881,6 +937,9 @@ describe("messages inbox", () => {
     assert.match(drawLoot, /0 metal, 0 crystal, 0 deuterium/);
     assert.match(drawDebris, /0 metal, 0 crystal, 0 deuterium/);
     assert.notEqual(drawLoot.includes("<h4>Loot</h4>"), drawDebris.includes("<h4>Loot</h4>"));
+    assert.equal(drawHtml.match(/data-testid="combat-side-compare"/g)?.length, 2);
+    assert.equal(drawHtml.match(/data-testid="combat-loot"/g)?.length, 2);
+    assert.equal(drawHtml.match(/0 metal, 0 crystal, 0 deuterium/g)?.length, 4);
 
     const defenderWin = {
       ...win,

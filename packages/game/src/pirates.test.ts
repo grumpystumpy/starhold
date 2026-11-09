@@ -69,6 +69,7 @@ import {
   planetRaidDeterrence,
   npcJobBudget,
   pickRaidTarget,
+  playerView,
   rollNextRaidAt,
   scalePirateRaidFleet,
   tickPirates,
@@ -1652,8 +1653,21 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
       assert.ok(launch.fleet.reportId);
       const report = universe.reports[launch.fleet.reportId!];
       assert.ok(report);
+      assert.equal(report.attackerPlayerId, player.id);
       assert.match(report.shareCode ?? "", /^sh_/);
       assert.ok(universe.players[player.id]?.combatStats);
+      assert.equal(
+        (universe.players[player.id]?.eventLog ?? []).some(
+          (entry) => entry.kind === "raidAlert",
+        ),
+        false,
+      );
+      assert.ok(
+        playerView(universe, player.id, launch.fleet.arrivesAt + 1).reports.some(
+          (entry) => entry.id === report.id,
+        ),
+        "the attacker receives the pirate-base combat report",
+      );
 
       assert.equal(universe.players[player.id]?.name, "OldCommander");
       assert.ok((universe.players[player.id]?.xpTotal ?? 0) >= 1200);
