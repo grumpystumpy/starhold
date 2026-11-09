@@ -2077,7 +2077,6 @@ describe("row save review fixes", () => {
     const packedDb = sqliteD1();
     await migrateAll(packedDb.db, packed);
     const packedStore = createD1Store(packedDb.db);
-    const before = Object.keys(packed.pirateBases).length;
     await runWithScope(
       { kv: packedStore, db: packedDb.db, mode: "d1", method: "GET", cpuMs: 0 },
       () =>
@@ -2087,7 +2086,8 @@ describe("row save review fixes", () => {
     );
     const kept = await loadWorkingSet(packedDb.db, { full: true });
     assert.equal(kept.universe.pirateBases?.[wreck.id]?.destroyedAt != null, true);
-    assert.equal(Object.keys(kept.universe.pirateBases ?? {}).length, before);
+    const livingAfter = activePirateBases(kept.universe);
+    assert.equal(livingAfter.length, PIRATE_TARGET_BASE_COUNT);
     const parked = Object.values(kept.universe.pirateBases ?? {}).find(
       (base) => base.coords.galaxy === blockedGalaxy && base.coords.system === blockedSystem,
     );

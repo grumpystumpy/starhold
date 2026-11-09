@@ -1085,12 +1085,12 @@ export function seedUniversePirates(
     else if (base.seasonalBoss) seasonalBosses[id] = base;
   }
   universe.pirateBases = { ...kept, ...seasonalBosses };
+  const livingBossCount = Object.values(seasonalBosses).filter(
+    (base) => base.destroyedAt == null,
+  ).length;
+  const room = Math.max(0, PIRATE_TARGET_BASE_COUNT - livingBossCount);
   const living: Record<string, PirateBase> = {};
-  for (const site of collectPirateSpawnSites(
-    universe,
-    seed,
-    PIRATE_TARGET_BASE_COUNT,
-  )) {
+  for (const site of collectPirateSpawnSites(universe, seed, room)) {
     const base = createPirateBase(
       seed,
       site.galaxy,
@@ -1104,7 +1104,73 @@ export function seedUniversePirates(
   universe.pirateBases = { ...kept, ...living, ...seasonalBosses };
 }
 
-/** Additive top-up to 200 living pirates — never removes players/living bases. */
+function aiCatchUpBaseId(universe: UniverseState): string | null {
+  const saved = universe.aiCatchUpCursor;
+  if (!saved) return null;
+  const separator = saved.indexOf(":");
+  if (separator > 0 && Number.isFinite(Number(saved.slice(0, separator)))) {
+    return saved.slice(separator + 1) || null;
+  }
+  return saved;
+}
+
+function isProtectedPirateBoss(universe: UniverseState, base: PirateBase): boolean {
+  return (
+    base.seasonalBoss === true ||
+    (universe.pirateBossBaseId != null && base.id === universe.pirateBossBaseId)
+  );
+}
+
+/** Inactive, then low level, then not due to raid, then id. */
+function compareCullPriority(a: PirateBase, b: PirateBase, now: number): number {
+  const raidA = a.lastRaidAt ?? 0;
+  const raidB = b.lastRaidAt ?? 0;
+  if (raidA !== raidB) return raidA < raidB ? -1 : 1;
+  const levelA = a.level ?? 0;
+  const levelB = b.level ?? 0;
+  if (levelA !== levelB) return levelA - levelB;
+  const dueA = a.nextRaidAt <= now ? 1 : 0;
+  const dueB = b.nextRaidAt <= now ? 1 : 0;
+  if (dueA !== dueB) return dueA - dueB;
+  if (a.id < b.id) return -1;
+  if (a.id > b.id) return 1;
+  return 0;
+}
+
+/**
+ * Drop excess living non-boss bases until `PIRATE_TARGET_BASE_COUNT`.
+ * The seasonal boss stays. A finished cull writes no raid report.
+ * Returns how many bases were removed.
+ */
+export function cullExcessPirateBases(universe: UniverseState, now: number): number {
+  if (!universe.pirateBases) return 0;
+  const living = activePirateBases(universe);
+  if (living.length <= PIRATE_TARGET_BASE_COUNT) return 0;
+  const bosses: PirateBase[] = [];
+  const candidates: PirateBase[] = [];
+  for (const base of living) {
+    if (isProtectedPirateBoss(universe, base)) bosses.push(base);
+    else candidates.push(base);
+  }
+  const keepNonBoss = Math.max(0, PIRATE_TARGET_BASE_COUNT - bosses.length);
+  if (candidates.length <= keepNonBoss) return 0;
+  candidates.sort((a, b) => compareCullPriority(a, b, now));
+  const removeCount = candidates.length - keepNonBoss;
+  const pinned = aiCatchUpBaseId(universe);
+  let removed = 0;
+  for (let i = 0; i < removeCount; i++) {
+    const base = candidates[i]!;
+    markPirateDestroyed(base, now);
+    delete universe.pirateBases[base.id];
+    removed += 1;
+  }
+  if (pinned && universe.pirateBases[pinned] == null) {
+    universe.aiCatchUpCursor = null;
+  }
+  return removed;
+}
+
+/** Top up to the design target. Prunes excess non-boss bases first. Never removes players. */
 export function ensurePiratePopulation(
   universe: UniverseState,
   now = Date.now(),
@@ -1112,6 +1178,7 @@ export function ensurePiratePopulation(
   if (universe.seedCursor && !universe.seedCursor.done) return;
   if (!universe.pirateBases) universe.pirateBases = {};
   if (!universe.alienBases) universe.alienBases = {};
+  cullExcessPirateBases(universe, now);
   // No occupancy data: placing would land on a planet this request did not load.
   if (universe.skipPirateTopUp) return;
   // Ranking every system is a few milliseconds. A budgeted page load skips it.
@@ -1207,6 +1274,7 @@ export function scalePirateRaidFleet(
 }
 
 function applyFreeSpawnsPirate(base: PirateBase, now: number): void {
+  // Ships and defenses on a base that already exists. This does not create a base.
   if (base.destroyedAt != null) return;
   const interval = PIRATE_FREE_SPAWN_INTERVAL_MS;
   const steps = Math.floor((now - base.lastFreeSpawnAt) / interval);
@@ -1243,6 +1311,8 @@ function tryPirateSplit(
   if (base.splitDone) return;
   if (base.level !== PIRATE_SPLIT_LEVEL) return;
   base.splitDone = true;
+  let living = activePirateBases(universe).length;
+  if (living >= PIRATE_TARGET_BASE_COUNT) return;
   const seed = universe.seed ?? universe.id;
   const sites = findNearbyEmptySlots(
     universe,
@@ -1252,7 +1322,9 @@ function tryPirateSplit(
     PIRATE_SPLIT_NEARBY_SYSTEM_RADIUS,
     base.id,
   );
+  if (!universe.pirateBases) universe.pirateBases = {};
   for (const site of sites) {
+    if (living >= PIRATE_TARGET_BASE_COUNT) break;
     const child = createPirateBase(
       seed,
       site.galaxy,
@@ -1262,7 +1334,8 @@ function tryPirateSplit(
       PIRATE_SPLIT_CHILD_LEVEL,
       base.coalitionId,
     );
-    universe.pirateBases![child.id] = child;
+    universe.pirateBases[child.id] = child;
+    living += 1;
   }
 }
 
@@ -1451,6 +1524,8 @@ function tickSeasonalPirateBoss(
 
   const id = pirateBaseId(site.galaxy, site.system, site.slot);
   if (universe.pirateBases?.[id]) return;
+  // Boss spawn is the one path that may pass the living cap, by one base.
+  // The post-spawn cull in tickPirates removes one ordinary base afterward.
   const boss = createPirateBase(
     seed,
     site.galaxy,
@@ -1511,7 +1586,10 @@ function respawnDestroyedPirates(universe: UniverseState, now: number): void {
   if (universe.skipPirateTopUp) return;
   const seed = universe.seed ?? universe.id;
   const bases = universe.pirateBases ?? {};
+  let living = activePirateBases(universe).length;
+  if (living >= PIRATE_TARGET_BASE_COUNT) return;
   for (const id of Object.keys(bases)) {
+    if (living >= PIRATE_TARGET_BASE_COUNT) return;
     const base = bases[id]!;
     if (base.seasonalBoss) continue;
     if (base.destroyedAt == null) continue;
@@ -1529,6 +1607,7 @@ function respawnDestroyedPirates(universe: UniverseState, now: number): void {
       0,
     );
     bases[next.id] = next;
+    living += 1;
   }
 }
 
@@ -2005,15 +2084,17 @@ function catchUpRaidsAlien(universe: UniverseState, base: AlienBase, now: number
 export function tickPirates(universe: UniverseState, now: number): void {
   if (!universe.pirateBases) universe.pirateBases = {};
   if (!universe.alienBases) universe.alienBases = {};
+  cullExcessPirateBases(universe, now);
   tickSeasonalPirateBoss(universe, now, false);
   // Page loads skip raids, but a destroyed base still has to come back and a
   // short universe still has to fill to 200 when this request loaded occupancy.
   if (universe.skipNpcRaids) {
     ensureAlienDailySeed(universe, now);
     if (!universe.skipPirateTopUp) {
-      ensurePiratePopulation(universe, now);
       respawnDestroyedPirates(universe, now);
+      ensurePiratePopulation(universe, now);
       tickSeasonalPirateBoss(universe, now, true);
+      cullExcessPirateBases(universe, now);
     }
     universe.lastAiSimAt = now;
     return;
@@ -2027,8 +2108,10 @@ export function tickPirates(universe: UniverseState, now: number): void {
       ? savedCursor!.slice(separator + 1)
       : savedCursor;
   ensureAlienDailySeed(universe, targetAt);
+  respawnDestroyedPirates(universe, targetAt);
   ensurePiratePopulation(universe, targetAt);
   tickSeasonalPirateBoss(universe, now, !universe.skipPirateTopUp);
+  cullExcessPirateBases(universe, targetAt);
   const entries = [
     ...Object.values(universe.pirateBases).map((base) => ({
       id: base.id,
