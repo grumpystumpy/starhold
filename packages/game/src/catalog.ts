@@ -1,4 +1,5 @@
 import type { BuildingId, DefenseId, ResearchId, ShipId } from "./types.js";
+import { PIRATE_BASES_PER_GALAXY } from "./data/tuning.js";
 
 export { BUILDINGS } from "./catalog-buildings.js";
 export { SHIPS, DEFENSES } from "./catalog-units.js";
@@ -405,7 +406,7 @@ export {
   PIRATE_TIER_CAP,
   PIRATE_LEVEL_GROWTH_INTERVAL_MS,
   PIRATE_GROWTH_INTERVAL_MS,
-  PIRATE_TARGET_BASE_COUNT,
+  PIRATE_SAME_TARGET_COOLDOWN_MS,
   PIRATE_RAID_PERIOD_MS,
   PIRATE_FATIGUE_WINDOW_MS,
   PIRATE_FATIGUE_FIRST_HITS,
@@ -546,6 +547,13 @@ export const MINE_GROWTH = 1.1;
 
 /** Map bounds (universe contract v1): 10×399×15 + deep space. */
 export const MAP_GALAXIES = 10;
+/**
+ * Living pirate cap. One source of truth: `PIRATE_BASES_PER_GALAXY` times the
+ * live galaxy count. The flat 200 cap is retired. The seasonal boss may exceed
+ * this by one base until the post-spawn cull.
+ */
+export { PIRATE_BASES_PER_GALAXY };
+export const PIRATE_TARGET_BASE_COUNT = PIRATE_BASES_PER_GALAXY * MAP_GALAXIES;
 export const MAP_SYSTEMS = 399;
 export const MAP_SLOTS = 15;
 

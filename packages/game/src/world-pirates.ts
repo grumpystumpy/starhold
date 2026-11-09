@@ -60,6 +60,8 @@ import {
   PIRATE_SPLIT_LEVEL,
   PIRATE_SPLIT_NEARBY_SYSTEM_RADIUS,
   PIRATE_STARSHARD_REWARD_MULT,
+  PIRATE_BASES_PER_GALAXY,
+  PIRATE_SAME_TARGET_COOLDOWN_MS,
   PIRATE_TARGET_BASE_COUNT,
   PIRATE_VS_PIRATE_RAID_PERIOD_MULT,
   SHIPS,
@@ -403,6 +405,7 @@ export function ensurePirateBaseShape(
   if (base.nextRaidAt == null || base.nextRaidAt <= 0) {
     base.nextRaidAt = rollNextRaidAt(base.id, now, PIRATE_RAID_PERIOD_MS);
   }
+  pruneRecentRaidTargets(base, now);
   return base;
 }
 
@@ -440,6 +443,7 @@ export function ensureAlienBaseShape(
       rollNextRaidAt(base.id, now, ALIEN_RAID_PERIOD_MS),
     );
   }
+  pruneRecentRaidTargets(base, now);
   return base;
 }
 
@@ -953,6 +957,7 @@ export function collectPirateSpawnSites(
   universe: UniverseState,
   seed: string,
   target: number,
+  perGalaxyCap?: number,
 ): Coordinates[] {
   const occupied = new Set<string>();
   const taken = new Set<string>();
@@ -983,12 +988,26 @@ export function collectPirateSpawnSites(
 
   const pointers = new Array<number>(MAP_GALAXIES).fill(0);
   const sites: Coordinates[] = [];
+  const galaxyCount =
+    perGalaxyCap != null ? nonBossCountByGalaxy(universe) : null;
+  const closed = new Array<boolean>(MAP_GALAXIES).fill(false);
 
   while (sites.length < target) {
     let placedAnyInRound = false;
     for (let gIndex = 0; gIndex < MAP_GALAXIES; gIndex++) {
       if (sites.length >= target) break;
+      if (closed[gIndex]) continue;
+      const galaxy = gIndex + 1;
+      if (
+        galaxyCount &&
+        perGalaxyCap != null &&
+        (galaxyCount[galaxy] ?? 0) >= perGalaxyCap
+      ) {
+        closed[gIndex] = true;
+        continue;
+      }
       const galaxyList = byGalaxy[gIndex]!;
+      let placedHere = false;
       while (pointers[gIndex]! < galaxyList.length) {
         const row = galaxyList[pointers[gIndex]!++]!;
         if (occupied.has(`${row.galaxy}:${row.system}`)) continue;
@@ -1003,8 +1022,13 @@ export function collectPirateSpawnSites(
         sites.push({ galaxy: row.galaxy, system: row.system, slot });
         taken.add(`${row.galaxy}:${row.system}:${slot}`);
         occupied.add(`${row.galaxy}:${row.system}`);
+        if (galaxyCount) galaxyCount[galaxy] = (galaxyCount[galaxy] ?? 0) + 1;
         placedAnyInRound = true;
+        placedHere = true;
         break;
+      }
+      if (!placedHere && pointers[gIndex]! >= galaxyList.length) {
+        closed[gIndex] = true;
       }
     }
     if (!placedAnyInRound) break;
@@ -1046,9 +1070,11 @@ export function placePiratesFromRanked(
   let placed = 0;
   let scanned = 0;
   let living = activePirateBases(universe).length;
+  const counts = nonBossCountByGalaxy(universe);
   for (const row of ranked) {
     if (placed >= limit || living >= PIRATE_TARGET_BASE_COUNT) break;
     scanned += 1;
+    if ((counts[row.galaxy] ?? 0) >= PIRATE_BASES_PER_GALAXY) continue;
     if (systemOccupiedByNpc(universe, row.galaxy, row.system)) continue;
     const slot = pickEmptySlot(
       universe,
@@ -1059,6 +1085,7 @@ export function placePiratesFromRanked(
     if (slot == null) continue;
     const base = createPirateBase(seed, row.galaxy, row.system, slot, now, 0);
     universe.pirateBases[base.id] = base;
+    counts[row.galaxy] = (counts[row.galaxy] ?? 0) + 1;
     placed += 1;
     living += 1;
   }
@@ -1090,7 +1117,12 @@ export function seedUniversePirates(
   ).length;
   const room = Math.max(0, PIRATE_TARGET_BASE_COUNT - livingBossCount);
   const living: Record<string, PirateBase> = {};
-  for (const site of collectPirateSpawnSites(universe, seed, room)) {
+  for (const site of collectPirateSpawnSites(
+    universe,
+    seed,
+    room,
+    PIRATE_BASES_PER_GALAXY,
+  )) {
     const base = createPirateBase(
       seed,
       site.galaxy,
@@ -1138,28 +1170,55 @@ function compareCullPriority(a: PirateBase, b: PirateBase, now: number): number 
 }
 
 /**
- * Drop excess living non-boss bases until `PIRATE_TARGET_BASE_COUNT`.
- * The seasonal boss stays. A finished cull writes no raid report.
- * Returns how many bases were removed.
+ * Drop excess living non-boss bases until each galaxy has at most
+ * `PIRATE_BASES_PER_GALAXY` and the living total is at most
+ * `PIRATE_TARGET_BASE_COUNT` (`PIRATE_BASES_PER_GALAXY * MAP_GALAXIES`).
+ * Over-full galaxies are trimmed first. The seasonal boss stays.
+ * A finished cull writes no raid report. Returns how many bases were removed.
  */
 export function cullExcessPirateBases(universe: UniverseState, now: number): number {
   if (!universe.pirateBases) return 0;
   const living = activePirateBases(universe);
-  if (living.length <= PIRATE_TARGET_BASE_COUNT) return 0;
   const bosses: PirateBase[] = [];
-  const candidates: PirateBase[] = [];
+  const byGalaxy = new Map<number, PirateBase[]>();
   for (const base of living) {
-    if (isProtectedPirateBoss(universe, base)) bosses.push(base);
-    else candidates.push(base);
+    if (isProtectedPirateBoss(universe, base)) {
+      bosses.push(base);
+      continue;
+    }
+    const galaxy = base.coords.galaxy;
+    const list = byGalaxy.get(galaxy);
+    if (list) list.push(base);
+    else byGalaxy.set(galaxy, [base]);
+  }
+  const galaxyOver = [...byGalaxy.values()].some(
+    (list) => list.length > PIRATE_BASES_PER_GALAXY,
+  );
+  if (!galaxyOver && living.length <= PIRATE_TARGET_BASE_COUNT) return 0;
+  const survivors: PirateBase[] = [];
+  const doomed: PirateBase[] = [];
+  const galaxies = [...byGalaxy.keys()].sort((a, b) => a - b);
+  for (const galaxy of galaxies) {
+    const list = byGalaxy.get(galaxy)!;
+    list.sort((a, b) => compareCullPriority(a, b, now));
+    const extra = list.length - PIRATE_BASES_PER_GALAXY;
+    if (extra > 0) {
+      doomed.push(...list.slice(0, extra));
+      survivors.push(...list.slice(extra));
+    } else {
+      survivors.push(...list);
+    }
   }
   const keepNonBoss = Math.max(0, PIRATE_TARGET_BASE_COUNT - bosses.length);
-  if (candidates.length <= keepNonBoss) return 0;
-  candidates.sort((a, b) => compareCullPriority(a, b, now));
-  const removeCount = candidates.length - keepNonBoss;
+  if (survivors.length > keepNonBoss) {
+    survivors.sort((a, b) => compareCullPriority(a, b, now));
+    const more = survivors.length - keepNonBoss;
+    doomed.push(...survivors.splice(0, more));
+  }
+  if (doomed.length === 0) return 0;
   const pinned = aiCatchUpBaseId(universe);
   let removed = 0;
-  for (let i = 0; i < removeCount; i++) {
-    const base = candidates[i]!;
+  for (const base of doomed) {
     markPirateDestroyed(base, now);
     delete universe.pirateBases[base.id];
     removed += 1;
@@ -1168,6 +1227,26 @@ export function cullExcessPirateBases(universe: UniverseState, now: number): num
     universe.aiCatchUpCursor = null;
   }
   return removed;
+}
+
+function nonBossCountByGalaxy(universe: UniverseState): number[] {
+  const counts = new Array<number>(MAP_GALAXIES + 1).fill(0);
+  for (const base of activePirateBases(universe)) {
+    if (isProtectedPirateBoss(universe, base)) continue;
+    const galaxy = base.coords.galaxy;
+    if (galaxy >= 1 && galaxy <= MAP_GALAXIES) counts[galaxy] += 1;
+  }
+  return counts;
+}
+
+/** Total living cap and the destination galaxy both have room for one more non-boss base. */
+export function pirateGalaxyAcceptsSpawn(
+  universe: UniverseState,
+  galaxy: number,
+): boolean {
+  if (galaxy < 1 || galaxy > MAP_GALAXIES) return false;
+  if (activePirateBases(universe).length >= PIRATE_TARGET_BASE_COUNT) return false;
+  return (nonBossCountByGalaxy(universe)[galaxy] ?? 0) < PIRATE_BASES_PER_GALAXY;
 }
 
 /** Top up to the design target. Prunes excess non-boss bases first. Never removes players. */
@@ -1193,7 +1272,12 @@ export function ensurePiratePopulation(
   if (living >= PIRATE_TARGET_BASE_COUNT) return;
   const seed = universe.seed ?? universe.id;
   const need = PIRATE_TARGET_BASE_COUNT - living;
-  for (const site of collectPirateSpawnSites(universe, `${seed}:topup`, need)) {
+  for (const site of collectPirateSpawnSites(
+    universe,
+    `${seed}:topup`,
+    need,
+    PIRATE_BASES_PER_GALAXY,
+  )) {
     if (living >= PIRATE_TARGET_BASE_COUNT) break;
     const base = createPirateBase(
       seed,
@@ -1313,6 +1397,7 @@ function tryPirateSplit(
   base.splitDone = true;
   let living = activePirateBases(universe).length;
   if (living >= PIRATE_TARGET_BASE_COUNT) return;
+  const counts = nonBossCountByGalaxy(universe);
   const seed = universe.seed ?? universe.id;
   const sites = findNearbyEmptySlots(
     universe,
@@ -1325,6 +1410,7 @@ function tryPirateSplit(
   if (!universe.pirateBases) universe.pirateBases = {};
   for (const site of sites) {
     if (living >= PIRATE_TARGET_BASE_COUNT) break;
+    if ((counts[site.galaxy] ?? 0) >= PIRATE_BASES_PER_GALAXY) continue;
     const child = createPirateBase(
       seed,
       site.galaxy,
@@ -1335,6 +1421,7 @@ function tryPirateSplit(
       base.coalitionId,
     );
     universe.pirateBases[child.id] = child;
+    counts[site.galaxy] = (counts[site.galaxy] ?? 0) + 1;
     living += 1;
   }
 }
@@ -1565,8 +1652,10 @@ function findRespawnSite(
 ): Coordinates | null {
   const startG = 1 + (hashSeed(`${seedKey}:g`) % MAP_GALAXIES);
   const startS = 1 + (hashSeed(`${seedKey}:s`) % MAP_SYSTEMS);
+  const counts = nonBossCountByGalaxy(universe);
   for (let dg = 0; dg < MAP_GALAXIES; dg++) {
     const galaxy = ((startG - 1 + dg) % MAP_GALAXIES) + 1;
+    if ((counts[galaxy] ?? 0) >= PIRATE_BASES_PER_GALAXY) continue;
     for (let ds = 0; ds < MAP_SYSTEMS; ds++) {
       const system = ((startS - 1 + ds) % MAP_SYSTEMS) + 1;
       if (systemOccupiedByNpc(universe, galaxy, system)) continue;
@@ -1658,16 +1747,59 @@ export function recordPirateHit(planet: PlanetState, now: number): void {
   planet.pirateHitHistory = history;
 }
 
+function pruneRecentRaidTargets(
+  base: PirateBase | AlienBase,
+  now: number,
+): Record<string, number> | undefined {
+  const raw = base.recentRaidTargets;
+  if (!raw) return undefined;
+  const cutoff = now - PIRATE_SAME_TARGET_COOLDOWN_MS;
+  const next: Record<string, number> = {};
+  for (const [key, at] of Object.entries(raw)) {
+    if (typeof at === "number" && Number.isFinite(at) && at > cutoff) next[key] = at;
+  }
+  if (Object.keys(next).length === 0) {
+    delete base.recentRaidTargets;
+    return undefined;
+  }
+  base.recentRaidTargets = next;
+  return next;
+}
+
+function targetOnCooldown(
+  base: PirateBase | AlienBase,
+  targetId: string,
+  now: number,
+): boolean {
+  const recent = pruneRecentRaidTargets(base, now);
+  if (!recent) return false;
+  const at = recent[targetId];
+  return at != null && now - at < PIRATE_SAME_TARGET_COOLDOWN_MS;
+}
+
+function rememberRaidTarget(
+  base: PirateBase | AlienBase,
+  targetId: string,
+  now: number,
+): void {
+  const recent = pruneRecentRaidTargets(base, now) ?? {};
+  recent[targetId] = now;
+  base.recentRaidTargets = recent;
+}
+
 /**
  * Pirate raids multiply relic weight by fairness (newbies weigh 0) and fatigue, then subtract deterrence.
  * Alien raids keep relic weight and subtract deterrence — fairness and fatigue do not apply.
+ * A target this base raided inside the cooldown weighs 0.
  */
 function npcPlanetPickWeight(
   universe: UniverseState,
   planet: PlanetState,
   now: number,
   faction: "pirate" | "alien",
+  attacker?: PirateBase | AlienBase,
 ): number {
+  if (attacker && targetOnCooldown(attacker, planet.id, now)) return 0;
   const relic = planetRaidWeight(planet);
   if (faction !== "pirate") return planetRaidDeterrence(planet, faction, relic);
   const owner = universe.players[planet.ownerPlayerId];
@@ -1684,8 +1816,10 @@ function pickWeightedPlayerPlanet(
   roll: number,
   now: number,
   faction: "pirate" | "alien",
+  attacker?: PirateBase | AlienBase,
 ): PlanetState | null {
   const baseWeights = planets.map((p) => {
+    if (attacker && targetOnCooldown(attacker, p.id, now)) return 0;
     const relic = planetRaidWeight(p);
     if (faction !== "pirate") return relic;
     const owner = universe.players[p.ownerPlayerId];
@@ -1734,7 +1868,9 @@ export function pickRaidTarget(
   faction: "pirate" | "alien",
 ): NpcRaidTarget | null {
   const roll = hashSeed(`${base.id}:target:${base.lastRaidAt}:${now}`);
-  const planets = Object.values(universe.planets).filter((p) => p.kind !== "moon");
+  const planets = Object.values(universe.planets).filter(
+    (p) => p.kind !== "moon" && !targetOnCooldown(base, p.id, now),
+  );
   const vsMult =
     faction === "pirate"
       ? PIRATE_VS_PIRATE_RAID_PERIOD_MULT
@@ -1742,17 +1878,21 @@ export function pickRaidTarget(
   // Most rolls prefer a player. Building the NPC list walks every base, so
   // only do that when the roll actually wants an NPC or no player is eligible.
   if (planets.length > 0 && roll % 1000 < Math.floor(1000 / vsMult)) {
-    const planet = pickWeightedPlayerPlanet(universe, planets, roll, now, faction);
+    const planet = pickWeightedPlayerPlanet(universe, planets, roll, now, faction, base);
     if (planet) return { kind: "planet", planet };
   }
   const pirateOthers = activePirateBases(universe).filter(
     (b) =>
       !b.seasonalBoss &&
       b.id !== base.id &&
-      b.coalitionId !== base.coalitionId,
+      b.coalitionId !== base.coalitionId &&
+      !targetOnCooldown(base, b.id, now),
   );
   const alienOthers = activeAlienBases(universe).filter(
-    (b) => b.id !== base.id && b.coalitionId !== base.coalitionId,
+    (b) =>
+      b.id !== base.id &&
+      b.coalitionId !== base.coalitionId &&
+      !targetOnCooldown(base, b.id, now),
   );
   const npcPool: NpcRaidTarget[] = [
     ...pirateOthers.map((other) => ({ kind: "pirate" as const, other })),
@@ -1760,7 +1900,7 @@ export function pickRaidTarget(
   ];
   if (npcPool.length === 0) {
     if (!planets.length) return null;
-    const planet = pickWeightedPlayerPlanet(universe, planets, roll, now, faction);
+    const planet = pickWeightedPlayerPlanet(universe, planets, roll, now, faction, base);
     return planet ? { kind: "planet", planet } : null;
   }
   return npcPool[roll % npcPool.length]!;
@@ -1814,6 +1954,8 @@ export function applyNpcRaidOnPlanet(
           `${base.id}:alien-raid:${now}`,
         );
   if (fleetShipCount(raidFleet) < 1) return;
+  // Instant raid path. When B7-98 launches a fleet instead, record the target at launch.
+  rememberRaidTarget(base, planet.id, now);
   if (faction === "pirate") {
     recordPirateHit(planet, now);
   }
@@ -1942,6 +2084,8 @@ export function applyNpcRaidOnNpc(
     );
   const raidFleet = scalePirateRaidFleet(base.ships, otherPower);
   if (fleetShipCount(raidFleet) < 1) return;
+  // Instant raid path. When B7-98 launches a fleet instead, record the target at launch.
+  rememberRaidTarget(base, other.id, now);
   const defenderBefore = { ...other.ships };
   const defensesBefore = other.defenses ?? emptyDefenses();
   const combat = resolveCombat(
@@ -2087,7 +2231,7 @@ export function tickPirates(universe: UniverseState, now: number): void {
   cullExcessPirateBases(universe, now);
   tickSeasonalPirateBoss(universe, now, false);
   // Page loads skip raids, but a destroyed base still has to come back and a
-  // short universe still has to fill to 200 when this request loaded occupancy.
+  // short universe still has to fill to the living cap when this request loaded occupancy.
   if (universe.skipNpcRaids) {
     ensureAlienDailySeed(universe, now);
     if (!universe.skipPirateTopUp) {

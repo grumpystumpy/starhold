@@ -433,6 +433,11 @@ export interface PirateBase {
   bossRewardsPaid?: boolean;
   /** Ship count at spawn, used for the HP bar. Absent on older bosses. */
   bossShipsAtSpawn?: number;
+  /**
+   * Target id (planet id or NPC base id) → last raid time.
+   * Entries older than the same-target cooldown are dropped. Absent on older saves.
+   */
+  recentRaidTargets?: Record<string, number>;
 }
 
 /**
@@ -460,6 +465,11 @@ export interface AlienBase {
   buildupEndsAt: number;
   foundAt: number;
   foundByPlayerId: string;
+  /**
+   * Target id (planet id or NPC base id) → last raid time.
+   * Entries older than the same-target cooldown are dropped. Absent on older saves.
+   */
+  recentRaidTargets?: Record<string, number>;
 }
 
 /** Mothership occupation of an enemy body (Round 2). */

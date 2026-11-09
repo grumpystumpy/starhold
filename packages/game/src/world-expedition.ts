@@ -3,7 +3,6 @@ import {
   EXPEDITION_SLOT,
   EXPEDITION_STARSHARD_REWARD_MULT,
   MAX_COMBAT_ROUNDS,
-  PIRATE_TARGET_BASE_COUNT,
   SHIPS,
   SHIP_ORDER,
 } from "./catalog.js";
@@ -111,7 +110,7 @@ import {
   pickOrSeedMiniForDiscovery,
 } from "./world-mini.js";
 import {
-  activePirateBases,
+  pirateGalaxyAcceptsSpawn,
   alienCombatResearchForOpponent,
   alienShipsForTier,
   createAlienBase,
@@ -578,7 +577,7 @@ export function resolveExpeditionArrival(
         fleet.targetCoords.galaxy,
         `${fleet.id}:new-pirate-base:${now}`,
       );
-      if (site && activePirateBases(universe).length < PIRATE_TARGET_BASE_COUNT) {
+      if (site && pirateGalaxyAcceptsSpawn(universe, site.galaxy)) {
         const base = createPirateBase(
           universe.seed ?? universe.id,
           site.galaxy,
