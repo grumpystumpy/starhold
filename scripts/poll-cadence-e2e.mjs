@@ -10,6 +10,7 @@ import { createActiveWaitClock } from "./active-wait-clock.mjs";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { captureBrowserErrors } from "./browser-error-capture.mjs";
+import { dismissWhatsNew } from "./lib/dismiss-whats-new.mjs";
 
 const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:3001";
 const VIEWPORTS = [
@@ -182,6 +183,7 @@ async function runViewport(browser, viewport) {
     );
   }
 
+  await dismissWhatsNew(page);
   await page.click('[data-testid="nav-buildings"]');
   await page.waitForSelector('[data-testid="upgrade-shipyard"]', {
     timeout: 10_000,
@@ -320,6 +322,7 @@ async function runIdlePause(browser, viewport) {
     );
   }
 
+  await dismissWhatsNew(page);
   await page.click('[data-testid="nav-buildings"]');
   const upgradeResponse = page.waitForResponse(
     (res) =>

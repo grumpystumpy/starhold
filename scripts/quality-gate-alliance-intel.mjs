@@ -11,6 +11,7 @@ import { createRequire } from "node:module";
 import fs from "node:fs";
 import path from "node:path";
 import { fleetToStep2 } from "./lib/fleet-two-step.mjs";
+import { armWhatsNewDismiss } from "./lib/dismiss-whats-new.mjs";
 
 const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:3001";
 const API = process.env.STARHOLD_API ?? WEB;
@@ -176,7 +177,7 @@ async function main() {
   const logs = [];
 
   const contextA = await browser.newContext();
-  const pageA = await contextA.newPage();
+  const pageA = await armWhatsNewDismiss(await contextA.newPage());
   const emailA = `gate_chat_a_${stamp}@example.com`;
   const commanderA = `Ca${stamp.slice(-4)}`;
   await signupAndJoin(pageA, emailA, `GateTest1!${stamp}`, commanderA);
@@ -197,7 +198,7 @@ async function main() {
   logs.push("alliance_created");
 
   const contextB = await browser.newContext();
-  const pageB = await contextB.newPage();
+  const pageB = await armWhatsNewDismiss(await contextB.newPage());
   const commanderB = `Cb${stamp.slice(-4)}`;
   await signupAndJoin(
     pageB,

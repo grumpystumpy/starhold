@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { mkdir } from "node:fs/promises";
 import { createActiveWaitClock } from "./active-wait-clock.mjs";
 /**
  * Quality gate for replayable battle reports — local production build only.
@@ -8,6 +9,7 @@ import { createActiveWaitClock } from "./active-wait-clock.mjs";
  * SESSION_SECRET + STARHOLD_E2E=1, playwright chromium installed.
  */
 import { createRequire } from "node:module";
+import { armWhatsNewDismiss } from "./lib/dismiss-whats-new.mjs";
 
 const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:3001";
 const API = process.env.STARHOLD_API ?? WEB;
@@ -47,7 +49,7 @@ async function main() {
   await context.grantPermissions(["clipboard-read", "clipboard-write"], {
     origin: WEB,
   });
-  const page = await context.newPage();
+  const page = await armWhatsNewDismiss(await context.newPage());
   const stamp = Date.now().toString(36);
   const email = `gate_br_${stamp}@example.com`;
   const password = `GateTest1!${stamp}`;
@@ -177,16 +179,78 @@ async function main() {
   await page.getByTestId("report-subwindow").waitFor({ timeout: 5_000 });
   logs.push("report_summary_ui_ok");
 
-  await page.getByTestId(`copy-battle-share-${report.id}`).click();
+  await page
+    .getByTestId("report-subwindow")
+    .getByTestId(`copy-battle-share-${report.id}`)
+    .click();
   await page.getByTestId("flash-ok").waitFor({ timeout: 10_000 });
   const clip = await page.evaluate(() => navigator.clipboard.readText());
   if (!clip.includes(report.shareCode) || !/Rounds:/i.test(clip)) {
     throw new Error(`clipboard share card bad: ${clip}`);
   }
+  if (!/Attacker ships: .+ before, .+ after/.test(clip)) {
+    throw new Error(`clipboard missing before/after ships: ${clip}`);
+  }
+  const reportUrl = clip.split("\n").find((line) => line.includes("?report="));
+  if (!reportUrl) throw new Error(`clipboard missing report url: ${clip}`);
   logs.push("share_copy_ok");
 
+  const shotDir = process.env.STARHOLD_SHOT_DIR ?? "/tmp/starhold-b7-68";
+  await mkdir(shotDir, { recursive: true });
+
+  async function shot(target, name) {
+    await target.screenshot({ path: `${shotDir}/${name}.png`, fullPage: true });
+  }
+
+  const guest = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const guestPage = await armWhatsNewDismiss(await guest.newPage());
+  await guestPage.goto(reportUrl, { waitUntil: "networkidle" });
+  await guestPage.getByTestId("shared-combat-report").waitFor({ timeout: 15_000 });
+  const sharedDesktop = await guestPage.getByTestId("shared-combat-report").innerText();
+  if (!sharedDesktop.includes("Before") || !sharedDesktop.includes("After")) {
+    throw new Error(`shared report missing before/after: ${sharedDesktop}`);
+  }
+  await shot(guestPage, "shared-report-desktop");
+  await guestPage.setViewportSize({ width: 390, height: 844 });
+  await guestPage.getByTestId("shared-combat-report").waitFor({ timeout: 10_000 });
+  const phoneOverflow = await guestPage.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  if (phoneOverflow > 1) {
+    throw new Error(`shared report phone overflow ${phoneOverflow}px`);
+  }
+  await shot(guestPage, "shared-report-phone");
+  await guest.close();
+  logs.push("shared_report_url_ok");
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const highscoreHref = await page.getByTestId("nav-highscore").getAttribute("href");
+  if (!highscoreHref) throw new Error("highscore nav has no href");
+  await page.goto(new URL(highscoreHref, WEB).toString(), { waitUntil: "networkidle" });
+  await page.getByTestId("hall-of-fame").waitFor({ timeout: 10_000 });
+  await page.getByTestId("hall-of-shame").waitFor({ timeout: 10_000 });
+  const fame = await page.getByTestId("hall-of-fame").innerText();
+  const shame = await page.getByTestId("hall-of-shame").innerText();
+  if (!fame.includes("Battle report")) {
+    throw new Error(`hall of fame missing shared fight: ${fame}`);
+  }
+  if (/No combat losses recorded yet/.test(shame)) {
+    throw new Error(`hall of shame empty: ${shame}`);
+  }
+  await shot(page, "highscores-desktop");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByTestId("hall-of-fame").waitFor({ timeout: 10_000 });
+  await page.getByTestId("hall-of-shame").waitFor({ timeout: 10_000 });
+  const hallOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  if (hallOverflow > 1) throw new Error(`highscores phone overflow ${hallOverflow}px`);
+  await shot(page, "highscores-phone");
+  logs.push("halls_ok");
+  await page.setViewportSize({ width: 1280, height: 800 });
+
   const fresh = await browser.newContext();
-  const loginPage = await fresh.newPage();
+  const loginPage = await armWhatsNewDismiss(await fresh.newPage());
   await loginPage.goto(WEB, { waitUntil: "networkidle" });
   await loginPage.getByTestId("auth-email").fill(email);
   await loginPage.getByTestId("auth-password").fill(password);

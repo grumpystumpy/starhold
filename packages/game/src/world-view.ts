@@ -1,3 +1,4 @@
+import { combatHallOfFame, combatHallOfShame } from "./combat-share.js";
 import {
   DEEP_SPACE_SLOT,
   MAP_GALAXIES,
@@ -69,6 +70,7 @@ import { stampQueueView } from "./world-queue-manage.js";
 import { inSensorPhalanxRange, ownedPlanetCount } from "./world-moons.js";
 import { goalsView } from "./world-goals.js";
 import { onboardingViewFor } from "./world-onboarding.js";
+import { whatsNewViewFor } from "./release-notes.js";
 import { pirateBossSummary } from "./world-pirate-boss.js";
 import { occupationForPlanet } from "./world-occupation.js";
 import { empireDriftBeaconCount, empireRelicResearchTimeFactor, playerKnowsMini } from "./world-mini.js";
@@ -547,8 +549,8 @@ export function playerView(
       : publicRoster(universe, pointsById),
     highscores,
     allianceHighscores,
-    hallOfFame: provided?.hallOfFame ?? [],
-    hallOfShame: provided?.hallOfShame ?? [],
+    hallOfFame: provided?.hallOfFame ?? combatHallOfFame(universe),
+    hallOfShame: provided?.hallOfShame ?? combatHallOfShame(universe),
     galaxy: galaxyViewFor(universe, playerId, g, s, now),
     fleets,
     fleetSlotCap,
@@ -579,6 +581,7 @@ export function playerView(
     openAcsGroups: listOpenAcsForAlliance(universe, player.allianceId),
     goals: goalsView(player, now),
     onboarding: onboardingViewFor(universe, player),
+    whatsNew: whatsNewViewFor(player),
     presetUnlockPlanets: player.planetIds
       .map((id) => universe.planets[id])
       .filter((planet): planet is NonNullable<typeof planet> => planet != null)

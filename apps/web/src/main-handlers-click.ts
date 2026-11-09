@@ -35,6 +35,7 @@ import {
   doClaimGoal,
   doClaimOnboarding,
   doDismissOnboarding,
+  doDismissWhatsNew,
   doGenerateRecoveryCodes,
   doChangePassword,
   doRecover,
@@ -111,8 +112,8 @@ import {
   salvageFleetForm,
 } from "./ui/render-fleets-draft";
 import { resolveNavPage } from "./ui/nav";
-import { navigateShopTab, navigateTo, openSecurity } from "./ui/router";
-import { battleShareUrl } from "./ui/shared-report";
+import { closeAccountMenu, navigateShopTab, navigateTo, openCredits, openSecurity } from "./ui/router";
+import { battleShareClipboard } from "./ui/shared-report";
 
 function parseGalaxyFleetCoords(raw: string | null): Coordinates | null {
   const parts = raw?.split(":").map(Number);
@@ -278,7 +279,22 @@ export function bindClickHandlers(): void {
       const accountNav = closestActionEl(target, "[data-account-nav]");
       if (accountNav) {
         ev.preventDefault();
-        openSecurity();
+        const which = accountNav.getAttribute("data-account-nav");
+        switch (which) {
+          case "security":
+            openSecurity();
+            return;
+          case "credits":
+            openCredits();
+            return;
+          default:
+            return;
+        }
+      }
+
+      if (closestActionEl(target, "[data-credits-back]")) {
+        ev.preventDefault();
+        closeAccountMenu();
         return;
       }
 
@@ -639,7 +655,11 @@ export function bindClickHandlers(): void {
           schedulePaint();
           return;
         }
-        const text = battleShareUrl(report.shareCode, window.location.origin);
+        const text = battleShareClipboard(
+          report,
+          window.location.origin,
+          session.view?.player.id,
+        );
         void navigator.clipboard.writeText(text).then(
           () => {
             setFlash("notice", "Battle share copied.");
@@ -704,6 +724,13 @@ export function bindClickHandlers(): void {
         void doDismissOnboarding(
           onboardingDismiss.getAttribute("data-onboarding-dismiss") !== "false",
         );
+        return;
+      }
+
+      const whatsNewDismiss = closestActionEl(target, "[data-whats-new-dismiss]");
+      if (whatsNewDismiss) {
+        ev.preventDefault();
+        void doDismissWhatsNew();
         return;
       }
 

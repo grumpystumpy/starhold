@@ -76,6 +76,7 @@ import {
   setAllianceJoinMode,
   setAllianceClass,
   setAllianceRole,
+  dismissWhatsNew,
   setOnboardingDismissed,
   setSeasonSkin,
   setSeasonTitle,
@@ -843,6 +844,29 @@ export function createApp(): Hono {
     }, { playerIds: [body.playerId] });
   });
 
+  app.post("/api/whats-new/dismiss", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+    };
+    if (!body.playerId) {
+      return c.json({ error: "playerId required." }, 400);
+    }
+    const sessionId = readSessionId(c);
+    if (!sessionId) return c.json({ error: "Sign in required." }, 401);
+    const session = await getSession(sessionId);
+    if (!session) return c.json({ error: "Sign in required." }, 401);
+    const account = await getAccountById(session.accountId);
+    if (!account?.playerId) return c.json({ error: "Sign in required." }, 401);
+    if (account.playerId !== body.playerId) {
+      return c.json({ error: "You do not own this player." }, 403);
+    }
+    return withUniverse((universe) => {
+      const result = dismissWhatsNew(universe, body.playerId!);
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    }, { playerIds: [body.playerId] });
+  });
+
   app.post("/api/claim-daily", async (c) => {
     const body = (await c.req.json().catch(() => ({}))) as {
       playerId?: string;
@@ -1561,6 +1585,8 @@ export function createApp(): Hono {
         starshards?: number;
         colonySlot?: number;
         inbox?: boolean;
+        /** Remember the current release key. Same write as Got it. */
+        dismissWhatsNew?: boolean;
         occupyMini?: boolean;
         occupyNonMini?: boolean;
         occupierPlayerId?: string;
@@ -1732,6 +1758,10 @@ export function createApp(): Hono {
             shipsDelta: {},
             summary: "Empty expedition",
           };
+        }
+        if (body.dismissWhatsNew === true) {
+          const dismissed = dismissWhatsNew(universe, player.id);
+          if (!dismissed.ok) return c.json({ error: dismissed.error }, 400);
         }
         return c.json(playerView(universe, body.playerId!));
       });

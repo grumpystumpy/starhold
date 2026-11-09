@@ -1,4 +1,8 @@
-import type { OfficerId, PlayerClassId } from "@starhold/game";
+import {
+  CURRENT_RELEASE_ID,
+  type OfficerId,
+  type PlayerClassId,
+} from "@starhold/game";
 import {
   activateOfficerHire,
   buyShopItem,
@@ -8,6 +12,7 @@ import {
   claimGoalReward,
   claimOnboarding,
   dismissOnboarding,
+  dismissWhatsNew,
   raiseOfficerLevel,
   tradeResources,
   unlockSkillNode,
@@ -114,6 +119,29 @@ export async function doClaimOnboarding(stepId: string): Promise<void> {
       failureFallback: "Briefing claim failed.",
       applied: (view) => view.player.onboarding?.claimed?.includes(stepId) ?? false,
       successNotice: () => `Claimed ${title}.`,
+    });
+  } finally {
+    session.busy = false;
+    releaseActionFocus();
+    schedulePaint();
+  }
+}
+
+export async function doDismissWhatsNew(): Promise<void> {
+  if (!session.view || session.busy) return;
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    session.view = await dismissWhatsNew(session.view.player.id);
+    setFlash("notice", "What's new hidden.");
+  } catch (err) {
+    await settleMutation({
+      err,
+      failureFallback: "Couldn't hide what's new.",
+      applied: (view) =>
+        view.player.whatsNewDismissedReleaseId === CURRENT_RELEASE_ID,
+      successNotice: () => "What's new hidden.",
     });
   } finally {
     session.busy = false;

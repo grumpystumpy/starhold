@@ -463,6 +463,22 @@ export interface SeasonClaimView {
   offers: SeasonClaimOffer[];
 }
 
+export type PirateBossSeasonPhase = "active" | "cooldown" | "due";
+
+/**
+ * View-only clock for the monthly hunt. Not stored.
+ * While the mothership is up, `nextSpawnAt` is the window close plus the cooldown.
+ */
+export interface PirateBossSeasonSchedule {
+  seasonId: string;
+  title: string;
+  line: string;
+  phase: PirateBossSeasonPhase;
+  /** Living window close. Omitted when the mothership is not up. */
+  activeUntil?: number;
+  nextSpawnAt: number;
+}
+
 /** Current month boards plus sealed seasons the player can claim. */
 export interface SeasonLeaderboardView {
   seasonId: string;
@@ -472,6 +488,8 @@ export interface SeasonLeaderboardView {
   ranks: Record<SeasonBoardId, number | null>;
   boards: Record<SeasonBoardId, SeasonStanding[]>;
   claims: SeasonClaimView[];
+  /** Active window, cooldown, and next spawn for this month's mothership. */
+  bossSchedule?: PirateBossSeasonSchedule;
 }
 
 export interface PlayerState {
@@ -556,6 +574,11 @@ export interface PlayerState {
    * Steps are evaluated live; this object only stores claims and dismiss.
    */
   onboarding?: PlayerOnboardingState;
+  /**
+   * Release id of the last "what's new" popup this commander dismissed.
+   * Missing on older saves. A newer catalog id shows the popup again.
+   */
+  whatsNewDismissedReleaseId?: string;
   /** Synthetic empire alerts. Missing on old saves — migrate to []. */
   eventLog?: EventLogEntry[];
   /** Open monthly season counters. Missing on older saves until the next read. */
@@ -624,6 +647,14 @@ export interface OnboardingRewardView {
   metal: number;
   crystal: number;
   deuterium: number;
+}
+
+/** Unseen release notes for the what's-new popup. Not a page. */
+export interface WhatsNewView {
+  /** Newest release id included in this popup. */
+  releaseId: string;
+  title: string;
+  items: string[];
 }
 
 export interface OnboardingStepView {
@@ -833,6 +864,17 @@ export interface PirateBossView {
   /** Rank 1, else share of total damage. Null when this commander is under 1%. */
   myTier: PirateBossTierId | null;
   top: { playerId: string; name: string; damage: number }[];
+  /** Current month id. View only. */
+  seasonId?: string;
+  /** Month hunt name. View only. */
+  flavorTitle?: string;
+  /** Month hunt sentence. View only. Pay stays on PIRATE_BOSS_TIERS. */
+  flavorLine?: string;
+  /**
+   * Next spawn. During an active window this is the window close plus the
+   * cooldown, and it is not written to the save.
+   */
+  projectedSpawnAt?: number;
 }
 
 export interface PlayerView {
@@ -921,6 +963,11 @@ export interface PlayerView {
   goals: GoalView[];
   /** Commander tutorial. Always filled by playerView; older clients may omit it. */
   onboarding?: OnboardingView;
+  /**
+   * What's-new popup for a release this commander has not dismissed.
+   * Null when the latest release key is already dismissed. Older responses omit it.
+   */
+  whatsNew?: WhatsNewView | null;
   /**
    * Owned bodies for fleet-composer preset gating. Ships stay off
    * `ownedPlanets` so existing planet-list comparisons stay stable.

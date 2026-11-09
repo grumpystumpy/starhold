@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 import { createUniverse, joinUniverse, levelBonuses, playerView } from "@starhold/game";
 import type { CombatReport } from "@starhold/game";
 
-const { shellHtml, levelBonusLines } = await import("./render-shell.js");
+const { shellHtml, levelBonusLines, syncWhatsNewPopup } = await import("./render-shell.js");
 
 describe("newbie bonus header badge", () => {
   it("shows remaining time while active and omits the badge when forfeited or expired", () => {
@@ -150,3 +150,105 @@ describe("messages badge", () => {
     assert.doesNotMatch(html, /data-testid="nav-messages-badge">2</);
   });
 });
+
+describe("what's new popup", () => {
+  function shellFor(dismissed: boolean) {
+    const now = 100_000_000;
+    const universe = createUniverse("Notes", 1, 1, { lazySeed: true });
+    const { player } = joinUniverse(universe, "Hold", now);
+    if (dismissed) {
+      universe.players[player.id]!.whatsNewDismissedReleaseId = "271";
+    }
+    const view = playerView(universe, player.id, now);
+    const html = shellHtml(
+      view,
+      { error: null, notice: null, busy: false },
+      "overview",
+      "<div>Main</div>",
+    );
+    return { view, html };
+  }
+
+  it("shows release 271 once and omits the popup after that key is dismissed", () => {
+    const shown = shellFor(false);
+    assert.equal(shown.view.whatsNew?.releaseId, "271");
+    assert.match(shown.html, /data-testid="whats-new"/);
+    assert.match(shown.html, /data-release-id="271"/);
+    assert.match(shown.html, /data-testid="whats-new-dismiss"/);
+    assert.match(shown.html, /home screen/);
+    assert.match(shown.html, /review of the mission/);
+    assert.match(shown.html, /loot and debris/);
+    assert.match(shown.html, /still locked/);
+    assert.match(shown.html, /shows the reason/);
+    assert.match(shown.html, /role="dialog"/);
+
+    const hidden = shellFor(true);
+    assert.equal(hidden.view.whatsNew, null);
+    assert.doesNotMatch(hidden.html, /data-testid="whats-new"/);
+    assert.match(hidden.html, /data-testid="game-shell"/);
+  });
+
+  it("removes the popup from a patched shell and inserts it when notes are still unseen", () => {
+    const shown = shellFor(false);
+    const hidden = shellFor(true);
+    const popup = fakeEl("whats-new");
+    popup.attrs["data-release-id"] = "271";
+    const shell = fakeEl("game-shell");
+    shell.children.push(popup);
+    popup.parent = shell;
+    const root = fakeEl(null);
+    root.children.push(shell);
+    shell.parent = root;
+
+    syncWhatsNewPopup(root as unknown as ParentNode, hidden.view, false);
+    assert.equal(shell.querySelector('[data-testid="whats-new"]'), null);
+
+    syncWhatsNewPopup(root as unknown as ParentNode, shown.view, false);
+    const again = shell.querySelector('[data-testid="whats-new"]');
+    assert.ok(again);
+    assert.equal(again?.getAttribute("data-release-id"), "271");
+  });
+});
+
+function fakeEl(testid: string | null) {
+  const node: {
+    testid: string | null;
+    attrs: Record<string, string>;
+    children: ReturnType<typeof fakeEl>[];
+    parent: ReturnType<typeof fakeEl> | null;
+    getAttribute: (name: string) => string | null;
+    querySelector: (sel: string) => ReturnType<typeof fakeEl> | null;
+    remove: () => void;
+    insertAdjacentHTML: (where: string, html: string) => void;
+  } = {
+    testid,
+    attrs: {},
+    children: [],
+    parent: null,
+    getAttribute(name: string) {
+      return this.attrs[name] ?? null;
+    },
+    querySelector(sel: string) {
+      const id = /data-testid="([^"]+)"/.exec(sel)?.[1];
+      if (!id) return null;
+      if (this.testid === id) return this;
+      for (const child of this.children) {
+        const found = child.querySelector(sel);
+        if (found) return found;
+      }
+      return null;
+    },
+    remove() {
+      if (!this.parent) return;
+      this.parent.children = this.parent.children.filter((child) => child !== this);
+    },
+    insertAdjacentHTML(_where: string, html: string) {
+      const child = fakeEl("whats-new");
+      const release = /data-release-id="([^"]+)"/.exec(html)?.[1];
+      if (release) child.attrs["data-release-id"] = release;
+      child.parent = this;
+      this.children.push(child);
+    },
+  };
+  return node;
+}

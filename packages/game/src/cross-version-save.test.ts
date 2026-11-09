@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { UNIVERSE_SCHEMA_VERSION } from "./catalog.js";
 import { advanceUniverse } from "./world-arrival.js";
 import { migrateOrResetUniverse } from "./world-migrate.js";
+import { whatsNewViewFor } from "./release-notes.js";
 import { bindTickBudget } from "./tick-budget.js";
 import type { UniverseState } from "./types.js";
 
@@ -56,6 +57,7 @@ describe("cross-version save fixtures", () => {
     assert.equal(planet.buildings.metalMine, 7);
     assert.equal(planet.buildings.crystalMine, 4);
     assert.equal(player.research.energyTech, 3);
+    assert.equal(player.whatsNewDismissedReleaseId, undefined);
     assert.equal(loaded.universe.fleets.flt_fixture_outbound!.ships.scout, 4);
     assert.equal(loaded.universe.fleets.flt_fixture_outbound!.phase, "outbound");
     assert.equal(planet.buildQueue[0]?.id, "q_fixture_metal");
@@ -85,6 +87,11 @@ describe("cross-version save fixtures", () => {
 
     const loaded = migrateOrResetUniverse(structuredClone(raw));
     assert.equal(loaded.didReset, false);
+    assert.equal(loaded.universe.pirateBossBaseId, undefined);
+    assert.equal(loaded.universe.pirateBossActiveUntil, undefined);
+    assert.equal(loaded.universe.pirateBossNextSpawnAt, undefined);
+    assert.equal(loaded.universe.fleets.flt_pre_boss!.ships.hauler, 9);
+    assert.equal(loaded.universe.fleets.flt_pre_boss!.phase, "outbound");
     assert.equal(loaded.universe.id, "uni_fixture_pre_boss");
     assert.equal(loaded.universe.schemaVersion, UNIVERSE_SCHEMA_VERSION);
 
@@ -98,6 +105,9 @@ describe("cross-version save fixtures", () => {
     assert.equal(player.research.energyTech, 1);
     assert.equal(player.research.weaponsTech, 2);
     assert.equal(player.onboarding, undefined);
+    assert.equal(player.whatsNewDismissedReleaseId, undefined);
+    assert.ok(whatsNewViewFor(player));
+    assert.equal(player.whatsNewDismissedReleaseId, undefined);
     assert.equal(loaded.universe.fleets.flt_pre_boss!.ships.hauler, 9);
     assert.equal(loaded.universe.fleets.flt_pre_boss!.phase, "outbound");
     assert.equal(planet.buildQueue[0]?.id, "q_pre_boss_lab");
@@ -111,5 +121,58 @@ describe("cross-version save fixtures", () => {
     assert.equal(loaded.universe.fleets.flt_pre_boss!.ships.hauler, 9);
     assert.equal(loaded.universe.players[playerId]!.research.weaponsTech, 2);
     assert.equal(loaded.universe.players[playerId]!.onboarding, undefined);
+    assert.equal(
+      loaded.universe.players[playerId]!.whatsNewDismissedReleaseId,
+      undefined,
+    );
+  });
+
+  it("loads a pre-what's-new in-flight save from main without resetting progress", () => {
+    const path = fileURLToPath(
+      new URL("./fixtures/pre-whats-new-inflight.json", import.meta.url),
+    );
+    const raw = JSON.parse(readFileSync(path, "utf8")) as UniverseState;
+    const fleetId = Object.keys(raw.fleets)[0];
+    assert.ok(fleetId);
+    const savedFleet = raw.fleets[fleetId]!;
+    const ownerId = savedFleet.ownerPlayerId;
+    const ownerBefore = raw.players[ownerId]!;
+    assert.equal(ownerBefore.whatsNewDismissedReleaseId, undefined);
+    assert.equal(ownerBefore.onboarding, undefined);
+    assert.equal(savedFleet.mission, "deploy");
+    assert.equal(savedFleet.phase, "outbound");
+    assert.equal(savedFleet.ships.scout, 1);
+    const homeId = ownerBefore.homePlanetId;
+    const metalBefore = raw.planets[homeId]!.resources.metal;
+
+    const loaded = migrateOrResetUniverse(structuredClone(raw));
+    assert.equal(loaded.didReset, false);
+    assert.equal(loaded.universe.schemaVersion, UNIVERSE_SCHEMA_VERSION);
+    const fleet = loaded.universe.fleets[fleetId];
+    assert.ok(fleet);
+    assert.equal(fleet.mission, "deploy");
+    assert.equal(fleet.phase, "outbound");
+    assert.equal(fleet.ships.scout, 1);
+    assert.equal(fleet.arrivesAt, savedFleet.arrivesAt);
+    assert.equal(fleet.ownerPlayerId, ownerId);
+    const owner = loaded.universe.players[ownerId]!;
+    assert.equal(owner.name, "Hold");
+    assert.equal(owner.onboarding, undefined);
+    assert.equal(owner.whatsNewDismissedReleaseId, undefined);
+    const home = loaded.universe.planets[homeId]!;
+    assert.equal(home.resources.metal, metalBefore);
+    assert.equal(home.buildings.metalMine, raw.planets[homeId]!.buildings.metalMine);
+    assert.ok(whatsNewViewFor(owner)?.releaseId);
+    assert.equal(owner.whatsNewDismissedReleaseId, undefined);
+
+    tick(loaded.universe, home.lastTickAt + 1000);
+    assert.equal(loaded.universe.fleets[fleetId]!.ships.scout, 1);
+    assert.equal(loaded.universe.fleets[fleetId]!.phase, "outbound");
+    assert.ok(loaded.universe.planets[homeId]!.resources.metal >= metalBefore);
+    assert.equal(
+      loaded.universe.players[ownerId]!.whatsNewDismissedReleaseId,
+      undefined,
+    );
+    assert.equal(loaded.universe.players[ownerId]!.onboarding, undefined);
   });
 });

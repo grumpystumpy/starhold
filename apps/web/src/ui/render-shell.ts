@@ -11,6 +11,7 @@ import { RESOURCE_ART } from "./assets";
 import { fmt, fmtBonusPct, fmtCompact, fmtCoords } from "./format";
 import { planetDiscHtml } from "./planet-disc";
 import { NAV_LABELS, NAV_PAGES, type NavPage } from "./nav";
+import { creditsHref, creditsNavHtml } from "./render-credits";
 import { accountNavHtml, securityHref } from "./render-security";
 import { flashHtml, resBlock } from "./render-chrome";
 import { escapeAttr, escapeHtml } from "./render-escape";
@@ -179,6 +180,7 @@ function leftNav(view: PlayerView, active: NavPage): string {
           return `<li><a href="${escapeAttr(href)}" class="nav-link${id === gameActive ? " active" : ""}" data-nav="${id}" data-testid="nav-${id}">${NAV_LABELS[id]}${badge}</a></li>`;
         }).join("")}
         ${accountNavHtml(Boolean(session.account), session.accountMenu === "security", securityHref(`?${params.toString()}`))}
+        ${creditsNavHtml(session.accountMenu === "credits", creditsHref(`?${params.toString()}`))}
       </ul>
     </nav>`;
 }
@@ -215,6 +217,53 @@ function planetSwitcher(
           .join("")}
       </ul>
     </aside>`;
+}
+
+/** One-time release notes. Empty once this commander dismissed the current key. */
+export function whatsNewHtml(
+  view: PlayerView,
+  busy: boolean,
+): string {
+  const notes = view.whatsNew;
+  if (!notes || notes.items.length === 0) return "";
+  const items = notes.items
+    .map((item) => `<li>${escapeHtml(item)}</li>`)
+    .join("");
+  return `<div class="whats-new-backdrop" data-testid="whats-new" data-release-id="${escapeAttr(notes.releaseId)}">
+    <section class="whats-new-dialog panel" role="dialog" aria-modal="true" aria-labelledby="whats-new-title">
+      <h2 id="whats-new-title">${escapeHtml(notes.title)}</h2>
+      <ul class="whats-new-list">${items}</ul>
+      <button type="button" data-whats-new-dismiss data-testid="whats-new-dismiss" ${busy ? "disabled" : ""}>Got it</button>
+    </section>
+  </div>`;
+}
+
+/** Keep the popup in step with the view when the shell is patched in place. */
+export function syncWhatsNewPopup(
+  root: ParentNode,
+  view: PlayerView,
+  busy: boolean,
+): void {
+  const shell = root.querySelector<HTMLElement>('[data-testid="game-shell"]');
+  if (!shell) return;
+  const next = whatsNewHtml(view, busy);
+  const existing = shell.querySelector<HTMLElement>('[data-testid="whats-new"]');
+  if (!next) {
+    existing?.remove();
+    return;
+  }
+  if (!existing) {
+    shell.insertAdjacentHTML("beforeend", next);
+    return;
+  }
+  const button = existing.querySelector<HTMLButtonElement>(
+    '[data-testid="whats-new-dismiss"]',
+  );
+  if (existing.getAttribute("data-release-id") !== view.whatsNew?.releaseId) {
+    existing.outerHTML = next;
+    return;
+  }
+  if (button) button.disabled = busy;
 }
 
 export function shellHtml(
@@ -288,6 +337,7 @@ export function shellHtml(
         </main>
         ${planetSwitcher(view, state.busy)}
       </div>
+      ${whatsNewHtml(view, state.busy)}
     </div>`;
 }
 

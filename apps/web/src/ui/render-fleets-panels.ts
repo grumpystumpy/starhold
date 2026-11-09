@@ -13,6 +13,7 @@ import {
 import { fmt, fmtCompact, fmtCoords, fmtCoordsLink, fmtEta, remainingSeconds } from "./format";
 import { planetDiscHtml } from "./planet-disc";
 import { escapeAttr, escapeHtml } from "./render-escape";
+import { formatBossCountdown } from "./render-seasons";
 import { infoTooltip } from "./render-tooltips";
 
 function unitLossLine(
@@ -159,7 +160,18 @@ function pirateBossGalaxyBanner(view: PlayerView, busy: boolean): string {
   if (!boss?.activeUntil) return "";
   const coords = `${boss.coords.galaxy}:${boss.coords.system}:${boss.coords.slot}`;
   const rank = boss.myRank == null ? "unranked" : `#${fmt(boss.myRank)}`;
-  return `<div class="pirate-boss-banner" data-testid="galaxy-boss-banner"><p>Seasonal mothership · ${fmtCoordsLink(boss.coords)} · ${fmt(boss.hpPct)}% hull · you ${rank}</p><button type="button" data-galaxy-attack-pirates="${coords}" data-galaxy-pirate-base="${escapeAttr(boss.id)}" data-testid="galaxy-raid-boss" ${busy ? "disabled" : ""}>Raid boss</button></div>`;
+  const flavor = boss.flavorTitle ? ` · ${escapeHtml(boss.flavorTitle)}` : "";
+  const clock =
+    typeof view.now === "number" && Number.isFinite(view.now)
+      ? ` · window ends in ${formatBossCountdown(boss.activeUntil, view.now)}`
+      : "";
+  const next =
+    typeof view.now === "number" &&
+    Number.isFinite(view.now) &&
+    boss.projectedSpawnAt != null
+      ? ` · next spawn ${formatBossCountdown(boss.projectedSpawnAt, view.now)}`
+      : "";
+  return `<div class="pirate-boss-banner" data-testid="galaxy-boss-banner"><p>Seasonal mothership${flavor}${clock} · ${fmtCoordsLink(boss.coords)} · ${fmt(boss.hpPct)}% hull · you ${rank}${next}</p><button type="button" data-galaxy-attack-pirates="${coords}" data-galaxy-pirate-base="${escapeAttr(boss.id)}" data-testid="galaxy-raid-boss" ${busy ? "disabled" : ""}>Raid boss</button></div>`;
 }
 
 export function galaxyPanel(

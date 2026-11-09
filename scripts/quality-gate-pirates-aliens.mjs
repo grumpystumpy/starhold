@@ -16,6 +16,7 @@ import { createRequire } from "node:module";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { captureBrowserErrors } from "./browser-error-capture.mjs";
+import { armWhatsNewDismiss } from "./lib/dismiss-whats-new.mjs";
 
 const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:3001";
 const API = process.env.STARHOLD_API ?? WEB;
@@ -77,7 +78,7 @@ async function runViewport(browser, vp, email, password, commander) {
   const context = await browser.newContext({
     viewport: { width: vp.width, height: vp.height },
   });
-  const page = await context.newPage();
+  const page = await armWhatsNewDismiss(await context.newPage());
   captureBrowserErrors(page, `pirates-${vp.name}`);
   const dir = path.join(OUT, vp.name);
   const pass = [];
@@ -130,7 +131,7 @@ async function runViewport(browser, vp, email, password, commander) {
   const loginCtx = await browser.newContext({
     viewport: { width: vp.width, height: vp.height },
   });
-  const loginPage = await loginCtx.newPage();
+  const loginPage = await armWhatsNewDismiss(await loginCtx.newPage());
   captureBrowserErrors(loginPage, `pirates-login-${vp.name}`);
   await loginPage.goto(WEB, { waitUntil: "networkidle" });
   await loginPage.waitForSelector('[data-testid="auth-form"]', {

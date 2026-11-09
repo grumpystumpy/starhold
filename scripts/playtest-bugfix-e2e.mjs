@@ -12,6 +12,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { fleetToStep2 } from "./lib/fleet-two-step.mjs";
 import { captureBrowserErrors } from "./browser-error-capture.mjs";
+import { armWhatsNewDismiss } from "./lib/dismiss-whats-new.mjs";
 
 const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:3001";
 const API = process.env.STARHOLD_API ?? WEB;
@@ -160,7 +161,7 @@ async function optionTexts(page) {
 }
 
 async function runViewport(browser, viewport, ids) {
-  const page = await browser.newPage({ viewport });
+  const page = await armWhatsNewDismiss(await browser.newPage({ viewport }));
   captureBrowserErrors(page, `playtest-${viewport.width}x${viewport.height}`);
   const tag = `${viewport.width}x${viewport.height}`;
   const stamp = `${Date.now().toString(36)}${viewport.width}`;
@@ -418,7 +419,7 @@ async function runViewport(browser, viewport, ids) {
 }
 
 async function expectGraduatedTarget(browser, viewport, ids) {
-  const page = await browser.newPage({ viewport });
+  const page = await armWhatsNewDismiss(await browser.newPage({ viewport }));
   captureBrowserErrors(page, `playtest-graduated-${viewport.width}x${viewport.height}`);
   const tag = `${viewport.width}x${viewport.height} graduated`;
   try {

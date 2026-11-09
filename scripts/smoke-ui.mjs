@@ -18,6 +18,7 @@ import { createRequire } from "node:module";
 import { runPollCadence } from "./poll-cadence-e2e.mjs";
 import { fleetToStep2 } from "./lib/fleet-two-step.mjs";
 import { captureBrowserErrors } from "./browser-error-capture.mjs";
+import { armWhatsNewDismiss, dismissWhatsNew } from "./lib/dismiss-whats-new.mjs";
 
 const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:5173";
 const API = process.env.STARHOLD_API ?? "http://127.0.0.1:3001";
@@ -270,6 +271,7 @@ async function pollUntil(page, label, ready, timeoutMs) {
 }
 
 async function goNav(page, id) {
+  await dismissWhatsNew(page);
   const navId = NAV_ALIAS[id] ?? id;
   if (SHOP_TAB_PAGES.has(navId)) {
     // Officers/Skills live as tabs under the Shop page (B5-01).
@@ -290,7 +292,7 @@ const PIRATE_GALAXIES = 10;
 const PIRATE_READ_CAP = PIRATE_ATTEMPTS * PIRATE_SYSTEMS;
 
 async function signupFreshCommander(browser, stamp) {
-  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  const page = await armWhatsNewDismiss(await browser.newPage({ viewport: { width: 1280, height: 800 } }));
   captureBrowserErrors(page, "ui-smoke-signup");
   const email = `pirate${stamp}@example.com`;
   const password = "starhold-pirate";
@@ -365,7 +367,7 @@ async function uiSmoke() {
   const logs = [];
 
   const urlName = `Url${Date.now().toString(36).slice(-4)}`;
-  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  const page = await armWhatsNewDismiss(await browser.newPage({ viewport: { width: 1280, height: 800 } }));
   captureBrowserErrors(page, "ui-smoke");
   await page.goto(`${WEB}/?commander=${encodeURIComponent(urlName)}`, {
     waitUntil: "networkidle",
@@ -656,7 +658,7 @@ async function uiSmoke() {
   }
   logs.push("p1-unaffordable-or-full-flash");
 
-  const typedPage = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  const typedPage = await armWhatsNewDismiss(await browser.newPage({ viewport: { width: 1280, height: 800 } }));
   captureBrowserErrors(typedPage, "ui-smoke-typed");
   await typedPage.goto(WEB, { waitUntil: "networkidle" });
   await typedPage.waitForSelector('[data-testid="commander-input"]');
@@ -672,7 +674,7 @@ async function uiSmoke() {
   await typedPage.waitForSelector('[data-testid="resources"]', { timeout: 15_000 });
   logs.push(`typed-join:${typed}`);
 
-  const helpPage = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  const helpPage = await armWhatsNewDismiss(await browser.newPage({ viewport: { width: 1280, height: 800 } }));
   captureBrowserErrors(helpPage, "ui-smoke-help");
   await helpPage.goto(WEB, { waitUntil: "networkidle" });
   const helperName = `Help${Date.now().toString(36).slice(-4)}`;
@@ -834,7 +836,7 @@ async function uiSmoke() {
   logs.push("build-feedback-ok");
 
   const rivalName = `Riv${Date.now().toString(36).slice(-4)}`;
-  const rivalPage = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  const rivalPage = await armWhatsNewDismiss(await browser.newPage({ viewport: { width: 1280, height: 800 } }));
   captureBrowserErrors(rivalPage, "ui-smoke-rival");
   await rivalPage.goto(`${WEB}/?commander=${encodeURIComponent(rivalName)}`, {
     waitUntil: "networkidle",
@@ -998,6 +1000,17 @@ async function authAndGoalsSmoke() {
   if (!playerId) throw new Error("signup join missing player");
   logs.push(`joined:${name}`);
 
+  const popup = page.locator('[data-testid="whats-new"]');
+  await popup.waitFor({ state: "visible", timeout: 10_000 });
+  const releaseId = await popup.getAttribute("data-release-id");
+  if (!releaseId) throw new Error("what's new popup missing release id");
+  const dismissed = await dismissWhatsNew(page);
+  if (!dismissed) throw new Error("what's new popup did not dismiss");
+  if ((await page.locator('[data-testid="whats-new"]').count()) !== 0) {
+    throw new Error("what's new popup stayed open after Got it");
+  }
+  logs.push(`whats-new-dismissed:${releaseId}`);
+
   await page.evaluate(() => localStorage.clear());
   await page.reload({ waitUntil: "networkidle" });
   await page.waitForSelector('[data-testid="resources"]', { timeout: 15_000 });
@@ -1006,6 +1019,10 @@ async function authAndGoalsSmoke() {
     throw new Error(`cookie persist failed: ${JSON.stringify(persisted)}`);
   }
   logs.push("cookie-persist");
+  if ((await page.locator('[data-testid="whats-new"]').count()) !== 0) {
+    throw new Error("what's new popup reappeared after dismiss");
+  }
+  logs.push("whats-new-stays-dismissed");
 
   await goNav(page, "goals");
   await page.waitForSelector('[data-testid="goals-daily"]', { timeout: 10_000 });

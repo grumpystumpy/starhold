@@ -262,6 +262,15 @@ export {
 } from "./world-onboarding.js";
 export { nextGoalSuggestionFor } from "./next-goal.js";
 export {
+  CURRENT_RELEASE_ID,
+  RELEASE_NOTES,
+  dismissWhatsNew,
+  releaseNotesNewerThan,
+  whatsNewViewFor,
+  type ReleaseNoteEntry,
+  type WhatsNewActionResult,
+} from "./release-notes.js";
+export {
   effectiveCombatResearch,
   ensurePlayerProgress,
   grantPlayerXp,
@@ -348,6 +357,8 @@ export {
   isSeasonPvpMission,
   placementReward,
   rollSeasons,
+  pirateBossSeasonFlavor,
+  pirateBossSeasonSchedule,
   seasonIdFromTime,
   seasonLeaderboardView,
   seasonPilotTitle,

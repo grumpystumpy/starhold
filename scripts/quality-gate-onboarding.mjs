@@ -9,6 +9,7 @@ import { createActiveWaitClock } from "./active-wait-clock.mjs";
  * with SESSION_SECRET or the local fallback, and playwright chromium.
  */
 import { createRequire } from "node:module";
+import { armWhatsNewDismiss } from "./lib/dismiss-whats-new.mjs";
 
 const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:3001";
 const API = process.env.STARHOLD_API ?? WEB;
@@ -82,7 +83,7 @@ async function main() {
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
   });
-  const page = await context.newPage();
+  const page = await armWhatsNewDismiss(await context.newPage());
   const errors = [];
   page.on("pageerror", (err) => errors.push(`pageerror:${err.message}`));
   page.on("console", (msg) => {

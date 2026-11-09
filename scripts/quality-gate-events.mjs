@@ -9,6 +9,7 @@ import { createActiveWaitClock } from "./active-wait-clock.mjs";
  * (default :3001), and playwright chromium.
  */
 import { createRequire } from "node:module";
+import { armWhatsNewDismiss } from "./lib/dismiss-whats-new.mjs";
 
 const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:3001";
 const API = process.env.STARHOLD_API ?? WEB;
@@ -90,7 +91,7 @@ async function main() {
   const context = await browser.newContext({
     viewport: { width: 1280, height: 800 },
   });
-  const page = await context.newPage();
+  const page = await armWhatsNewDismiss(await context.newPage());
   const stamp = Date.now().toString(36);
   const email = `gate_evt_${stamp}@example.com`;
   const password = `GateTest1!${stamp}`;

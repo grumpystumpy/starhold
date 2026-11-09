@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import type { OnboardingView, PlayerView } from "@starhold/game";
 import { fleetComposer } from "./render-fleets-composer";
 import { blankFleetDraft } from "./render-fleets-draft";
+import { recommendedNext } from "./render-helpers";
 import { pageHtml } from "./render-pages";
 
 function briefing(partial: Partial<OnboardingView> = {}): OnboardingView {
@@ -101,8 +102,14 @@ describe("onboarding ui", () => {
     const shown = pageHtml("overview", overviewView(briefing()), false, null);
     assert.match(shown, /data-testid="onboarding-panel"/);
     assert.match(shown, /data-testid="onboarding-claim-metalMine1"/);
+    assert.match(shown, /data-testid="onboarding-claim-hint-metalMine1"/);
+    assert.match(shown, /Already done\. Claim the reward\./);
+    assert.match(shown, /Ready to claim/);
+    assert.doesNotMatch(shown, /onboarding-claim-hint-solarPlant1/);
     assert.match(shown, /data-testid="onboarding-step-colonyFoundation"/);
-    assert.match(shown, /1 \/ 8 complete/);
+    assert.match(shown, /1 \/ 8 complete · 1 ready to claim/);
+    assert.match(shown, /raise the Research Lab, then start Power Discipline/);
+    assert.doesNotMatch(shown, /Shadow Optics/);
     assert.match(shown, /data-testid="overview-daily-missions-ready"/);
     assert.doesNotMatch(shown, /Metal ×1\.20/);
     assert.match(shown, /data-testid="position-mult"/);
@@ -144,6 +151,8 @@ describe("onboarding ui", () => {
     const open = pageHtml("goals", overviewView(briefing()), false, null);
     assert.match(open, /data-testid="onboarding-goals"/);
     assert.match(open, /data-testid="onboarding-claim-metalMine1"/);
+    assert.match(open, /data-testid="onboarding-claim-hint-metalMine1"/);
+    assert.match(open, /1 \/ 8 complete · 1 ready to claim/);
     assert.doesNotMatch(open, /data-testid="onboarding-restore"/);
 
     const legacy = pageHtml("goals", overviewView(undefined), false, null);
@@ -267,5 +276,22 @@ describe("onboarding ui", () => {
     );
     assert.match(owned, /Moon Destruction/);
     assert.match(owned, /Mini Planet Destruction/);
+  });
+
+  it("names the hulls a new commander can build", () => {
+    const fresh = recommendedNext(overviewView(briefing()));
+    assert.match(fresh, /start Power Discipline/);
+    assert.doesNotMatch(fresh, /Shadow Optics/);
+
+    const withLab = overviewView(briefing());
+    withLab.planet.buildings.researchLab = 1;
+    const afterLab = recommendedNext(withLab);
+    assert.match(afterLab, /Recon Drone or Spy Satellite/);
+    assert.doesNotMatch(afterLab, /Scout \/ Probe/);
+
+    const hint = fleetComposer(fleetView({ scout: 1 }), false, blankFleetDraft());
+    assert.match(hint, /data-testid="fleet-orbit-hint"/);
+    assert.match(hint, /1 Recon Drone/);
+    assert.doesNotMatch(hint, /1 scout/);
   });
 });

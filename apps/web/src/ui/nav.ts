@@ -72,21 +72,25 @@ export const NAV_PATHS: Record<NavPage, string> = {
   messages: "/messages",
 };
 
-/** Signed-in account pages. Not part of the game nav union. */
-export const ACCOUNT_MENU = ["security"] as const;
+/** Account pages. Not part of the game nav union. Credits stays visible when signed out. */
+export const ACCOUNT_MENU = ["security", "credits"] as const;
 export type AccountMenuPage = (typeof ACCOUNT_MENU)[number];
 
 export const ACCOUNT_MENU_LABELS: Record<AccountMenuPage, string> = {
   security: "Security",
+  credits: "Credits",
 };
 
 export const ACCOUNT_MENU_PATHS: Record<AccountMenuPage, string> = {
   security: "/security",
+  credits: "/credits",
 };
 
 export function accountMenuFromPath(pathname: string): AccountMenuPage | null {
   const raw = pathname.replace(/\/+$/, "") || "/";
-  if (raw === ACCOUNT_MENU_PATHS.security) return "security";
+  for (const page of ACCOUNT_MENU) {
+    if (raw === ACCOUNT_MENU_PATHS[page]) return page;
+  }
   return null;
 }
 

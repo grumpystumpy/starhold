@@ -1,7 +1,7 @@
 import type { FleetMission, PlayerView } from "@starhold/game";
 import { fmt, fmtCompact, fmtCoords, fmtCoordsLink, fmtEta, remainingSeconds } from "./format";
 import { escapeHtml } from "./render-escape";
-import { bossDamageCallout } from "./render-seasons";
+import { bossDamageCallout, formatBossCountdown } from "./render-seasons";
 
 export interface EventPresentation {
   className: "event-outgoing" | "event-returning" | "event-hostile";
@@ -62,16 +62,6 @@ function renderCoordLink(c: { galaxy: number; system: number; slot: number } | s
   return `<a href="/galaxy?galaxy=${c.galaxy}&amp;system=${c.system}" class="coord-link" data-galaxy-coords="${formatted}">${formatted}</a>`;
 }
 
-function bossCountdown(until: number, now: number): string {
-  const seconds = Math.max(0, Math.ceil((until - now) / 1000));
-  const days = Math.floor(seconds / 86_400);
-  const hours = Math.floor((seconds % 86_400) / 3_600);
-  const minutes = Math.floor((seconds % 3_600) / 60);
-  if (days > 0) return `${fmt(days)}d ${fmt(hours)}h`;
-  if (hours > 0) return `${fmt(hours)}h ${fmt(minutes)}m`;
-  return fmtEta(seconds);
-}
-
 /** Compact boss status for the fleet-events strip. Empty when no boss is tracked. */
 export function pirateBossEventCard(view: PlayerView, now = view.now): string {
   const boss = view.pirateBoss;
@@ -82,10 +72,15 @@ export function pirateBossEventCard(view: PlayerView, now = view.now): string {
     until == null
       ? ""
       : active
-        ? ` · ends in ${bossCountdown(until, now)}`
-        : ` · next spawn ${bossCountdown(until, now)}`;
+        ? ` · ends in ${formatBossCountdown(until, now)}`
+        : ` · next spawn ${formatBossCountdown(until, now)}`;
   const rank = boss.myRank == null ? "unranked" : `#${fmt(boss.myRank)}`;
-  return `<section class="pirate-boss-card" data-testid="pirate-boss-event-card" aria-label="Seasonal pirate boss"><p><strong>Pirate mothership</strong> · ${active ? "Active" : "Cooldown"}${when} · ${fmtCoordsLink(boss.coords)} · ${fmt(boss.hpPct)}% hull</p><p class="hint" data-testid="pirate-boss-event-me">You ${fmtCompact(boss.myDamage)} · ${rank}</p>${bossDamageCallout(view)}</section>`;
+  const flavor = boss.flavorTitle ? ` · ${escapeHtml(boss.flavorTitle)}` : "";
+  const next =
+    active && boss.projectedSpawnAt != null
+      ? `<p class="hint" data-testid="pirate-boss-event-next">Next spawn ${formatBossCountdown(boss.projectedSpawnAt, now)}</p>`
+      : "";
+  return `<section class="pirate-boss-card" data-testid="pirate-boss-event-card" aria-label="Seasonal pirate boss"><p><strong>Pirate mothership</strong>${flavor} · ${active ? "Active" : "Cooldown"}${when} · ${fmtCoordsLink(boss.coords)} · ${fmt(boss.hpPct)}% hull</p><p class="hint" data-testid="pirate-boss-event-me">You ${fmtCompact(boss.myDamage)} · ${rank}</p>${next}${bossDamageCallout(view)}</section>`;
 }
 
 export function eventsBannerHtml(view: PlayerView, now = Date.now()): string {
