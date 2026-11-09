@@ -69,6 +69,8 @@ import {
 } from "./catalog.js";
 import {
   PIRATE_RAID_POWER_FACTOR_PLAYER,
+  PIRATE_RAID_LEVEL_POWER_BONUS,
+  PIRATE_STRENGTH_MULT,
   PIRATE_TECH_OFFSET,
   PIRATE_BOSS_COOLDOWN_MS,
   PIRATE_BOSS_DURATION_MS,
@@ -575,7 +577,8 @@ function addDefensesTimes(
   return out;
 }
 
-export function pirateShipsForTier(tier: number): FleetShips {
+/** Unscaled ordinary hull table. Boss spawn uses this; pirates then apply PIRATE_STRENGTH_MULT. */
+function pirateShipTemplate(tier: number): FleetShips {
   const t = Math.max(0, Math.min(PIRATE_MAX_LEVEL, Math.floor(tier)));
   const ships = emptyFleetShips();
   ships.scout = 2 + Math.floor(t * 0.4);
@@ -597,9 +600,22 @@ export function pirateShipsForTier(tier: number): FleetShips {
   return stripExcludedShips(ships, false);
 }
 
+/**
+ * One cut for ordinary pirate hulls. Hangar templates and free-spawn counts
+ * both go through here. Raid detachments are taken from the hangar, so they
+ * inherit it. Seasonal boss hangar does not call this.
+ */
+function scaleOrdinaryPirateShips(ships: FleetShips): FleetShips {
+  return scaleShips(ships, PIRATE_STRENGTH_MULT);
+}
+
+export function pirateShipsForTier(tier: number): FleetShips {
+  return scaleOrdinaryPirateShips(pirateShipTemplate(tier));
+}
+
 export function alienShipsForTier(tier: number): FleetShips {
   return stripExcludedShips(
-    scaleShips(pirateShipsForTier(tier), ALIEN_STRENGTH_MULT),
+    scaleShips(pirateShipTemplate(tier), ALIEN_STRENGTH_MULT),
     true,
   );
 }
@@ -608,13 +624,15 @@ export function pirateFreeSpawnShips(level: number): FleetShips {
   const total =
     PIRATE_FREE_SHIP_BASE +
     PIRATE_FREE_SHIP_PER_LEVEL * Math.max(0, Math.floor(level));
-  return stripExcludedShips(
-    distributeByComposition(
-      total,
-      PIRATE_FREE_SHIP_COMPOSITION,
+  return scaleOrdinaryPirateShips(
+    stripExcludedShips(
+      distributeByComposition(
+        total,
+        PIRATE_FREE_SHIP_COMPOSITION,
+        false,
+      ) as FleetShips,
       false,
-    ) as FleetShips,
-    false,
+    ),
   );
 }
 
@@ -1340,6 +1358,15 @@ export function applyStrongShipCap(
   return out;
 }
 
+/**
+ * Level 0 keeps `baseFactor`. Level PIRATE_MAX_LEVEL multiplies it by
+ * 1 + PIRATE_RAID_LEVEL_POWER_BONUS (1.5×). Aliens do not call this.
+ */
+export function pirateRaidPowerFactor(baseFactor: number, level: number): number {
+  const clamped = Math.max(0, Math.min(PIRATE_MAX_LEVEL, Math.floor(level) || 0));
+  return baseFactor * (1 + PIRATE_RAID_LEVEL_POWER_BONUS * (clamped / PIRATE_MAX_LEVEL));
+}
+
 export function scalePirateRaidFleet(
   full: FleetShips,
   defenderPower: number,
@@ -1624,6 +1651,8 @@ function tickSeasonalPirateBoss(
   );
   boss.name = "Seasonal Pirate Mothership";
   boss.seasonalBoss = true;
+  // Boss hangar stays on the unscaled template. PIRATE_STRENGTH_MULT is ordinary pirates only.
+  boss.ships = pirateShipTemplate(PIRATE_BOSS_TIER);
   boss.ships.swarmMothership = PIRATE_BOSS_MOTHERSHIPS;
   boss.bossShipsAtSpawn = fleetShipCount(boss.ships);
   boss.resources = {
@@ -1924,6 +1953,43 @@ function battleDebris(
   };
 }
 
+function isAlienBase(base: PirateBase | AlienBase): base is AlienBase {
+  return "foundByPlayerId" in base;
+}
+
+/**
+ * Pirate hangar after the sent detachment fights.
+ * Any outcome other than attacker_win removes the full sent detachment.
+ * Survivors are not put back. On attacker_win, only destroyed sent hulls
+ * leave (sent minus survived), with no 50% floor on the rest of the hangar.
+ * B7-98 flight-time fleets must keep the same loss semantics: no return leg on a loss.
+ */
+function settlePirateHangarAfterRaid(
+  hangar: FleetShips,
+  sentFleet: FleetShips,
+  survivedFleet: FleetShips,
+  outcome: string,
+): FleetShips {
+  const out = normalizeFleetShips(hangar);
+  const loseAllSent = outcome !== "attacker_win";
+  for (const id of SHIP_ORDER) {
+    const sent = sentFleet[id] ?? 0;
+    const survived = survivedFleet[id] ?? 0;
+    const remove = loseAllSent ? sent : Math.max(0, sent - survived);
+    out[id] = Math.max(0, (out[id] ?? 0) - remove);
+  }
+  return out;
+}
+
+function settleAlienHangarAfterRaid(
+  hangar: FleetShips,
+  sent: number,
+  survived: number,
+): FleetShips {
+  if (sent <= 0) return hangar;
+  return scaleShips(hangar, Math.min(1, 0.5 + (survived / sent) * 0.5));
+}
+
 export function applyNpcRaidOnPlanet(
   universe: UniverseState,
   base: PirateBase | AlienBase,
@@ -1947,7 +2013,7 @@ export function applyNpcRaidOnPlanet(
           base.ships,
           planetDefensePower(planet, universe),
           planet.ships,
-          PIRATE_RAID_POWER_FACTOR_PLAYER,
+          pirateRaidPowerFactor(PIRATE_RAID_POWER_FACTOR_PLAYER, base.level),
         )
       : scaleAlienRaidFleet(
           base.ships,
@@ -2033,8 +2099,15 @@ export function applyNpcRaidOnPlanet(
   });
   const sent = fleetShipCount(raidFleet);
   const survived = fleetShipCount(combat.attackerAfter);
-  if (sent > 0) {
-    base.ships = scaleShips(base.ships, Math.min(1, 0.5 + (survived / sent) * 0.5));
+  if (faction === "pirate") {
+    base.ships = settlePirateHangarAfterRaid(
+      base.ships,
+      raidFleet,
+      combat.attackerAfter,
+      combat.outcome,
+    );
+  } else {
+    base.ships = settleAlienHangarAfterRaid(base.ships, sent, survived);
   }
   if (combat.outcome === "attacker_win") {
     const loot = computeRaidLoot(planet.resources, combat.attackerAfter);
@@ -2083,7 +2156,15 @@ export function applyNpcRaidOnNpc(
       other.defenses ?? emptyDefenses(),
       pirateCombatResearch(other),
     );
-  const raidFleet = scalePirateRaidFleet(base.ships, otherPower);
+  const pirateAttacker = !isAlienBase(base);
+  const raidFleet = pirateAttacker
+    ? scalePirateRaidFleet(
+        base.ships,
+        otherPower,
+        undefined,
+        pirateRaidPowerFactor(PIRATE_RAID_POWER_FACTOR, base.level),
+      )
+    : scalePirateRaidFleet(base.ships, otherPower);
   if (fleetShipCount(raidFleet) < 1) return;
   // Instant raid path. When B7-98 launches a fleet instead, record the target at launch.
   rememberRaidTarget(base, other.id, now);
@@ -2113,8 +2194,15 @@ export function applyNpcRaidOnNpc(
   addDebris(universe, other.coords, debrisCreated);
   const sent = fleetShipCount(raidFleet);
   const survived = fleetShipCount(combat.attackerAfter);
-  if (sent > 0) {
-    base.ships = scaleShips(base.ships, Math.min(1, 0.5 + (survived / sent) * 0.5));
+  if (pirateAttacker) {
+    base.ships = settlePirateHangarAfterRaid(
+      base.ships,
+      raidFleet,
+      combat.attackerAfter,
+      combat.outcome,
+    );
+  } else {
+    base.ships = settleAlienHangarAfterRaid(base.ships, sent, survived);
   }
   if (combat.outcome === "attacker_win") {
     const loot = computeRaidLoot(other.resources, combat.attackerAfter);

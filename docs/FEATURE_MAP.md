@@ -46,6 +46,12 @@ Living non-boss pirate bases are capped at `PIRATE_BASES_PER_GALAXY` (75) in eac
 
 On the Workers `*/10` NPC job, when a tick budget is set, even ten-minute wall-clock slices grow pirate and alien bases and apply free spawns; odd slices catch up raids only. Each phase has its own resumable cursor (`aiCatchUpCursor` for grow, optional `aiRaidCatchUpCursor` for raids), so work in one phase cannot clear the other's backlog. Each slice visits at most `NPC_AI_BATCH_SIZE` (50) bases. Non-budgeted ticks keep the combined catch-up path. Population culling and boss upkeep stay active on both phases.
 
+Ordinary pirate raid power keeps the existing detachment cap, then applies a level term. `pirateRaidPowerFactor` in `packages/game/src/world-pirates.ts` multiplies the factor passed into `scalePirateRaidFleet` by `(1 + PIRATE_RAID_LEVEL_POWER_BONUS * (level / PIRATE_MAX_LEVEL))`. `PIRATE_RAID_LEVEL_POWER_BONUS` is `0.5` in `packages/game/src/data/tuning.ts`. Level 0 keeps today's factor (`PIRATE_RAID_POWER_FACTOR` against NPCs, `PIRATE_RAID_POWER_FACTOR_PLAYER` against players). Level `PIRATE_MAX_LEVEL` is 1.5× that factor. Aliens do not use this bonus.
+
+When a pirate raid's outcome is not `attacker_win` (a loss or a draw), the whole sent detachment is subtracted from `base.ships` and clamped at 0. Combat survivors of that detachment are not put back. On `attacker_win`, only destroyed sent hulls leave the hangar (sent minus survived). There is no 50% floor on the unsent hangar. Aliens keep the previous hangar scale. B7-98 flight-time fleets must keep the same loss semantics: no return leg on a loss.
+
+`PIRATE_STRENGTH_MULT` is `0.5` in `packages/game/src/data/tuning.ts`. `scaleOrdinaryPirateShips` in `packages/game/src/world-pirates.ts` is the one place that applies it, to ordinary hangar templates (`pirateShipsForTier`) and free-spawn ship counts (`pirateFreeSpawnShips`). Raid detachments are taken from that hangar, so they inherit the cut. The seasonal boss hangar, built from the unscaled tier template plus `PIRATE_BOSS_MOTHERSHIPS`, does not use this multiplier. `PIRATE_BOSS_TIERS` payout amounts are unchanged. This note lives in `docs/FEATURE_MAP.md`.
+
 ## Open questions
 
 - Join requests do not expire.

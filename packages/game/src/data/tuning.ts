@@ -1659,6 +1659,20 @@ export const EXPEDITION_STARSHARD_REWARD_MULT = 0.05;
 export const PIRATE_RAID_POWER_FACTOR = 1.4;
 export const PIRATE_RAID_POWER_FACTOR_PLAYER = 0.70;
 export const PIRATE_RAID_POWER_FLOOR = 40;
+/**
+ * Level term on the pirate raid power factor.
+ * effective = baseFactor * (1 + PIRATE_RAID_LEVEL_POWER_BONUS * (level / PIRATE_MAX_LEVEL)).
+ * Level 0 keeps baseFactor. Level PIRATE_MAX_LEVEL is 1.5× baseFactor.
+ * Aliens do not use this bonus.
+ */
+export const PIRATE_RAID_LEVEL_POWER_BONUS = 0.5;
+/**
+ * Ordinary pirate hangar templates and free-spawn ship counts.
+ * Raid detachments are drawn from that hangar, so they inherit this cut.
+ * Seasonal boss hangar (PIRATE_BOSS_TIER / PIRATE_BOSS_MOTHERSHIPS) is exempt.
+ * Does not change PIRATE_BOSS_TIERS payouts.
+ */
+export const PIRATE_STRENGTH_MULT = 0.5;
 export const PIRATE_TECH_OFFSET = 3;
 
 /** Max catch-up raid firings per base per tick (lazy Hobby path). */
