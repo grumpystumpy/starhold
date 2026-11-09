@@ -4,7 +4,6 @@ import {
   DAILY_LOGIN_METAL,
   PRODUCTION_MULT,
   STARSHARDS_DAILY_LOGIN,
-  unreadEventCount,
   type PlayerView,
 } from "@starhold/game";
 import { fmt, fmtCompact, fmtCoords } from "./format";
@@ -14,6 +13,7 @@ import { patchFlash } from "./render-chrome-join.js";
 import { escapeHtml } from "./render-escape";
 import { infoTooltip, storageFillTitle } from "./render-tooltips";
 import { levelBonusHelpTooltip } from "./render-shell";
+import { inboxUnreadCount } from "./render-messages";
 
 /**
  * Update top bar + resource bar in place (no remount) so background polls
@@ -227,7 +227,7 @@ export function patchLiveChrome(
 }
 
 function patchMessagesBadge(root: HTMLElement, view: PlayerView): void {
-  const unread = unreadEventCount(view.player);
+  const unread = inboxUnreadCount(view);
   const link = root.querySelector<HTMLElement>('[data-testid="nav-messages"]');
   if (link) {
     const existing = link.querySelector<HTMLElement>(

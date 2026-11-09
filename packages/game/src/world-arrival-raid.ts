@@ -46,7 +46,6 @@ import {
   vacateMiniPlanet,
 } from "./world-mini.js";
 import { maybeDestroyMoonWithTitans } from "./world-round2.js";
-import { pushEventLog } from "./world-event-log.js";
 import { awardSeasonPvpWin, isSeasonPvpMission } from "./world-seasons.js";
 import { addDebris, subtractCargo } from "./world-tick.js";
 import { isNewbieBonusActive, NEWBIE_DEFENSE_MULT } from "./world-protection.js";
@@ -304,25 +303,6 @@ export function resolveRaidArrival(
     xpAwarded: { attacker: attackerXp, defender: defenderXp },
   };
   recordCombatReport(universe, report);
-
-  if (defenderOwner && defenderOwner.id !== fleet.ownerPlayerId) {
-    pushEventLog(defenderOwner, {
-      kind: "raidAlert",
-      createdAt: fleet.arrivesAt,
-      title: `Hostile raid resolved at ${target.name}`,
-      body: summary,
-      href: `#msg-combat-${reportId}`,
-      meta: {
-        reportId,
-        outcome: combat.outcome,
-        planetId: target.id,
-        galaxy: target.coords.galaxy,
-        system: target.coords.system,
-        slot: target.coords.slot,
-      },
-    });
-    universe.players[defenderOwner.id] = defenderOwner;
-  }
 
   fleet.ships = combat.attackerAfter;
   fleet.cargo = loot;

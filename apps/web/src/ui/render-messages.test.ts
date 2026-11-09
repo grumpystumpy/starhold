@@ -5,12 +5,15 @@ import {
   categoryLabel,
   closeReportWindow,
   collectInbox,
+  combatLossSummary,
   inboxBucket,
+  inboxUnreadCount,
   messagesPageHtml,
   openReportWindow,
   setConfirmDelete,
   setInboxFilter,
 } from "./render-messages";
+import { fmt, fmtCompact } from "./format";
 import { combatBattleExtrasHtml } from "./render-fleets-panels";
 
 function baseView(overrides: Partial<PlayerView> = {}): PlayerView {
@@ -119,6 +122,87 @@ describe("messages inbox", () => {
     assert.equal(items[3]?.title, "Raid at 1:22:8 — victory");
     assert.equal(items[1]?.unread, true);
     assert.equal(items[4]?.unread, false);
+  });
+
+  it("hides only raid alerts duplicated by a visible combat report", () => {
+    const report = {
+      id: "pvp-report",
+      at: 100,
+      missionId: "pvp-mission",
+      attackerPlayerId: "p1",
+      defenderPlayerId: "p2",
+      attackerName: "Alpha",
+      defenderName: "Bravo",
+      targetCoords: { galaxy: 1, system: 2, slot: 3 },
+      attackerBefore: {},
+      attackerAfter: {},
+      defenderBefore: {},
+      defenderAfter: {},
+      defensesBefore: {},
+      defensesAfter: {},
+      loot: { metal: 0, crystal: 0, deuterium: 0 },
+      debrisCreated: { metal: 0, crystal: 0, deuterium: 0 },
+      outcome: "attacker_win",
+      rounds: 1,
+      summary: "Raid won",
+    } as PlayerView["reports"][number];
+    const npcReport = {
+      ...report,
+      id: "npc-report",
+      at: 200,
+      missionId: "pir:1:2:3",
+      attackerPlayerId: "npc_pirates",
+      defenderPlayerId: "p1",
+    };
+    const view = baseView({
+      reports: [report, npcReport],
+      player: {
+        id: "p1",
+        name: "Alpha",
+        eventLog: [
+          {
+            id: "pvp-alert",
+            kind: "raidAlert",
+            createdAt: 100,
+            readAt: null,
+            title: "Hostile raid resolved",
+            body: "Raid won",
+            meta: { reportId: "pvp-report" },
+          },
+          {
+            id: "npc-alert",
+            kind: "raidAlert",
+            createdAt: 200,
+            readAt: null,
+            title: "Hostile raid resolved",
+            body: "Pirate raid",
+            meta: { pirateBaseId: "pir:1:2:3" },
+          },
+          {
+            id: "other-alert",
+            kind: "raidAlert",
+            createdAt: 300,
+            readAt: null,
+            title: "Unlinked alert",
+            body: "Keep this alert",
+          },
+          {
+            id: "fleet-warning",
+            kind: "fleetReturn",
+            createdAt: 400,
+            readAt: null,
+            title: "Fleet warning",
+            body: "Unrelated fleet notification",
+          },
+        ],
+      } as PlayerView["player"],
+    });
+
+    assert.deepEqual(
+      collectInbox(view).map((item) => item.id),
+      ["fleet-warning", "other-alert", "npc-report", "pvp-report"],
+    );
+    assert.equal(inboxUnreadCount(view), 2);
   });
 
   it("renders filters, unread rows, and an empty state", () => {
@@ -707,6 +791,110 @@ describe("messages inbox", () => {
     assert.doesNotMatch(legacyHtml, /Defenses destroyed:/);
     assert.doesNotMatch(legacyHtml, /data-copy-battle-share="c_legacy_1"/);
 
+    closeReportWindow();
+  });
+
+  it("compares survivors and losses and separates loot from debris", () => {
+    closeReportWindow();
+    const win = {
+      id: "c_read_win",
+      at: 1000,
+      missionId: "m_read_win",
+      attackerPlayerId: "p1",
+      defenderPlayerId: "p2",
+      attackerName: "Alpha",
+      defenderName: "Bravo",
+      originCoords: { galaxy: 1, system: 10, slot: 2 },
+      targetCoords: { galaxy: 1, system: 20, slot: 5 },
+      attackerBefore: { scout: 2_500_000 },
+      attackerAfter: { scout: 1_000_000 },
+      defenderBefore: { interceptor: 4_000 },
+      defenderAfter: { interceptor: 0 },
+      defensesBefore: {},
+      defensesAfter: {},
+      loot: { metal: 0, crystal: 0, deuterium: 0 },
+      debrisCreated: { metal: 9_999_000, crystal: 0, deuterium: 1_500 },
+      outcome: "attacker_win" as const,
+      rounds: 6,
+      summary: "Large battle",
+      shareCode: "sh_read_win",
+    };
+    const lossView = baseView({
+      player: { id: "p2", name: "Bravo", eventLog: [] } as PlayerView["player"],
+      reports: [win] as PlayerView["reports"],
+    });
+    openReportWindow("combat", "c_read_win");
+    const lossHtml = messagesPageHtml(lossView);
+    assert.match(lossHtml, /combat-report-loss/);
+    assert.match(lossHtml, /data-combat-result="loss"/);
+    assert.match(lossHtml, /data-testid="inbox-filter-combat"/);
+    assert.match(lossHtml, /data-copy-battle-share="c_read_win"/);
+    assert.match(lossHtml, /<th>Before<\/th><th>After<\/th><th>Lost<\/th>/);
+    const attacker = lossHtml.match(/data-testid="combat-side-attacker"[\s\S]*?<\/section>/)?.[0] ?? "";
+    const defender = lossHtml.match(/data-testid="combat-side-defender"[\s\S]*?<\/section>/)?.[0] ?? "";
+    assert.doesNotMatch(attacker, /data-viewer="self"/);
+    assert.match(defender, /data-viewer="self"/);
+    assert.match(attacker, /Ships before: 2\.5M/);
+    assert.match(attacker, /Survivors: 1M/);
+    assert.match(attacker, /Total ships lost: 1\.5M/);
+    assert.match(defender, /Survivors: 0/);
+    assert.match(defender, /Total ships lost: 4k/);
+    const loss = combatLossSummary(win as CombatReport);
+    assert.ok(attacker.includes(`Points lost: ${fmtCompact(loss.attackerPointsLost)}`));
+    assert.ok(defender.includes(`Points lost: ${fmtCompact(loss.defenderPointsLost)}`));
+    const loot = lossHtml.match(/data-testid="combat-loot"[\s\S]*?<\/section>/)?.[0] ?? "";
+    const debris = lossHtml.match(/data-testid="combat-debris"[\s\S]*?<\/section>/)?.[0] ?? "";
+    assert.match(loot, /Loot/);
+    assert.equal(loot.includes(`${fmt(0)} metal, ${fmt(0)} crystal, ${fmt(0)} deuterium`), true);
+    assert.doesNotMatch(loot, /9\.9M/);
+    assert.match(debris, /Debris/);
+    assert.match(debris, /9\.9M metal, 0 crystal, 1\.5k deuterium/);
+    assert.doesNotMatch(debris, /<h4>Loot<\/h4>/);
+
+    const draw = {
+      ...win,
+      id: "c_read_draw",
+      attackerPlayerId: "p1",
+      defenderPlayerId: "p2",
+      attackerBefore: {},
+      attackerAfter: {},
+      defenderBefore: {},
+      defenderAfter: {},
+      loot: { metal: 0, crystal: 0, deuterium: 0 },
+      debrisCreated: { metal: 0, crystal: 0, deuterium: 0 },
+      outcome: "draw" as const,
+      shareCode: "sh_read_draw",
+    };
+    const drawView = baseView({
+      reports: [draw] as PlayerView["reports"],
+    });
+    openReportWindow("combat", "c_read_draw");
+    const drawHtml = messagesPageHtml(drawView);
+    assert.match(drawHtml, /combat-report-draw/);
+    assert.match(drawHtml, /data-combat-result="draw"/);
+    assert.match(drawHtml, /data-testid="combat-side-attacker"[^>]*data-viewer="self"/);
+    assert.match(drawHtml, /Survivors: 0/);
+    assert.match(drawHtml, /Total ships lost: 0/);
+    assert.match(drawHtml, /data-copy-battle-share="c_read_draw"/);
+    const drawLoot = drawHtml.match(/data-testid="combat-loot"[\s\S]*?<\/section>/)?.[0] ?? "";
+    const drawDebris = drawHtml.match(/data-testid="combat-debris"[\s\S]*?<\/section>/)?.[0] ?? "";
+    assert.match(drawLoot, /0 metal, 0 crystal, 0 deuterium/);
+    assert.match(drawDebris, /0 metal, 0 crystal, 0 deuterium/);
+    assert.notEqual(drawLoot.includes("<h4>Loot</h4>"), drawDebris.includes("<h4>Loot</h4>"));
+
+    const defenderWin = {
+      ...win,
+      id: "c_read_def",
+      outcome: "defender_win" as const,
+      shareCode: undefined,
+    };
+    openReportWindow("combat", "c_read_def");
+    const defenderWinHtml = messagesPageHtml(
+      baseView({ reports: [defenderWin] as PlayerView["reports"] }),
+    );
+    assert.match(defenderWinHtml, /combat-report-loss/);
+    assert.match(defenderWinHtml, /data-combat-result="loss"/);
+    assert.doesNotMatch(defenderWinHtml, /data-copy-battle-share="c_read_def"/);
     closeReportWindow();
   });
 });

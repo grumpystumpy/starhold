@@ -176,14 +176,15 @@ describe("event log", () => {
     assert.deepEqual(titles, []);
   });
 
-  it("alerts the defender on a hostile raid and the owner when the fleet returns", () => {
+  it("gives both commanders the combat report and keeps a later hostile warning", () => {
     const universe = createUniverse("Raid Log", 8);
     const a = joinUniverse(universe, "Raider", 60_000_000);
     const b = joinUniverse(universe, "Victim", 60_000_001);
     graduateNewbieProtection(universe, universe.players[b.player.id]!);
-    universe.planets[a.planet.id].ships.scout = 5;
+    universe.planets[a.planet.id].ships.scout = 6;
     universe.planets[a.planet.id].ships.hauler = 1;
-    universe.planets[a.planet.id].resources.deuterium = 500;
+    universe.planets[a.planet.id].resources.deuterium = 5_000;
+    universe.players[a.player.id]!.research.computerTech = 1;
     universe.planets[b.planet.id].ships.scout = 0;
 
     const launch = launchFleet(
@@ -196,22 +197,73 @@ describe("event log", () => {
     );
     assert.equal(launch.ok, true);
     if (!launch.ok) return;
+    const followUp = launchFleet(
+      universe,
+      a.player.id,
+      b.planet.id,
+      "raid",
+      { scout: 1 },
+      60_000_110,
+    );
+    assert.equal(followUp.ok, true);
+    if (!followUp.ok) return;
+    universe.fleets[followUp.fleet.id]!.arrivesAt = launch.fleet.arrivesAt + 3_600_000;
+
+    const inboundView = playerView(
+      universe,
+      b.player.id,
+      launch.fleet.arrivesAt - 1,
+    );
+    assert.ok(
+      inboundView.hostileInbound.some((fleet) => fleet.id === launch.fleet.id),
+      "incoming hostile fleet warning remains visible before combat",
+    );
+    assert.ok(
+      inboundView.hostileInbound.some((fleet) => fleet.id === followUp.fleet.id),
+      "a second inbound fleet is warned before the first fight",
+    );
 
     advanceUniverse(universe, launch.fleet.arrivesAt);
     const defenderLog = universe.players[b.player.id].eventLog ?? [];
-    assert.ok(
-      defenderLog.some(
-        (entry) =>
-          entry.kind === "raidAlert" &&
-          entry.title === `Hostile raid resolved at ${b.planet.name}`,
-      ),
+    assert.equal(
+      defenderLog.some((entry) => entry.kind === "raidAlert"),
+      false,
+      "resolved combat does not add a duplicate raid alert",
     );
     assert.equal(
       (universe.players[a.player.id].eventLog ?? []).filter(
-        (entry) =>
-          entry.kind === "raidAlert" && entry.title.includes(b.planet.name),
+        (entry) => entry.kind === "raidAlert",
       ).length,
       0,
+    );
+    for (const recipient of [a, b]) {
+      const view = playerView(
+        universe,
+        recipient.player.id,
+        launch.fleet.arrivesAt + 1,
+      );
+      assert.ok(
+        view.reports.some((report) => report.missionId === launch.fleet.id),
+        `${recipient.player.name} receives the combat report`,
+      );
+      assert.equal(
+        view.player.eventLog?.some(
+          (entry) =>
+            entry.kind === "raidAlert" &&
+            entry.meta?.reportId != null &&
+            view.reports.some((report) => report.id === entry.meta?.reportId),
+        ) ?? false,
+        false,
+      );
+    }
+    const after = playerView(universe, b.player.id, launch.fleet.arrivesAt + 1);
+    assert.equal(
+      after.hostileInbound.some((fleet) => fleet.id === launch.fleet.id),
+      false,
+    );
+    assert.ok(
+      after.hostileInbound.some((fleet) => fleet.id === followUp.fleet.id),
+      "an in-flight hostile warning stays after another combat resolves",
     );
 
     const mid = universe.fleets[launch.fleet.id];

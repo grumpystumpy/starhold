@@ -5,7 +5,6 @@ import {
   PRODUCTION_MULT,
   STARSHARDS_DAILY_LOGIN,
   levelBonuses,
-  unreadEventCount,
   type PlayerView,
 } from "@starhold/game";
 import { RESOURCE_ART } from "./assets";
@@ -18,6 +17,7 @@ import { escapeAttr, escapeHtml } from "./render-escape";
 import { hrefForPage } from "./router";
 import { session } from "../session";
 import { infoTooltip, storageFillTitle } from "./render-tooltips";
+import { inboxUnreadCount } from "./render-messages";
 
 export function levelBonusLines(level: number): string[] {
   const b = levelBonuses(level);
@@ -171,7 +171,7 @@ function leftNav(view: PlayerView, active: NavPage): string {
       <ul>
         ${NAV_PAGES.map((id) => {
           const href = hrefForPage(id, q);
-          const unread = id === "messages" ? unreadEventCount(view.player) : 0;
+          const unread = id === "messages" ? inboxUnreadCount(view) : 0;
           const badge =
             unread > 0
               ? `<span class="nav-badge" data-testid="nav-messages-badge">${fmt(unread)}</span>`
