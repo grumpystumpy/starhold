@@ -35,6 +35,7 @@ import {
   doClaimGoal,
   doClaimOnboarding,
   doDismissOnboarding,
+  doDismissWhatsNew,
   doGenerateRecoveryCodes,
   doChangePassword,
   doRecover,
@@ -708,6 +709,13 @@ export function bindClickHandlers(): void {
         void doDismissOnboarding(
           onboardingDismiss.getAttribute("data-onboarding-dismiss") !== "false",
         );
+        return;
+      }
+
+      const whatsNewDismiss = closestActionEl(target, "[data-whats-new-dismiss]");
+      if (whatsNewDismiss) {
+        ev.preventDefault();
+        void doDismissWhatsNew();
         return;
       }
 

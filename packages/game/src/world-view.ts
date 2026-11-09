@@ -70,6 +70,7 @@ import { stampQueueView } from "./world-queue-manage.js";
 import { inSensorPhalanxRange, ownedPlanetCount } from "./world-moons.js";
 import { goalsView } from "./world-goals.js";
 import { onboardingViewFor } from "./world-onboarding.js";
+import { whatsNewViewFor } from "./release-notes.js";
 import { pirateBossSummary } from "./world-pirate-boss.js";
 import { occupationForPlanet } from "./world-occupation.js";
 import { empireDriftBeaconCount, empireRelicResearchTimeFactor, playerKnowsMini } from "./world-mini.js";
@@ -580,6 +581,7 @@ export function playerView(
     openAcsGroups: listOpenAcsForAlliance(universe, player.allianceId),
     goals: goalsView(player, now),
     onboarding: onboardingViewFor(universe, player),
+    whatsNew: whatsNewViewFor(player),
     presetUnlockPlanets: player.planetIds
       .map((id) => universe.planets[id])
       .filter((planet): planet is NonNullable<typeof planet> => planet != null)

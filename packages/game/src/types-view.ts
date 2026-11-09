@@ -556,6 +556,11 @@ export interface PlayerState {
    * Steps are evaluated live; this object only stores claims and dismiss.
    */
   onboarding?: PlayerOnboardingState;
+  /**
+   * Release id of the last "what's new" popup this commander dismissed.
+   * Missing on older saves. A newer catalog id shows the popup again.
+   */
+  whatsNewDismissedReleaseId?: string;
   /** Synthetic empire alerts. Missing on old saves — migrate to []. */
   eventLog?: EventLogEntry[];
   /** Open monthly season counters. Missing on older saves until the next read. */
@@ -624,6 +629,14 @@ export interface OnboardingRewardView {
   metal: number;
   crystal: number;
   deuterium: number;
+}
+
+/** Unseen release notes for the what's-new popup. Not a page. */
+export interface WhatsNewView {
+  /** Newest release id included in this popup. */
+  releaseId: string;
+  title: string;
+  items: string[];
 }
 
 export interface OnboardingStepView {
@@ -921,6 +934,11 @@ export interface PlayerView {
   goals: GoalView[];
   /** Commander tutorial. Always filled by playerView; older clients may omit it. */
   onboarding?: OnboardingView;
+  /**
+   * What's-new popup for a release this commander has not dismissed.
+   * Null when the latest release key is already dismissed. Older responses omit it.
+   */
+  whatsNew?: WhatsNewView | null;
   /**
    * Owned bodies for fleet-composer preset gating. Ships stay off
    * `ownedPlanets` so existing planet-list comparisons stay stable.
