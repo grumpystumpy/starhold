@@ -1673,6 +1673,13 @@ export const PIRATE_RAID_LEVEL_POWER_BONUS = 0.5;
  * Does not change PIRATE_BOSS_TIERS payouts.
  */
 export const PIRATE_STRENGTH_MULT = 0.5;
+/**
+ * Distance reference for pirate player-planet pick weight.
+ * distanceWeight = 1 / (1 + (coordDistance / PIRATE_RAID_DISTANCE_REF)^2).
+ * Multiplies relic, fairness, fatigue, deterrence, and cooldown weights.
+ * The term itself is never zero. Aliens do not use it.
+ */
+export const PIRATE_RAID_DISTANCE_REF = 400;
 export const PIRATE_TECH_OFFSET = 3;
 
 /** Max catch-up raid firings per base per tick (lazy Hobby path). */

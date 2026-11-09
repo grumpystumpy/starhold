@@ -70,6 +70,7 @@ import {
 import {
   PIRATE_RAID_POWER_FACTOR_PLAYER,
   PIRATE_RAID_LEVEL_POWER_BONUS,
+  PIRATE_RAID_DISTANCE_REF,
   PIRATE_STRENGTH_MULT,
   PIRATE_TECH_OFFSET,
   PIRATE_BOSS_COOLDOWN_MS,
@@ -106,7 +107,7 @@ import {
   xpForPirateShipKills,
 } from "./formulas.js";
 import { hashSeed } from "./formulas-position.js";
-import { coordDistance } from "./formulas-travel.js";
+import { coordDistance, flightSecondsOneWay } from "./formulas-travel.js";
 import {
   awardSeasonPirateKill,
   awardSeasonPveWin,
@@ -549,6 +550,14 @@ function mergeHangarAtLeast(current: FleetShips, template: FleetShips): FleetShi
 
 function addShips(into: FleetShips, add: FleetShips): FleetShips {
   return addShipsTimes(into, add, 1);
+}
+
+function subtractShips(hangar: FleetShips, sent: FleetShips): FleetShips {
+  const out = normalizeFleetShips(hangar);
+  for (const id of SHIP_ORDER) {
+    out[id] = Math.max(0, (out[id] ?? 0) - (sent[id] ?? 0));
+  }
+  return out;
 }
 
 function addShipsTimes(
@@ -1818,8 +1827,49 @@ function rememberRaidTarget(
 }
 
 /**
- * Pirate raids multiply relic weight by fairness (newbies weigh 0) and fatigue, then subtract deterrence.
- * Alien raids keep relic weight and subtract deterrence — fairness and fatigue do not apply.
+ * Pirate player-planet distance factor.
+ * `1 / (1 + (d / PIRATE_RAID_DISTANCE_REF)^2)` with ref 400.
+ * Never zero. Aliens do not use it.
+ */
+export function pirateRaidDistanceWeight(distance: number): number {
+  const ratio = distance / PIRATE_RAID_DISTANCE_REF;
+  return 1 / (1 + ratio * ratio);
+}
+
+function pirateDistanceFactor(
+  faction: "pirate" | "alien",
+  attacker: PirateBase | AlienBase | undefined,
+  planet: PlanetState,
+): number {
+  if (faction !== "pirate" || !attacker) return 1;
+  return pirateRaidDistanceWeight(coordDistance(attacker.coords, planet.coords));
+}
+
+/**
+ * Pre-deterrence pirate planet weight: relic × fairness × fatigue × distance.
+ * Cooldown and a missing owner are 0. Distance never zeroes this on its own.
+ */
+export function piratePlanetPickWeight(
+  universe: UniverseState,
+  planet: PlanetState,
+  now: number,
+  attacker: PirateBase,
+): number {
+  if (targetOnCooldown(attacker, planet.id, now)) return 0;
+  const owner = universe.players[planet.ownerPlayerId];
+  if (!owner) return 0;
+  return (
+    planetRaidWeight(planet) *
+    pirateRaidPickWeight(universe, owner, now) *
+    pirateFatigueMult(planet, now) *
+    pirateDistanceFactor("pirate", attacker, planet)
+  );
+}
+
+/**
+ * Pirate raids multiply relic weight by fairness (newbies weigh 0), fatigue, and
+ * distance, then subtract deterrence. Alien raids keep relic weight and subtract
+ * deterrence — fairness, fatigue, and distance do not apply.
  * A target this base raided inside the cooldown weighs 0.
  */
 function npcPlanetPickWeight(
@@ -1832,12 +1882,24 @@ function npcPlanetPickWeight(
   if (attacker && targetOnCooldown(attacker, planet.id, now)) return 0;
   const relic = planetRaidWeight(planet);
   if (faction !== "pirate") return planetRaidDeterrence(planet, faction, relic);
-  const owner = universe.players[planet.ownerPlayerId];
-  if (!owner) return 0;
-  const baseWeight =
-    relic * pirateRaidPickWeight(universe, owner, now) * pirateFatigueMult(planet, now);
+  if (!attacker || isAlienBase(attacker)) return 0;
+  const baseWeight = piratePlanetPickWeight(universe, planet, now, attacker);
   if (baseWeight <= 0) return 0;
   return planetRaidDeterrence(planet, faction, baseWeight);
+}
+
+function planetPickBaseWeight(
+  universe: UniverseState,
+  planet: PlanetState,
+  now: number,
+  faction: "pirate" | "alien",
+  attacker?: PirateBase | AlienBase,
+): number {
+  if (attacker && targetOnCooldown(attacker, planet.id, now)) return 0;
+  const relic = planetRaidWeight(planet);
+  if (faction !== "pirate") return relic;
+  if (!attacker || isAlienBase(attacker)) return 0;
+  return piratePlanetPickWeight(universe, planet, now, attacker);
 }
 
 function pickWeightedPlayerPlanet(
@@ -1848,16 +1910,9 @@ function pickWeightedPlayerPlanet(
   faction: "pirate" | "alien",
   attacker?: PirateBase | AlienBase,
 ): PlanetState | null {
-  const baseWeights = planets.map((p) => {
-    if (attacker && targetOnCooldown(attacker, p.id, now)) return 0;
-    const relic = planetRaidWeight(p);
-    if (faction !== "pirate") return relic;
-    const owner = universe.players[p.ownerPlayerId];
-    if (!owner) return 0;
-    return (
-      relic * pirateRaidPickWeight(universe, owner, now) * pirateFatigueMult(p, now)
-    );
-  });
+  const baseWeights = planets.map((p) =>
+    planetPickBaseWeight(universe, p, now, faction, attacker),
+  );
   let baseTotal = 0;
   for (const w of baseWeights) baseTotal += w;
   if (baseTotal <= 0) return null;
@@ -1990,42 +2045,37 @@ function settleAlienHangarAfterRaid(
   return scaleShips(hangar, Math.min(1, 0.5 + (survived / sent) * 0.5));
 }
 
-export function applyNpcRaidOnPlanet(
+const NPC_PIRATE_OWNER_ID = "npc_pirates";
+
+interface NpcPlanetFight {
+  outcome: string;
+  attackerAfter: FleetShips;
+  loot: Resources;
+  reportId: string;
+}
+
+/**
+ * Planet combat, debris, report, and defender rewards shared by the instant
+ * path and a pirate fleet arrival. Hangar settlement stays with the caller.
+ * Loot is removed from the planet either way. `creditLootToBase` adds it to
+ * the base immediately (instant raids). Flight wins carry it home instead.
+ */
+function fightNpcRaidOnPlanet(
   universe: UniverseState,
   base: PirateBase | AlienBase,
   planet: PlanetState,
   now: number,
   faction: "pirate" | "alien",
-  markDestroyed: (b: PirateBase | AlienBase, n: number) => void,
-): void {
-  syncPlanetForTick(universe, planet.id, now);
-  const live = universe.planets[planet.id] ?? planet;
-  planet = live;
+  raidFleet: FleetShips,
+  creditLootToBase: boolean,
+): NpcPlanetFight | null {
   const owner = universe.players[planet.ownerPlayerId];
-  if (!owner) return;
+  if (!owner) return null;
+  if (faction === "pirate") recordPirateHit(planet, now);
   const defenderResearch = effectiveCombatResearch(owner);
   const npcResearch = faction === "pirate"
     ? pirateCombatResearchForOpponent(defenderResearch)
     : alienCombatResearchForOpponent(defenderResearch);
-  const raidFleet =
-    faction === "pirate"
-      ? scalePirateRaidFleet(
-          base.ships,
-          planetDefensePower(planet, universe),
-          planet.ships,
-          pirateRaidPowerFactor(PIRATE_RAID_POWER_FACTOR_PLAYER, base.level),
-        )
-      : scaleAlienRaidFleet(
-          base.ships,
-          planetDefensePower(planet, universe),
-          `${base.id}:alien-raid:${now}`,
-        );
-  if (fleetShipCount(raidFleet) < 1) return;
-  // Instant raid path. When B7-98 launches a fleet instead, record the target at launch.
-  rememberRaidTarget(base, planet.id, now);
-  if (faction === "pirate") {
-    recordPirateHit(planet, now);
-  }
   const defenderBefore = { ...planet.ships };
   const defensesBefore = planet.defenses ?? emptyDefenses();
   const combat = resolveCombat(
@@ -2068,7 +2118,7 @@ export function applyNpcRaidOnPlanet(
   }
   if (!universe.reports) universe.reports = {};
   const reportId = `rpt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
-  const npcId = faction === "pirate" ? "npc_pirates" : "npc_aliens";
+  const npcId = faction === "pirate" ? NPC_PIRATE_OWNER_ID : "npc_aliens";
   recordCombatReport(universe, {
     id: reportId,
     at: now,
@@ -2097,27 +2147,18 @@ export function applyNpcRaidOnPlanet(
     moonFormed,
     roundLog: combat.roundLog.length ? combat.roundLog : undefined,
   });
-  const sent = fleetShipCount(raidFleet);
-  const survived = fleetShipCount(combat.attackerAfter);
-  if (faction === "pirate") {
-    base.ships = settlePirateHangarAfterRaid(
-      base.ships,
-      raidFleet,
-      combat.attackerAfter,
-      combat.outcome,
-    );
-  } else {
-    base.ships = settleAlienHangarAfterRaid(base.ships, sent, survived);
-  }
+  let loot = emptyCargo();
   if (combat.outcome === "attacker_win") {
-    const loot = computeRaidLoot(planet.resources, combat.attackerAfter);
+    loot = computeRaidLoot(planet.resources, combat.attackerAfter);
     subtractCargo(planet, loot);
-    universe.reports[reportId].loot = loot;
-    base.resources = {
-      metal: base.resources.metal + loot.metal,
-      crystal: base.resources.crystal + loot.crystal,
-      deuterium: base.resources.deuterium + loot.deuterium,
-    };
+    universe.reports[reportId]!.loot = loot;
+    if (creditLootToBase) {
+      base.resources = {
+        metal: base.resources.metal + loot.metal,
+        crystal: base.resources.crystal + loot.crystal,
+        deuterium: base.resources.deuterium + loot.deuterium,
+      };
+    }
     grantPlayerXp(owner, xpForCombatLose());
   } else if (combat.outcome === "defender_win") {
     awardSeasonPveWin(universe, owner, now);
@@ -2137,9 +2178,201 @@ export function applyNpcRaidOnPlanet(
   // Successful pirate raid for fairness (#18) — aliens exempt; fires when raid lands.
   if (faction === "pirate") recordSuccessfulPirateRaid(owner, now);
   universe.players[owner.id] = owner;
+  return {
+    outcome: combat.outcome,
+    attackerAfter: combat.attackerAfter,
+    loot,
+    reportId,
+  };
+}
+
+export function applyNpcRaidOnPlanet(
+  universe: UniverseState,
+  base: PirateBase | AlienBase,
+  planet: PlanetState,
+  now: number,
+  faction: "pirate" | "alien",
+  markDestroyed: (b: PirateBase | AlienBase, n: number) => void,
+): void {
+  syncPlanetForTick(universe, planet.id, now);
+  const live = universe.planets[planet.id] ?? planet;
+  planet = live;
+  const owner = universe.players[planet.ownerPlayerId];
+  if (!owner) return;
+  const raidFleet =
+    faction === "pirate"
+      ? scalePirateRaidFleet(
+          base.ships,
+          planetDefensePower(planet, universe),
+          planet.ships,
+          pirateRaidPowerFactor(PIRATE_RAID_POWER_FACTOR_PLAYER, base.level),
+        )
+      : scaleAlienRaidFleet(
+          base.ships,
+          planetDefensePower(planet, universe),
+          `${base.id}:alien-raid:${now}`,
+        );
+  if (fleetShipCount(raidFleet) < 1) return;
+  // Instant path (aliens, and direct callers). Pirate player fleets stamp cooldown at launch.
+  rememberRaidTarget(base, planet.id, now);
+  const fought = fightNpcRaidOnPlanet(
+    universe,
+    base,
+    planet,
+    now,
+    faction,
+    raidFleet,
+    true,
+  );
+  if (!fought) return;
+  const sent = fleetShipCount(raidFleet);
+  const survived = fleetShipCount(fought.attackerAfter);
+  if (faction === "pirate") {
+    base.ships = settlePirateHangarAfterRaid(
+      base.ships,
+      raidFleet,
+      fought.attackerAfter,
+      fought.outcome,
+    );
+  } else {
+    base.ships = settleAlienHangarAfterRaid(base.ships, sent, survived);
+  }
   if (fleetShipCount(base.ships) <= 0 && defenseCount(base.defenses) <= 0) {
     markDestroyed(base, now);
   }
+}
+
+function piratePlayerRaidFleet(
+  base: PirateBase,
+  planet: PlanetState,
+  universe: UniverseState,
+): FleetShips {
+  return scalePirateRaidFleet(
+    base.ships,
+    planetDefensePower(planet, universe),
+    planet.ships,
+    pirateRaidPowerFactor(PIRATE_RAID_POWER_FACTOR_PLAYER, base.level),
+  );
+}
+
+/** Pirate → player raids leave the hangar immediately and fly at player cruise formulas with techs 0. */
+function launchPiratePlanetRaid(
+  universe: UniverseState,
+  base: PirateBase,
+  planet: PlanetState,
+  now: number,
+): void {
+  syncPlanetForTick(universe, planet.id, now);
+  const live = universe.planets[planet.id] ?? planet;
+  const owner = universe.players[live.ownerPlayerId];
+  if (!owner) return;
+  const raidFleet = piratePlayerRaidFleet(base, live, universe);
+  if (fleetShipCount(raidFleet) < 1) return;
+  rememberRaidTarget(base, live.id, now);
+  base.ships = subtractShips(base.ships, raidFleet);
+  const seconds = flightSecondsOneWay(
+    base.coords,
+    live.coords,
+    raidFleet,
+    universe.fleetSpeed,
+    0,
+    null,
+    0,
+  );
+  const fleetId = `flt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  const fleet: FleetMission = {
+    id: fleetId,
+    ownerPlayerId: NPC_PIRATE_OWNER_ID,
+    originPlanetId: base.id,
+    originPirateBaseId: base.id,
+    targetPlanetId: live.id,
+    targetPlayerId: owner.id,
+    targetCoords: { ...live.coords },
+    mission: "raid",
+    ships: { ...raidFleet },
+    cargo: emptyCargo(),
+    departedAt: now,
+    arrivesAt: now + seconds * 1000,
+    phase: "outbound",
+    reportId: null,
+  };
+  universe.fleets ??= {};
+  universe.fleets[fleetId] = fleet;
+}
+
+function creditPirateHome(base: PirateBase, fleet: FleetMission): void {
+  base.ships = addShips(base.ships, fleet.ships);
+  base.resources = {
+    metal: base.resources.metal + (fleet.cargo.metal ?? 0),
+    crystal: base.resources.crystal + (fleet.cargo.crystal ?? 0),
+    deuterium: base.resources.deuterium + (fleet.cargo.deuterium ?? 0),
+  };
+}
+
+/**
+ * Due NPC pirate fleet. Called from resolveFleetArrival before the missing-origin
+ * delete. Outbound arrival fights once. A win flies survivors and loot home.
+ * Any other outcome drops the fleet; sent ships stay out of the hangar.
+ */
+export function resolveNpcPiratePlayerFleet(
+  universe: UniverseState,
+  fleet: FleetMission,
+  now: number,
+): void {
+  const live = universe.fleets[fleet.id];
+  if (!live || live.arrivesAt > now) return;
+  const baseId = live.originPirateBaseId ?? live.originPlanetId;
+  const base = baseId ? universe.pirateBases?.[baseId] : undefined;
+  if (live.phase === "returning") {
+    if (base && base.destroyedAt == null) creditPirateHome(base, live);
+    delete universe.fleets[live.id];
+    return;
+  }
+  if (live.phase !== "outbound") {
+    delete universe.fleets[live.id];
+    return;
+  }
+  const planet = live.targetPlanetId ? universe.planets[live.targetPlanetId] : undefined;
+  if (!base || base.destroyedAt != null || !planet) {
+    delete universe.fleets[live.id];
+    return;
+  }
+  const fought = fightNpcRaidOnPlanet(
+    universe,
+    base,
+    planet,
+    now,
+    "pirate",
+    live.ships,
+    false,
+  );
+  if (!fought || fought.outcome !== "attacker_win" || fleetShipCount(fought.attackerAfter) < 1) {
+    delete universe.fleets[live.id];
+    if (
+      base.destroyedAt == null &&
+      fleetShipCount(base.ships) <= 0 &&
+      defenseCount(base.defenses) <= 0
+    ) {
+      markPirateDestroyed(base, now);
+    }
+    return;
+  }
+  live.ships = normalizeFleetShips(fought.attackerAfter);
+  live.cargo = fought.loot;
+  live.reportId = fought.reportId;
+  live.phase = "returning";
+  live.departedAt = now;
+  const seconds = flightSecondsOneWay(
+    planet.coords,
+    base.coords,
+    live.ships,
+    universe.fleetSpeed,
+    0,
+    null,
+    0,
+  );
+  live.arrivesAt = now + seconds * 1000;
+  universe.fleets[live.id] = live;
 }
 
 export function applyNpcRaidOnNpc(
@@ -2166,7 +2399,7 @@ export function applyNpcRaidOnNpc(
       )
     : scalePirateRaidFleet(base.ships, otherPower);
   if (fleetShipCount(raidFleet) < 1) return;
-  // Instant raid path. When B7-98 launches a fleet instead, record the target at launch.
+  // NPC-vs-NPC stays instant. Pirate player raids stamp cooldown when the fleet launches.
   rememberRaidTarget(base, other.id, now);
   const defenderBefore = { ...other.ships };
   const defensesBefore = other.defenses ?? emptyDefenses();
@@ -2239,14 +2472,18 @@ function fireRaid(
   const markA = (b: PirateBase | AlienBase, n: number) =>
     markAlienDestroyed(b as AlienBase, n);
   if (target.kind === "planet") {
-    applyNpcRaidOnPlanet(
-      universe,
-      base,
-      target.planet,
-      now,
-      faction,
-      faction === "pirate" ? markP : markA,
-    );
+    if (faction === "pirate" && !isAlienBase(base)) {
+      launchPiratePlanetRaid(universe, base, target.planet, now);
+    } else {
+      applyNpcRaidOnPlanet(
+        universe,
+        base,
+        target.planet,
+        now,
+        faction,
+        faction === "pirate" ? markP : markA,
+      );
+    }
   } else if (target.kind === "pirate") {
     applyNpcRaidOnNpc(
       universe,
