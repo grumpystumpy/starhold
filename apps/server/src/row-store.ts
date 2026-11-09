@@ -7,6 +7,7 @@ import {
   advancePlanetNow,
   combatHallOfFame,
   combatHallOfShame,
+  mergeCombatHallOfFame,
   ensureSystemVisited,
   ensureUniverseShape,
   highscoresBoard,
@@ -749,6 +750,25 @@ function buildHighscoreCache(
   };
 }
 
+/**
+ * A normal save does not load every combat report. Fame keeps the cached
+ * fights and overlays reports in this working set. Shame is recomputed from
+ * every player row, which this save already loaded.
+ */
+async function combatHallsForPartialSave(
+  db: D1Like,
+  universe: UniverseState,
+): Promise<Pick<HighscoreCache, "hallOfFame" | "hallOfShame">> {
+  let cachedFame = currentScope()?.hallOfFame;
+  if (cachedFame === undefined) {
+    cachedFame = (await readBoard(db))?.cache.hallOfFame ?? [];
+  }
+  return {
+    hallOfFame: mergeCombatHallOfFame(cachedFame, universe),
+    hallOfShame: combatHallOfShame(universe),
+  };
+}
+
 const STAGES = [
   "world",
   "players",
@@ -924,7 +944,7 @@ export async function migrateChunk(
         push(
           `INSERT INTO save_highscores (id, built_at, doc) VALUES ('board', ?, ?)
            ON CONFLICT(id) DO UPDATE SET built_at = excluded.built_at, doc = excluded.doc`,
-          [Date.now(), timedStringify(buildHighscoreCache(universe, false))],
+          [Date.now(), timedStringify(buildHighscoreCache(universe, true))],
         );
         state.cursor = "board-done";
         continue;
@@ -2108,10 +2128,11 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
       const mine = highscoresBoard(universe).filter((row) => scoredIds.has(row.playerId));
       if (mine.length) {
         const kept = cached.filter((row) => !scoredIds.has(row.playerId));
+        const halls = await combatHallsForPartialSave(db, universe);
         boardJson = timedStringify({
           rows: rerank([...kept, ...mine]),
-          hallOfFame: currentScope()?.hallOfFame ?? [],
-          hallOfShame: currentScope()?.hallOfShame ?? [],
+          hallOfFame: halls.hallOfFame,
+          hallOfShame: halls.hallOfShame,
         } satisfies HighscoreCache);
         // Merged into a cached board: keep its build time (-1) so the TTL rebuild
         // still happens. A board seeded from a partial working set gets time 0,

@@ -460,6 +460,7 @@ describe("row save migration", () => {
     await migrateAll(db, source);
     const staleAt = Date.now() - HIGHSCORE_TTL_MS - 5_000;
     raw.prepare("UPDATE save_highscores SET built_at = ? WHERE id = 'board'").run(staleAt);
+    const docBeforeRead = raw.prepare("SELECT doc FROM save_highscores WHERE id = 'board'").get()!.doc as string;
     const store = createD1Store(db);
     await runWithScope(
       { kv: store, db, mode: "d1", method: "GET", cpuMs: 0 },
@@ -471,10 +472,14 @@ describe("row save migration", () => {
     );
     const afterRead = await readHighscoreMeta(db);
     assert.equal(afterRead?.builtAt, staleAt);
-    const staleCache = JSON.parse(
-      raw.prepare("SELECT doc FROM save_highscores WHERE id = 'board'").get()!.doc as string,
-    ) as { hallOfFame: unknown[] };
-    assert.deepEqual(staleCache.hallOfFame, []);
+    const docAfterRead = raw.prepare("SELECT doc FROM save_highscores WHERE id = 'board'").get()!.doc as string;
+    assert.equal(docAfterRead, docBeforeRead);
+    const staleCache = JSON.parse(docAfterRead) as {
+      hallOfFame: Array<{ shareCode?: string }>;
+      hallOfShame: Array<{ name: string; lostValue: number }>;
+    };
+    assert.equal(staleCache.hallOfFame[0]?.shareCode, "sh_hallfight");
+    assert.equal(staleCache.hallOfShame[0]?.name, "Other");
     await runWithScope(
       { kv: store, db, mode: "d1", method: "POST", cpuMs: 0 },
       () => withUniverse(() => undefined, { maintenance: true }),
@@ -494,6 +499,111 @@ describe("row save migration", () => {
     assert.equal(rebuiltCache.hallOfFame[0]?.shareCode, "sh_hallfight");
     assert.equal(rebuiltCache.hallOfShame[0]?.name, "Other");
     assert.equal(rebuiltCache.hallOfShame[0]?.lostValue, 750);
+  });
+
+  it("keeps other players on both halls when one commander is saved", async () => {
+    resetMemoryUniverse();
+    const { db, raw } = sqliteD1();
+    const source = fixture();
+    const alpha = Object.values(source.players).find((player) => player.name === "OldHand")!;
+    const bravo = Object.values(source.players).find((player) => player.name === "Other")!;
+    alpha.combatStats = { lostValue: 100, destroyedValue: 50, wins: 1, losses: 0 };
+    bravo.combatStats = { lostValue: 750, destroyedValue: 100, wins: 0, losses: 1 };
+    source.reports["hall-fight"] = {
+      id: "hall-fight",
+      at: 1_700_000_100_000,
+      missionId: "fight-mission",
+      attackerPlayerId: alpha.id,
+      defenderPlayerId: bravo.id,
+      attackerName: alpha.name,
+      defenderName: bravo.name,
+      targetCoords: { galaxy: 1, system: 2, slot: 8 },
+      attackerBefore: { scout: 2 },
+      attackerAfter: { scout: 1 },
+      defenderBefore: { interceptor: 1 },
+      defenderAfter: {},
+      defensesBefore: emptyDefenses(),
+      defensesAfter: emptyDefenses(),
+      loot: { metal: 0, crystal: 0, deuterium: 0 },
+      debrisCreated: { metal: 0, crystal: 0, deuterium: 0 },
+      outcome: "attacker_win",
+      rounds: 1,
+      summary: "Fight",
+      shareCode: "sh_hallfight",
+    };
+    await migrateAll(db, source);
+    const store = createD1Store(db);
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "POST", cpuMs: 0 },
+      () =>
+        withUniverse((universe) => {
+          const offline = universe.players[bravo.id]!;
+          offline.combatStats = {
+            lostValue: 9_000,
+            destroyedValue: 100,
+            wins: 0,
+            losses: 2,
+          };
+          universe.reports["home-fight"] = {
+            id: "home-fight",
+            at: 1_700_000_200_000,
+            missionId: "home-mission",
+            attackerPlayerId: alpha.id,
+            defenderPlayerId: bravo.id,
+            attackerName: alpha.name,
+            defenderName: bravo.name,
+            targetCoords: { galaxy: 1, system: 1, slot: 8 },
+            attackerBefore: { scout: 1 },
+            attackerAfter: {},
+            defenderBefore: {},
+            defenderAfter: {},
+            defensesBefore: emptyDefenses(),
+            defensesAfter: emptyDefenses(),
+            loot: { metal: 0, crystal: 0, deuterium: 0 },
+            debrisCreated: { metal: 0, crystal: 0, deuterium: 0 },
+            outcome: "attacker_win",
+            rounds: 1,
+            summary: "Home",
+            shareCode: "sh_homefight",
+          };
+          universe.players[alpha.id]!.name = "OldHand Renamed";
+        }, { playerIds: [alpha.id] }),
+    );
+    const board = JSON.parse(
+      raw.prepare("SELECT doc FROM save_highscores WHERE id = 'board'").get()!.doc as string,
+    ) as {
+      hallOfFame: Array<{ shareCode?: string }>;
+      hallOfShame: Array<{ name: string; lostValue: number }>;
+    };
+    assert.deepEqual(
+      board.hallOfFame.map((fight) => fight.shareCode).sort(),
+      ["sh_hallfight", "sh_homefight"],
+    );
+    assert.equal(board.hallOfShame[0]?.name, "Other");
+    assert.equal(board.hallOfShame[0]?.lostValue, 9_000);
+    assert.ok(board.hallOfShame.some((row) => row.name === "OldHand Renamed"));
+
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "POST", cpuMs: 0 },
+      () =>
+        withUniverse((universe) => {
+          const player = universe.players[alpha.id];
+          assert.ok(player);
+          player.starshards = (player.starshards ?? 0) + 3;
+        }, { npc: true }),
+    );
+    const afterNpc = JSON.parse(
+      raw.prepare("SELECT doc FROM save_highscores WHERE id = 'board'").get()!.doc as string,
+    ) as {
+      hallOfFame: Array<{ shareCode?: string }>;
+      hallOfShame: Array<{ name: string; lostValue: number }>;
+    };
+    assert.deepEqual(
+      afterNpc.hallOfFame.map((fight) => fight.shareCode).sort(),
+      ["sh_hallfight", "sh_homefight"],
+    );
+    assert.equal(afterNpc.hallOfShame[0]?.name, "Other");
+    assert.equal(afterNpc.hallOfShame[0]?.lostValue, 9_000);
   });
 
   it("rebuilds every player's highscore after maintenance when the cache is fresh", async () => {
