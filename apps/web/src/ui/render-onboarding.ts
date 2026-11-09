@@ -56,11 +56,15 @@ function stepList(
     const claim = !step.claimed && step.completed
       ? `<button type="button" data-onboarding-claim="${escapeAttr(step.id)}" data-testid="onboarding-claim-${escapeAttr(step.id)}" ${busy ? "disabled" : ""}>Claim reward</button>`
       : "";
-    const status = step.claimed ? "Claimed" : step.completed ? "Ready" : "Not yet";
+    const status = step.claimed ? "Claimed" : step.completed ? "Ready to claim" : "Not yet";
+    const doneHint = step.completed && !step.claimed
+      ? `<span class="hint" data-testid="onboarding-claim-hint-${escapeAttr(step.id)}">Already done. Claim the reward.</span>`
+      : "";
     return `<li class="onboarding-step${step.id === nextId ? " is-next" : ""}" data-testid="onboarding-step-${escapeAttr(step.id)}" data-completed="${step.completed ? "true" : "false"}" data-claimed="${step.claimed ? "true" : "false"}">
       <div class="onboarding-step-copy">
         <strong>${escapeHtml(step.title)}</strong>
         <span class="hint">${escapeHtml(step.description)}</span>
+        ${doneHint}
         <span class="hint">${escapeHtml(onboardingRewardText(step.reward))}</span>
       </div>
       <div class="onboarding-step-actions">
@@ -70,6 +74,12 @@ function stepList(
       </div>
     </li>`;
   }).join("");
+}
+
+function progressText(briefing: OnboardingView): string {
+  const ready = briefing.steps.filter((step) => step.completed && !step.claimed).length;
+  const waiting = ready > 0 ? ` · ${fmt(ready)} ready to claim` : "";
+  return `${fmt(briefing.completedCount)} / ${fmt(briefing.steps.length)} complete${waiting}`;
 }
 
 function nextGoalHtml(
@@ -94,11 +104,9 @@ function nextGoalHtml(
 export function onboardingPanelHtml(view: PlayerView, busy: boolean): string {
   const briefing = visible(view);
   if (!briefing) return "";
-  const done = briefing.completedCount;
-  const total = briefing.steps.length;
   return `<section class="panel onboarding-panel" data-testid="onboarding-panel">
     <h2>Commander briefing</h2>
-    <p class="hint" data-testid="onboarding-progress">${fmt(done)} / ${fmt(total)} complete</p>
+    <p class="hint" data-testid="onboarding-progress">${progressText(briefing)}</p>
     <ul class="onboarding-steps">${stepList(view, briefing, busy, briefing.steps)}</ul>
     ${nextGoalHtml(view, briefing.suggestion)}
     <button type="button" data-onboarding-dismiss="true" data-testid="onboarding-dismiss" ${busy ? "disabled" : ""}>Dismiss tutorial</button>
@@ -135,7 +143,7 @@ export function onboardingGoalsHtml(view: PlayerView, busy: boolean): string {
   );
   return `<section class="panel onboarding-panel" data-testid="onboarding-goals">
     <h2>Commander briefing</h2>
-    <p class="hint" data-testid="onboarding-progress">${fmt(briefing.completedCount)} / ${fmt(briefing.steps.length)} complete</p>
+    <p class="hint" data-testid="onboarding-progress">${progressText(briefing)}</p>
     <ul class="onboarding-steps">${stepList(view, briefing, busy, shown)}</ul>
     ${suggestion}
   </section>`;

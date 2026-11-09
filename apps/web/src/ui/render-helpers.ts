@@ -55,13 +55,13 @@ export function recommendedNext(view: PlayerView): string {
   const lab = planet.buildings.researchLab ?? 0;
   const scouts = planet.ships.scout ?? 0;
   if (lab < 1) {
-    return "Recommended next: raise the Research Lab, then unlock Shadow Optics.";
+    return "Recommended next: raise the Research Lab, then start Power Discipline.";
   }
   if (yard < 1) {
-    return "Recommended next: raise the Shipyard (then bank a Scout / Probe).";
+    return "Recommended next: raise the Shipyard, then build a Recon Drone or Spy Satellite.";
   }
   if (scouts < 1 && (planet.ships.probe ?? 0) < 1 && !(planet.shipQueue?.length ?? 0)) {
-    return "Recommended next: build a Scout or Spy Satellite, then open Fleets.";
+    return "Recommended next: build a Recon Drone or Spy Satellite, then open Fleet.";
   }
   return "Recommended next: browse Galaxy, spy or raid a rival, or colonize an empty slot.";
 }

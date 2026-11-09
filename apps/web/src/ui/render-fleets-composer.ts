@@ -526,7 +526,7 @@ export function fleetComposer(
       <p class="hint" data-testid="fleet-slot-counters">Fleets ${fmt(fleetActive)}/${fmt(fleetCap)} · Expeditions ${fmt(expeditionActive)}/${fmt(expeditionCap)}</p>
       ${presetPanel}
       <div class="fleet-ships" data-testid="fleet-orbit-ships">${shipInputs}</div>
-      <p class="hint">Ships shown are in orbit on the selected colony. Example one-way ETA ~${fmtEta(sampleEta)} · fuel ~${fmt(sampleFuel)} deut (1 scout).</p>
+      <p class="hint" data-testid="fleet-orbit-hint">Ships shown are in orbit on the selected colony. Example one-way ETA ~${fmtEta(sampleEta)} · fuel ~${fmt(sampleFuel)} deut (1 Recon Drone).</p>
       ${swarmHint}
       <div class="fleet-actions">
         <button type="submit" data-fleet-action="next" data-testid="fleet-next" ${nextDisabled ? "disabled" : ""} ${nextReason ? `aria-describedby="fleet-next-blocked"` : ""}>Next</button>
