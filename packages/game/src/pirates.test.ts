@@ -10,6 +10,7 @@ import {
   ALIEN_SPLIT_LEVEL,
   MAP_GALAXIES,
   MAP_SYSTEMS,
+  NPC_AI_BATCH_SIZE,
   NPC_JOB_LEVELUP_BUDGET,
   NPC_JOB_RAID_BUDGET,
   PIRATE_DESTROY_STARSHARDS_BASE,
@@ -34,6 +35,7 @@ import {
   SHIPS,
 } from "./catalog.js";
 import {
+  NPC_AI_SLICE_INTERVAL_MS,
   PIRATE_BOSS_COOLDOWN_MS,
   PIRATE_BOSS_DURATION_MS,
   PIRATE_BOSS_MOTHERSHIPS,
@@ -516,6 +518,7 @@ describe("pirate density cap + zero aliens", () => {
     assert.equal(activePirateBases(universe).length, 1096);
     const loaded = migrateOrResetUniverse(JSON.parse(JSON.stringify(universe)));
     assert.equal(loaded.didReset, false);
+    assert.equal(loaded.universe.aiRaidCatchUpCursor, undefined);
     assert.equal(loaded.universe.players[player.id]?.name, "Keeper");
     assert.equal(loaded.universe.planets[planet.id]?.resources.metal, 123_456);
     assert.equal(loaded.universe.planets[planet.id]?.buildings.metalMine, 4);
@@ -1248,6 +1251,105 @@ describe("NPC soft raids", () => {
 });
 
 describe("workers tick budget", () => {
+  it("uses grow-only and raid-only slices", () => {
+    assert.equal(NPC_AI_BATCH_SIZE, 50);
+    assert.equal(NPC_AI_SLICE_INTERVAL_MS, 10 * 60 * 1000);
+    assert.equal(
+      NPC_JOB_RAID_BUDGET,
+      Math.ceil(PIRATE_TARGET_BASE_COUNT / 18) + 6,
+    );
+    const now = 1_700_000_000_000;
+    const growAt = now + NPC_AI_SLICE_INTERVAL_MS;
+    const raidAt = now;
+    const growUniverse = createUniverse("Grow-only NPC slice", 8);
+    growUniverse.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
+    for (const base of activePirateBases(growUniverse)) {
+      base.lastGrewAt = growAt + 1;
+      base.lastFreeSpawnAt = growAt + 1;
+      base.nextRaidAt = growAt - 1;
+    }
+    let budget = npcJobBudget();
+    bindTickBudget(() => budget);
+    try {
+      tickPirates(growUniverse, growAt);
+      assert.ok(
+        activePirateBases(growUniverse).every((base) => base.nextRaidAt <= growAt),
+        "grow slice fired a raid",
+      );
+
+      const raidUniverse = createUniverse("Raid-only NPC slice", 8);
+      raidUniverse.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
+      const before = new Map(
+        activePirateBases(raidUniverse).map((base) => [
+          base.id,
+          {
+            level: base.level,
+            lastGrewAt: base.lastGrewAt,
+            lastFreeSpawnAt: base.lastFreeSpawnAt,
+            ships: { ...base.ships },
+          },
+        ]),
+      );
+      for (const base of activePirateBases(raidUniverse)) {
+        base.lastGrewAt = raidAt - PIRATE_LEVEL_GROWTH_INTERVAL_MS;
+        base.lastFreeSpawnAt = 0;
+        base.nextRaidAt = raidAt + PIRATE_RAID_PERIOD_MS;
+      }
+      budget = npcJobBudget();
+      tickPirates(raidUniverse, raidAt);
+      for (const base of activePirateBases(raidUniverse)) {
+        const previous = before.get(base.id)!;
+        assert.equal(base.level, previous.level);
+        assert.equal(base.lastGrewAt, raidAt - PIRATE_LEVEL_GROWTH_INTERVAL_MS);
+        assert.equal(base.lastFreeSpawnAt, 0);
+        assert.deepEqual(base.ships, previous.ships);
+      }
+    } finally {
+      bindTickBudget(() => undefined);
+    }
+  });
+
+  it("resumes the grow cursor after an intervening raid slice", () => {
+    const now = 1_700_000_000_000;
+    const growAt = now + NPC_AI_SLICE_INTERVAL_MS;
+    const universe = createUniverse("NPC grow cursor", 8);
+    universe.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
+    for (const base of activePirateBases(universe)) {
+      base.lastGrewAt = growAt - PIRATE_LEVEL_GROWTH_INTERVAL_MS;
+      base.lastFreeSpawnAt = growAt + 1;
+      base.nextRaidAt = growAt + PIRATE_RAID_PERIOD_MS;
+    }
+    let budget = npcJobBudget();
+    budget.levelUps = 1000;
+    bindTickBudget(() => budget);
+    try {
+      tickPirates(universe, growAt);
+      const firstCursor = universe.aiCatchUpCursor;
+      assert.ok(firstCursor);
+      const firstLevels = activePirateBases(universe).filter(
+        (base) => base.lastGrewAt === growAt,
+      ).length;
+      assert.ok(firstLevels > 0);
+      assert.equal(firstLevels <= NPC_AI_BATCH_SIZE, true);
+
+      budget = npcJobBudget();
+      tickPirates(universe, now + 2 * NPC_AI_SLICE_INTERVAL_MS);
+      assert.equal(universe.aiCatchUpCursor, firstCursor);
+
+      budget = npcJobBudget();
+      budget.levelUps = 1000;
+      tickPirates(universe, now + 3 * NPC_AI_SLICE_INTERVAL_MS);
+      assert.ok(universe.aiCatchUpCursor);
+      assert.notEqual(universe.aiCatchUpCursor, firstCursor);
+      assert.ok(
+        activePirateBases(universe).filter((base) => base.lastGrewAt === growAt).length >
+          firstLevels,
+      );
+    } finally {
+      bindTickBudget(() => undefined);
+    }
+  });
+
   it("closed-form free spawn matches interval steps at the current level", () => {
     const universe = createUniverse("Spawn Exact", 8);
     const base = activePirateBases(universe)[0]!;
@@ -1272,7 +1374,7 @@ describe("workers tick budget", () => {
     bindTickBudget(() => budget);
     try {
       const universe = createUniverse("Raid Budget", 8);
-      const now = PIRATE_RAID_PERIOD_MS * 4;
+      const now = PIRATE_RAID_PERIOD_MS * 4 + NPC_AI_SLICE_INTERVAL_MS;
       for (const base of activePirateBases(universe)) {
         base.lastGrewAt = now + 1;
         base.lastFreeSpawnAt = now + 1;
@@ -1296,7 +1398,7 @@ describe("workers tick budget", () => {
       const mid = universe.pirateBases![base.id]!.nextRaidAt;
       assert.ok(mid > 0);
       assert.ok(mid <= now);
-      assert.equal(universe.aiCatchUpCursor, `${now}:${base.id}`);
+      assert.equal(universe.aiRaidCatchUpCursor, `${now}:${base.id}`);
       budget = step();
       tickPirates(universe, now);
       assert.ok(universe.pirateBases![base.id]!.nextRaidAt > mid);
@@ -1335,16 +1437,26 @@ describe("workers tick budget", () => {
       budget.raids = 1;
       bindTickBudget(() => budget);
       let runs = 0;
+      let at = now;
       do {
-        tickPirates(split, now + runs * 10 * 60 * 1000);
+        tickPirates(split, at);
         runs += 1;
-        assert.ok(runs <= 4, "bounded catch-up did not resume");
+        assert.ok(runs <= 5, "bounded catch-up did not resume");
         budget = npcJobBudget();
         budget.raids = 1;
-      } while (split.aiCatchUpCursor);
+        at += NPC_AI_SLICE_INTERVAL_MS;
+      } while (split.aiRaidCatchUpCursor);
 
-      assert.equal(runs, 3);
-      assert.deepEqual(split, full);
+      assert.equal(runs, 5);
+      assert.equal(split.aiRaidCatchUpCursor, null);
+      assert.ok(split.aiCatchUpCursor, "grow cursor must remain independent");
+      for (const [id, base] of Object.entries(full.pirateBases ?? {})) {
+        assert.equal(split.pirateBases?.[id]?.nextRaidAt, base.nextRaidAt);
+      }
+      assert.equal(
+        split.alienBases?.[alien.id]?.nextRaidAt,
+        full.alienBases?.[alien.id]?.nextRaidAt,
+      );
     } finally {
       bindTickBudget(() => undefined);
       if (previous == null) delete process.env.STARHOLD_E2E;
@@ -1361,19 +1473,23 @@ describe("workers tick budget", () => {
       levelWork.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
       const levelBases = activePirateBases(levelWork);
       const initialLevels = new Map(levelBases.map((base) => [base.id, base.level]));
+      const growNow = now + NPC_AI_SLICE_INTERVAL_MS;
       for (const base of levelBases) {
-        base.lastGrewAt = now - PIRATE_LEVEL_GROWTH_INTERVAL_MS;
-        base.lastFreeSpawnAt = now + 1;
-        base.nextRaidAt = now + PIRATE_RAID_PERIOD_MS;
+        base.lastGrewAt = growNow - PIRATE_LEVEL_GROWTH_INTERVAL_MS;
+        base.lastFreeSpawnAt = growNow + 1;
+        base.nextRaidAt = growNow + PIRATE_RAID_PERIOD_MS;
       }
       let budget = npcJobBudget();
       bindTickBudget(() => budget);
-      tickPirates(levelWork, now);
+      tickPirates(levelWork, growNow);
       const levelsGained = levelBases.reduce(
         (sum, base) => sum + base.level - initialLevels.get(base.id)!,
         0,
       );
-      assert.equal(levelsGained, NPC_JOB_LEVELUP_BUDGET);
+      const eligibleBatch = Object.values(levelWork.pirateBases ?? {})
+        .slice(0, NPC_AI_BATCH_SIZE)
+        .filter((base) => !base.seasonalBoss).length;
+      assert.equal(levelsGained, Math.min(eligibleBatch, NPC_JOB_LEVELUP_BUDGET));
 
       const raidWork = createUniverse("NPC raid caps", 8);
       raidWork.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
@@ -1432,9 +1548,10 @@ describe("workers tick budget", () => {
       let runs = 0;
       while (
         split.aiCatchUpCursor ||
+        split.aiRaidCatchUpCursor ||
         Object.values(split.pirateBases ?? {}).some((base) => base.nextRaidAt <= end)
       ) {
-        assert.ok(runs < 12, "budgeted NPC cron did not catch up");
+        assert.ok(runs < 400, "budgeted NPC cron did not catch up");
         budget = npcJobBudget();
         tickPirates(split, end);
         runs += 1;
@@ -1485,7 +1602,7 @@ describe("workers tick budget", () => {
       for (const base of Object.values(universe.pirateBases ?? {})) {
         if (base.destroyedAt == null && base.nextRaidAt <= end) backlog += 1;
       }
-      for (let run = 0; backlog > 0 && run < 20; run += 1) {
+      for (let run = 0; backlog > 0 && run < 400; run += 1) {
         budget = npcJobBudget();
         tickPirates(universe, end);
         backlog = Object.values(universe.pirateBases ?? {}).filter(

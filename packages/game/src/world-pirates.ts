@@ -76,6 +76,7 @@ import {
   PIRATE_BOSS_RESOURCE_REWARD_MULT,
   PIRATE_BOSS_STARSHARD_REWARD_MULT,
   PIRATE_BOSS_TIER,
+  NPC_AI_SLICE_INTERVAL_MS,
 } from "./data/tuning.js";
 import { recordCombatReport } from "./combat-share.js";
 import {
@@ -2226,6 +2227,12 @@ function catchUpRaidsAlien(universe: UniverseState, base: AlienBase, now: number
  * when occupancy was loaded.
  */
 export function tickPirates(universe: UniverseState, now: number): void {
+  const phase: "both" | "grow" | "raid" =
+    tickBudget() == null
+      ? "both"
+      : Math.floor(now / NPC_AI_SLICE_INTERVAL_MS) % 2 === 0
+        ? "grow"
+        : "raid";
   if (!universe.pirateBases) universe.pirateBases = {};
   if (!universe.alienBases) universe.alienBases = {};
   cullExcessPirateBases(universe, now);
@@ -2243,7 +2250,8 @@ export function tickPirates(universe: UniverseState, now: number): void {
     universe.lastAiSimAt = now;
     return;
   }
-  const savedCursor = universe.aiCatchUpCursor;
+  const savedCursor =
+    phase === "raid" ? universe.aiRaidCatchUpCursor : universe.aiCatchUpCursor;
   const separator = savedCursor?.indexOf(":") ?? -1;
   const savedAt = separator > 0 ? Number(savedCursor!.slice(0, separator)) : NaN;
   const targetAt = Number.isFinite(savedAt) ? savedAt : now;
@@ -2284,20 +2292,24 @@ export function tickPirates(universe: UniverseState, now: number): void {
         processed += 1;
         continue;
       }
-      // Level-up budget can run out mid-wave. Still spawn and raid; the next
-      // job applies the missed levels at their own timestamps.
-      growPirateBase(universe, base, targetAt);
-      applyFreeSpawnsPirate(base, targetAt);
-      if (catchUpRaidsPirate(universe, base, targetAt)) {
+      // Level-up budget can run out mid-wave. Still spawn on a grow slice;
+      // the next grow slice applies the missed levels at their own timestamps.
+      if (phase !== "raid") {
+        growPirateBase(universe, base, targetAt);
+        applyFreeSpawnsPirate(base, targetAt);
+      }
+      if (phase !== "grow" && catchUpRaidsPirate(universe, base, targetAt)) {
         resumeId = entry.id;
         break;
       }
     } else {
       const base = entry.base;
       ensureAlienBaseShape(base, universe, targetAt);
-      growAlienBase(universe, base, targetAt);
-      applyFreeSpawnsAlien(base, targetAt);
-      if (catchUpRaidsAlien(universe, base, targetAt)) {
+      if (phase !== "raid") {
+        growAlienBase(universe, base, targetAt);
+        applyFreeSpawnsAlien(base, targetAt);
+      }
+      if (phase !== "grow" && catchUpRaidsAlien(universe, base, targetAt)) {
         resumeId = entry.id;
         break;
       }
@@ -2310,11 +2322,14 @@ export function tickPirates(universe: UniverseState, now: number): void {
       const base = entry.base;
       if (base.destroyedAt != null) return false;
       if (entry.faction === "pirate" && entry.base.seasonalBoss) return false;
-      if (entry.faction === "alien") {
-        if (targetAt >= entry.base.buildupEndsAt && base.nextRaidAt <= targetAt) return true;
-      } else if (base.nextRaidAt <= targetAt) {
-        return true;
+      if (phase !== "grow") {
+        if (entry.faction === "alien") {
+          if (targetAt >= entry.base.buildupEndsAt && base.nextRaidAt <= targetAt) return true;
+        } else if (base.nextRaidAt <= targetAt) {
+          return true;
+        }
       }
+      if (phase === "raid") return false;
       const maxLevel = entry.faction === "pirate" ? PIRATE_MAX_LEVEL : ALIEN_MAX_LEVEL;
       return (
         base.level < maxLevel &&
@@ -2323,11 +2338,18 @@ export function tickPirates(universe: UniverseState, now: number): void {
     });
     resumeId =
       pending?.id ??
-      (startAt + processed < entries.length ? entries[startAt + processed]!.id : null);
+      (phase !== "raid" && startAt + processed < entries.length
+        ? entries[startAt + processed]!.id
+        : null);
   }
-  universe.aiCatchUpCursor = resumeId ? `${targetAt}:${resumeId}` : null;
-  respawnDestroyedPirates(universe, targetAt);
-  universe.lastAiSimAt = targetAt;
+  const cursor = resumeId ? `${targetAt}:${resumeId}` : null;
+  if (phase === "raid") universe.aiRaidCatchUpCursor = cursor;
+  else universe.aiCatchUpCursor = cursor;
+  if (phase !== "grow") {
+    respawnDestroyedPirates(universe, targetAt);
+    if (phase === "raid") ensurePiratePopulation(universe, targetAt);
+  }
+  universe.lastAiSimAt = Math.max(universe.lastAiSimAt ?? 0, targetAt);
 }
 
 export function ensureAlienDailySeed(universe: UniverseState, now: number): void {

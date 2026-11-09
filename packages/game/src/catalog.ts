@@ -554,9 +554,10 @@ export const MAP_GALAXIES = 10;
 export { PIRATE_BASES_PER_GALAXY };
 export const PIRATE_TARGET_BASE_COUNT = PIRATE_BASES_PER_GALAXY * MAP_GALAXIES;
 /**
- * 10-minute npc job. One raid per 180 minutes means about 1/18 of the living
- * cap comes due each run. Slack covers a burst; the rest resumes next run.
- * Page-load raid budget stays `WORKERS_TICK_RAID_BUDGET`.
+ * Raid-only slices of the Workers npc job (every other 10 minutes). One raid
+ * per 180 minutes is about 1/18 of the living cap, plus slack. A slice can
+ * leave a remainder; `aiRaidCatchUpCursor` resumes it. Page-load raid budget
+ * stays `WORKERS_TICK_RAID_BUDGET`.
  */
 export const NPC_JOB_RAID_BUDGET = Math.ceil(PIRATE_TARGET_BASE_COUNT / 18) + 6;
 export const MAP_SYSTEMS = 399;

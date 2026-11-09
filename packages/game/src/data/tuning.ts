@@ -1663,11 +1663,10 @@ export const PIRATE_TECH_OFFSET = 3;
 
 /** Max catch-up raid firings per base per tick (lazy Hobby path). */
 export const NPC_RAID_CATCHUP_MAX = 24;
-/**
- * Max AI bases processed per lazy tick batch. One npc-job pass has to see
- * every living pirate base (75 per galaxy times MAP_GALAXIES) plus aliens.
- */
-export const NPC_AI_BATCH_SIZE = 800;
+/** Max AI bases visited by one budgeted grow or raid slice. */
+export const NPC_AI_BATCH_SIZE = 50;
+/** Wall-clock period used to alternate grow and raid-only NPC slices. */
+export const NPC_AI_SLICE_INTERVAL_MS = 10 * 60 * 1000;
 
 /**
  * Workers free plan allows 10ms of CPU per request. These caps spread a
@@ -1686,8 +1685,9 @@ export const WORKERS_TICK_SEED_MINIS = 1;
 export const WORKERS_TICK_SEED_PIRATES = 4;
 
 /**
- * 10-minute npc job level-ups. Raid count for that job is derived in
- * catalog.ts from the living pirate cap (`NPC_JOB_RAID_BUDGET`).
+ * Npc-job level-ups, applied on grow slices. Raid count stays derived in
+ * catalog.ts from the living pirate cap (`NPC_JOB_RAID_BUDGET`) and is
+ * spent on raid slices only.
  */
 export const NPC_JOB_LEVELUP_BUDGET = 80;
 export const NPC_JOB_FLEET_BUDGET = 8;
