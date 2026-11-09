@@ -1,5 +1,6 @@
 import { SHIP_ORDER } from "./catalog.js";
 import { GOALS, ONBOARDING_STEPS } from "./data/tuning.js";
+import { nextGoalSuggestionFor } from "./next-goal.js";
 import type {
   OnboardingView,
   PlanetState,
@@ -169,6 +170,7 @@ export function onboardingViewFor(
     dismissed: Boolean(player.onboarding?.dismissed),
     allClaimed: steps.length > 0 && steps.every((step) => step.claimed),
     completedCount,
+    suggestion: nextGoalSuggestionFor(universe, player),
   };
 }
 

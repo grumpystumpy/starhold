@@ -1,4 +1,5 @@
 import type {
+  NextGoalSuggestion,
   OnboardingNavPage,
   OnboardingRewardView,
   OnboardingView,
@@ -71,6 +72,24 @@ function stepList(
   }).join("");
 }
 
+function nextGoalHtml(
+  view: PlayerView,
+  suggestion: NextGoalSuggestion | null | undefined,
+): string {
+  if (!suggestion) return "";
+  const page = navPageFor(suggestion.targetNavPage);
+  const href = hrefForPage(page, {
+    playerId: view.player.id,
+    planetId: view.planet.id,
+  });
+  return `<div class="next-goal" data-testid="next-goal" data-next-goal-id="${escapeAttr(suggestion.id)}">
+    <p class="hint">Optional next step</p>
+    <strong>${escapeHtml(suggestion.title)}</strong>
+    <p class="hint" data-testid="next-goal-rationale">${escapeHtml(suggestion.rationale)}</p>
+    <a href="${escapeAttr(href)}" data-nav="${escapeAttr(page)}" data-testid="next-goal-open">Open</a>
+  </div>`;
+}
+
 /** Full checklist for Overview. Hidden once dismissed or fully claimed. */
 export function onboardingPanelHtml(view: PlayerView, busy: boolean): string {
   const briefing = visible(view);
@@ -81,6 +100,7 @@ export function onboardingPanelHtml(view: PlayerView, busy: boolean): string {
     <h2>Commander briefing</h2>
     <p class="hint" data-testid="onboarding-progress">${fmt(done)} / ${fmt(total)} complete</p>
     <ul class="onboarding-steps">${stepList(view, briefing, busy, briefing.steps)}</ul>
+    ${nextGoalHtml(view, briefing.suggestion)}
     <button type="button" data-onboarding-dismiss="true" data-testid="onboarding-dismiss" ${busy ? "disabled" : ""}>Dismiss tutorial</button>
   </section>`;
 }
@@ -89,11 +109,25 @@ export function onboardingPanelHtml(view: PlayerView, busy: boolean): string {
  * Goals page: claimable steps plus the next milestone, or a restore link
  * when the briefing was dismissed with rewards still unclaimed.
  */
+function restoreHtml(busy: boolean, label: string): string {
+  return `<p class="hint"><button type="button" data-onboarding-dismiss="false" data-testid="onboarding-restore" ${busy ? "disabled" : ""}>${escapeHtml(label)}</button></p>`;
+}
+
 export function onboardingGoalsHtml(view: PlayerView, busy: boolean): string {
   const briefing = view.onboarding;
-  if (!briefing || briefing.allClaimed) return "";
+  if (!briefing) return "";
   if (briefing.dismissed) {
-    return `<p class="hint"><button type="button" data-onboarding-dismiss="false" data-testid="onboarding-restore" ${busy ? "disabled" : ""}>Show tutorial</button></p>`;
+    if (briefing.allClaimed && !briefing.suggestion) return "";
+    const label = briefing.allClaimed ? "Show next step" : "Show tutorial";
+    return restoreHtml(busy, label);
+  }
+  const suggestion = nextGoalHtml(view, briefing.suggestion);
+  if (briefing.allClaimed) {
+    if (!suggestion) return "";
+    return `<section class="panel onboarding-panel" data-testid="next-goal-panel">
+      ${suggestion}
+      <button type="button" data-onboarding-dismiss="true" data-testid="onboarding-dismiss" ${busy ? "disabled" : ""}>Hide suggestion</button>
+    </section>`;
   }
   const next = briefing.steps.find((step) => !step.completed);
   const shown = briefing.steps.filter(
@@ -103,5 +137,6 @@ export function onboardingGoalsHtml(view: PlayerView, busy: boolean): string {
     <h2>Commander briefing</h2>
     <p class="hint" data-testid="onboarding-progress">${fmt(briefing.completedCount)} / ${fmt(briefing.steps.length)} complete</p>
     <ul class="onboarding-steps">${stepList(view, briefing, busy, shown)}</ul>
+    ${suggestion}
   </section>`;
 }

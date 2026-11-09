@@ -636,11 +636,30 @@ export interface OnboardingStepView {
   reward: OnboardingRewardView;
 }
 
+/**
+ * One optional next step derived from current buildings, research, and
+ * catalog prerequisites. Not stored on the save and pays no reward.
+ */
+export interface NextGoalSuggestion {
+  /** Catalog id, `research:<researchId>` or `building:<buildingId>`. */
+  id: string;
+  /** Catalog display name of the step to take. */
+  title: string;
+  /** Why this step is next, using catalog names and levels only. */
+  rationale: string;
+  targetNavPage: OnboardingNavPage;
+}
+
 export interface OnboardingView {
   steps: OnboardingStepView[];
   dismissed: boolean;
   allClaimed: boolean;
   completedCount: number;
+  /**
+   * Closest catalog gate. Omitted by older view fixtures.
+   * `null` when every gated level-1 step is already met.
+   */
+  suggestion?: NextGoalSuggestion | null;
 }
 
 export interface UniverseSeedCursor {

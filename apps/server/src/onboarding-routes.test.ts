@@ -31,7 +31,10 @@ describe("onboarding routes", () => {
     const view = (await join.json()) as {
       player: { id: string; onboarding?: { claimed?: string[] } };
       planet: { resources: { metal: number; crystal: number } };
-      onboarding?: { steps: Array<{ id: string; claimed: boolean; completed: boolean }> };
+      onboarding?: {
+        steps: Array<{ id: string; claimed: boolean; completed: boolean }>;
+        suggestion?: { id: string; targetNavPage: string; rationale: string } | null;
+      };
     };
     return { app, cookie, view };
   }
@@ -40,6 +43,10 @@ describe("onboarding routes", () => {
     const owner = await signupAndJoin("onboard@example.com", "Briefing");
     const other = await signupAndJoin("other-onboard@example.com", "Intruder");
     const playerId = owner.view.player.id;
+    assert.equal(owner.view.onboarding?.suggestion?.id, "building:researchLab");
+    assert.equal(owner.view.onboarding?.suggestion?.targetNavPage, "buildings");
+    assert.match(owner.view.onboarding?.suggestion?.rationale ?? "", /Power Discipline/);
+    assert.equal(owner.view.player.onboarding, undefined);
 
     const missing = await owner.app.request("/api/onboarding/claim", {
       method: "POST",
@@ -97,8 +104,16 @@ describe("onboarding routes", () => {
       body: JSON.stringify({ playerId, dismissed: true }),
     });
     assert.equal(hidden.status, 200);
-    const hiddenBody = (await hidden.json()) as { onboarding: { dismissed: boolean } };
+    const hiddenBody = (await hidden.json()) as {
+      onboarding: {
+        dismissed: boolean;
+        suggestion?: { id: string } | null;
+      };
+      player: { onboarding?: { claimed?: string[] } };
+    };
     assert.equal(hiddenBody.onboarding.dismissed, true);
+    assert.equal(hiddenBody.onboarding.suggestion?.id, "building:researchLab");
+    assert.ok(hiddenBody.player.onboarding?.claimed?.includes("metalMine1"));
 
     const noCookie = await owner.app.request("/api/onboarding/dismiss", {
       method: "POST",
@@ -121,10 +136,11 @@ describe("onboarding routes", () => {
     });
     assert.equal(restored.status, 200);
     const restoredBody = (await restored.json()) as {
-      onboarding: { dismissed: boolean };
+      onboarding: { dismissed: boolean; suggestion?: { id: string } | null };
       player: { onboarding?: { claimed?: string[] } };
     };
     assert.equal(restoredBody.onboarding.dismissed, false);
+    assert.equal(restoredBody.onboarding.suggestion?.id, "building:researchLab");
     assert.ok(restoredBody.player.onboarding?.claimed?.includes("metalMine1"));
   });
 });
