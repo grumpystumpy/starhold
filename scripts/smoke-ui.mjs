@@ -621,11 +621,7 @@ async function uiSmoke() {
   // Base queue length 2 — second item should enqueue (multi-item queues).
   await page.click('[data-testid="upgrade-crystalMine"]');
   await page.waitForFunction(
-    () => {
-      const items = document.querySelectorAll('[data-testid="build-queue-item"]');
-      const ok = document.querySelector('[data-testid="flash-ok"]');
-      return items.length >= 2 || Boolean(ok?.textContent?.match(/Queued upgrade/i));
-    },
+    () => document.querySelectorAll('[data-testid="build-queue-item"]').length >= 2,
     undefined,
     { timeout: 10_000 },
   );
