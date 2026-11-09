@@ -1686,11 +1686,9 @@ export const WORKERS_TICK_SEED_MINIS = 1;
 export const WORKERS_TICK_SEED_PIRATES = 4;
 
 /**
- * 10-minute NPC job. One raid per 180 minutes across the living cap
- * (75 per galaxy times MAP_GALAXIES) is about 42 dues per run.
- * Any burst beyond this budget resumes on the next scheduled run.
+ * 10-minute npc job level-ups. Raid count for that job is derived in
+ * catalog.ts from the living pirate cap (`NPC_JOB_RAID_BUDGET`).
  */
-export const NPC_JOB_RAID_BUDGET = 48;
 export const NPC_JOB_LEVELUP_BUDGET = 80;
 export const NPC_JOB_FLEET_BUDGET = 8;
 

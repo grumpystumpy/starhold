@@ -452,7 +452,6 @@ export {
   WORKERS_TICK_SEED_SYSTEMS,
   WORKERS_TICK_SEED_MINIS,
   WORKERS_TICK_SEED_PIRATES,
-  NPC_JOB_RAID_BUDGET,
   NPC_JOB_LEVELUP_BUDGET,
   NPC_JOB_FLEET_BUDGET,
   ALIEN_INITIAL_BASE_COUNT,
@@ -554,6 +553,12 @@ export const MAP_GALAXIES = 10;
  */
 export { PIRATE_BASES_PER_GALAXY };
 export const PIRATE_TARGET_BASE_COUNT = PIRATE_BASES_PER_GALAXY * MAP_GALAXIES;
+/**
+ * 10-minute npc job. One raid per 180 minutes means about 1/18 of the living
+ * cap comes due each run. Slack covers a burst; the rest resumes next run.
+ * Page-load raid budget stays `WORKERS_TICK_RAID_BUDGET`.
+ */
+export const NPC_JOB_RAID_BUDGET = Math.ceil(PIRATE_TARGET_BASE_COUNT / 18) + 6;
 export const MAP_SYSTEMS = 399;
 export const MAP_SLOTS = 15;
 
