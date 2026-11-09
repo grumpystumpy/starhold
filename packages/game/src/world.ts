@@ -260,6 +260,7 @@ export {
   setOnboardingDismissed,
   type OnboardingActionResult,
 } from "./world-onboarding.js";
+export { nextGoalSuggestionFor } from "./next-goal.js";
 export {
   effectiveCombatResearch,
   ensurePlayerProgress,
