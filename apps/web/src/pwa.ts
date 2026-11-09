@@ -5,6 +5,7 @@ import {
   isStandalone,
   mayApplyAppUpdate,
   renderPwaChrome,
+  serviceWorkerUpdateReady,
   shouldRegisterServiceWorker,
   type OfflinePhase,
   type PwaView,
@@ -83,13 +84,28 @@ function watchUpdates(win: Window, doc: Document, reg: ServiceWorkerRegistration
     updateReady = true;
     paint(doc, win);
   };
-  if (reg.waiting && win.navigator.serviceWorker.controller) mark();
-  reg.addEventListener("updatefound", () => {
-    const worker = reg.installing;
+  const controllerChanged = () => {
+    const controller = win.navigator.serviceWorker.controller;
+    const active = reg.active;
+    if (!controller || !active || controller === active) return;
+    if (serviceWorkerUpdateReady(active.state, true)) mark();
+  };
+  const watch = (worker: ServiceWorker | null) => {
     if (!worker) return;
-    worker.addEventListener("statechange", () => {
-      if (worker.state === "installed" && win.navigator.serviceWorker.controller) mark();
-    });
+    const consider = () => {
+      if (serviceWorkerUpdateReady(worker.state, Boolean(win.navigator.serviceWorker.controller))) mark();
+      controllerChanged();
+    };
+    consider();
+    worker.addEventListener("statechange", consider);
+  };
+  watch(reg.waiting);
+  watch(reg.installing);
+  controllerChanged();
+  reg.addEventListener("updatefound", () => {
+    watch(reg.installing);
+    watch(reg.waiting);
+    controllerChanged();
   });
 }
 
