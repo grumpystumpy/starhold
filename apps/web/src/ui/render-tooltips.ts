@@ -2,6 +2,13 @@ import type { Resources } from "@starhold/game";
 import { fmt, fmtCost, fmtEta } from "./format";
 import { escapeAttr, escapeHtml } from "./render-escape";
 
+/** Visible reason beside a blocked action. Omitted when the action is allowed. */
+export function blockedActionNote(testId: string, reason: string | null): string {
+  if (!reason) return "";
+  const id = escapeAttr(testId);
+  return `<p class="blocked-reason" role="status" id="${id}" data-testid="${id}">${escapeHtml(reason)}</p>`;
+}
+
 export type InfoTooltipOpts = {
   title: string;
   /** Function / detail lines shown under the title. */

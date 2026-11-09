@@ -23,8 +23,80 @@ import {
   SHIP_ART,
 } from "./assets";
 import { fmt, fmtCost, fmtEta } from "./format";
-import { escapeHtml } from "./render-escape";
-import { costTooltip } from "./render-tooltips";
+import { escapeAttr, escapeHtml } from "./render-escape";
+import { blockedActionNote, costTooltip } from "./render-tooltips";
+
+export function buildQuantityReason(opts: {
+  count: number;
+  locked: string | null;
+  queue: string | null;
+  cost: { metal: number; crystal: number; deuterium: number };
+  have: { metal: number; crystal: number; deuterium: number };
+}): string | null {
+  if (opts.locked) return opts.locked;
+  if (opts.queue) return opts.queue;
+  const count = Math.max(1, Math.floor(opts.count) || 1);
+  const short =
+    opts.have.metal < opts.cost.metal * count ||
+    opts.have.crystal < opts.cost.crystal * count ||
+    opts.have.deuterium < opts.cost.deuterium * count;
+  return short ? "Not enough resources." : null;
+}
+
+export function syncBuildCountReason(input: HTMLInputElement): void {
+  const article = input.closest("article");
+  const note = article?.querySelector<HTMLElement>("[data-build-reason]");
+  const button = article?.querySelector<HTMLButtonElement>("button");
+  if (!note || !button) return;
+  const reason = buildQuantityReason({
+    count: Number(input.value),
+    locked: note.dataset.lockedReason || null,
+    queue: note.dataset.queueReason || null,
+    cost: {
+      metal: Number(note.dataset.costMetal ?? 0),
+      crystal: Number(note.dataset.costCrystal ?? 0),
+      deuterium: Number(note.dataset.costDeuterium ?? 0),
+    },
+    have: {
+      metal: Number(note.dataset.haveMetal ?? 0),
+      crystal: Number(note.dataset.haveCrystal ?? 0),
+      deuterium: Number(note.dataset.haveDeuterium ?? 0),
+    },
+  });
+  note.textContent = reason ?? "";
+  note.hidden = !reason;
+  button.disabled = Boolean(reason);
+  if (reason) button.setAttribute("aria-describedby", note.id);
+  else button.removeAttribute("aria-describedby");
+}
+
+function quantityNote(
+  testId: string,
+  reason: string | null,
+  locked: string | null,
+  queue: string | null,
+  cost: { metal: number; crystal: number; deuterium: number },
+  have: { metal: number; crystal: number; deuterium: number },
+): string {
+  const id = testId;
+  const attrs = [
+    `data-build-reason`,
+    `data-cost-metal="${cost.metal}"`,
+    `data-cost-crystal="${cost.crystal}"`,
+    `data-cost-deuterium="${cost.deuterium}"`,
+    `data-have-metal="${have.metal}"`,
+    `data-have-crystal="${have.crystal}"`,
+    `data-have-deuterium="${have.deuterium}"`,
+    locked ? `data-locked-reason="${escapeAttr(locked)}"` : "",
+    queue ? `data-queue-reason="${escapeAttr(queue)}"` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  if (!reason) {
+    return `<p class="blocked-reason" role="status" id="${id}" data-testid="${id}" ${attrs} hidden></p>`;
+  }
+  return `<p class="blocked-reason" role="status" id="${id}" data-testid="${id}" ${attrs}>${escapeHtml(reason)}</p>`;
+}
 
 export function shipRow(
   id: ShipId,
@@ -46,13 +118,14 @@ export function shipRow(
   else if (queueFull) label = "Queue full";
   else if (!affordable) label = "Can't afford";
   const lockMsg = `Needs Shipyard level ${fmt(def.shipyardLevel)} (you have ${fmt(yard)}).`;
-  const blocked = locked
-    ? lockMsg
-    : queueFull
-      ? "Ship queue is full."
-      : !affordable
-        ? "Not enough resources."
-        : null;
+  const queueMsg = queueFull ? "Ship queue is full." : null;
+  const blocked = buildQuantityReason({
+    count: 1,
+    locked: locked ? lockMsg : null,
+    queue: queueMsg,
+    cost,
+    have: planet.resources,
+  });
 
   const naniteLevel = Math.max(0, Math.floor(planet.buildings.chronoLathe ?? 0));
   const rigLevel = Math.max(0, Math.floor(planet.buildings.rigFoundry ?? 0));
@@ -91,7 +164,8 @@ export function shipRow(
       </div>
       <div class="actions">
         <input type="number" min="1" max="999999" value="1" data-ship-count="${id}" data-testid="ship-count-${id}" ${locked ? "disabled" : ""} style="min-width:4rem;width:4.5rem" />
-        <button type="button" data-ship="${id}" data-locked="${locked ? "1" : "0"}" data-testid="build-${id}" ${locked ? "disabled" : ""} title="${tip.title}">${label}</button>
+        <button type="button" data-ship="${id}" data-locked="${locked ? "1" : "0"}" data-testid="build-${id}" ${blocked ? "disabled" : ""} ${blocked ? `aria-describedby="blocked-build-${id}"` : ""} title="${tip.title}">${label}</button>
+        ${quantityNote(`blocked-build-${id}`, blocked, locked ? lockMsg : null, queueMsg, cost, planet.resources)}
       </div>
     </article>
   `;
@@ -115,13 +189,15 @@ export function defenseRow(
   if (locked) label = "Locked";
   else if (queueFull) label = "Queue full";
   else if (!affordable) label = "Can't afford";
-  const blocked = locked
-    ? `Needs Shipyard level ${fmt(def.shipyardLevel)}`
-    : queueFull
-      ? "Defense queue is full."
-      : !affordable
-        ? "Not enough resources."
-        : null;
+  const lockMsg = locked ? `Needs Shipyard level ${fmt(def.shipyardLevel)}` : null;
+  const queueMsg = queueFull ? "Defense queue is full." : null;
+  const blocked = buildQuantityReason({
+    count: 1,
+    locked: lockMsg,
+    queue: queueMsg,
+    cost,
+    have: planet.resources,
+  });
 
   const naniteLevel = Math.max(0, Math.floor(planet.buildings.chronoLathe ?? 0));
   const rigLevel = Math.max(0, Math.floor(planet.buildings.rigFoundry ?? 0));
@@ -155,7 +231,8 @@ export function defenseRow(
       </div>
       <div class="actions">
         <input type="number" min="1" max="999999" value="1" data-defense-count="${id}" data-testid="defense-count-${id}" ${locked ? "disabled" : ""} style="min-width:4rem;width:4.5rem" />
-        <button type="button" data-defense="${id}" data-locked="${locked ? "1" : "0"}" data-testid="build-defense-${id}" ${locked ? "disabled" : ""} title="${tip.title}">${label}</button>
+        <button type="button" data-defense="${id}" data-locked="${locked ? "1" : "0"}" data-testid="build-defense-${id}" ${blocked ? "disabled" : ""} ${blocked ? `aria-describedby="blocked-defense-${id}"` : ""} title="${tip.title}">${label}</button>
+        ${quantityNote(`blocked-defense-${id}`, blocked, lockMsg, queueMsg, cost, planet.resources)}
       </div>
     </article>
   `;
@@ -260,7 +337,8 @@ export function researchRow(
         <div class="meta">Next: ${fmtCost(cost)} · ${fmtEta(secs)}</div>
       </div>
       <div class="actions">
-        <button type="button" data-research="${id}" data-locked="${blocked ? "1" : "0"}" data-testid="research-btn-${id}" ${blocked ? "disabled" : ""} title="${tip.title}">${label}</button>
+        <button type="button" data-research="${id}" data-locked="${blocked ? "1" : "0"}" data-testid="research-btn-${id}" ${blocked ? "disabled" : ""} ${blocked ? `aria-describedby="blocked-research-${id}"` : ""} title="${tip.title}">${label}</button>
+        ${blockedActionNote(`blocked-research-${id}`, blocked)}
       </div>
     </article>
   `;

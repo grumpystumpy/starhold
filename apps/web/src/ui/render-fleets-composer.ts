@@ -30,7 +30,7 @@ import {
   type FleetDraft,
   type FleetStep,
 } from "./render-fleets-draft.js";
-import { infoTooltip } from "./render-tooltips";
+import { blockedActionNote, infoTooltip } from "./render-tooltips";
 
 export function fleetComposer(
   view: PlayerView,
@@ -309,29 +309,46 @@ export function fleetComposer(
     options.length === 0 &&
     rivals.length > 0 &&
     attackableRivals.length === 0;
-  const needHint = protectedFromAttack
-    ? `<p class="hint" data-testid="fleet-targets-protected">No attack targets. Commanders under ${fmt(NEWBIE_PROTECTION_POINTS)} points are protected.</p>`
+  const targetReason = protectedFromAttack
+    ? `No attack targets. Commanders under ${fmt(NEWBIE_PROTECTION_POINTS)} points are protected.`
     : mission === "expedition" && expeditionActive >= expeditionCap
-      ? `<p class="hint" data-testid="fleet-need-expedition-slot">Expedition slots full (${fmt(expeditionActive)}/${fmt(expeditionCap)}). Research Stellar Cartography for more.</p>`
+      ? `Expedition slots full (${fmt(expeditionActive)}/${fmt(expeditionCap)}). Research Stellar Cartography for more.`
       : options.length === 0
         ? mission === "transport"
-          ? `<p class="hint" data-testid="fleet-need-colony">Need a second world: research Stellar Cartography, build a Colonizer, colonize an empty galaxy slot — then transport cargo there.</p>`
+          ? "Need a second world: research Stellar Cartography, build a Colonizer, colonize an empty galaxy slot — then transport cargo there."
           : mission === "jump"
-            ? `<p class="hint" data-testid="fleet-need-jump-moon">Need another of your moons with a Moon Bridge (form moons from large debris, then build Lunar Habitat + Moon Bridge on both).</p>`
+            ? "Need another of your moons with a Moon Bridge (form moons from large debris, then build Lunar Habitat + Moon Bridge on both)."
             : mission === "deploy"
-              ? `<p class="hint" data-testid="fleet-need-deploy-target">Colonize for park targets, or join a second commander for attacking another rival.</p>`
+              ? "Colonize for park targets, or join a second commander for attacking another rival."
               : mission === "colonize"
-                ? `<p class="hint">Browse the galaxy for an empty slot in this system (or change system).</p>`
+                ? "Browse the galaxy for an empty slot in this system (or change system)."
                 : mission === "harvest"
-                  ? `<p class="hint">No debris in this system yet — win a raid that destroys ships.</p>`
+                  ? "No debris in this system yet — win a raid that destroys ships."
                   : mission === "harvestAsteroid"
-                    ? `<p class="hint">No asteroids in this system — browse another system.</p>`
+                    ? "No asteroids in this system — browse another system."
                     : mission === "pirateRaid"
-                      ? `<p class="hint">No pirate base in this system — browse the galaxy for NPC activity.</p>`
-                    : mission === "alienRaid"
-                      ? `<p class="hint">No alien base in this system — find them via expedition.</p>`
-                      : `<p class="hint" data-testid="fleet-need-rival">Join a second commander (another tab) for attacking another rival / spy targets.</p>`
-        : "";
+                      ? "No pirate base in this system — browse the galaxy for NPC activity."
+                      : mission === "alienRaid"
+                        ? "No alien base in this system — find them via expedition."
+                        : "Join a second commander (another tab) for attacking another rival / spy targets."
+        : null;
+  const needHint = targetReason
+    ? `<p class="hint" data-testid="${
+        protectedFromAttack
+          ? "fleet-targets-protected"
+          : mission === "expedition" && expeditionActive >= expeditionCap
+            ? "fleet-need-expedition-slot"
+            : mission === "transport"
+              ? "fleet-need-colony"
+              : mission === "jump"
+                ? "fleet-need-jump-moon"
+                : mission === "deploy"
+                  ? "fleet-need-deploy-target"
+                  : mission === "raid" || mission === "espionage"
+                    ? "fleet-need-rival"
+                    : "fleet-need-target"
+      }">${escapeHtml(targetReason)}</p>`
+    : "";
   const launchBlocked =
     busy ||
     options.length === 0 ||
@@ -363,6 +380,15 @@ export function fleetComposer(
   }, 0);
   const nextDisabled =
     busy || orbitShipIds.length === 0 || selectedShips < 1 || !swarmCheck.ok;
+  const nextReason = busy
+    ? null
+    : orbitShipIds.length === 0
+      ? "No ships in orbit on this colony."
+      : selectedShips < 1
+        ? "Select at least one ship."
+        : !swarmCheck.ok
+          ? swarmCheck.error
+          : null;
 
   const missionMeta: Record<
     MissionType,
@@ -502,7 +528,10 @@ export function fleetComposer(
       <div class="fleet-ships" data-testid="fleet-orbit-ships">${shipInputs}</div>
       <p class="hint">Ships shown are in orbit on the selected colony. Example one-way ETA ~${fmtEta(sampleEta)} · fuel ~${fmt(sampleFuel)} deut (1 scout).</p>
       ${swarmHint}
-      <button type="submit" data-fleet-action="next" data-testid="fleet-next" ${nextDisabled ? "disabled" : ""}>Next</button>
+      <div class="fleet-actions">
+        <button type="submit" data-fleet-action="next" data-testid="fleet-next" ${nextDisabled ? "disabled" : ""} ${nextReason ? `aria-describedby="fleet-next-blocked"` : ""}>Next</button>
+        ${blockedActionNote("fleet-next-blocked", nextReason)}
+      </div>
     </form>
   `;
   }
@@ -516,6 +545,25 @@ export function fleetComposer(
   }
   const cruise = flightPreview(view, sentCounts, destination, 100);
   const preview = flightPreview(view, sentCounts, destination, speedPercent);
+  const deut = view.planet.resources?.deuterium;
+  const fuelShort =
+    typeof deut === "number" && preview.fuel != null && deut < preview.fuel;
+  const slotsFull = fleetActive >= fleetCap;
+  const sendReason = busy
+    ? null
+    : selectedShips < 1
+      ? "Select at least one ship."
+      : !swarmCheck.ok
+        ? swarmCheck.error
+        : slotsFull
+          ? `Fleet slot limit reached (Fleet OS → ${fleetCap} slots).`
+          : targetReason
+            ? targetReason
+            : fuelShort
+              ? `Not enough deuterium for fuel (need ${preview.fuel}).`
+              : null;
+  const sendDisabled =
+    busy || launchBlocked || selectedShips < 1 || slotsFull || fuelShort;
   const ownTarget =
     (selectedPlanetId != null &&
       view.ownedPlanets.some((p) => p.id === selectedPlanetId)) ||
@@ -611,7 +659,8 @@ export function fleetComposer(
       ${acsBlock(view, mission, busy, draft)}
       <div class="fleet-actions">
         <button type="button" data-fleet-back data-testid="fleet-back" ${busy ? "disabled" : ""}>Back</button>
-        <button type="submit" data-fleet-action="send" data-testid="launch-fleet" ${launchBlocked || selectedShips < 1 ? "disabled" : ""}>Send</button>
+        <button type="submit" data-fleet-action="send" data-testid="launch-fleet" ${sendDisabled ? "disabled" : ""} ${sendReason ? `aria-describedby="fleet-send-blocked"` : ""}>Send</button>
+        ${blockedActionNote("fleet-send-blocked", sendReason)}
       </div>
       ${
         view.alliance

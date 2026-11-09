@@ -472,6 +472,19 @@ button.ghost {
   padding-left: 1.1rem;
 }
 
+.blocked-reason {
+  margin: 0.35rem 0 0;
+  color: var(--bad, #f87171);
+  font-size: 0.82rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.actions .blocked-reason,
+.fleet-actions .blocked-reason {
+  flex: 1 0 100%;
+}
+
 .fleet-review {
   border: 1px solid var(--line);
   border-radius: 3px;

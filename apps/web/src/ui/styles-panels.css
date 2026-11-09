@@ -797,6 +797,7 @@ a.message-title:hover {
 
 .item .actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.4rem;
   align-items: center;
   justify-content: flex-end;
