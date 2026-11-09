@@ -23,6 +23,7 @@ import {
 } from "./world.js";
 import { emptyBuildings } from "./world-bootstrap.js";
 import { graduateNewbieProtection } from "./test-graduate.js";
+import { recordCombatReport } from "./combat-share.js";
 import { bindHighscoreSource } from "./world-view.js";
 
 describe("P2 highscores", () => {
@@ -299,5 +300,46 @@ describe("P2 highscores", () => {
     } finally {
       bindHighscoreSource(undefined);
     }
+  });
+
+  it("builds both halls from the universe when no score cache is bound", () => {
+    bindHighscoreSource(undefined);
+    const universe = createUniverse("Live Halls", 10);
+    const attacker = joinUniverse(universe, "Live Atk", 161_000_000).player;
+    const defender = joinUniverse(universe, "Live Def", 161_000_001).player;
+    const attackerBefore = emptyFleetShips();
+    const attackerAfter = emptyFleetShips();
+    const defenderBefore = emptyFleetShips();
+    const defenderAfter = emptyFleetShips();
+    attackerBefore.scout = 3;
+    attackerAfter.scout = 2;
+    defenderBefore.interceptor = 2;
+    defenderAfter.interceptor = 1;
+    recordCombatReport(universe, {
+      id: "live-hall",
+      at: 161_000_100,
+      missionId: "live-mission",
+      attackerPlayerId: attacker.id,
+      defenderPlayerId: defender.id,
+      attackerName: attacker.name,
+      defenderName: defender.name,
+      targetCoords: { galaxy: 1, system: 1, slot: 8 },
+      attackerBefore,
+      attackerAfter,
+      defenderBefore,
+      defenderAfter,
+      defensesBefore: emptyDefenses(),
+      defensesAfter: emptyDefenses(),
+      loot: { metal: 0, crystal: 0, deuterium: 0 },
+      debrisCreated: { metal: 0, crystal: 0, deuterium: 0 },
+      outcome: "attacker_win",
+      rounds: 1,
+      summary: "Live",
+    });
+    const view = playerView(universe, attacker.id, 161_000_200);
+    assert.equal(view.hallOfFame[0]?.attackerName, "Live Atk");
+    assert.ok((view.hallOfFame[0]?.destroyedValue ?? 0) > 0);
+    assert.equal(view.hallOfShame[0]?.playerId, defender.id);
+    assert.ok((view.hallOfShame[0]?.lostValue ?? 0) > (view.hallOfShame[1]?.lostValue ?? 0));
   });
 });

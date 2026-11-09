@@ -1,8 +1,10 @@
 import {
   DEFENSE_ORDER,
   DEFENSES,
+  formatCombatShareCard,
   SHIP_ORDER,
   SHIPS,
+  type CombatReport,
   type PublicCombatReport,
 } from "@starhold/game";
 import { fmt, fmtCoords } from "./format";
@@ -16,6 +18,17 @@ export function battleShareUrl(shareCode: string, origin: string): string {
   const url = new URL("/", origin);
   url.searchParams.set("report", shareCode);
   return url.toString();
+}
+
+/** Plaintext card plus the public report link. Copy share writes this. */
+export function battleShareClipboard(
+  report: CombatReport,
+  origin: string,
+  viewerPlayerId?: string,
+): string {
+  const card = formatCombatShareCard(report, viewerPlayerId);
+  if (!report.shareCode) return card;
+  return `${card}\n${battleShareUrl(report.shareCode, origin)}`;
 }
 
 function shipTable(

@@ -103,6 +103,26 @@ function splitValue(total: number, count: number, index: number): number {
   return Math.floor(total / count) + (index < total % count ? 1 : 0);
 }
 
+function shipTotal(ships: Partial<FleetShips> | undefined): number {
+  let total = 0;
+  for (const id of SHIP_ORDER) total += ships?.[id] ?? 0;
+  return total;
+}
+
+function compareHallOfFame(a: HallOfFameEntry, b: HallOfFameEntry): number {
+  return (
+    b.destroyedValue - a.destroyedValue ||
+    b.at - a.at ||
+    a.attackerName.localeCompare(b.attackerName)
+  );
+}
+
+function hallFameKey(entry: HallOfFameEntry): string {
+  if (entry.shareCode) return `share:${entry.shareCode}`;
+  const coords = entry.targetCoords;
+  return `fight:${entry.at}|${entry.attackerName}|${entry.defenderName}|${entry.outcome}|${coords.galaxy}:${coords.system}:${coords.slot}`;
+}
+
 /** Persist combat counters at the same time as a newly-created report. */
 export function recordCombatReport(
   universe: UniverseState,
@@ -214,13 +234,22 @@ export function combatHallOfFame(
       destroyedValue: combatReportDestroyedValue(report),
       ...(report.shareCode ? { shareCode: report.shareCode } : {}),
     }))
-    .sort(
-      (a, b) =>
-        b.destroyedValue - a.destroyedValue ||
-        b.at - a.at ||
-        a.attackerName.localeCompare(b.attackerName),
-    )
+    .sort(compareHallOfFame)
     .slice(0, 20);
+}
+
+/**
+ * Keep fights already on the cached board, then overlay battles loaded in this
+ * working set. A partial save must not drop another commander's fight.
+ */
+export function mergeCombatHallOfFame(
+  cached: readonly HallOfFameEntry[] | undefined,
+  universe: UniverseState,
+): HallOfFameEntry[] {
+  const merged = new Map<string, HallOfFameEntry>();
+  for (const entry of cached ?? []) merged.set(hallFameKey(entry), entry);
+  for (const entry of combatHallOfFame(universe)) merged.set(hallFameKey(entry), entry);
+  return [...merged.values()].sort(compareHallOfFame).slice(0, 20);
 }
 
 export function combatHallOfShame(
@@ -261,6 +290,8 @@ export function formatCombatShareCard(
     `Starhold ${role} report ${report.shareCode ? `[${report.shareCode}]` : ""}`.trim(),
     `${report.attackerName} vs ${report.defenderName} @ ${coords}`,
     `Outcome: ${report.outcome.replaceAll("_", " ")} · ${report.rounds} round${report.rounds === 1 ? "" : "s"}`,
+    `Attacker ships: ${fmtNum(shipTotal(report.attackerBefore))} before, ${fmtNum(shipTotal(report.attackerAfter))} after`,
+    `Defender ships: ${fmtNum(shipTotal(report.defenderBefore))} before, ${fmtNum(shipTotal(report.defenderAfter))} after`,
   ];
   const lootTotal =
     (report.loot?.metal ?? 0) +

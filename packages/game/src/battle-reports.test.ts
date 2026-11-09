@@ -5,6 +5,7 @@ import {
   combatHallOfShame,
   combatReportDestroyedValue,
   formatCombatShareCard,
+  mergeCombatHallOfFame,
   mintCombatShareCode,
   publicCombatReport,
   recordCombatReport,
@@ -165,6 +166,10 @@ describe("replayable battle reports", () => {
     );
     assert.deepEqual(combatHallOfFame(universe)[0]?.destroyedValue, 1650);
     assert.deepEqual(combatHallOfShame(universe)[0]?.playerId, defender.id);
+    const card = formatCombatShareCard(report, attacker.id);
+    assert.match(card, /Attacker ships: 3 before, 2 after/);
+    assert.match(card, /Defender ships: 2 before, 1 after/);
+    assert.match(card, /sh_/);
   });
 
   it("caps both cached combat halls at 20 and sorts by value", () => {
@@ -202,6 +207,46 @@ describe("replayable battle reports", () => {
     assert.equal(shame.length, 20);
     assert.equal(fame[0]?.attackerName, "Player 24");
     assert.equal(shame[0]?.name, "Player 24");
+  });
+
+  it("keeps another player's cached fight when this working set has a different battle", () => {
+    const universe = createUniverse("Partial Halls", 15);
+    const cached = [
+      {
+        at: 50,
+        attackerName: "Other",
+        defenderName: "Rival",
+        targetCoords: { galaxy: 2, system: 2, slot: 4 },
+        outcome: "defender_win" as const,
+        destroyedValue: 9_000,
+        shareCode: "sh_otherfight",
+      },
+    ];
+    universe.reports.local = {
+      id: "local",
+      at: 80,
+      attackerPlayerId: "home",
+      defenderPlayerId: "away",
+      attackerName: "Home",
+      defenderName: "Away",
+      targetCoords: { galaxy: 1, system: 1, slot: 8 },
+      attackerBefore: normalizeFleetShips({ scout: 2 }),
+      attackerAfter: normalizeFleetShips({}),
+      defenderBefore: normalizeFleetShips({}),
+      defenderAfter: normalizeFleetShips({}),
+      defensesBefore: emptyDefenses(),
+      defensesAfter: emptyDefenses(),
+      loot: { metal: 0, crystal: 0, deuterium: 0 },
+      debrisCreated: { metal: 0, crystal: 0, deuterium: 0 },
+      outcome: "attacker_win",
+      rounds: 1,
+      shareCode: "sh_localfight",
+    } as CombatReport;
+    const merged = mergeCombatHallOfFame(cached, universe);
+    assert.equal(merged.length, 2);
+    assert.equal(merged[0]?.shareCode, "sh_otherfight");
+    assert.equal(merged[1]?.shareCode, "sh_localfight");
+    assert.equal(merged[1]?.destroyedValue, 600);
   });
 
   it("legacy report without roundLog still formats a share card", () => {

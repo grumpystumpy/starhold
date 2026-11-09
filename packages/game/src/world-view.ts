@@ -1,3 +1,4 @@
+import { combatHallOfFame, combatHallOfShame } from "./combat-share.js";
 import {
   DEEP_SPACE_SLOT,
   MAP_GALAXIES,
@@ -547,8 +548,8 @@ export function playerView(
       : publicRoster(universe, pointsById),
     highscores,
     allianceHighscores,
-    hallOfFame: provided?.hallOfFame ?? [],
-    hallOfShame: provided?.hallOfShame ?? [],
+    hallOfFame: provided?.hallOfFame ?? combatHallOfFame(universe),
+    hallOfShame: provided?.hallOfShame ?? combatHallOfShame(universe),
     galaxy: galaxyViewFor(universe, playerId, g, s, now),
     fleets,
     fleetSlotCap,

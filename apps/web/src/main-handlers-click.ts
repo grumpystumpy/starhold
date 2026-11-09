@@ -112,7 +112,7 @@ import {
 } from "./ui/render-fleets-draft";
 import { resolveNavPage } from "./ui/nav";
 import { navigateShopTab, navigateTo, openSecurity } from "./ui/router";
-import { battleShareUrl } from "./ui/shared-report";
+import { battleShareClipboard } from "./ui/shared-report";
 
 function parseGalaxyFleetCoords(raw: string | null): Coordinates | null {
   const parts = raw?.split(":").map(Number);
@@ -639,7 +639,11 @@ export function bindClickHandlers(): void {
           schedulePaint();
           return;
         }
-        const text = battleShareUrl(report.shareCode, window.location.origin);
+        const text = battleShareClipboard(
+          report,
+          window.location.origin,
+          session.view?.player.id,
+        );
         void navigator.clipboard.writeText(text).then(
           () => {
             setFlash("notice", "Battle share copied.");
