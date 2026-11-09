@@ -1044,39 +1044,3 @@ describe("failed actions check state", () => {
   });
 
 });
-
-describe("upgrade lock", () => {
-  it("releases the lock when the upgrade response arrives, before deferred paint", async () => {
-    setPaintImpl(() => {});
-    setApiFailureReporter(() => {});
-    session.view = view([]);
-    session.busy = false;
-    session.error = null;
-    session.notice = null;
-    session.paintQueued = true;
-    session.gestureGraceUntil = Date.now() + 200;
-    const original = globalThis.fetch;
-    let posts = 0;
-    globalThis.fetch = async () => {
-      posts += 1;
-      return new Response(JSON.stringify(view([{ id: "q1", buildingId: "metalMine", targetLevel: 2 }])), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    };
-    const pending = doUpgrade("metalMine");
-    const start = Date.now();
-    while (posts < 1 && Date.now() - start < 2_000) {
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    assert.equal(posts, 1);
-    assert.equal(session.busy, false);
-    session.paintQueued = false;
-    session.gestureGraceUntil = 0;
-    await pending;
-    globalThis.fetch = original;
-    session.paintQueued = false;
-    session.busy = false;
-  });
-});

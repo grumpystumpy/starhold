@@ -80,12 +80,6 @@ async function waitForPendingPaint(): Promise<void> {
   }
 }
 
-let buildEpoch = 0;
-
-function releaseBuildLock(epoch: number): void {
-  if (buildEpoch === epoch) session.busy = false;
-}
-
 export async function doUpgrade(buildingId: BuildingId): Promise<void> {
   if (!session.view) return;
   if (session.busy) {
@@ -93,7 +87,6 @@ export async function doUpgrade(buildingId: BuildingId): Promise<void> {
     schedulePaint();
     return;
   }
-  const epoch = ++buildEpoch;
   session.busy = true;
   clearFlash();
   schedulePaint();
@@ -128,9 +121,9 @@ export async function doUpgrade(buildingId: BuildingId): Promise<void> {
       successNotice: upgradeNotice,
     });
   } finally {
-    releaseBuildLock(epoch);
     schedulePaint();
     await waitForPendingPaint();
+    session.busy = false;
     schedulePaint();
   }
 }
