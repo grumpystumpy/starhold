@@ -69,6 +69,7 @@ import {
   planetRaidDeterrence,
   npcJobBudget,
   pickRaidTarget,
+  playerView,
   rollNextRaidAt,
   scalePirateRaidFleet,
   tickPirates,
@@ -1399,11 +1400,18 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
     try {
       tickPirates(universe2, nowB + 1000);
 
-      const event = (universe2.players[playerB.id]?.eventLog ?? []).find(
-        (e) => e.kind === "raidAlert" && e.meta?.pirateBaseId === baseB.id,
+      const report = Object.values(universe2.reports ?? {}).find(
+        (entry) =>
+          entry.defenderPlayerId === playerB.id && entry.missionId === baseB.id,
       );
-      assert.ok(event, "expected raidAlert event");
-      assert.equal(event.meta?.outcome, "defender_win");
+      assert.ok(report, "defender receives the pirate combat report");
+      assert.equal(report.outcome, "defender_win");
+      assert.equal(
+        (universe2.players[playerB.id]?.eventLog ?? []).some(
+          (entry) => entry.kind === "raidAlert",
+        ),
+        false,
+      );
     } finally {
       if (prevE2E != null) process.env.STARHOLD_E2E = prevE2E;
     }
@@ -1453,12 +1461,18 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
     try {
       tickPirates(universe, now + 1000);
 
-      const alienAlert = (universe.players[player.id]?.eventLog ?? []).find(
-        (e) => e.kind === "raidAlert" && e.meta?.pirateBaseId === alienBase.id,
+      const alienReport = Object.values(universe.reports ?? {}).find(
+        (entry) =>
+          entry.defenderPlayerId === player.id && entry.missionId === alienBase.id,
       );
-      assert.ok(alienAlert, "expected alien raid alert in event log");
-      const actualAlienFleet = JSON.parse(alienAlert.meta?.raidFleet as string);
-      assert.deepEqual(actualAlienFleet, expectedAlienRaid);
+      assert.ok(alienReport, "defender receives the alien combat report");
+      assert.deepEqual(alienReport.attackerBefore, expectedAlienRaid);
+      assert.equal(
+        (universe.players[player.id]?.eventLog ?? []).some(
+          (entry) => entry.kind === "raidAlert",
+        ),
+        false,
+      );
 
       // 2. Reset defender ships and test Pirate base raid via tickPirates (faction === "pirate")
       planetState.ships = { ...emptyFleetShips(), interceptor: 10 };
@@ -1489,12 +1503,19 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
 
       tickPirates(universe, now + 3000);
 
-      const pirateAlert = (universe.players[player.id]?.eventLog ?? []).find(
-        (e) => e.kind === "raidAlert" && e.meta?.pirateBaseId === pirateBase.id,
+      const pirateReport = Object.values(universe.reports ?? {}).find(
+        (entry) =>
+          entry.defenderPlayerId === player.id &&
+          entry.missionId === pirateBase.id,
       );
-      assert.ok(pirateAlert, "expected pirate raid alert in event log");
-      const actualPirateFleet = JSON.parse(pirateAlert.meta?.raidFleet as string);
-      assert.deepEqual(actualPirateFleet, expectedPirateRaid);
+      assert.ok(pirateReport, "defender receives the pirate combat report");
+      assert.deepEqual(pirateReport.attackerBefore, expectedPirateRaid);
+      assert.equal(
+        (universe.players[player.id]?.eventLog ?? []).some(
+          (entry) => entry.kind === "raidAlert",
+        ),
+        false,
+      );
     } finally {
       if (prevE2E != null) process.env.STARHOLD_E2E = prevE2E;
     }
@@ -1607,10 +1628,16 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
     try {
       tickPirates(universe, now + 1000);
 
-      const eventLog = universe.players[player.id]?.eventLog ?? [];
-      assert.ok(eventLog.length >= 1, "expected at least one event log entry");
-      const raidAlert = eventLog.find((e) => e.kind === "raidAlert");
-      assert.ok(raidAlert, "expected raidAlert in event log");
+      const raidReport = Object.values(universe.reports ?? {}).find(
+        (entry) => entry.defenderPlayerId === player.id && entry.missionId === base.id,
+      );
+      assert.ok(raidReport, "old save still records the pirate combat report");
+      assert.equal(
+        (universe.players[player.id]?.eventLog ?? []).some(
+          (entry) => entry.kind === "raidAlert",
+        ),
+        false,
+      );
 
       universe.planets[planet.id].resources.deuterium = 100_000;
       universe.planets[planet.id].ships.cruiser = 5;
@@ -1626,8 +1653,21 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
       assert.ok(launch.fleet.reportId);
       const report = universe.reports[launch.fleet.reportId!];
       assert.ok(report);
+      assert.equal(report.attackerPlayerId, player.id);
       assert.match(report.shareCode ?? "", /^sh_/);
       assert.ok(universe.players[player.id]?.combatStats);
+      assert.equal(
+        (universe.players[player.id]?.eventLog ?? []).some(
+          (entry) => entry.kind === "raidAlert",
+        ),
+        false,
+      );
+      assert.ok(
+        playerView(universe, player.id, launch.fleet.arrivesAt + 1).reports.some(
+          (entry) => entry.id === report.id,
+        ),
+        "the attacker receives the pirate-base combat report",
+      );
 
       assert.equal(universe.players[player.id]?.name, "OldCommander");
       assert.ok((universe.players[player.id]?.xpTotal ?? 0) >= 1200);

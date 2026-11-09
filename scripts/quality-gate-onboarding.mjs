@@ -53,6 +53,27 @@ async function assertNoHorizontalScroll(page, label) {
   if (overflow > 1) throw new Error(`${label} horizontal overflow ${overflow}px`);
 }
 
+async function assertNextGoal(page, label) {
+  const goal = page.getByTestId("next-goal");
+  await goal.waitFor({ timeout: 10_000 });
+  const id = await goal.getAttribute("data-next-goal-id");
+  if (id !== "building:researchLab") {
+    throw new Error(`${label} next goal ${id}`);
+  }
+  const rationale = await page.getByTestId("next-goal-rationale").innerText();
+  if (!/Power Discipline/.test(rationale) || !/Research Lab level 1/.test(rationale)) {
+    throw new Error(`${label} rationale ${rationale}`);
+  }
+  const href = await page.getByTestId("next-goal-open").getAttribute("href");
+  if (!href || !href.startsWith("/buildings")) {
+    throw new Error(`${label} next goal href ${href}`);
+  }
+  const box = await goal.boundingBox();
+  if (!box || box.width < 40) throw new Error(`${label} next goal has no box`);
+  const overflow = await goal.evaluate((el) => el.scrollWidth - el.clientWidth);
+  if (overflow > 1) throw new Error(`${label} next goal overflow ${overflow}px`);
+}
+
 async function main() {
   await waitHealthy();
   const require = createRequire(import.meta.url);
@@ -89,12 +110,20 @@ async function main() {
   await page.getByTestId("onboarding-panel").waitFor({ timeout: 10_000 });
   const stepCount = await page.locator("[data-testid^='onboarding-step-']").count();
   if (stepCount !== 8) throw new Error(`expected 8 onboarding steps, saw ${stepCount}`);
+  await assertNextGoal(page, "phone");
   logs.push("briefing_phone");
   await assertNoHorizontalScroll(page, "phone overview");
 
   await page.setViewportSize({ width: 1280, height: 800 });
+  await assertNextGoal(page, "desktop");
   await assertNoHorizontalScroll(page, "desktop overview");
   logs.push("briefing_desktop");
+
+  await page.getByTestId("next-goal-open").click();
+  await page.getByTestId("upgrade-metalMine").waitFor({ timeout: 10_000 });
+  logs.push("next_goal_buildings");
+  await page.getByTestId("nav-overview").click();
+  await page.getByTestId("onboarding-panel").waitFor({ timeout: 10_000 });
 
   await page.getByTestId("nav-fleet").click();
   await page.getByTestId("fleet-preset").waitFor({ timeout: 10_000 });
@@ -144,9 +173,17 @@ async function main() {
     { timeout: 10_000 },
   );
   await page.getByTestId("nav-goals").click();
+  await page.getByTestId("onboarding-restore").waitFor({ timeout: 10_000 });
+  if (await page.getByTestId("next-goal").count()) {
+    throw new Error("next goal stayed visible after dismiss");
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await assertNoHorizontalScroll(page, "phone goals dismissed");
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.getByTestId("onboarding-restore").click();
   await page.getByTestId("nav-overview").click();
   await page.getByTestId("onboarding-panel").waitFor({ timeout: 10_000 });
+  await assertNextGoal(page, "restored");
   logs.push("dismiss_restore");
 
   const noise = errors.filter((line) => !/favicon|Failed to load resource/i.test(line));

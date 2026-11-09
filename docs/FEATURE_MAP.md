@@ -46,11 +46,15 @@ The seasonal pirate mothership is one marked `PirateBase` in `pirateBases`, trac
 
 ## Messages
 
-Messages in the inbox display category badges matching their filter bucket (`Combat`, `Spy`, `Alerts`) alongside the specific kind badge (`message-kind`), allowing players to identify message categories at a glance.
+Messages in the inbox display category badges matching their filter bucket (`Combat`, `Spy`, `Alerts`) alongside the specific kind badge (`message-kind`), allowing players to identify message categories at a glance. After combat resolves, each attacker (including a Joint Strike participant) and the defender receive that combat report, and no extra raid alert is written. A saved post-resolution `raidAlert` stays hidden, including from the unread badge, only when its matching combat report is visible. Unrelated alerts and pre-attack hostile-fleet warnings remain. The combat report, in the inbox details and the report subwindow, compares each side's ships before, survivors, and losses from that report's before/after counts, and shows loot and debris as separate figures. Attacker and defender viewpoints, Before/After tables, share links, and inbox filters stay. The paths are `world-arrival-raid.ts` (planet, occupy, and moon fights), `world-pirates.ts` (pirate and alien raids), `world-view.ts` (who receives the report), `render-messages.ts` and `styles.css` (inbox and subwindow), and `render-shell.ts` with `patch-chrome.ts` (unread badge).
 
 ## Fleet tab
 
 The Fleet tab shows the composer, hostile inbound fleets, sensor contacts, and a link to Messages. In-flight fleets are in the top fleet events banner; combat, spy, and expedition reports are in Messages.
+
+A blocked build or fleet send shows the existing rejection next to that button (`blocked-reason` in `render-chrome-rows.ts`, `render-chrome-join.ts`, and `render-fleets-composer.ts`). Ship and defense counts update the resource reason as the number changes, and the note is removed when the action is allowed again. Server checks stay in place. This entry is in `FEATURE_MAP.md`.
+
+Step 2 of the fleet composer ends with one review (`data-testid="fleet-send-review"`) before Send. It restates the mission, destination coordinates, target type, and target name, then separates flight duration from a clock time labeled with the timezone. Launch fuel is the full-cruise one-way cost. The speed control stays a preview and is not sent. Returning harvest, deploy-to-foreign, and spy missions show an estimated return. Station, transport, Moon Bridge, colonize, expedition, occupy, and combat missions do not promise a guaranteed return. Expedition has no separate hold; Joint Strike explains the 15-minute join window and 30-minute hold cap; occupation explains the two-day cap. Officers, class, and route bonuses are named as missing from the estimate. Changing ships, target, mission, speed, or the Joint Strike controls repaints the review. Ship counts, presets, and send-max are unchanged.
 
 ## Onboarding & Fleet Presets
 
@@ -79,6 +83,12 @@ Any completed step can be claimed in any order. A second claim is rejected. Carg
 Both routes use the shop session ownership check (401 without a cookie, 403 for another commander) and return the updated player view. They are not called on a normal page load.
 
 Overview shows `data-testid="onboarding-panel"` until the briefing is dismissed or every step is claimed. The Goals page shows `data-testid="onboarding-restore"` while it is dismissed with steps still unclaimed, and a compact claim list otherwise.
+
+The same surfaces show one optional next step (`data-testid="next-goal"`) when a catalog gate is still open. It is computed on read by `nextGoalSuggestionFor` from owned buildings, research levels, and the gates already enforced by `previewResearchUpgrade`, `previewBuildingUpgrade`, and ship `researchReq` / `shipyardLevel`. It is not stored, pays nothing, and does not change `claimed`, `dismissed`, or `recon`. A save with no `player.onboarding` still receives a suggestion and still does not gain that field until a claim or dismiss. Queued work does not count until it finishes. In-flight fleets are not read or written.
+
+Distance is the smallest unmet level on a gate. A gate the commander can start now (distance 0) wins. Ties break by the total missing levels, then research in `RESEARCH_ORDER`, then gated buildings (System Scanner, Moon Bridge, Manufacture Line, Land Reclamation, Nano Production), then hulls in `SHIP_ORDER` that declare `researchReq`. The line names the catalog step and why, and links to Buildings or Research. Moon-only gates are omitted when the commander has no moon. When nothing is gated, the element is omitted.
+
+Dismissing the briefing hides the suggestion. Restore shows it again. When every tutorial step is claimed, Overview stays clear and the Goals page keeps the suggestion until Hide suggestion, which uses the same dismiss flag. Restore then reads Show next step.
 
 Fleet composer hides built-in `moonDestruction` and `miniPlanetDestruction` until the player owns that hull or meets its research and shipyard level. `expedition`, `raid`, `miniPlanetCapture`, and custom presets stay visible. The presets remain on the save, and the galaxy preset buttons are unchanged.
 
@@ -155,5 +165,15 @@ A failed order re-checks state once. If that read times out or never returns a v
 ## CPU bursts and pirate smoke retries
 
 `npm run perf:cpu-burst` posts 10 `POST /api/build-ship` calls and 10 `POST /api/build-defense` calls back to back. On `wrangler dev --local` with `STARHOLD_CPU_PROFILE=1`, the warm run's `x-starhold-cpu-ms` max was 69 ms for both bursts, over the 10 ms free-plan limit. Build rules are unchanged. Numbers and the method are in `docs/cloudflare.md`. The UI smoke signs up a fresh commander, up to 5 times, when the home galaxy has no pirate. It logs `pirate-home-retries:N`, still requires the galaxy page to show `galaxy-pirate`, and fails with a different message when a pirate exists only outside those home galaxies or when no pirate base was found. State reads for that search stay within 5×399.
+
+## Installable app
+
+Starhold can be added to an iPhone or Android home screen. It is not a store app. `apps/web/public/manifest.webmanifest` is the identity (`id` `/`, standalone, theme `#0f1a24`) with 192 and 512 icons plus a maskable 512. Apple uses `/icons/apple-touch-icon.png`. The page pads `env(safe-area-inset-*)` and keeps form text at 16px on narrow screens so the keyboard does not zoom the layout.
+
+The install note explains Share → Add to Home Screen on iPhone. Android shows Install app only after the browser fires `beforeinstallprompt`. Other browsers get written steps and no Install button. Dismiss stores `starhold-pwa-install-dismissed` and does not ask again. Standalone display, including iOS `navigator.standalone`, hides the note.
+
+A shell service worker (`/sw.js`) caches only the public document, manifest, icons, and hashed `/assets/*.js|css` files, capped at 24 entries. The document is stored only under `/index.html` (the query string is stripped, so a player id in the URL is not a cache key). The manifest is stored only under `/manifest.webmanifest`. Those keys do not overwrite each other. An offline manifest miss returns the plain offline text and does not serve the cached HTML document. Responses that carry `Set-Cookie`, and every `/api` or auth request, are not stored. The worker does not reload the page. While the fleet screen is open the update control will not reload. Offline copy says the game is not playable and that orders are not queued. Coming back online does not replay them.
+
+No save fields were added. `packages/game/src/fixtures/in-flight-fleet-save.json` is a main-branch universe with one deploy still in flight; `migrateOrResetUniverse` keeps that fleet.
 
 

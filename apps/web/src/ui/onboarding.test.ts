@@ -151,6 +151,98 @@ describe("onboarding ui", () => {
     assert.match(legacy, /data-testid="goals-daily"/);
   });
 
+  it("shows an optional next step with a route link and hides it when dismissed", () => {
+    const suggestion = {
+      id: "research:energyTech",
+      title: "Power Discipline",
+      rationale: 'Raise it. <script>alert("x")</script>',
+      targetNavPage: "research" as const,
+    };
+    const open = pageHtml(
+      "overview",
+      overviewView(briefing({ suggestion })),
+      false,
+      null,
+    );
+    assert.match(open, /data-testid="next-goal"/);
+    assert.match(open, /data-next-goal-id="research:energyTech"/);
+    assert.match(open, /Optional next step/);
+    assert.match(open, /data-testid="next-goal-open"/);
+    assert.match(open, /href="\/research\?playerId=p1&amp;planet=pl1"/);
+    assert.match(open, /data-nav="research"/);
+    assert.match(open, /&lt;script&gt;/);
+    assert.doesNotMatch(open, /<script>alert/);
+    const goalBlock = open.slice(open.indexOf('data-testid="next-goal"'));
+    assert.doesNotMatch(goalBlock, /data-onboarding-claim/);
+
+    const goals = pageHtml(
+      "goals",
+      overviewView(briefing({ suggestion })),
+      false,
+      null,
+    );
+    assert.match(goals, /data-testid="onboarding-goals"/);
+    assert.match(goals, /data-testid="next-goal"/);
+    assert.match(goals, /href="\/research\?playerId=p1&amp;planet=pl1"/);
+
+    const hidden = pageHtml(
+      "goals",
+      overviewView(briefing({ suggestion, dismissed: true })),
+      false,
+      null,
+    );
+    assert.match(hidden, /data-testid="onboarding-restore"/);
+    assert.match(hidden, /Show tutorial/);
+    assert.doesNotMatch(hidden, /data-testid="next-goal"/);
+
+    const overviewHidden = pageHtml(
+      "overview",
+      overviewView(briefing({ suggestion, dismissed: true })),
+      false,
+      null,
+    );
+    assert.doesNotMatch(overviewHidden, /data-testid="next-goal"/);
+
+    const finished = pageHtml(
+      "goals",
+      overviewView(briefing({ suggestion, allClaimed: true, completedCount: 8 })),
+      false,
+      null,
+    );
+    assert.match(finished, /data-testid="next-goal-panel"/);
+    assert.match(finished, /data-testid="next-goal"/);
+    assert.match(finished, /Hide suggestion/);
+    assert.doesNotMatch(finished, /data-testid="onboarding-goals"/);
+    assert.doesNotMatch(finished, /data-testid="onboarding-claim-metalMine1"/);
+
+    const finishedOverview = pageHtml(
+      "overview",
+      overviewView(briefing({ suggestion, allClaimed: true })),
+      false,
+      null,
+    );
+    assert.doesNotMatch(finishedOverview, /data-testid="next-goal"/);
+
+    const bringBack = pageHtml(
+      "goals",
+      overviewView(briefing({ suggestion, allClaimed: true, dismissed: true })),
+      false,
+      null,
+    );
+    assert.match(bringBack, /data-testid="onboarding-restore"/);
+    assert.match(bringBack, /Show next step/);
+    assert.doesNotMatch(bringBack, /data-testid="next-goal"/);
+
+    const clear = pageHtml(
+      "goals",
+      overviewView(briefing({ suggestion: null, allClaimed: true })),
+      false,
+      null,
+    );
+    assert.doesNotMatch(clear, /data-testid="next-goal"/);
+    assert.doesNotMatch(clear, /Hide suggestion/);
+  });
+
   it("hides locked superweapon presets until the hull is owned", () => {
     const fresh = fleetComposer(fleetView(), false, blankFleetDraft());
     assert.doesNotMatch(fresh, /Moon Destruction/);

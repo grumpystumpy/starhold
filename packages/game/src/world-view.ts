@@ -402,7 +402,9 @@ export function playerView(
   const reports = Object.values(universe.reports)
     .filter(
       (r) =>
-        (r.attackerPlayerId === playerId || r.defenderPlayerId === playerId) &&
+        (r.attackerPlayerId === playerId ||
+          r.defenderPlayerId === playerId ||
+          r.acsParticipantIds?.includes(playerId) === true) &&
         !hiddenReports.has(r.id),
     )
     .sort((a, b) => b.at - a.at)

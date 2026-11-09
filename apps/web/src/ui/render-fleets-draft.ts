@@ -41,6 +41,8 @@ export type FleetDraft = {
    * Cruise preview, 10–100. Display only — launchFleet has no speed field.
    */
   speedPercent: number;
+  /** Selected open ACS group. Empty means solo or open a new group. UI-only until send. */
+  acsGroupId: string;
 };
 
 /** Last composer draft. Keeps step-2 fields while step 1 is on screen. */
@@ -61,6 +63,7 @@ export function blankFleetDraft(): FleetDraft {
     openAcs: false,
     step: 1,
     speedPercent: 100,
+    acsGroupId: "",
   };
 }
 
@@ -184,6 +187,7 @@ export function fleetDraftWithAcsPrefill(
     counts,
     cargo: { ...(base?.cargo ?? {}) },
     openAcs: prefill.openAcs,
+    acsGroupId: base?.acsGroupId ?? "",
     speedPercent: base?.speedPercent ?? 100,
     // Coords (and a mission) are set. Step 2 only once ships are filled in.
     step: fleetShipTotal(counts) > 0 ? 2 : 1,
@@ -254,6 +258,8 @@ export function salvageFleetForm(root: HTMLElement): FleetDraft | null {
     ? readCargo(form)
     : { ...prior.cargo };
   const acs = form.querySelector<HTMLInputElement>("#fleet-open-acs");
+  const acsJoin =
+    form.querySelector<HTMLSelectElement>("#fleet-acs-join")?.value ?? "";
   const speedEl = form.querySelector<HTMLSelectElement>("[data-fleet-speed]");
   const draft: FleetDraft = {
     targetPlanetId,
@@ -269,6 +275,7 @@ export function salvageFleetForm(root: HTMLElement): FleetDraft | null {
     speedPercent: speedEl
       ? clampFleetSpeed(Number(speedEl.value))
       : prior.speedPercent,
+    acsGroupId: form.querySelector("#fleet-acs-join") ? acsJoin : prior.acsGroupId,
   };
   remembered = draft;
   return draft;

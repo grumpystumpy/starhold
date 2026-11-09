@@ -11,6 +11,7 @@ import {
   type ShipId,
 } from "@starhold/game";
 import { fmt } from "./ui/format";
+import { syncBuildCountReason } from "./ui/render-chrome-rows";
 import {
   clearFlash,
   closestActionEl,
@@ -1022,7 +1023,11 @@ export function bindClickHandlers(): void {
     }
     if (
       (el instanceof HTMLSelectElement || el instanceof HTMLInputElement) &&
-      (el.name === "fleet-mission" || el.id === "fleet-target" || el.hasAttribute("data-fleet-speed"))
+      (el.name === "fleet-mission" ||
+        el.id === "fleet-target" ||
+        el.id === "fleet-open-acs" ||
+        el.id === "fleet-acs-join" ||
+        el.hasAttribute("data-fleet-speed"))
     ) {
       schedulePaint();
       return;
@@ -1031,7 +1036,12 @@ export function bindClickHandlers(): void {
 
   root.addEventListener("input", (ev) => {
     const el = ev.target;
-    if (!(el instanceof HTMLInputElement) || !el.matches("[data-fleet-count]")) {
+    if (!(el instanceof HTMLInputElement)) return;
+    if (el.matches("[data-ship-count], [data-defense-count]")) {
+      syncBuildCountReason(el);
+      return;
+    }
+    if (!el.matches("[data-fleet-count]")) {
       return;
     }
     const form = el.closest("form");

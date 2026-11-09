@@ -13,6 +13,7 @@ import { fmtEta } from "./format";
 import { syncChangedInputTypeValue } from "./morph-dom";
 import { flashHtml } from "./render-chrome-join";
 import { fleetComposer } from "./render-fleets-composer";
+import { buildQuantityReason } from "./render-chrome-rows";
 import { fleetDraftForPage } from "./render-app";
 import { readFleetFormIn } from "../main-fleet-form";
 import {
@@ -462,6 +463,103 @@ describe("fleet send two-step", () => {
     );
     assert.doesNotMatch(buttonTag(step2WithMS, "launch-fleet"), /disabled/);
     assert.doesNotMatch(step2WithMS, /data-testid="fleet-need-mothership"/);
+  });
+
+  it("puts the block reason beside Next and Send and clears it when the constraint lifts", () => {
+    const empty = fleetComposer(view(), false, draft({ step: 1 }));
+    assert.match(empty, /data-testid="fleet-next-blocked"/);
+    assert.match(empty, /Select at least one ship\./);
+    const none = fleetComposer(
+      { ...view(), planet: { ...view().planet, ships: {} } },
+      false,
+      draft({ step: 1 }),
+    );
+    assert.match(none, /No ships in orbit on this colony\./);
+    const armed = fleetComposer(view(), false, draft({ step: 1, counts: { scout: 1 } }));
+    assert.doesNotMatch(armed, /data-testid="fleet-next-blocked"/);
+    assert.doesNotMatch(buttonTag(armed, "fleet-next"), /disabled/);
+
+    const unsent = fleetComposer(
+      view(),
+      false,
+      draft({ step: 2, mission: "raid", targetPlanetId: "pl2" }),
+    );
+    assert.match(unsent, /data-testid="fleet-send-blocked"/);
+    assert.match(unsent, /Select at least one ship\./);
+    assert.match(buttonTag(unsent, "launch-fleet"), /disabled/);
+
+    const capped = fleetComposer(
+      { ...view(), fleets: [{ mission: "deploy" } as PlayerView["fleets"][number]], fleetSlotCap: 1 },
+      false,
+      draft({ step: 2, counts: { scout: 1 }, mission: "raid", targetPlanetId: "pl2" }),
+    );
+    assert.match(capped, /Fleet slot limit reached \(Fleet OS → 1 slots\)\./);
+    assert.match(buttonTag(capped, "launch-fleet"), /disabled/);
+
+    const dryPlanet = {
+      ...view().planet,
+      resources: { metal: 0, crystal: 0, deuterium: 0 },
+    };
+    const dry = fleetComposer(
+      { ...view(), planet: dryPlanet },
+      false,
+      draft({ step: 2, counts: { scout: 1 }, mission: "raid", targetPlanetId: "pl2" }),
+    );
+    assert.match(dry, /Not enough deuterium for fuel \(need /);
+    assert.match(buttonTag(dry, "launch-fleet"), /disabled/);
+
+    const wet = fleetComposer(
+      {
+        ...view(),
+        planet: { ...dryPlanet, resources: { metal: 0, crystal: 0, deuterium: 5000 } },
+      },
+      false,
+      draft({ step: 2, counts: { scout: 1 }, mission: "raid", targetPlanetId: "pl2" }),
+    );
+    assert.doesNotMatch(wet, /data-testid="fleet-send-blocked"/);
+    assert.doesNotMatch(buttonTag(wet, "launch-fleet"), /disabled/);
+
+    const lock = "Needs Shipyard level 2 (you have 0).";
+    assert.equal(
+      buildQuantityReason({
+        count: 4,
+        locked: lock,
+        queue: null,
+        cost: { metal: 1, crystal: 1, deuterium: 0 },
+        have: { metal: 100, crystal: 100, deuterium: 100 },
+      }),
+      lock,
+    );
+    assert.equal(
+      buildQuantityReason({
+        count: 1,
+        locked: null,
+        queue: "Ship queue is full.",
+        cost: { metal: 1, crystal: 0, deuterium: 0 },
+        have: { metal: 100, crystal: 0, deuterium: 0 },
+      }),
+      "Ship queue is full.",
+    );
+    assert.equal(
+      buildQuantityReason({
+        count: 3,
+        locked: null,
+        queue: null,
+        cost: { metal: 10, crystal: 0, deuterium: 0 },
+        have: { metal: 20, crystal: 0, deuterium: 0 },
+      }),
+      "Not enough resources.",
+    );
+    assert.equal(
+      buildQuantityReason({
+        count: 2,
+        locked: null,
+        queue: null,
+        cost: { metal: 10, crystal: 0, deuterium: 0 },
+        have: { metal: 20, crystal: 0, deuterium: 0 },
+      }),
+      null,
+    );
   });
 });
 

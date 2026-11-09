@@ -11,7 +11,7 @@ import {
 import { BUILDING_ART, PLANET_ART } from "./assets";
 import { fmt, fmtCost, fmtEta } from "./format";
 import { escapeAttr, escapeHtml } from "./render-escape";
-import { costTooltip } from "./render-tooltips";
+import { blockedActionNote, costTooltip } from "./render-tooltips";
 import { recoverFormHtml } from "./render-security";
 
 export type JoinScreenState = {
@@ -444,7 +444,8 @@ export function buildingRow(
         <div class="meta">Next: ${fmtCost(cost)} · ${fmtEta(secs)}${storageLine ? ` · ${escapeHtml(storageLine)}` : ""}</div>
       </div>
       <div class="actions">
-        <button type="button" data-upgrade="${id}" data-building-id="${id}" data-locked="${blocked ? "1" : "0"}" data-testid="upgrade-${id}" ${blocked ? "disabled" : ""} title="${tip.title}">${label}</button>
+        <button type="button" data-upgrade="${id}" data-building-id="${id}" data-locked="${blocked ? "1" : "0"}" data-testid="upgrade-${id}" ${blocked ? "disabled" : ""} ${blocked ? `aria-describedby="blocked-upgrade-${id}"` : ""} title="${tip.title}">${label}</button>
+        ${blockedActionNote(`blocked-upgrade-${id}`, blocked)}
       </div>
     </article>
   `;

@@ -62,6 +62,8 @@ describe("playtest fixes", () => {
     );
     assert.match(html, /data-testid="upgrade-solarPlant"[^>]*disabled/);
     assert.match(html, />Can't afford</);
+    assert.match(html, /data-testid="blocked-upgrade-solarPlant"/);
+    assert.match(html, /Not enough/);
     assert.doesNotMatch(html, />Upgrade</);
     assert.doesNotMatch(html, />Locked</);
   });
@@ -128,6 +130,7 @@ describe("playtest fixes", () => {
     assert.match(ready, />Research</);
     assert.doesNotMatch(ready, /Needs lab</);
     assert.doesNotMatch(ready, /disabled/);
+    assert.doesNotMatch(ready, /data-testid="blocked-research-energyTech"/);
 
     const needsTwo = researchRow("shieldingTech", base, false);
     assert.match(needsTwo, />Needs lab 6</);
@@ -155,6 +158,8 @@ describe("playtest fixes", () => {
     const full = researchRow("energyTech", base, false);
     assert.match(full, />Queue full</);
     assert.match(full, /disabled/);
+    assert.match(full, /data-testid="blocked-research-energyTech"/);
+    assert.match(full, /queue is full/);
     assert.doesNotMatch(full, /Needs lab/);
 
     base.player.researchQueue = [];

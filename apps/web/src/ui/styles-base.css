@@ -41,6 +41,12 @@ body {
   /* scroll — fixed attachment leaves white gutters in full-page screenshots / some mobile browsers */
   background-attachment: scroll;
   background-color: var(--bg0);
+  min-height: 100dvh;
+  padding:
+    env(safe-area-inset-top)
+    env(safe-area-inset-right)
+    env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
 }
 
 #app {
@@ -180,6 +186,45 @@ button.ghost {
   background: transparent;
   color: var(--text);
   border-color: var(--line);
+}
+
+#pwa-chrome {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0.4rem 0.75rem 0;
+}
+
+#pwa-chrome:empty {
+  display: none;
+}
+
+.pwa-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--bg2) 88%, black);
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.pwa-note p {
+  margin: 0;
+  flex: 1 1 14rem;
+}
+
+@media (max-width: 640px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
 }
 
 .topbar {
@@ -425,6 +470,67 @@ button.ghost {
 .fleet-summary ul {
   margin: 0.25rem 0;
   padding-left: 1.1rem;
+}
+
+.blocked-reason {
+  margin: 0.35rem 0 0;
+  color: var(--bad, #f87171);
+  font-size: 0.82rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.actions .blocked-reason,
+.fleet-actions .blocked-reason {
+  flex: 1 0 100%;
+}
+
+.fleet-review {
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0.65rem 0.75rem;
+  margin: 0;
+}
+
+.fleet-review h3 {
+  margin: 0 0 0.45rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.fleet-review dl {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr);
+  gap: 0.35rem 0.75rem;
+  margin: 0;
+}
+
+.fleet-review dt {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.fleet-review dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .fleet-review dl {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.15rem;
+  }
+
+  .fleet-review dt {
+    margin-top: 0.45rem;
+  }
+
+  .fleet-review dd {
+    font-size: 1rem;
+  }
 }
 
 .fleet-speed select {
