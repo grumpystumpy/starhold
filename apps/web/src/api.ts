@@ -769,6 +769,15 @@ export async function dismissOnboarding(
   return parse<PlayerView>(res);
 }
 
+export async function dismissWhatsNew(playerId: string): Promise<PlayerView> {
+  const res = await credFetch("/api/whats-new/dismiss", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId }),
+  });
+  return parse<PlayerView>(res);
+}
+
 export async function claimDaily(playerId: string): Promise<PlayerView> {
   const res = await credFetch("/api/claim-daily", {
     method: "POST",

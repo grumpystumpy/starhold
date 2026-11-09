@@ -176,4 +176,18 @@ A shell service worker (`/sw.js`) caches only the public document, manifest, ico
 
 No save fields were added. `packages/game/src/fixtures/in-flight-fleet-save.json` is a main-branch universe with one deploy still in flight; `migrateOrResetUniverse` keeps that fleet.
 
+## What's new
+
+A dismissible popup (`data-testid="whats-new"`) shows once per commander when the shared release key is newer than the key they last dismissed. It is part of the existing shell, not a new page. The catalog is `RELEASE_NOTES` in `packages/game/src/release-notes.ts`, oldest first. The current key is the last id, `271`, covering that release: home-screen install, the fleet-send review, combat-report losses with loot and debris separated, the next locked building/research/ship hint, and the blocked-action reason beside the button.
+
+Optional save field `player.whatsNewDismissedReleaseId` is written only by dismiss. Older saves omit it and still load. Reading the popup does not create the field. Dismiss stores the current key and leaves planets, resources, buildings, research, onboarding, and in-flight fleets in place.
+
+`packages/game/src/fixtures/pre-whats-new-inflight.json` is a main-branch universe (created before this field existed) with one deploy still outbound. `migrateOrResetUniverse` keeps that fleet and leaves the field unset, so the popup is due. `packages/game/src/cross-version-save.test.ts` loads it.
+
+| Action | Route | Who |
+| --- | --- | --- |
+| Dismiss | `POST /api/whats-new/dismiss` `{ playerId }` | owning session (401 without a cookie, 403 for another commander) |
+
+The route is not called on a normal page load. `playerView` fills optional `whatsNew` (`releaseId`, `title`, `items`) or `null`. `apps/web/src/ui/render-shell.ts` paints the dialog inside `shellHtml` and `syncWhatsNewPopup` removes it when a patched shell's view is already dismissed. `apps/web/src/ui/render-app.ts` calls that sync on the patch path. The Got it button is handled in `apps/web/src/main-handlers-click.ts` via `apps/web/src/main-actions.ts` and `apps/web/src/main-actions-starshards.ts`, which post through `apps/web/src/api.ts`. The server route is in `apps/server/src/app.ts`. The player field lives on `packages/game/src/types-view.ts` and is copied through `packages/game/src/world-view.ts` and `packages/game/src/world.ts`. Dialog layout is in `apps/web/src/ui/styles-shell.css`. Test file lists that include the new suites are `packages/game/package.json` and `apps/server/package.json`. This entry is in `docs/FEATURE_MAP.md`.
+
 

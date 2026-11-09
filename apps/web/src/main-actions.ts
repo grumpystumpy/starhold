@@ -51,6 +51,7 @@ export {
   doClaimGoal,
   doClaimOnboarding,
   doDismissOnboarding,
+  doDismissWhatsNew,
   doTradeResources,
   doBuyShopItem,
   doActivateOfficer,
