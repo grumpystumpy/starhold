@@ -318,7 +318,7 @@ export function shipyardPage(view: PlayerView, busy: boolean): string {
             ],
             testId: `hangar-tip-${id}`,
           });
-          return `<li data-testid="hangar-${id}"><span class="row-with-thumb"><img class="thumb" src="${SHIP_ART[id]}" alt="" width="36" height="36" />${escapeHtml(def.name)} ${tip.html}</span><span data-testid="hangar-count-${id}">${fmt(count)}</span></li>`;
+          return `<li data-testid="hangar-${id}"><span class="row-with-thumb"><img class="thumb" src="${SHIP_ART[id]}" alt="${escapeAttr(def.name)}" width="36" height="36" />${escapeHtml(def.name)} ${tip.html}</span><span data-testid="hangar-count-${id}">${fmt(count)}</span></li>`;
         }).join("")}
       </ul>`
       }

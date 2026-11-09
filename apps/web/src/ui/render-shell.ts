@@ -11,6 +11,7 @@ import { RESOURCE_ART } from "./assets";
 import { fmt, fmtBonusPct, fmtCompact, fmtCoords } from "./format";
 import { planetDiscHtml } from "./planet-disc";
 import { NAV_LABELS, NAV_PAGES, type NavPage } from "./nav";
+import { creditsHref, creditsNavHtml } from "./render-credits";
 import { accountNavHtml, securityHref } from "./render-security";
 import { flashHtml, resBlock } from "./render-chrome";
 import { escapeAttr, escapeHtml } from "./render-escape";
@@ -179,6 +180,7 @@ function leftNav(view: PlayerView, active: NavPage): string {
           return `<li><a href="${escapeAttr(href)}" class="nav-link${id === gameActive ? " active" : ""}" data-nav="${id}" data-testid="nav-${id}">${NAV_LABELS[id]}${badge}</a></li>`;
         }).join("")}
         ${accountNavHtml(Boolean(session.account), session.accountMenu === "security", securityHref(`?${params.toString()}`))}
+        ${creditsNavHtml(session.accountMenu === "credits", creditsHref(`?${params.toString()}`))}
       </ul>
     </nav>`;
 }

@@ -7,7 +7,7 @@ import type {
   ShipId,
 } from "@starhold/game";
 import type { AuthAccount, SecurityStatus } from "./api";
-import type { NavPage } from "./ui/nav";
+import type { AccountMenuPage, NavPage } from "./ui/nav";
 import type { FleetDraft } from "./ui/render-fleets-draft";
 
 export const SESSION_KEY = "starhold.playerId";
@@ -37,8 +37,8 @@ export const session = {
   passwordDraft: "",
   /** Cookie session account (null = guest / anonymous). */
   account: null as AuthAccount | null,
-  /** Signed-in account page. Null stays on the game nav. */
-  accountMenu: null as "security" | null,
+  /** Account page (Security or Credits). Null stays on the game nav. */
+  accountMenu: null as AccountMenuPage | null,
   security: null as SecurityStatus | null,
   /** Account id the security panel was loaded for. */
   securityFor: null as string | null,

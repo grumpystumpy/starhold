@@ -1,4 +1,4 @@
 # Planet art plates
 
-- `outpost.svg` / `rocky.svg` / `moon.svg` — current colony art
-- `mini.svg` — **placeholder** for Round 2 mini planets; swap when the PLANET ART lane ships dedicated plates (`PLANET_ART.mini` / `planetArtFor()`).
+- `outpost.webp` / `rocky.webp` / `moon.webp` / `mini.webp` — Kenney planet discs for `PLANET_ART` and `planetArtFor()`. Credits: `docs/ART_CREDITS.md`.
+- Galaxy slots still use the procedural files under `/planet-art/`, not these four plates.

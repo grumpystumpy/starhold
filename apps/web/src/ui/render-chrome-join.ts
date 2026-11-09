@@ -197,7 +197,7 @@ export function joinScreenHtml(state: JoinScreenState): string {
 
   return `
     <header class="join-hero">
-      <img class="thumb thumb-hero" src="${PLANET_ART.rocky}" alt="" width="72" height="72" />
+      <img class="thumb thumb-hero" src="${PLANET_ART.rocky}" alt="Rocky world" width="72" height="72" />
       <div>
         <h1 class="brand">Starhold</h1>
         <p class="tagline">Mine the crust, raise the yard, launch hulls — and raid rival colonies. One shared universe — open another tab for attacking another rival.</p>
@@ -216,6 +216,7 @@ export function joinScreenHtml(state: JoinScreenState): string {
       </form>
       ${claimBlock}
       ${authBlock}
+      <p class="hint"><a href="/credits" data-account-nav="credits" data-testid="join-credits">Art credits</a></p>
     </section>
   `;
 }
@@ -227,7 +228,7 @@ export function reconnectScreenHtml(state: {
 }): string {
   return `
     <header class="join-hero">
-      <img class="thumb thumb-hero" src="${PLANET_ART.rocky}" alt="" width="72" height="72" />
+      <img class="thumb thumb-hero" src="${PLANET_ART.rocky}" alt="Rocky world" width="72" height="72" />
       <div>
         <h1 class="brand">Starhold</h1>
         <p class="tagline">Reconnecting to the universe…</p>
@@ -437,7 +438,7 @@ export function buildingRow(
   });
   return `
     <article class="item item-thumb" data-building-id="${id}" data-testid="building-${id}">
-      <img class="thumb" src="${BUILDING_ART[id]}" alt="" width="48" height="48" />
+      <img class="thumb" src="${BUILDING_ART[id]}" alt="${escapeAttr(def.name)}" width="48" height="48" />
       <div>
         <h3>${escapeHtml(def.name)} <span class="meta" data-testid="building-level-${id}">L${fmt(level)}</span> ${tip.html}</h3>
         <p>${escapeHtml(def.description)}</p>

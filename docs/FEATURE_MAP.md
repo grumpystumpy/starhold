@@ -202,4 +202,12 @@ Optional save field `player.whatsNewDismissedReleaseId` is written only by dismi
 
 The route is not called on a normal page load. `playerView` fills optional `whatsNew` (`releaseId`, `title`, `items`) or `null`. `apps/web/src/ui/render-shell.ts` paints the dialog inside `shellHtml` and `syncWhatsNewPopup` removes it when a patched shell's view is already dismissed. `apps/web/src/ui/render-app.ts` calls that sync on the patch path. The Got it button is handled in `apps/web/src/main-handlers-click.ts` via `apps/web/src/main-actions.ts` and `apps/web/src/main-actions-starshards.ts`, which post through `apps/web/src/api.ts`. The server route is in `apps/server/src/app.ts`. The player field lives on `packages/game/src/types-view.ts` and is copied through `packages/game/src/world-view.ts` and `packages/game/src/world.ts`. Dialog layout is in `apps/web/src/ui/styles-shell.css`. Test file lists that include the new suites are `packages/game/package.json` and `apps/server/package.json`. This entry is in `docs/FEATURE_MAP.md`.
 
+## Credits and art pass
+
+The Credits page is an account route, `/credits`, linked from the side nav (`data-testid="nav-credits"`) and from the join screen (`data-testid="join-credits"`). It is not a game-nav page. Guests can open it. Security stays signed-in only.
+
+Plates are mapped in `apps/web/src/ui/assets.ts` (`BUILDING_ART`, `SHIP_ART`, `DEFENSE_ART`, `RESOURCE_ART`, `PLANET_ART`, `planetArtFor`, `UI_ART`, `RESEARCH_ART`, `BACKGROUND_ART`). Research rows use `RESEARCH_ART`. Ship, defense, building, and hangar thumbs use the existing img slots. The galaxy page uses the Kenney sky file as a full-bleed backdrop. The join screen uses the NASA photograph as a full-bleed backdrop. Galaxy slot discs stay on `/planet-art/`.
+
+Every referenced file is listed in `docs/ART_CREDITS.md`. game-icons.net lines on the Credits page use the required CC BY 3.0 credit. Capital hulls, shield-style defenses, Jump Gate, Chrono Lathe, Mantle Loom, the deuterium chip, and officer portraits stay on the original plates. No save fields were added.
+
 

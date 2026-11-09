@@ -55,6 +55,7 @@ import {
   sharedCombatReportError,
   sharedCombatReportPage,
 } from "./ui/shared-report";
+import { accountMenuFromPath } from "./ui/nav";
 import {
   ensurePopstateHandler,
   pageFromLocation,
@@ -162,6 +163,7 @@ async function boot(): Promise<void> {
   ensureDelegatedHandlers();
   ensurePopstateHandler();
   session.activePage = pageFromLocation();
+  session.accountMenu = accountMenuFromPath(window.location.pathname);
   const bootParams = new URLSearchParams(window.location.search);
   const resetParam = bootParams.get("reset")?.trim() ?? "";
   if (resetParam) session.passwordResetToken = resetParam;

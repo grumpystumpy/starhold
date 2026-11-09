@@ -1,47 +1,47 @@
-import type { BuildingId, DefenseId, ShipId } from "@starhold/game";
+import type { BuildingId, DefenseId, ResearchId, ShipId } from "@starhold/game";
 
-/** Public Vite paths for original SVG plates (see public/assets/README.md). */
+/** Public Vite paths for plates (see public/assets/README.md and docs/ART_CREDITS.md). */
 export const BUILDING_ART: Record<BuildingId, string> = {
-  metalMine: "/assets/buildings/metal-mine.svg",
-  crystalMine: "/assets/buildings/crystal-mine.svg",
-  deutSynth: "/assets/buildings/deut-synth.svg",
-  solarPlant: "/assets/buildings/solar-plant.svg",
-  metalStorage: "/assets/buildings/metal-storage.svg",
-  crystalStorage: "/assets/buildings/crystal-storage.svg",
-  deutTank: "/assets/buildings/deut-tank.svg",
-  shipyard: "/assets/buildings/shipyard.svg",
-  researchLab: "/assets/buildings/research-lab.svg",
-  lunarBase: "/assets/buildings/lunar-base.svg",
-  sensorArray: "/assets/buildings/sensor-array.svg",
+  metalMine: "/assets/buildings/metal-mine.webp",
+  crystalMine: "/assets/buildings/crystal-mine.webp",
+  deutSynth: "/assets/buildings/deut-synth.webp",
+  solarPlant: "/assets/buildings/solar-plant.webp",
+  metalStorage: "/assets/buildings/metal-storage.webp",
+  crystalStorage: "/assets/buildings/crystal-storage.webp",
+  deutTank: "/assets/buildings/deut-tank.webp",
+  shipyard: "/assets/buildings/shipyard.webp",
+  researchLab: "/assets/buildings/research-lab.webp",
+  lunarBase: "/assets/buildings/lunar-base.webp",
+  sensorArray: "/assets/buildings/sensor-array.webp",
   jumpGate: "/assets/buildings/jump-gate.svg",
   chronoLathe: "/assets/buildings/chrono-lathe.svg",
   mantleLoom: "/assets/buildings/mantle-loom.svg",
   rigFoundry: "/assets/buildings/rig-foundry.svg",
-  riftSiphon: "/assets/buildings/deut-synth.svg",
-  echoVault: "/assets/buildings/metal-storage.svg",
-  anomalyForge: "/assets/buildings/shipyard.svg",
-  driftBeacon: "/assets/buildings/sensor-array.svg",
+  riftSiphon: "/assets/buildings/deut-synth.webp",
+  echoVault: "/assets/buildings/metal-storage.webp",
+  anomalyForge: "/assets/buildings/shipyard.webp",
+  driftBeacon: "/assets/buildings/sensor-array.webp",
 };
 
 export const SHIP_ART: Record<ShipId, string> = {
-  scout: "/assets/ships/scout.svg",
-  hauler: "/assets/ships/hauler.svg",
-  fastCargo: "/assets/ships/fast-cargo.svg",
-  bulkCargo: "/assets/ships/bulk-cargo.svg",
-  interceptor: "/assets/ships/interceptor.svg",
-  cruiser: "/assets/ships/cruiser.svg",
-  bomber: "/assets/ships/bomber.svg",
-  probe: "/assets/ships/probe.svg",
-  recycler: "/assets/ships/recycler.svg",
-  colonyShip: "/assets/ships/colony-ship.svg",
-  helioBuoy: "/assets/ships/helio-buoy.svg",
-  keelSovereign: "/assets/ships/keel-sovereign.svg",
-  rakeCorsair: "/assets/ships/rake-corsair.svg",
-  anvilDread: "/assets/ships/anvil-dread.svg",
-  wardbreaker: "/assets/ships/wardbreaker.svg",
-  vaultScout: "/assets/ships/vault-scout.svg",
-  astrolabeWing: "/assets/ships/astrolabe-wing.svg",
-  spoilSkimmer: "/assets/ships/spoil-skimmer.svg",
+  scout: "/assets/ships/scout.webp",
+  hauler: "/assets/ships/hauler.webp",
+  fastCargo: "/assets/ships/fast-cargo.webp",
+  bulkCargo: "/assets/ships/bulk-cargo.webp",
+  interceptor: "/assets/ships/interceptor.webp",
+  cruiser: "/assets/ships/cruiser.webp",
+  bomber: "/assets/ships/bomber.webp",
+  probe: "/assets/ships/probe.webp",
+  recycler: "/assets/ships/recycler.webp",
+  colonyShip: "/assets/ships/colony-ship.webp",
+  helioBuoy: "/assets/ships/helio-buoy.webp",
+  keelSovereign: "/assets/ships/keel-sovereign.webp",
+  rakeCorsair: "/assets/ships/rake-corsair.webp",
+  anvilDread: "/assets/ships/anvil-dread.webp",
+  wardbreaker: "/assets/ships/wardbreaker.webp",
+  vaultScout: "/assets/ships/vault-scout.webp",
+  astrolabeWing: "/assets/ships/astrolabe-wing.webp",
+  spoilSkimmer: "/assets/ships/spoil-skimmer.webp",
   lineDrummer: "/assets/ships/line-drummer.svg",
   veinAnchor: "/assets/ships/vein-anchor.svg",
   gridStake: "/assets/ships/grid-stake.svg",
@@ -55,23 +55,23 @@ export const SHIP_ART: Record<ShipId, string> = {
 };
 
 export const DEFENSE_ART: Record<DefenseId, string> = {
-  laserBattery: "/assets/defenses/laser-battery.svg",
+  laserBattery: "/assets/defenses/laser-battery.webp",
   shieldDome: "/assets/defenses/shield-dome.svg",
-  needleTurret: "/assets/defenses/needle-turret.svg",
-  prismLaser: "/assets/defenses/prism-laser.svg",
-  arcLattice: "/assets/defenses/arc-lattice.svg",
-  pulseBastion: "/assets/defenses/pulse-bastion.svg",
-  gaussRail: "/assets/defenses/gauss-rail.svg",
+  needleTurret: "/assets/defenses/needle-turret.webp",
+  prismLaser: "/assets/defenses/prism-laser.webp",
+  arcLattice: "/assets/defenses/arc-lattice.webp",
+  pulseBastion: "/assets/defenses/pulse-bastion.webp",
+  gaussRail: "/assets/defenses/gauss-rail.webp",
   ionSheath: "/assets/defenses/ion-sheath.svg",
-  plasmaSpire: "/assets/defenses/plasma-spire.svg",
-  flakCurtain: "/assets/defenses/flak-curtain.svg",
-  kineticFence: "/assets/defenses/kinetic-fence.svg",
-  emberMortar: "/assets/defenses/ember-mortar.svg",
-  rippleArray: "/assets/defenses/ripple-array.svg",
+  plasmaSpire: "/assets/defenses/plasma-spire.webp",
+  flakCurtain: "/assets/defenses/flak-curtain.webp",
+  kineticFence: "/assets/defenses/kinetic-fence.webp",
+  emberMortar: "/assets/defenses/ember-mortar.webp",
+  rippleArray: "/assets/defenses/ripple-array.webp",
   haloProjector: "/assets/defenses/halo-projector.svg",
   crownAegis: "/assets/defenses/crown-aegis.svg",
-  siegeBlockade: "/assets/defenses/siege-blockade.svg",
-  frostLance: "/assets/defenses/frost-lance.svg",
+  siegeBlockade: "/assets/defenses/siege-blockade.webp",
+  frostLance: "/assets/defenses/frost-lance.webp",
   voidWard: "/assets/defenses/void-ward.svg",
 };
 
@@ -83,11 +83,11 @@ export const RESOURCE_ART = {
 } as const;
 
 export const PLANET_ART = {
-  outpost: "/assets/planets/outpost.svg",
-  rocky: "/assets/planets/rocky.svg",
-  moon: "/assets/planets/moon.svg",
-  /** Mini planet — placeholder until PLANET ART lane ships dedicated plates. */
-  mini: "/assets/planets/mini.svg",
+  outpost: "/assets/planets/outpost.webp",
+  rocky: "/assets/planets/rocky.webp",
+  moon: "/assets/planets/moon.webp",
+  /** Mini planet plate. Galaxy slots still use the procedural `/planet-art/` discs. */
+  mini: "/assets/planets/mini.webp",
 } as const;
 
 /** Resolve body art; prefers mini → moon → outpost/rocky. */
@@ -104,4 +104,30 @@ export function planetArtFor(opts: {
 
 export const UI_ART = {
   emptyHangar: "/assets/ui/empty-hangar.svg",
+} as const;
+
+export const RESEARCH_ART: Record<ResearchId, string> = {
+  energyTech: "/assets/research/power-discipline.svg",
+  combustionDrive: "/assets/research/pulse-drive.svg",
+  weaponsTech: "/assets/research/ordnance-doctrine.svg",
+  armourTech: "/assets/research/hull-weave.svg",
+  shieldingTech: "/assets/research/aegis-lattice.svg",
+  espionageTech: "/assets/research/shadow-optics.svg",
+  astrophysics: "/assets/research/stellar-cartography.svg",
+  computerTech: "/assets/research/fleet-os.svg",
+  queueLogistics: "/assets/research/yard-logistics.svg",
+  swarmHold: "/assets/research/swarm-hold.svg",
+  gravityWell: "/assets/research/well-binding.svg",
+  metallurgistTech: "/assets/research/metallurgist.svg",
+  crystalizerTech: "/assets/research/crystal-refining.svg",
+  deutSynthesisTech: "/assets/research/deut-synthesis.svg",
+  researchNetwork: "/assets/research/research-network.svg",
+  cargoHoldTech: "/assets/research/cargo-hold.svg",
+  fleetSpeedTech: "/assets/research/fleet-thrusters.svg",
+};
+
+/** Full-bleed backgrounds. Not used as HUD icons. */
+export const BACKGROUND_ART = {
+  galaxy: "/assets/backgrounds/kenney-sky-galaxy.webp",
+  join: "/assets/backgrounds/nasa-earthrise.webp",
 } as const;
