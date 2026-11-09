@@ -1022,7 +1022,11 @@ export function bindClickHandlers(): void {
     }
     if (
       (el instanceof HTMLSelectElement || el instanceof HTMLInputElement) &&
-      (el.name === "fleet-mission" || el.id === "fleet-target" || el.hasAttribute("data-fleet-speed"))
+      (el.name === "fleet-mission" ||
+        el.id === "fleet-target" ||
+        el.id === "fleet-open-acs" ||
+        el.id === "fleet-acs-join" ||
+        el.hasAttribute("data-fleet-speed"))
     ) {
       schedulePaint();
       return;

@@ -19,6 +19,11 @@ import { SHIP_ART } from "./assets";
 import { fmt, fmtCoords, fmtCoordsLink, fmtEta } from "./format";
 import { escapeAttr, escapeHtml } from "./render-escape";
 import {
+  buildFleetSendReview,
+  fleetReviewTimeZone,
+  renderFleetSendReview,
+} from "./fleet-send-review";
+import {
   clampFleetSpeed,
   rememberFleetDraft,
   MISSIONS,
@@ -482,6 +487,7 @@ export function fleetComposer(
     counts: { ...(draft?.counts ?? {}) },
     cargo: { ...(draft?.cargo ?? {}) },
     openAcs: draft?.openAcs ?? false,
+    acsGroupId: draft?.acsGroupId ?? "",
     step,
     speedPercent,
   };
@@ -503,7 +509,43 @@ export function fleetComposer(
 
   const destination = coordsFromTarget(view, selected);
   const kind = targetKind(mission, selected, selectedOptionLabel(optionHtml, selected));
-  const preview = flightPreview(view, held.counts, destination, speedPercent);
+  const sentCounts: FleetDraft["counts"] = {};
+  for (const id of orbitShipIds) {
+    const have = view.planet.ships[id] ?? 0;
+    sentCounts[id] = Math.min(have, Math.max(0, Math.floor(held.counts[id] ?? 0)));
+  }
+  const cruise = flightPreview(view, sentCounts, destination, 100);
+  const preview = flightPreview(view, sentCounts, destination, speedPercent);
+  const ownTarget =
+    (selectedPlanetId != null &&
+      view.ownedPlanets.some((p) => p.id === selectedPlanetId)) ||
+    (destination != null &&
+      view.ownedPlanets.some(
+        (p) =>
+          p.coords.galaxy === destination.galaxy &&
+          p.coords.system === destination.system &&
+          p.coords.slot === destination.slot,
+      ));
+  const review = renderFleetSendReview(
+    buildFleetSendReview({
+      mission,
+      missionLabel: selectedMeta.label,
+      coords: destination,
+      targetType: kind,
+      targetLabel: selectedOptionLabel(optionHtml, selected),
+      ownTarget,
+      nowMs: view.now,
+      timeZone: fleetReviewTimeZone(),
+      cruiseSeconds: cruise.eta,
+      cruiseFuel: cruise.fuel,
+      cargo: cruise.cap,
+      speedPercent,
+      previewSeconds: preview.eta,
+      previewFuel: preview.fuel,
+      openAcs: Boolean(held.openAcs) && !held.acsGroupId,
+      joiningAcs: Boolean(held.acsGroupId),
+    }),
+  );
   const summaryRows = WEAKEST_FIRST_SHIPS.filter((id) => {
     const have = view.planet.ships[id] ?? 0;
     const raw = held.counts[id] ?? 0;
@@ -528,10 +570,6 @@ export function fleetComposer(
         `<option value="${n}"${n === speedPercent ? " selected" : ""}>${n}%</option>`,
     )
     .join("");
-  const flightLine =
-    preview.eta == null || preview.fuel == null
-      ? `Cargo ${fmt(preview.cap)}. Pick a target for flight time and fuel.`
-      : `Flight ~${fmtEta(preview.eta)} · fuel ~${fmt(preview.fuel)} deut · cargo ${fmt(preview.cap)}`;
 
   return `
     <form id="fleet-form" data-testid="fleet-form" class="fleet-form" data-fleet-step="2">
@@ -556,14 +594,13 @@ export function fleetComposer(
           ${speedOptions}
         </select>
       </label>
-      <p class="hint" data-testid="fleet-speed-note">Speed changes this preview only. Send still flies at full cruise — the server has no speed field.</p>
       ${cargoBlock}
       <div hidden>${hiddenCounts}</div>
       <div class="fleet-summary" data-testid="fleet-ship-summary">
         <p class="hint">Ships</p>
         <ul>${summaryRows || `<li>No ships selected</li>`}</ul>
-        <p data-testid="fleet-flight">${flightLine}</p>
       </div>
+      ${review}
       ${needHint}
       ${swarmHint}
       ${
@@ -622,7 +659,8 @@ function selectedOptionLabel(optionHtml: string, selected: string): string {
   if (start < 0) return "";
   const end = optionHtml.indexOf("</option>", start);
   const chunk = optionHtml.slice(start, end < 0 ? undefined : end);
-  return chunk.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  const text = chunk.slice(chunk.indexOf(">") + 1);
+  return text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 }
 
 function targetKind(mission: MissionType, selected: string, label: string): string {
@@ -690,7 +728,7 @@ function acsBlock(
     .filter((g) => g.mission === mission)
     .map(
       (g) =>
-        `<option value="${escapeAttr(g.id)}">${escapeHtml(g.id.slice(0, 12))} · ${g.fleetIds.length} fleets · closes ${fmtEta(Math.max(0, (g.joinClosesAt - view.now) / 1000))}</option>`,
+        `<option value="${escapeAttr(g.id)}"${draft?.acsGroupId === g.id ? " selected" : ""}>${escapeHtml(g.id.slice(0, 12))} · ${g.fleetIds.length} fleets · closes ${fmtEta(Math.max(0, (g.joinClosesAt - view.now) / 1000))}</option>`,
     )
     .join("");
   return `

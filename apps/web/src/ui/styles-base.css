@@ -472,6 +472,54 @@ button.ghost {
   padding-left: 1.1rem;
 }
 
+.fleet-review {
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0.65rem 0.75rem;
+  margin: 0;
+}
+
+.fleet-review h3 {
+  margin: 0 0 0.45rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.fleet-review dl {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr);
+  gap: 0.35rem 0.75rem;
+  margin: 0;
+}
+
+.fleet-review dt {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.fleet-review dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .fleet-review dl {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.15rem;
+  }
+
+  .fleet-review dt {
+    margin-top: 0.45rem;
+  }
+
+  .fleet-review dd {
+    font-size: 1rem;
+  }
+}
+
 .fleet-speed select {
   display: block;
   width: 100%;
