@@ -68,6 +68,7 @@ async function main() {
   const pages = [
     { name: "iphone", width: 390, height: 844 },
     { name: "android", width: 412, height: 915 },
+    { name: "desktop", width: 1280, height: 800 },
   ];
   try {
     for (const vp of pages) {
@@ -164,15 +165,33 @@ async function main() {
           const cache = await caches.open(name);
           for (const req of await cache.keys()) urls.push(req.url);
         }
+        const cache = await caches.open("starhold-shell-v1");
+        const manifest = await cache.match("/manifest.webmanifest");
+        const document = await cache.match("/index.html");
+        const manifestText = manifest ? (await manifest.text()).slice(0, 80) : "";
+        const documentText = document ? (await document.text()).slice(0, 80) : "";
         return {
           scope: reg.scope,
           script: reg.active?.scriptURL ?? null,
           urls,
+          manifestText,
+          documentText,
         };
       });
       if (!shell.script?.endsWith("/sw.js")) throw new Error(`${vp.name} worker ${shell.script}`);
       if (shell.urls.some((url) => url.includes("/api/"))) {
         throw new Error(`${vp.name} cached API ${shell.urls.filter((url) => url.includes("/api/")).join(",")}`);
+      }
+      const manifestKey = shell.urls.find((url) => url.includes("/manifest.webmanifest"));
+      const documentKey = shell.urls.find((url) => url.endsWith("/index.html"));
+      if (!manifestKey || !documentKey || manifestKey === documentKey) {
+        throw new Error(`${vp.name} cache keys ${shell.urls.join(",")}`);
+      }
+      if (!shell.manifestText.startsWith("{") || shell.manifestText.includes("<html")) {
+        throw new Error(`${vp.name} manifest cache body ${shell.manifestText}`);
+      }
+      if (!shell.documentText.includes("<") || shell.documentText === shell.manifestText) {
+        throw new Error(`${vp.name} document cache body ${shell.documentText}`);
       }
 
       await page.screenshot({

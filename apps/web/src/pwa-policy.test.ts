@@ -174,6 +174,28 @@ describe("service worker allowlist", () => {
       assert.equal(await (await cache.match(htmlKey)).text(), "cached HTML");
       assert.equal(await (await cache.match(manifestKey)).text(), "fresh manifest");
 
+      globalThis.fetch = async () => {
+        const response = new Response("<html>fresh document</html>", {
+          headers: { "Content-Type": "text/html", "Set-Cookie": "session=secret" },
+        });
+        Object.defineProperty(response, "type", { value: "basic" });
+        return response;
+      };
+      await networkFirst(new Request(`${ORIGIN}/?playerId=private`), ORIGIN);
+      assert.equal(await (await cache.match(htmlKey)).text(), "cached HTML");
+      assert.equal(await (await cache.match(manifestKey)).text(), "fresh manifest");
+
+      globalThis.fetch = async () => {
+        const response = new Response("<html>fresh document</html>", {
+          headers: { "Content-Type": "text/html" },
+        });
+        Object.defineProperty(response, "type", { value: "basic" });
+        return response;
+      };
+      await networkFirst(new Request(`${ORIGIN}/?playerId=private`), ORIGIN);
+      assert.equal(await (await cache.match(htmlKey)).text(), "<html>fresh document</html>");
+      assert.equal(await (await cache.match(manifestKey)).text(), "fresh manifest");
+
       await cache.delete(manifestKey);
       globalThis.fetch = async () => {
         throw new Error("offline");
