@@ -22,6 +22,7 @@ import {
   deletePlayerMessages,
   isMessageCategory,
   advanceUniverse,
+  playerStateTickDue,
   batchScanSystem,
   cancelQueueItem,
   changePlayerClass,
@@ -326,11 +327,17 @@ export function createApp(): Hono {
       const galaxy = Number(c.req.query("galaxy") || 0) || undefined;
       const system = Number(c.req.query("system") || 0) || undefined;
       return await withUniverseRead(
-        (universe) =>
-          respondWithPlayerView(
+        (universe) => {
+          const now = Date.now();
+          const tickDue = playerStateTickDue(universe, playerId, now);
+          c.header("X-Starhold-State-Tick", tickDue ? "advanced" : "skipped");
+          return respondWithPlayerView(
             c,
-            playerView(universe, playerId, Date.now(), galaxy, system),
-          ),
+            playerView(universe, playerId, now, galaxy, system, {
+              skipUniverseTick: !tickDue,
+            }),
+          );
+        },
         { playerIds: [playerId], galaxy, system },
       );
     } catch (err) {
