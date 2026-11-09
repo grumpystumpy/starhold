@@ -87,6 +87,11 @@ describe("cross-version save fixtures", () => {
 
     const loaded = migrateOrResetUniverse(structuredClone(raw));
     assert.equal(loaded.didReset, false);
+    assert.equal(loaded.universe.pirateBossBaseId, undefined);
+    assert.equal(loaded.universe.pirateBossActiveUntil, undefined);
+    assert.equal(loaded.universe.pirateBossNextSpawnAt, undefined);
+    assert.equal(loaded.universe.fleets.flt_pre_boss!.ships.hauler, 9);
+    assert.equal(loaded.universe.fleets.flt_pre_boss!.phase, "outbound");
     assert.equal(loaded.universe.id, "uni_fixture_pre_boss");
     assert.equal(loaded.universe.schemaVersion, UNIVERSE_SCHEMA_VERSION);
 

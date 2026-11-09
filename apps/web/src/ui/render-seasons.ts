@@ -1,6 +1,8 @@
 import {
   SEASON_BOARDS,
   SEASON_ECONOMY_SPEND_DIV,
+  pirateBossSeasonFlavor,
+  type PirateBossSeasonSchedule,
   type PirateBossTierId,
   type PlayerView,
   type SeasonBoardId,
@@ -111,7 +113,7 @@ function claimCard(
   </section>`;
 }
 
-function bossCountdown(until: number, now: number): string {
+export function formatBossCountdown(until: number, now: number): string {
   const seconds = Math.max(0, Math.ceil((until - now) / 1000));
   const days = Math.floor(seconds / 86_400);
   const hours = Math.floor((seconds % 86_400) / 3_600);
@@ -146,7 +148,7 @@ export function pirateBossPanel(view: PlayerView): string {
   const when =
     until == null
       ? "—"
-      : `${active ? "ends in" : "next spawn"} ${bossCountdown(until, view.now)}`;
+      : `${active ? "ends in" : "next spawn"} ${formatBossCountdown(until, view.now)}`;
   const rank = boss.myRank == null ? "unranked" : `#${fmt(boss.myRank)}`;
   const rows =
     boss.top.length === 0
@@ -171,6 +173,107 @@ export function pirateBossPanel(view: PlayerView): string {
     <h3 class="subhead">Damage leaderboard</h3>
     ${rows}
   </section>`;
+}
+
+function resolveBossSchedule(view: PlayerView): PirateBossSeasonSchedule {
+  const fromServer = view.seasonLeaderboard.bossSchedule;
+  if (fromServer) return fromServer;
+  const seasonId = view.seasonLeaderboard.seasonId;
+  const flavor = pirateBossSeasonFlavor(seasonId);
+  const boss = view.pirateBoss;
+  if (boss?.activeUntil != null) {
+    return {
+      seasonId,
+      title: boss.flavorTitle ?? flavor.title,
+      line: boss.flavorLine ?? flavor.line,
+      phase: "active",
+      activeUntil: boss.activeUntil,
+      nextSpawnAt: boss.projectedSpawnAt ?? boss.activeUntil,
+    };
+  }
+  if (boss?.nextSpawnAt != null && boss.nextSpawnAt > view.now) {
+    return {
+      seasonId,
+      title: boss.flavorTitle ?? flavor.title,
+      line: boss.flavorLine ?? flavor.line,
+      phase: "cooldown",
+      nextSpawnAt: boss.nextSpawnAt,
+    };
+  }
+  return {
+    seasonId,
+    title: flavor.title,
+    line: flavor.line,
+    phase: "due",
+    nextSpawnAt: view.now,
+  };
+}
+
+function scheduleWindowLine(
+  schedule: PirateBossSeasonSchedule,
+  now: number,
+): string {
+  switch (schedule.phase) {
+    case "active":
+      return schedule.activeUntil == null
+        ? "Active window · open"
+        : `Active window · ends in ${formatBossCountdown(schedule.activeUntil, now)}`;
+    case "cooldown":
+      return "Active window · closed";
+    case "due":
+      return "Active window · closed";
+    default: {
+      const exhaustive: never = schedule.phase;
+      return exhaustive;
+    }
+  }
+}
+
+function scheduleCooldownLine(
+  schedule: PirateBossSeasonSchedule,
+  now: number,
+): string {
+  switch (schedule.phase) {
+    case "active":
+      return "Cooldown · begins when this window closes";
+    case "cooldown":
+      return `Cooldown · ends in ${formatBossCountdown(schedule.nextSpawnAt, now)}`;
+    case "due":
+      return "Cooldown · not running";
+    default: {
+      const exhaustive: never = schedule.phase;
+      return exhaustive;
+    }
+  }
+}
+
+function scheduleNextLine(
+  schedule: PirateBossSeasonSchedule,
+  now: number,
+): string {
+  switch (schedule.phase) {
+    case "active":
+    case "cooldown":
+      return `Next spawn · ${formatBossCountdown(schedule.nextSpawnAt, now)}`;
+    case "due":
+      return "Next spawn · due on the next pirate tick";
+    default: {
+      const exhaustive: never = schedule.phase;
+      return exhaustive;
+    }
+  }
+}
+
+function bossScheduleCard(view: PlayerView): string {
+  const schedule = resolveBossSchedule(view);
+  return `<aside class="pirate-boss-schedule" data-testid="pirate-boss-schedule">
+    <h3>${escapeHtml(schedule.title)}</h3>
+    <p class="hint" data-testid="pirate-boss-flavor">${escapeHtml(schedule.line)}</p>
+    <p data-testid="pirate-boss-window">${scheduleWindowLine(schedule, view.now)}</p>
+    <p data-testid="pirate-boss-cooldown">${scheduleCooldownLine(schedule, view.now)}</p>
+    <p data-testid="pirate-boss-next-spawn">${scheduleNextLine(schedule, view.now)}</p>
+    ${pirateBossPanel(view)}
+  </aside>`;
 }
 
 export function seasonsPage(view: PlayerView, busy: boolean): string {
@@ -223,8 +326,10 @@ export function seasonsPage(view: PlayerView, busy: boolean): string {
   return `<section class="panel" data-testid="seasons-panel">
     <h2>Seasons</h2>
     <p class="hint" data-testid="season-id">${escapeHtml(monthLabel(board.seasonId))} · titles and planet skins from placement.</p>
-    ${pirateBossPanel(view)}
-    <div class="season-boards">${boards}</div>
+    <div class="season-layout">
+      <div class="season-boards">${boards}</div>
+      ${bossScheduleCard(view)}
+    </div>
     <h3 class="subhead">Claim</h3>
     ${claims}
     <h3 class="subhead">Cosmetics</h3>

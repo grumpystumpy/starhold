@@ -463,6 +463,22 @@ export interface SeasonClaimView {
   offers: SeasonClaimOffer[];
 }
 
+export type PirateBossSeasonPhase = "active" | "cooldown" | "due";
+
+/**
+ * View-only clock for the monthly hunt. Not stored.
+ * While the mothership is up, `nextSpawnAt` is the window close plus the cooldown.
+ */
+export interface PirateBossSeasonSchedule {
+  seasonId: string;
+  title: string;
+  line: string;
+  phase: PirateBossSeasonPhase;
+  /** Living window close. Omitted when the mothership is not up. */
+  activeUntil?: number;
+  nextSpawnAt: number;
+}
+
 /** Current month boards plus sealed seasons the player can claim. */
 export interface SeasonLeaderboardView {
   seasonId: string;
@@ -472,6 +488,8 @@ export interface SeasonLeaderboardView {
   ranks: Record<SeasonBoardId, number | null>;
   boards: Record<SeasonBoardId, SeasonStanding[]>;
   claims: SeasonClaimView[];
+  /** Active window, cooldown, and next spawn for this month's mothership. */
+  bossSchedule?: PirateBossSeasonSchedule;
 }
 
 export interface PlayerState {
@@ -846,6 +864,17 @@ export interface PirateBossView {
   /** Rank 1, else share of total damage. Null when this commander is under 1%. */
   myTier: PirateBossTierId | null;
   top: { playerId: string; name: string; damage: number }[];
+  /** Current month id. View only. */
+  seasonId?: string;
+  /** Month hunt name. View only. */
+  flavorTitle?: string;
+  /** Month hunt sentence. View only. Pay stays on PIRATE_BOSS_TIERS. */
+  flavorLine?: string;
+  /**
+   * Next spawn. During an active window this is the window close plus the
+   * cooldown, and it is not written to the save.
+   */
+  projectedSpawnAt?: number;
 }
 
 export interface PlayerView {

@@ -357,6 +357,8 @@ export {
   isSeasonPvpMission,
   placementReward,
   rollSeasons,
+  pirateBossSeasonFlavor,
+  pirateBossSeasonSchedule,
   seasonIdFromTime,
   seasonLeaderboardView,
   seasonPilotTitle,

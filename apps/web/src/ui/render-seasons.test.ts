@@ -26,6 +26,15 @@ describe("seasonal pirate boss panel", () => {
     assert.match(html, /data-testid="seasons-panel"/);
     assert.equal(pirateBossPanel(seasonView()), "");
     assert.doesNotMatch(html, /pirate-boss-panel/);
+    assert.match(html, /class="season-layout"/);
+    assert.match(html, /data-testid="pirate-boss-schedule"/);
+    assert.match(html, /November Veil Hunt/);
+    assert.match(html, /data-testid="pirate-boss-window"/);
+    assert.match(html, /Active window · closed/);
+    assert.match(html, /data-testid="pirate-boss-cooldown"/);
+    assert.match(html, /Cooldown · not running/);
+    assert.match(html, /data-testid="pirate-boss-next-spawn"/);
+    assert.match(html, /Next spawn · due on the next pirate tick/);
   });
 
   it("shows status, hull, rank, tier, and the top-10 board", () => {
@@ -70,6 +79,82 @@ describe("seasonal pirate boss panel", () => {
     assert.match(html, /You \(you\)/);
     assert.match(html, /data-testid="pirate-boss-report"/);
     assert.match(html, /Last strike destroyed 4.2K/);
+    assert.match(html, /data-testid="pirate-boss-schedule"/);
+    assert.match(html, /November Veil Hunt/);
+    assert.match(html, /Active window · ends in 2d 3h/);
+    assert.match(html, /Cooldown · begins when this window closes/);
+    assert.match(html, /Next spawn · 2d 3h/);
+  });
+
+  it("shows the server schedule beside the boards, including cooldown", () => {
+    const now = 1_700_000_000_000;
+    const activeUntil = now + 2 * 86_400_000 + 3 * 3_600_000;
+    const nextSpawnAt = now + 9 * 86_400_000 + 3 * 3_600_000;
+    const active = seasonsPage(
+      seasonView({
+        now,
+        seasonLeaderboard: {
+          ...seasonView().seasonLeaderboard,
+          bossSchedule: {
+            seasonId: "2026-11",
+            title: "November Veil Hunt",
+            line: "November's veil mothership is the target. Participation pay stays on the same three tiers.",
+            phase: "active",
+            activeUntil,
+            nextSpawnAt,
+          },
+        },
+        pirateBoss: {
+          id: "boss-1",
+          coords: { galaxy: 2, system: 14, slot: 9 },
+          shipsLeft: 25,
+          hpPct: 80,
+          activeUntil,
+          projectedSpawnAt: nextSpawnAt,
+          myDamage: 12_500,
+          myRank: 2,
+          totalDamage: 40_000,
+          myTier: "top10",
+          top: [],
+        },
+      }),
+      false,
+    );
+    assert.match(active, /Active window · ends in 2d 3h/);
+    assert.match(active, /Next spawn · 9d 3h/);
+    assert.match(active, /Active · ends in 2d 3h/);
+    const cooling = seasonsPage(
+      seasonView({
+        now,
+        seasonLeaderboard: {
+          ...seasonView().seasonLeaderboard,
+          bossSchedule: {
+            seasonId: "2026-11",
+            title: "November Veil Hunt",
+            line: "November's veil mothership is the target. Participation pay stays on the same three tiers.",
+            phase: "cooldown",
+            nextSpawnAt: now + 5 * 3_600_000,
+          },
+        },
+        pirateBoss: {
+          id: "boss-1",
+          coords: { galaxy: 1, system: 1, slot: 4 },
+          shipsLeft: 0,
+          hpPct: 0,
+          nextSpawnAt: now + 5 * 3_600_000,
+          myDamage: 100,
+          myRank: 1,
+          totalDamage: 100,
+          myTier: "top1",
+          top: [],
+        },
+      }),
+      false,
+    );
+    assert.match(cooling, /Active window · closed/);
+    assert.match(cooling, /Cooldown · ends in 5h 0m/);
+    assert.match(cooling, /Next spawn · 5h 0m/);
+    assert.match(cooling, /Cooldown · next spawn 5h 0m/);
   });
 
   it("counts down to the next spawn after the mothership falls", () => {

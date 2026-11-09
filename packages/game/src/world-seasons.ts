@@ -5,7 +5,9 @@ import {
   SEASON_LEADERBOARD_TOP,
   SEASON_REWARD_TOP_N,
 } from "./catalog.js";
+import { PIRATE_BOSS_COOLDOWN_MS } from "./data/tuning.js";
 import type {
+  PirateBossSeasonSchedule,
   PlayerState,
   Resources,
   SeasonBoardId,
@@ -472,6 +474,93 @@ function claimOffers(
   });
 }
 
+const BOSS_MONTH_FLAVOR = [
+  ["January Frost Hunt", "January's frost mothership"],
+  ["February Rift Hunt", "February's rift mothership"],
+  ["March Thaw Hunt", "March's thaw mothership"],
+  ["April Drift Hunt", "April's drift mothership"],
+  ["May Flare Hunt", "May's flare mothership"],
+  ["June Solstice Hunt", "June's solstice mothership"],
+  ["July Ember Hunt", "July's ember mothership"],
+  ["August Dust Hunt", "August's dust mothership"],
+  ["September Equinox Hunt", "September's equinox mothership"],
+  ["October Harvest Hunt", "October's harvest mothership"],
+  ["November Veil Hunt", "November's veil mothership"],
+  ["December Long Night Hunt", "December's long-night mothership"],
+] as const;
+
+/** Month hunt name and sentence. Copy only; tier pay is unchanged. */
+export function pirateBossSeasonFlavor(seasonId: string): {
+  title: string;
+  line: string;
+} {
+  const month = Number(String(seasonId).slice(5, 7));
+  const row = BOSS_MONTH_FLAVOR[month - 1];
+  if (!row) {
+    return {
+      title: "Seasonal Drift Hunt",
+      line: "This month's mothership is in the drift. Participation pay stays on the same three tiers.",
+    };
+  }
+  return {
+    title: row[0],
+    line: `${row[1]} is the target. Participation pay stays on the same three tiers.`,
+  };
+}
+
+function seasonalBossIsUp(universe: UniverseState): boolean {
+  const bases = universe.pirateBases;
+  if (!bases) return false;
+  const trackedId = universe.pirateBossBaseId;
+  if (trackedId) {
+    const tracked = bases[trackedId];
+    if (tracked?.seasonalBoss === true && tracked.destroyedAt == null) {
+      return true;
+    }
+  }
+  for (const base of Object.values(bases)) {
+    if (base.seasonalBoss === true && base.destroyedAt == null) return true;
+  }
+  return false;
+}
+
+/** Active window, cooldown, and next spawn for the open month. Does not write the save. */
+export function pirateBossSeasonSchedule(
+  universe: UniverseState,
+  now: number,
+): PirateBossSeasonSchedule {
+  const seasonId = seasonIdFromTime(now);
+  const flavor = pirateBossSeasonFlavor(seasonId);
+  if (seasonalBossIsUp(universe)) {
+    const activeUntil = universe.pirateBossActiveUntil ?? now;
+    return {
+      seasonId,
+      title: flavor.title,
+      line: flavor.line,
+      phase: "active",
+      activeUntil,
+      nextSpawnAt: activeUntil + PIRATE_BOSS_COOLDOWN_MS,
+    };
+  }
+  const next = universe.pirateBossNextSpawnAt ?? 0;
+  if (next > now) {
+    return {
+      seasonId,
+      title: flavor.title,
+      line: flavor.line,
+      phase: "cooldown",
+      nextSpawnAt: next,
+    };
+  }
+  return {
+    seasonId,
+    title: flavor.title,
+    line: flavor.line,
+    phase: "due",
+    nextSpawnAt: now,
+  };
+}
+
 export function seasonLeaderboardView(
   universe: UniverseState,
   player: PlayerState,
@@ -510,5 +599,6 @@ export function seasonLeaderboardView(
       pirateKills: ranked(full.pirateKills, SEASON_LEADERBOARD_TOP),
     },
     claims,
+    bossSchedule: pirateBossSeasonSchedule(universe, now),
   };
 }
