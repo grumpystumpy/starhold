@@ -1585,6 +1585,8 @@ export function createApp(): Hono {
         starshards?: number;
         colonySlot?: number;
         inbox?: boolean;
+        /** Remember the current release key. Same write as Got it. */
+        dismissWhatsNew?: boolean;
         occupyMini?: boolean;
         occupyNonMini?: boolean;
         occupierPlayerId?: string;
@@ -1756,6 +1758,10 @@ export function createApp(): Hono {
             shipsDelta: {},
             summary: "Empty expedition",
           };
+        }
+        if (body.dismissWhatsNew === true) {
+          const dismissed = dismissWhatsNew(universe, player.id);
+          if (!dismissed.ok) return c.json({ error: dismissed.error }, 400);
         }
         return c.json(playerView(universe, body.playerId!));
       });

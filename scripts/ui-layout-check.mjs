@@ -16,6 +16,7 @@ import { createRequire } from "node:module";
 import { mkdir, writeFile, readFile, access } from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
+import { armWhatsNewDismiss, dismissWhatsNew } from "./lib/dismiss-whats-new.mjs";
 
 const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:3001";
 const API = process.env.STARHOLD_API ?? WEB;
@@ -372,6 +373,7 @@ async function goRoute(page, route, playerId) {
   });
   // settle layout / fonts
   await page.waitForTimeout(350);
+  await dismissWhatsNew(page);
 }
 
 /** Hide volatile session text so screenshot baselines stay stable across runs. */
@@ -433,10 +435,10 @@ async function main() {
   };
 
   for (const vp of VIEWPORTS) {
-    const page = await browser.newPage({
+    const page = await armWhatsNewDismiss(await browser.newPage({
       viewport: { width: vp.width, height: vp.height },
       deviceScaleFactor: 1,
-    });
+    }));
     report.viewports[vp.name] = {};
 
     for (const route of ROUTES) {

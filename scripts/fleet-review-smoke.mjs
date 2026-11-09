@@ -7,6 +7,7 @@
 import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fleetToStep2 } from "./lib/fleet-two-step.mjs";
+import { armWhatsNewDismiss } from "./lib/dismiss-whats-new.mjs";
 
 const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:3001";
 const API = process.env.STARHOLD_API ?? WEB;
@@ -35,7 +36,7 @@ async function overflow(page) {
 async function main() {
   const stamp = Date.now().toString(36);
   const browser = await playwright.chromium.launch({ headless: true });
-  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  const page = await armWhatsNewDismiss(await browser.newPage({ viewport: { width: 1280, height: 800 } }));
   const pageErrors = [];
   page.on("pageerror", (err) => pageErrors.push(String(err)));
   const email = `review${stamp}@example.com`;

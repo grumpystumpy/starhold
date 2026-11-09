@@ -4,6 +4,7 @@ import { createActiveWaitClock } from "./active-wait-clock.mjs";
 import { createRequire } from "node:module";
 import fs from "node:fs";
 import path from "node:path";
+import { armWhatsNewDismiss } from "./lib/dismiss-whats-new.mjs";
 
 const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:3001";
 const OUT =
@@ -30,7 +31,7 @@ async function shotFlow(browser, viewport, dir) {
     viewport,
     deviceScaleFactor: 1,
   });
-  const page = await context.newPage();
+  const page = await armWhatsNewDismiss(await context.newPage());
   const stamp = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
   const email = `ui_ally_${stamp}@example.com`;
   const password = `GateTest1!${stamp}`;

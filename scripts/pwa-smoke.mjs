@@ -8,6 +8,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CACHE_NAME, classifyRequest, documentCacheUrl } from "../apps/web/public/sw.js";
+import { armWhatsNewDismiss } from "./lib/dismiss-whats-new.mjs";
 
 const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:3001";
 const NEXT_CACHE = "starhold-shell-v2";
@@ -251,7 +252,7 @@ async function main() {
         viewport: { width: vp.width, height: vp.height },
         serviceWorkers: "allow",
       });
-      const page = await context.newPage();
+      const page = await armWhatsNewDismiss(await context.newPage());
       const errors = [];
       page.on("pageerror", (err) => errors.push(String(err)));
       page.on("console", (msg) => {
@@ -413,7 +414,7 @@ async function main() {
     const standalone = await browser.newContext({
       viewport: { width: 390, height: 844 },
     });
-    const page = await standalone.newPage();
+    const page = await armWhatsNewDismiss(await standalone.newPage());
     await page.addInitScript(() => {
       Object.defineProperty(window.navigator, "standalone", { get: () => true });
     });

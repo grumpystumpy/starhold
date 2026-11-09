@@ -9,6 +9,7 @@ import { createActiveWaitClock } from "./active-wait-clock.mjs";
  * SESSION_SECRET + STARHOLD_E2E=1, playwright chromium installed.
  */
 import { createRequire } from "node:module";
+import { armWhatsNewDismiss } from "./lib/dismiss-whats-new.mjs";
 
 const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:3001";
 const API = process.env.STARHOLD_API ?? WEB;
@@ -48,7 +49,7 @@ async function main() {
   await context.grantPermissions(["clipboard-read", "clipboard-write"], {
     origin: WEB,
   });
-  const page = await context.newPage();
+  const page = await armWhatsNewDismiss(await context.newPage());
   const stamp = Date.now().toString(36);
   const email = `gate_br_${stamp}@example.com`;
   const password = `GateTest1!${stamp}`;
@@ -202,7 +203,7 @@ async function main() {
   }
 
   const guest = await browser.newContext({ viewport: { width: 1280, height: 800 } });
-  const guestPage = await guest.newPage();
+  const guestPage = await armWhatsNewDismiss(await guest.newPage());
   await guestPage.goto(reportUrl, { waitUntil: "networkidle" });
   await guestPage.getByTestId("shared-combat-report").waitFor({ timeout: 15_000 });
   const sharedDesktop = await guestPage.getByTestId("shared-combat-report").innerText();
@@ -249,7 +250,7 @@ async function main() {
   await page.setViewportSize({ width: 1280, height: 800 });
 
   const fresh = await browser.newContext();
-  const loginPage = await fresh.newPage();
+  const loginPage = await armWhatsNewDismiss(await fresh.newPage());
   await loginPage.goto(WEB, { waitUntil: "networkidle" });
   await loginPage.getByTestId("auth-email").fill(email);
   await loginPage.getByTestId("auth-password").fill(password);

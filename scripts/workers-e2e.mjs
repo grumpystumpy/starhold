@@ -7,6 +7,7 @@ import { createActiveWaitClock } from "./active-wait-clock.mjs";
  */
 import { createRequire } from "node:module";
 import { fleetToStep2 } from "./lib/fleet-two-step.mjs";
+import { armWhatsNewDismiss } from "./lib/dismiss-whats-new.mjs";
 
 const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:8787";
 const require = createRequire(import.meta.url);
@@ -72,7 +73,7 @@ async function waitHealthy() {
 
 async function runViewport(width, height) {
   const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage({ viewport: { width, height } });
+  const page = await armWhatsNewDismiss(await browser.newPage({ viewport: { width, height } }));
   const stamp = Date.now().toString(36);
   const email = `cf${stamp}@example.com`;
   const password = "starhold-cf";

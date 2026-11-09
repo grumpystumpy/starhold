@@ -9,6 +9,7 @@ import { createActiveWaitClock } from "./active-wait-clock.mjs";
  * and playwright chromium.
  */
 import { createRequire } from "node:module";
+import { armWhatsNewDismiss } from "./lib/dismiss-whats-new.mjs";
 
 const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:3001";
 const API = process.env.STARHOLD_API ?? WEB;
@@ -33,7 +34,7 @@ async function main() {
   const playwright = require("playwright");
   const browser = await playwright.chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
-  const page = await context.newPage();
+  const page = await armWhatsNewDismiss(await context.newPage());
   const errors = [];
   function watch(target) {
     target.on("pageerror", (err) => errors.push(`pageerror:${err.message}`));
@@ -103,7 +104,7 @@ async function main() {
   // Same-tab reload resumes the empire from localStorage. A clean context is
   // a signed-out device: no cookie and no saved commander.
   const loginCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
-  const loginPage = await loginCtx.newPage();
+  const loginPage = await armWhatsNewDismiss(await loginCtx.newPage());
   watch(loginPage);
   await loginPage.goto(WEB, { waitUntil: "networkidle" });
   await loginPage.getByTestId("auth-email").fill(email);
@@ -125,7 +126,7 @@ async function main() {
   if (!loggedOutAgain) throw new Error("second logout failed");
 
   const recoverCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
-  const recoverPage = await recoverCtx.newPage();
+  const recoverPage = await armWhatsNewDismiss(await recoverCtx.newPage());
   watch(recoverPage);
   await recoverPage.goto(WEB, { waitUntil: "networkidle" });
   await recoverPage.getByTestId("auth-forgot-link").click();

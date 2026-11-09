@@ -2,6 +2,7 @@
 import { mkdir } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { createActiveWaitClock } from "./active-wait-clock.mjs";
+import { armWhatsNewDismiss } from "./lib/dismiss-whats-new.mjs";
 
 /**
  * First-hour new-player audit — local production build only.
@@ -130,7 +131,7 @@ async function main() {
   const playwright = require("playwright");
   const browser = await playwright.chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
-  const page = await context.newPage();
+  const page = await armWhatsNewDismiss(await context.newPage());
   const errors = [];
   page.on("pageerror", (err) => errors.push(`pageerror:${err.message}`));
   page.on("console", (msg) => {

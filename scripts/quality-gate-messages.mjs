@@ -9,6 +9,7 @@ import { createActiveWaitClock } from "./active-wait-clock.mjs";
  * SESSION_SECRET set (or local fallback), playwright chromium installed.
  */
 import { createRequire } from "node:module";
+import { armWhatsNewDismiss } from "./lib/dismiss-whats-new.mjs";
 
 const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:3001";
 const API = process.env.STARHOLD_API ?? WEB;
@@ -33,7 +34,7 @@ async function main() {
   const playwright = require("playwright");
   const browser = await playwright.chromium.launch({ headless: true });
   const context = await browser.newContext();
-  const page = await context.newPage();
+  const page = await armWhatsNewDismiss(await context.newPage());
   const stamp = Date.now().toString(36);
   const email = `gate_msg_${stamp}@example.com`;
   const password = `GateTest1!${stamp}`;
@@ -75,7 +76,7 @@ async function main() {
   await page.getByTestId("messages-panel").waitFor({ timeout: 20_000 });
   logs.push("persist_reload_messages");
 
-  const page2 = await context.newPage();
+  const page2 = await armWhatsNewDismiss(await context.newPage());
   await page2.goto(WEB, { waitUntil: "networkidle" });
   const hasOverview = await page2
     .getByTestId("overview-panel")
@@ -91,7 +92,7 @@ async function main() {
   logs.push(hasOverview ? "cookie_resume_overview" : "cookie_resume_signed_in");
 
   const fresh = await browser.newContext();
-  const loginPage = await fresh.newPage();
+  const loginPage = await armWhatsNewDismiss(await fresh.newPage());
   await loginPage.goto(WEB, { waitUntil: "networkidle" });
   await loginPage.getByTestId("auth-email").fill(email);
   await loginPage.getByTestId("auth-password").fill(password);

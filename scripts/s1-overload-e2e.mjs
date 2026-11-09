@@ -3,6 +3,7 @@
  * Expects the API and the Vite build on http://127.0.0.1:3001.
  */
 import { createRequire } from "node:module";
+import { armWhatsNewDismiss } from "./lib/dismiss-whats-new.mjs";
 
 const require = createRequire(new URL("../apps/web/package.json", import.meta.url));
 const { chromium } = require("playwright");
@@ -13,7 +14,7 @@ const password = "hunter2xx";
 const commander = `S1${Date.now().toString(36).slice(-4)}`;
 
 const browser = await chromium.launch({ headless: true });
-const page = await browser.newPage();
+const page = await armWhatsNewDismiss(await browser.newPage());
 const upgradePosts = [];
 page.on("request", (req) => {
   if (req.method() === "POST" && new URL(req.url()).pathname === "/api/upgrade") {

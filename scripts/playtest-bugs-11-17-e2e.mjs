@@ -7,6 +7,7 @@
  * Server needs STARHOLD_E2E=1.
  */
 import { createRequire } from "node:module";
+import { armWhatsNewDismiss } from "./lib/dismiss-whats-new.mjs";
 
 const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:3001";
 const API = process.env.STARHOLD_API ?? WEB;
@@ -48,7 +49,7 @@ const VIEWPORTS = [
 ];
 
 async function runViewport(browser, viewport) {
-  const page = await browser.newPage({ viewport });
+  const page = await armWhatsNewDismiss(await browser.newPage({ viewport }));
   const tag = `${viewport.width}x${viewport.height}`;
   const stamp = `${Date.now().toString(36)}${viewport.width}`;
   try {

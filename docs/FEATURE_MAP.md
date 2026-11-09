@@ -200,6 +200,8 @@ Optional save field `player.whatsNewDismissedReleaseId` is written only by dismi
 | --- | --- | --- |
 | Dismiss | `POST /api/whats-new/dismiss` `{ playerId }` | owning session (401 without a cookie, 403 for another commander) |
 
+Playwright e2e, smoke, and quality-gate scripts dismiss that dialog before they click the shell or measure layout. A signed-in page presses Got it. A page opened with `?commander=` or `?playerId=` has no session, so `POST /api/e2e/grant` `{ dismissWhatsNew: true }` (only when `STARHOLD_E2E=1`) writes the same field and the next state read removes the dialog. Players still see the popup until they dismiss it. The helper is `scripts/lib/dismiss-whats-new.mjs`.
+
 The route is not called on a normal page load. `playerView` fills optional `whatsNew` (`releaseId`, `title`, `items`) or `null`. `apps/web/src/ui/render-shell.ts` paints the dialog inside `shellHtml` and `syncWhatsNewPopup` removes it when a patched shell's view is already dismissed. `apps/web/src/ui/render-app.ts` calls that sync on the patch path. The Got it button is handled in `apps/web/src/main-handlers-click.ts` via `apps/web/src/main-actions.ts` and `apps/web/src/main-actions-starshards.ts`, which post through `apps/web/src/api.ts`. The server route is in `apps/server/src/app.ts`. The player field lives on `packages/game/src/types-view.ts` and is copied through `packages/game/src/world-view.ts` and `packages/game/src/world.ts`. Dialog layout is in `apps/web/src/ui/styles-shell.css`. Test file lists that include the new suites are `packages/game/package.json` and `apps/server/package.json`. This entry is in `docs/FEATURE_MAP.md`.
 
 ## Credits and art pass

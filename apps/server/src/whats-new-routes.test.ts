@@ -108,4 +108,67 @@ describe("what's new dismiss route", () => {
     assert.ok(state.planet.resources.metal < metal + 50);
     assert.equal(state.fleets.length, fleetCount);
   });
+
+  it("e2e grant seeds the release key for a commander with no session", async () => {
+    const previous = process.env.STARHOLD_E2E;
+    const app = createApp();
+    const join = await app.request("/api/join", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Legacy" }),
+    });
+    assert.equal(join.status, 200);
+    const before = (await join.json()) as {
+      player: {
+        id: string;
+        whatsNewDismissedReleaseId?: string;
+        onboarding?: unknown;
+      };
+      planet: {
+        resources: { metal: number };
+        buildings: { metalMine: number };
+      };
+      fleets: unknown[];
+      whatsNew: { releaseId: string } | null;
+    };
+    assert.equal(before.player.whatsNewDismissedReleaseId, undefined);
+    assert.equal(before.whatsNew?.releaseId, "271");
+    delete process.env.STARHOLD_E2E;
+    const blocked = await app.request("/api/e2e/grant", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        playerId: before.player.id,
+        dismissWhatsNew: true,
+      }),
+    });
+    assert.equal(blocked.status, 404);
+
+    process.env.STARHOLD_E2E = "1";
+    try {
+      const grant = await app.request("/api/e2e/grant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          playerId: before.player.id,
+          dismissWhatsNew: true,
+        }),
+      });
+      assert.equal(grant.status, 200);
+      const after = (await grant.json()) as typeof before;
+      assert.equal(after.player.whatsNewDismissedReleaseId, "271");
+      assert.equal(after.whatsNew, null);
+      assert.equal(after.player.onboarding, undefined);
+      assert.ok(after.planet.resources.metal >= before.planet.resources.metal);
+      assert.ok(after.planet.resources.metal < before.planet.resources.metal + 50);
+      assert.equal(
+        after.planet.buildings.metalMine,
+        before.planet.buildings.metalMine,
+      );
+      assert.equal(after.fleets.length, before.fleets.length);
+    } finally {
+      if (previous === undefined) delete process.env.STARHOLD_E2E;
+      else process.env.STARHOLD_E2E = previous;
+    }
+  });
 });

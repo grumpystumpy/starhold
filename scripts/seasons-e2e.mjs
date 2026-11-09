@@ -8,6 +8,7 @@
  *   STARHOLD_API  default STARHOLD_WEB
  */
 import { createRequire } from "node:module";
+import { armWhatsNewDismiss } from "./lib/dismiss-whats-new.mjs";
 
 const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:3001";
 const API = process.env.STARHOLD_API ?? WEB;
@@ -58,9 +59,9 @@ async function main() {
   });
 
   const browser = await playwright.chromium.launch({ headless: true });
-  const page = await browser.newPage({
+  const page = await armWhatsNewDismiss(await browser.newPage({
     viewport: { width: 1280, height: 800 },
-  });
+  }));
   try {
     await page.goto(`${WEB}/seasons?playerId=${encodeURIComponent(playerId)}`, {
       waitUntil: "networkidle",

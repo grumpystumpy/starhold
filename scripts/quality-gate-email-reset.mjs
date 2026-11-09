@@ -9,6 +9,7 @@ import { createActiveWaitClock } from "./active-wait-clock.mjs";
  * started with EMAIL_MOCK=1, and playwright chromium.
  */
 import { createRequire } from "node:module";
+import { armWhatsNewDismiss } from "./lib/dismiss-whats-new.mjs";
 
 const WEB = process.env.STARHOLD_WEB ?? "http://127.0.0.1:3001";
 const API = process.env.STARHOLD_API ?? WEB;
@@ -50,7 +51,7 @@ async function main() {
   const playwright = require("playwright");
   const browser = await playwright.chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
-  const page = await context.newPage();
+  const page = await armWhatsNewDismiss(await context.newPage());
   const errors = [];
   function watch(target) {
     target.on("pageerror", (err) => errors.push(`pageerror:${err.message}`));
@@ -85,7 +86,7 @@ async function main() {
   if (!loggedOut) throw new Error("logout failed");
 
   const guestCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
-  const guest = await guestCtx.newPage();
+  const guest = await armWhatsNewDismiss(await guestCtx.newPage());
   watch(guest);
   await guest.goto(WEB, { waitUntil: "networkidle" });
   await guest.getByTestId("auth-email-reset-link").waitFor({ timeout: 15_000 });
@@ -108,7 +109,7 @@ async function main() {
   logs.push("mock_mail");
 
   const resetCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
-  const resetPage = await resetCtx.newPage();
+  const resetPage = await armWhatsNewDismiss(await resetCtx.newPage());
   watch(resetPage);
   await resetPage.goto(`${WEB}/?reset=${token}`, { waitUntil: "networkidle" });
   await resetPage.getByTestId("password-reset-form").waitFor({ timeout: 15_000 });
