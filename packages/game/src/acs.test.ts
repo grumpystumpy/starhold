@@ -102,6 +102,18 @@ describe("ACS joint strike", () => {
     assert.equal(report.attackerName, "Leader, Wing");
     assert.ok(universe.players[a.player.id]?.combatStats);
     assert.ok(universe.players[b.player.id]?.combatStats);
+    for (const participant of [a, b, c]) {
+      const view = playerView(universe, participant.player.id, when + 1);
+      assert.ok(
+        view.reports.some((entry) => entry.acsGroupId === acsId),
+        `${participant.player.name} receives the joint-strike combat report`,
+      );
+      assert.equal(
+        view.player.eventLog?.some((entry) => entry.kind === "raidAlert") ?? false,
+        false,
+        `${participant.player.name} does not get a duplicate raid alert`,
+      );
+    }
   });
 
   it("rejects cross-alliance join", () => {

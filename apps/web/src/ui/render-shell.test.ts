@@ -2,6 +2,7 @@ import "../test-dom";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createUniverse, joinUniverse, levelBonuses, playerView } from "@starhold/game";
+import type { CombatReport } from "@starhold/game";
 
 const { shellHtml, levelBonusLines } = await import("./render-shell.js");
 
@@ -93,5 +94,59 @@ describe("commander level help icon and bonuses", () => {
       "Weapons +19 levels",
       "Shielding +19 levels",
     ]);
+  });
+});
+
+describe("messages badge", () => {
+  it("counts an unrelated alert and skips a raid alert covered by the combat report", () => {
+    const now = 100_000_000;
+    const universe = createUniverse("Badge", 1);
+    const { player, planet } = joinUniverse(universe, "Defender", now);
+    const foe = joinUniverse(universe, "Raider", now + 1);
+    const report = {
+      id: "rpt_badge",
+      at: now,
+      missionId: "flt_badge",
+      attackerPlayerId: foe.player.id,
+      defenderPlayerId: player.id,
+      attackerName: "Raider",
+      defenderName: "Defender",
+      targetCoords: { ...planet.coords },
+      attackerBefore: {},
+      attackerAfter: {},
+      defenderBefore: {},
+      defenderAfter: {},
+      defensesBefore: {},
+      defensesAfter: {},
+      loot: { metal: 0, crystal: 0, deuterium: 0 },
+      debrisCreated: { metal: 0, crystal: 0, deuterium: 0 },
+      outcome: "draw",
+      rounds: 1,
+      summary: "Draw",
+    } as CombatReport;
+    universe.reports[report.id] = report;
+    player.eventLog = [
+      {
+        id: "evt_dup",
+        kind: "raidAlert",
+        createdAt: now,
+        readAt: null,
+        title: "Hostile raid resolved",
+        body: "Draw",
+        meta: { reportId: report.id },
+      },
+      {
+        id: "evt_keep",
+        kind: "fleetReturn",
+        createdAt: now + 1,
+        readAt: null,
+        title: "Fleet returned",
+        body: "home",
+      },
+    ];
+    const view = playerView(universe, player.id, now + 2);
+    const html = shellHtml(view, { error: null, notice: null, busy: false }, "overview", "<div>Main</div>");
+    assert.match(html, /data-testid="nav-messages-badge">1</);
+    assert.doesNotMatch(html, /data-testid="nav-messages-badge">2</);
   });
 });

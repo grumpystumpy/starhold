@@ -42,6 +42,7 @@
 .report-subwindow-title {
   margin: 0;
   font-size: 1.2rem;
+  overflow-wrap: anywhere;
 }
 
 .report-subwindow-close {
@@ -90,4 +91,73 @@
 .combat-report-loss {
   background: color-mix(in srgb, var(--bad, #f87171) 16%, var(--panel-bg, #181c24));
   border-color: var(--bad, #f87171);
+}
+
+.combat-report-draw {
+  border-color: var(--muted, #94a3b8);
+}
+
+.combat-side-compare,
+.combat-spoils {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.combat-side,
+.combat-loot,
+.combat-debris {
+  border: 1px solid var(--border-color, #2a3242);
+  border-radius: 6px;
+  padding: 0.65rem 0.75rem;
+  min-width: 0;
+}
+
+.combat-side h4,
+.combat-loot h4,
+.combat-debris h4,
+.battle-ship-totals h4 {
+  margin: 0 0 0.35rem;
+}
+
+.combat-you {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.combat-loot {
+  border-color: color-mix(in srgb, var(--ok, #4ade80) 55%, var(--border-color, #2a3242));
+}
+
+.combat-debris {
+  border-color: color-mix(in srgb, var(--accent, #fbbf24) 55%, var(--border-color, #2a3242));
+}
+
+.battle-ship-totals {
+  overflow-x: auto;
+  margin-top: 0.75rem;
+}
+
+@media (max-width: 640px) {
+  .combat-side-compare,
+  .combat-spoils {
+    grid-template-columns: 1fr;
+  }
+
+  .report-subwindow {
+    max-height: calc(100vh - 1rem);
+    padding: 0.75rem;
+  }
+
+  .report-subwindow-header {
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .report-subwindow-title {
+    font-size: 1rem;
+  }
 }

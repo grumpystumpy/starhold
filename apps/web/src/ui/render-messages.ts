@@ -226,9 +226,43 @@ function shipTotalsTable(
     .join("");
   return `<div class="battle-ship-totals" data-testid="battle-ship-totals-${side.toLowerCase()}"><h4>${side} ships</h4>${
     rows
-      ? `<table><thead><tr><th>Ship</th><th>Before</th><th>After</th><th>Lost</th></tr></thead><tbody>${rows}</tbody></table>`
+      ? `<table class="report-composition-table"><thead><tr><th>Ship</th><th>Before</th><th>After</th><th>Lost</th></tr></thead><tbody>${rows}</tbody></table>`
       : `<p class="meta">None</p>`
   }</div>`;
+}
+
+function shipCount(ships: CombatReport["attackerBefore"] | undefined): number {
+  let total = 0;
+  for (const id of SHIP_ORDER) total += ships?.[id] ?? 0;
+  return total;
+}
+
+function fullResourceLine(
+  resources: { metal?: number; crystal?: number; deuterium?: number } | null | undefined,
+): string {
+  return `${fmt(resources?.metal ?? 0)} metal, ${fmt(resources?.crystal ?? 0)} crystal, ${fmt(resources?.deuterium ?? 0)} deuterium`;
+}
+
+function combatSideHtml(
+  side: "Attacker" | "Defender",
+  report: CombatReport,
+  selfId: string,
+  loss: ReturnType<typeof combatLossSummary>,
+): string {
+  const attacking = side === "Attacker";
+  const before = attacking ? report.attackerBefore : report.defenderBefore;
+  const after = attacking ? report.attackerAfter : report.defenderAfter;
+  const shipsLost = attacking ? loss.attackerShipsLost : loss.defenderShipsLost;
+  const pointsLost = attacking ? loss.attackerPointsLost : loss.defenderPointsLost;
+  const playerId = attacking ? report.attackerPlayerId : report.defenderPlayerId;
+  const you = playerId === selfId;
+  return `<section class="combat-side" data-testid="combat-side-${side.toLowerCase()}"${you ? ' data-viewer="self"' : ""}><h4>${side}${you ? ' <span class="combat-you">You</span>' : ""}</h4><p class="meta">Ships before: ${fmt(shipCount(before))}</p><p class="meta">Survivors: ${fmt(shipCount(after))}</p><p class="meta">Total ships lost: ${fmt(shipsLost)}</p><p class="meta">Points lost: ${fmtCompact(pointsLost)}</p></section>`;
+}
+
+/** Losses, survivors, loot, and debris from the report's own counts. */
+export function combatReadoutHtml(report: CombatReport, selfId: string): string {
+  const loss = combatLossSummary(report);
+  return `<div class="combat-side-compare" data-testid="combat-side-compare">${combatSideHtml("Attacker", report, selfId, loss)}${combatSideHtml("Defender", report, selfId, loss)}</div><div class="combat-spoils" data-testid="combat-spoils"><section class="combat-loot" data-testid="combat-loot"><h4>Loot</h4><p>${fullResourceLine(report.loot)}</p></section><section class="combat-debris" data-testid="combat-debris"><h4>Debris</h4><p>${fullResourceLine(report.debrisCreated)}</p></section></div>`;
 }
 
 export function combatLossSummary(report: CombatReport): {
@@ -303,15 +337,12 @@ function renderReportSubwindow(view: PlayerView): string {
 
     const res = viewerResult(report, view.player.id);
     const pres = resultPresentation(res);
-    const loss = combatLossSummary(report);
 
     const atkCoords = report.originCoords
       ? `<a href="/galaxy?galaxy=${report.originCoords.galaxy}&amp;system=${report.originCoords.system}" class="coord-link" data-galaxy-coords="${fmtCoords(report.originCoords)}">${fmtCoords(report.originCoords)}</a>`
       : "";
     const defCoords = `<a href="/galaxy?galaxy=${report.targetCoords.galaxy}&amp;system=${report.targetCoords.system}" class="coord-link" data-galaxy-coords="${fmtCoords(report.targetCoords)}">${fmtCoords(report.targetCoords)}</a>`;
 
-    const debrisText = resourceNames(report.debrisCreated) || "None";
-    const lootText = resourceNames(report.loot) || "None";
     let defenseSummaryHtml = "";
     if (report.defensesDestroyed) {
       const destroyed = namedCounts(DEFENSE_ORDER, DEFENSES, report.defensesDestroyed) || "None";
@@ -331,13 +362,10 @@ function renderReportSubwindow(view: PlayerView): string {
           </div>
           <div class="report-section">
             <p class="meta"><strong>Result:</strong> ${pres.label} (${escapeHtml(report.outcome.replace("_", " "))})</p>
-            <p class="meta"><strong>Attacker:</strong> ${escapeHtml(report.attackerName)} ${atkCoords ? `(${atkCoords})` : ""} — Total ships lost: ${fmt(loss.attackerShipsLost)} · Points lost: ${fmtCompact(loss.attackerPointsLost)}</p>
-            <p class="meta"><strong>Defender:</strong> ${escapeHtml(report.defenderName)} (${defCoords}) — Total ships lost: ${fmt(loss.defenderShipsLost)} · Points lost: ${fmtCompact(loss.defenderPointsLost)}</p>
+            ${combatReadoutHtml(report, view.player.id)}
           </div>
           <div class="report-section">
-            <h4>Debris & Summary</h4>
-            <p class="meta"><strong>Debris field created:</strong> ${debrisText}</p>
-            <p class="meta"><strong>Loot:</strong> ${lootText}</p>
+            <h4>Ships</h4>
             ${shipTotalsTable("Attacker", report.attackerBefore, report.attackerAfter)}
             ${shipTotalsTable("Defender", report.defenderBefore, report.defenderAfter)}
             ${defenseSummaryHtml}
@@ -518,28 +546,60 @@ function expeditionItems(
   });
 }
 
-function eventItems(log: EventLogEntry[] | undefined): InboxItem[] {
-  return (log ?? []).map((entry) => ({
-    kind: entry.kind,
-    id: entry.id,
-    at: entry.createdAt,
-    title: entry.title,
-    body: entry.body,
-    unread: entry.readAt == null,
-    href: entry.href,
-  }));
+function eventItems(
+  log: EventLogEntry[] | undefined,
+  reports: PlayerView["reports"],
+  playerId: string,
+): InboxItem[] {
+  return (log ?? [])
+    .filter((entry) => {
+      if (entry.kind !== "raidAlert") return true;
+      const reportId = entry.meta?.reportId;
+      if (typeof reportId === "string") {
+        return !reports.some((report) => report.id === reportId);
+      }
+      const pirateBaseId = entry.meta?.pirateBaseId;
+      return !(
+        typeof pirateBaseId === "string" &&
+        reports.some(
+          (report) =>
+            report.defenderPlayerId === playerId &&
+            report.missionId === pirateBaseId &&
+            report.at === entry.createdAt,
+        )
+      );
+    })
+    .map((entry) => ({
+      kind: entry.kind,
+      id: entry.id,
+      at: entry.createdAt,
+      title: entry.title,
+      body: entry.body,
+      unread: entry.readAt == null,
+      href: entry.href,
+    }));
 }
 
 /** Merge combat / spy / expedition reports with the player event log, newest first. */
 export function collectInbox(view: PlayerView): InboxItem[] {
+  const reports = view.reports ?? [];
   const items: InboxItem[] = [
-    ...combatItems(view.reports ?? [], view.player.id),
+    ...combatItems(reports, view.player.id),
     ...spyItems(view.spyReports ?? []),
     ...expeditionItems(view.expeditionReports ?? []),
-    ...eventItems(view.player.eventLog),
+    ...eventItems(view.player.eventLog, reports, view.player.id),
   ];
   items.sort((a, b) => b.at - a.at || a.id.localeCompare(b.id));
   return items;
+}
+
+/** Unread rows the inbox actually shows, after duplicate combat alerts are hidden. */
+export function inboxUnreadCount(view: PlayerView): number {
+  let unread = 0;
+  for (const item of collectInbox(view)) {
+    if (item.unread) unread += 1;
+  }
+  return unread;
 }
 
 function filterButton(id: InboxFilter, label: string, active: InboxFilter): string {
@@ -613,7 +673,7 @@ export function messagesPageHtml(
               shareBtn = report.shareCode
                 ? `<div class="battle-report-actions"><button type="button" class="ghost" data-copy-battle-share="${escapeAttr(report.id)}" data-testid="copy-battle-share-${escapeAttr(report.id)}">Copy share</button></div>`
                 : "";
-              combatDetails = `<details class="inbox-combat-details" data-testid="inbox-combat-details-${escapeAttr(report.id)}"><summary>Battle details</summary>${shipTotalsTable("Attacker", report.attackerBefore, report.attackerAfter)}${shipTotalsTable("Defender", report.defenderBefore, report.defenderAfter)}</details>`;
+              combatDetails = `<details class="inbox-combat-details" data-testid="inbox-combat-details-${escapeAttr(report.id)}"><summary>Battle details</summary>${combatReadoutHtml(report, view.player.id)}${shipTotalsTable("Attacker", report.attackerBefore, report.attackerAfter)}${shipTotalsTable("Defender", report.defenderBefore, report.defenderAfter)}</details>`;
             }
             const spy =
               item.kind === "spy"

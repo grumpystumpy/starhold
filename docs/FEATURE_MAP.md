@@ -46,7 +46,7 @@ The seasonal pirate mothership is one marked `PirateBase` in `pirateBases`, trac
 
 ## Messages
 
-Messages in the inbox display category badges matching their filter bucket (`Combat`, `Spy`, `Alerts`) alongside the specific kind badge (`message-kind`), allowing players to identify message categories at a glance.
+Messages in the inbox display category badges matching their filter bucket (`Combat`, `Spy`, `Alerts`) alongside the specific kind badge (`message-kind`), allowing players to identify message categories at a glance. After combat resolves, each attacker (including a Joint Strike participant) and the defender receive that combat report, and no extra raid alert is written. A saved post-resolution `raidAlert` stays hidden, including from the unread badge, only when its matching combat report is visible. Unrelated alerts and pre-attack hostile-fleet warnings remain. The combat report, in the inbox details and the report subwindow, compares each side's ships before, survivors, and losses from that report's before/after counts, and shows loot and debris as separate figures. Attacker and defender viewpoints, Before/After tables, share links, and inbox filters stay. The paths are `world-arrival-raid.ts` (planet, occupy, and moon fights), `world-pirates.ts` (pirate and alien raids), `world-view.ts` (who receives the report), `render-messages.ts` and `styles.css` (inbox and subwindow), and `render-shell.ts` with `patch-chrome.ts` (unread badge).
 
 ## Fleet tab
 

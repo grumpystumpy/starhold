@@ -130,7 +130,6 @@ import {
 import { noteGoalMetric } from "./world-goals.js";
 import { emptyCargo, planetAtCoords } from "./world-bootstrap.js";
 import { consumeTickBudget, syncPlanetForTick, tickBudget } from "./tick-budget.js";
-import { pushEventLog } from "./world-event-log.js";
 import {
   payBossParticipation,
   recordBossDamage,
@@ -1842,18 +1841,6 @@ export function applyNpcRaidOnPlanet(
   }
   // Successful pirate raid for fairness (#18) — aliens exempt; fires when raid lands.
   if (faction === "pirate") recordSuccessfulPirateRaid(owner, now);
-  pushEventLog(owner, {
-    kind: "raidAlert",
-    createdAt: now,
-    title: `Hostile raid resolved at ${planet.name}`,
-    body: `${base.name}: ${combat.summary}`,
-    meta: {
-      pirateBaseId: base.id,
-      outcome: combat.outcome,
-      planetId: planet.id,
-      raidFleet: JSON.stringify(raidFleet),
-    },
-  });
   universe.players[owner.id] = owner;
   if (fleetShipCount(base.ships) <= 0 && defenseCount(base.defenses) <= 0) {
     markDestroyed(base, now);
