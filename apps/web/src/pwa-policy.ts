@@ -41,6 +41,16 @@ export function mayApplyAppUpdate(fleetFormOpen: boolean): boolean {
   return !fleetFormOpen;
 }
 
+/**
+ * A newer worker is ready for the next visit. `skipWaiting` can move the
+ * worker to `activating` or `activated` before a listener reads `installed`,
+ * so those states count too. The page is not reloaded here.
+ */
+export function serviceWorkerUpdateReady(phase: string, hasController: boolean): boolean {
+  if (!hasController) return false;
+  return phase === "installed" || phase === "activating" || phase === "activated";
+}
+
 /** Production builds load a hashed chunk. Vite dev loads `/src/main.ts`. */
 export function shouldRegisterServiceWorker(moduleSrc: string | null | undefined): boolean {
   return /^\/assets\/[^/]+\.js$/.test(moduleSrc ?? "");

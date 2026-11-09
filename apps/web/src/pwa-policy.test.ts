@@ -8,6 +8,7 @@ import {
   isStandalone,
   mayApplyAppUpdate,
   renderPwaChrome,
+  serviceWorkerUpdateReady,
   shouldRegisterServiceWorker,
 } from "./pwa-policy.js";
 import {
@@ -96,6 +97,12 @@ describe("offline and updates", () => {
     assert.match(ready, /Nothing was replayed/);
     assert.match(ready, /data-testid="pwa-update-apply"/);
     assert.equal(mayApplyAppUpdate(false), true);
+    assert.equal(serviceWorkerUpdateReady("installed", true), true);
+    assert.equal(serviceWorkerUpdateReady("activating", true), true);
+    assert.equal(serviceWorkerUpdateReady("activated", true), true);
+    assert.equal(serviceWorkerUpdateReady("activated", false), false);
+    assert.equal(serviceWorkerUpdateReady("installing", true), false);
+    assert.equal(serviceWorkerUpdateReady("redundant", true), false);
   });
 
   it("registers a worker only for the production hashed bundle", () => {
