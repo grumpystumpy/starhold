@@ -572,6 +572,24 @@ a.message-title:hover {
   white-space: nowrap;
 }
 
+button.galaxy-debris-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+button.galaxy-debris-badge:hover:not(:disabled) {
+  filter: none;
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
 .galaxy-tactical-deck {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

@@ -115,6 +115,15 @@ describe("galaxy page rendering", () => {
     assert.match(html, /data-testid="galaxy-moon-art-1"/);
     assert.match(html, /data-testid="galaxy-debris-1"/);
     assert.match(html, /debris 500\/200/);
+    assert.match(
+      html,
+      /<button type="button" class="galaxy-debris-badge" data-galaxy-harvest="1" data-testid="galaxy-debris-1"[^>]*>debris 500\/200<\/button>/,
+    );
+    assert.doesNotMatch(html, /<span class="galaxy-debris-badge"/);
+    assert.doesNotMatch(html, /data-galaxy-harvest="2"/);
+    assert.doesNotMatch(html, /data-galaxy-harvest="3"/);
+    const busy = pageHtml("galaxy", view, true, null);
+    assert.match(busy, /data-galaxy-harvest="1"[^>]*disabled/);
     assert.doesNotMatch(html, /500M/);
     assert.match(html, /1\.2K pts/);
     assert.match(html, /class="[^"]*galaxy-slot-occupied[^"]*galaxy-slot-marked[^"]*"[^>]*data-testid="galaxy-slot-2"/);
@@ -224,6 +233,7 @@ describe("galaxy page rendering", () => {
     // Spec B7-17: Mini planet row number precedes disc, no coords
     assert.match(html, /<span class="galaxy-slot-num" data-testid="galaxy-mini-slot-num-17">17<\/span>/);
     assert.match(html, /<span class="galaxy-slot-label">Mini Scout · debris 100\/50<\/span>/);
+    assert.doesNotMatch(html, /data-galaxy-harvest/);
 
     // Spec B7-13: Mini planet preset icons
     // Foreign mini (Scout): spy, attack, claim, destroy
@@ -272,6 +282,37 @@ describe("galaxy page rendering", () => {
     assert.match(html, /<span class="galaxy-slot-label">Tagged \[&lt;X&amp;&gt;\]/);
     assert.doesNotMatch(html, /\[<X&>\]/);
     assert.match(html, /<span class="galaxy-slot-label">Loner(?! \[)/);
+  });
+
+  it("puts a harvest button only on slots that hold metal or crystal debris", () => {
+    const slots = [1, 2, 3].map((slot) => ({
+      coords: { galaxy: 2, system: 3, slot },
+      planetId: null,
+      playerId: null,
+      playerName: null,
+      allianceTag: null,
+      empirePoints: 0,
+      isOwn: false,
+      hasMoon: false,
+      moonId: null,
+      debris:
+        slot === 1
+          ? { metal: 0, crystal: 40 }
+          : slot === 2
+            ? { metal: 15, crystal: 0 }
+            : { metal: 0, crystal: 0 },
+      artId: "normal-1",
+      artThumbUrl: "/thumb.webp",
+      allianceMarker: null,
+    }));
+    const view = {
+      galaxy: { galaxy: 2, system: 3, slots, minis: [], asteroids: [] },
+    } as unknown as PlayerView;
+    const html = pageHtml("galaxy", view, false, null);
+    assert.match(html, /data-galaxy-harvest="1"[^>]*>debris 0\/40<\/button>/);
+    assert.match(html, /data-galaxy-harvest="2"[^>]*>debris 15\/0<\/button>/);
+    assert.doesNotMatch(html, /data-galaxy-harvest="3"/);
+    assert.doesNotMatch(html, /data-testid="galaxy-debris-3"/);
   });
 
   it("banners an active seasonal boss with a one-click raid prefill", () => {
