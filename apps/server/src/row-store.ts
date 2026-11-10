@@ -11,6 +11,8 @@ import {
   ensureSystemVisited,
   ensureUniverseShape,
   highscoresBoard,
+  appendHighscoreRankHistory,
+  utcHighscoreDay,
   allianceRankBoard,
   type AllianceRankEntry,
   type AsteroidField,
@@ -744,9 +746,18 @@ async function writeHighscoreCache(
 function buildHighscoreCache(
   universe: UniverseState,
   includeCombatLists: boolean,
+  previousRows?: readonly HighscoreEntry[],
+  now = Date.now(),
 ): HighscoreCache {
+  const day = utcHighscoreDay(now);
+  const prior = new Map(
+    (previousRows ?? []).map((row) => [row.playerId, row.rankHistory] as const),
+  );
   return {
-    rows: highscoresBoard(universe),
+    rows: highscoresBoard(universe).map((row) => ({
+      ...row,
+      rankHistory: appendHighscoreRankHistory(prior.get(row.playerId), day, row.rank),
+    })),
     hallOfFame: includeCombatLists ? combatHallOfFame(universe) : [],
     hallOfShame: includeCombatLists ? combatHallOfShame(universe) : [],
   };
@@ -1905,6 +1916,15 @@ async function commitRows(db: D1Like, stmts: D1Stmt[]): Promise<void> {
   }
 }
 
+function withKeptRankHistory(
+  row: HighscoreEntry,
+  historyByPlayer: ReadonlyMap<string, NonNullable<HighscoreEntry["rankHistory"]>>,
+): HighscoreEntry {
+  const rankHistory = historyByPlayer.get(row.playerId);
+  if (!rankHistory?.length) return row;
+  return { ...row, rankHistory };
+}
+
 function rerank(rows: HighscoreEntry[]): HighscoreEntry[] {
   const sorted = [...rows].sort(
     (a, b) =>
@@ -2156,9 +2176,11 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
   let allianceJson: string | null = null;
   let boardAt = 0;
   if (rebuildScores) {
-    boardJson = timedStringify(buildHighscoreCache(universe, true));
+    const now = Date.now();
+    const previousRows = currentScope()?.priorHighscoreRows;
+    boardJson = timedStringify(buildHighscoreCache(universe, true, previousRows, now));
     allianceJson = timedStringify(allianceRankBoard(universe));
-    boardAt = Date.now();
+    boardAt = now;
   } else {
     // Keep the board in step with every player this save scored correctly:
     // new joiners plus changed players whose planets were all fully loaded.
@@ -2172,7 +2194,14 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
     }
     if (scoredIds.size) {
       const cached = currentScope()?.highscores ?? [];
-      const mine = highscoresBoard(universe).filter((row) => scoredIds.has(row.playerId));
+      const historyByPlayer = new Map(
+        cached.flatMap((row) =>
+          row.rankHistory?.length ? [[row.playerId, row.rankHistory] as const] : [],
+        ),
+      );
+      const mine = highscoresBoard(universe)
+        .filter((row) => scoredIds.has(row.playerId))
+        .map((row) => withKeptRankHistory(row, historyByPlayer));
       if (mine.length) {
         const kept = cached.filter((row) => !scoredIds.has(row.playerId));
         const halls = await combatHallsForPartialSave(db, universe);
@@ -2400,11 +2429,13 @@ async function attachBoard(db: D1Like, work: UniverseWork | undefined): Promise<
   if (!scope) return;
   scope.allianceHighscores = cached.alliances;
   if (work?.maintenance) {
+    scope.priorHighscoreRows = board?.cache.rows ?? [];
     scope.highscores = undefined;
     scope.hallOfFame = undefined;
     scope.hallOfShame = undefined;
     return;
   }
+  scope.priorHighscoreRows = undefined;
   scope.highscores = board?.cache.rows ?? [];
   scope.hallOfFame = board?.cache.hallOfFame ?? [];
   scope.hallOfShame = board?.cache.hallOfShame ?? [];

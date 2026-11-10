@@ -12,6 +12,7 @@ import {
   createUniverse,
   empirePoints,
   graduateNewbieProtection,
+  HIGHSCORE_RANK_HISTORY_DAYS,
   joinUniverse,
   launchFleet,
   migrateOrResetUniverse,
@@ -27,6 +28,7 @@ import {
   queueShipBuild,
   resolvePirateRaidArrival,
   tickPirates,
+  utcHighscoreDay,
   UNIVERSE_SCHEMA_VERSION,
   emptyDefenses,
   emptyFleetShips,
@@ -2740,5 +2742,169 @@ describe("row save review fixes", () => {
     assert.equal(done, true);
     assert.ok(totalPlayers >= 115);
     assert.ok(maxQueries <= 50);
+  });
+});
+
+describe("highscore 7-day rank snapshots", () => {
+  function boardDoc(raw: DatabaseSync): {
+    rows: Array<{ playerId: string; rank: number; rankHistory?: Array<{ day: string; rank: number }> }>;
+  } {
+    const row = raw.prepare("SELECT doc FROM save_highscores WHERE id = 'board'").get() as { doc: string };
+    return JSON.parse(row.doc) as {
+      rows: Array<{ playerId: string; rank: number; rankHistory?: Array<{ day: string; rank: number }> }>;
+    };
+  }
+
+  function shiftUtcDay(day: string, delta: number): string {
+    const [year, month, date] = day.split("-").map(Number);
+    const next = new Date(Date.UTC(year!, (month ?? 1) - 1, date ?? 1));
+    next.setUTCDate(next.getUTCDate() + delta);
+    return next.toISOString().slice(0, 10);
+  }
+
+  async function maintain(db: D1Like): Promise<void> {
+    const store = createD1Store(db);
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "POST", cpuMs: 0 },
+      () => withUniverse(() => undefined, { maintenance: true }),
+    );
+  }
+
+  it("writes one UTC day on maintenance and does not duplicate that day", async () => {
+    resetMemoryUniverse();
+    const { db, raw } = sqliteD1();
+    const source = fixture();
+    await migrateAll(db, source);
+    const migrated = boardDoc(raw);
+    const stripped = {
+      ...migrated,
+      rows: migrated.rows.map(({ rankHistory: _history, ...row }) => row),
+    };
+    raw.prepare("UPDATE save_highscores SET doc = ? WHERE id = 'board'").run(JSON.stringify(stripped));
+
+    const day = utcHighscoreDay(Date.now());
+    await maintain(db);
+    const first = boardDoc(raw);
+    assert.ok(first.rows.length >= 2);
+    for (const row of first.rows) {
+      assert.deepEqual(row.rankHistory, [{ day, rank: row.rank }]);
+    }
+
+    const alpha = Object.values(source.players).find((player) => player.name === "OldHand")!;
+    const stored = raw.prepare("SELECT doc FROM save_highscores WHERE id = 'board'").get() as { doc: string };
+    await runWithScope(
+      { kv: createD1Store(db), db, mode: "d1", method: "GET", cpuMs: 0 },
+      () => withUniverseRead(() => undefined, { playerIds: [alpha.id], galaxy: 1, system: 1 }),
+    );
+    const afterRead = raw.prepare("SELECT doc FROM save_highscores WHERE id = 'board'").get() as { doc: string };
+    assert.equal(afterRead.doc, stored.doc);
+
+    await maintain(db);
+    const second = boardDoc(raw);
+    for (const row of second.rows) {
+      assert.equal(row.rankHistory?.length, 1);
+      assert.equal(row.rankHistory?.[0]?.day, day);
+      assert.equal(row.rankHistory?.[0]?.rank, row.rank);
+      assert.equal(new Set(row.rankHistory?.map((point) => point.day)).size, 1);
+    }
+  });
+
+  it("drops the oldest day so each commander keeps at most 7 points", async () => {
+    assert.equal(HIGHSCORE_RANK_HISTORY_DAYS, 7);
+    resetMemoryUniverse();
+    const { db, raw } = sqliteD1();
+    const source = fixture();
+    await migrateAll(db, source);
+    const today = utcHighscoreDay(Date.now());
+    const seeded = Array.from({ length: HIGHSCORE_RANK_HISTORY_DAYS }, (_, index) => ({
+      day: shiftUtcDay(today, index - HIGHSCORE_RANK_HISTORY_DAYS),
+      rank: index + 1,
+    }));
+    const current = boardDoc(raw);
+    raw.prepare("UPDATE save_highscores SET doc = ? WHERE id = 'board'").run(JSON.stringify({
+      ...current,
+      rows: current.rows.map((row) => ({ ...row, rankHistory: seeded })),
+    }));
+
+    await maintain(db);
+    const after = boardDoc(raw);
+    const expectedDays = [...seeded.slice(1).map((point) => point.day), today];
+    assert.equal(expectedDays.length, 7);
+    for (const row of after.rows) {
+      assert.equal(row.rankHistory?.length, 7);
+      assert.deepEqual(row.rankHistory?.map((point) => point.day), expectedDays);
+      assert.equal(row.rankHistory?.[0]?.day, shiftUtcDay(today, -6));
+      assert.equal(row.rankHistory?.[0]?.rank, seeded[1]?.rank);
+      assert.equal(row.rankHistory?.[6]?.day, today);
+      assert.equal(row.rankHistory?.[6]?.rank, row.rank);
+      assert.equal(new Set(row.rankHistory?.map((point) => point.day)).size, 7);
+    }
+  });
+
+  it("loads a legacy board with no history and does not invent a sparkline on read", async () => {
+    resetMemoryUniverse();
+    const { db, raw } = sqliteD1();
+    const source = fixture();
+    await migrateAll(db, source);
+    const current = boardDoc(raw);
+    const legacyRows = current.rows.map(({ rankHistory: _history, ...row }) => row);
+    const legacyDoc = JSON.stringify(legacyRows);
+    const builtAt = Date.now();
+    raw.prepare("UPDATE save_highscores SET doc = ?, built_at = ? WHERE id = 'board'").run(legacyDoc, builtAt);
+    const alpha = Object.values(source.players).find((player) => player.name === "OldHand")!;
+    await runWithScope(
+      { kv: createD1Store(db), db, mode: "d1", method: "GET", cpuMs: 0 },
+      () => withUniverseRead((universe) => {
+        const view = playerView(universe, alpha.id, Date.now(), 1, 1, { skipUniverseTick: true });
+        assert.ok(view.highscores.length >= 2);
+        for (const row of view.highscores) assert.equal(row.rankHistory, undefined);
+        assert.ok(view.highscores.some((row) => row.playerId === alpha.id));
+      }, { playerIds: [alpha.id], galaxy: 1, system: 1 }),
+    );
+    const afterRead = raw.prepare("SELECT doc FROM save_highscores WHERE id = 'board'").get() as { doc: string };
+    assert.equal(afterRead.doc.includes("rankHistory"), false);
+
+    const objectDoc = JSON.stringify({ rows: legacyRows, hallOfFame: [], hallOfShame: [] });
+    raw.prepare("UPDATE save_highscores SET doc = ?, built_at = ? WHERE id = 'board'").run(objectDoc, builtAt);
+    await runWithScope(
+      { kv: createD1Store(db), db, mode: "d1", method: "GET", cpuMs: 0 },
+      () => withUniverseRead((universe) => {
+        const view = playerView(universe, alpha.id, Date.now(), 1, 1, { skipUniverseTick: true });
+        assert.ok(view.highscores.every((row) => row.rankHistory === undefined));
+      }, { playerIds: [alpha.id], galaxy: 1, system: 1 }),
+    );
+    const afterObject = raw.prepare("SELECT doc FROM save_highscores WHERE id = 'board'").get() as { doc: string };
+    assert.equal(afterObject.doc.includes("rankHistory"), false);
+  });
+
+  it("keeps stored rank history when a normal save rewrites a commander row", async () => {
+    resetMemoryUniverse();
+    const { db, raw } = sqliteD1();
+    const source = fixture();
+    await migrateAll(db, source);
+    const today = utcHighscoreDay(Date.now());
+    const current = boardDoc(raw);
+    const legacyRows = current.rows.map(({ rankHistory: _history, ...row }) => row);
+    raw.prepare("UPDATE save_highscores SET doc = ? WHERE id = 'board'").run(JSON.stringify({
+      ...current,
+      rows: legacyRows,
+    }));
+    await maintain(db);
+    const before = boardDoc(raw);
+    const alpha = Object.values(source.players).find((player) => player.name === "OldHand")!;
+    await runWithScope(
+      { kv: createD1Store(db), db, mode: "d1", method: "POST", cpuMs: 0 },
+      () => withUniverse((universe) => {
+        const player = universe.players[alpha.id]!;
+        player.starshards = (player.starshards ?? 0) + 1;
+      }, { playerIds: [alpha.id] }),
+    );
+    const after = boardDoc(raw);
+    for (const row of after.rows) {
+      const previous = before.rows.find((item) => item.playerId === row.playerId);
+      assert.deepEqual(row.rankHistory, previous?.rankHistory);
+      assert.equal(row.rankHistory?.length, 1);
+      assert.equal(row.rankHistory?.[0]?.day, today);
+    }
   });
 });
