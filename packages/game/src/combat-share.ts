@@ -14,6 +14,7 @@ import type {
   PublicCombatReport,
   UniverseState,
 } from "./types.js";
+import { noteAchievementCount } from "./world-achievements.js";
 
 function fmtNum(n: number): string {
   return Math.floor(n).toLocaleString("en-US");
@@ -103,6 +104,17 @@ function splitValue(total: number, count: number, index: number): number {
   return Math.floor(total / count) + (index < total % count ? 1 : 0);
 }
 
+function hullsLost(
+  before: Partial<FleetShips> | undefined,
+  after: Partial<FleetShips> | undefined,
+): number {
+  let total = 0;
+  for (const id of SHIP_ORDER) {
+    total += Math.max(0, (before?.[id] ?? 0) - (after?.[id] ?? 0));
+  }
+  return total;
+}
+
 function shipTotal(ships: Partial<FleetShips> | undefined): number {
   let total = 0;
   for (const id of SHIP_ORDER) total += ships?.[id] ?? 0;
@@ -155,6 +167,7 @@ export function recordCombatReport(
       ids: attackers,
       lost: attackerLoss,
       destroyed: defenderLoss + defenseLoss,
+      hulls: hullsLost(report.defenderBefore, report.defenderAfter),
       won: report.outcome === "attacker_win",
       lostBattle: report.outcome === "defender_win",
     },
@@ -162,6 +175,7 @@ export function recordCombatReport(
       ids: [report.defenderPlayerId],
       lost: defenderLoss,
       destroyed: attackerLoss,
+      hulls: hullsLost(report.attackerBefore, report.attackerAfter),
       won: report.outcome === "defender_win",
       lostBattle: report.outcome === "attacker_win",
     },
@@ -183,6 +197,8 @@ export function recordCombatReport(
       if (side.won) stats.wins += 1;
       if (side.lostBattle) stats.losses += 1;
       player.combatStats = stats;
+      const hullShare = splitValue(side.hulls, count, index);
+      if (hullShare > 0) noteAchievementCount(player, "shipsDestroyed", hullShare);
     });
   }
 }

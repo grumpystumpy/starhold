@@ -2094,6 +2094,132 @@ export const ONBOARDING_STEPS: readonly OnboardingStepTuning[] = [
   },
 ];
 
+/**
+ * One-time achievements. Rewards are Starshards only and stay small
+ * next to the daily and weekly goal payouts. `highscoreRank` uses
+ * `target` as the best rank that still counts (10 means 10th or better).
+ */
+export type AchievementMetric =
+  | "moons"
+  | "colonies"
+  | "shipsDestroyed"
+  | "pirateBases"
+  | "highscoreRank"
+  | "expeditions"
+  | "victories"
+  | "research"
+  | "alliance"
+  | "officer"
+  | "commanderLevel";
+
+export interface AchievementTuning {
+  id: string;
+  metric: AchievementMetric;
+  title: string;
+  detail: string;
+  target: number;
+  starshards: number;
+}
+
+export const ACHIEVEMENTS: readonly AchievementTuning[] = [
+  {
+    id: "firstMoon",
+    metric: "moons",
+    title: "First moon",
+    detail: "Own a moon.",
+    target: 1,
+    starshards: 15,
+  },
+  {
+    id: "firstColony",
+    metric: "colonies",
+    title: "First colony",
+    detail: "Own a planet that is not your homeworld and not a moon.",
+    target: 1,
+    starshards: 15,
+  },
+  {
+    id: "shipsDestroyed1000",
+    metric: "shipsDestroyed",
+    title: "Thousand hulls",
+    detail: "Destroy 1,000 enemy ships. Defenses do not count.",
+    target: 1000,
+    starshards: 25,
+  },
+  {
+    id: "firstPirateBase",
+    metric: "pirateBases",
+    title: "Pirate base",
+    detail: "Destroy a pirate base.",
+    target: 1,
+    starshards: 20,
+  },
+  {
+    id: "highscoreTop10",
+    metric: "highscoreRank",
+    title: "Top 10",
+    detail: "Place 10th or better on the commander board, with at least one other commander.",
+    target: 10,
+    starshards: 20,
+  },
+  {
+    id: "expeditions10",
+    metric: "expeditions",
+    title: "Ten expeditions",
+    detail: "Finish 10 expedition flights. An empty find still counts.",
+    target: 10,
+    starshards: 15,
+  },
+  {
+    id: "firstVictory",
+    metric: "victories",
+    title: "First victory",
+    detail: "Win a battle.",
+    target: 1,
+    starshards: 10,
+  },
+  {
+    id: "victories10",
+    metric: "victories",
+    title: "Ten victories",
+    detail: "Win 10 battles.",
+    target: 10,
+    starshards: 20,
+  },
+  {
+    id: "firstResearch",
+    metric: "research",
+    title: "First research",
+    detail: "Finish any research at level 1.",
+    target: 1,
+    starshards: 10,
+  },
+  {
+    id: "firstAlliance",
+    metric: "alliance",
+    title: "Alliance",
+    detail: "Join or found an alliance.",
+    target: 1,
+    starshards: 10,
+  },
+  {
+    id: "officerHired",
+    metric: "officer",
+    title: "Officer",
+    detail: "Hire an officer.",
+    target: 1,
+    starshards: 10,
+  },
+  {
+    id: "commanderLevel5",
+    metric: "commanderLevel",
+    title: "Commander level 5",
+    detail: "Reach commander level 5.",
+    target: 5,
+    starshards: 15,
+  },
+];
+
 /** Per-player ring buffer for synthetic empire alerts (builds, returns, raids, minis). */
 export const EVENT_LOG_MAX = 100;
 /** Same-galaxy system distance that counts as “nearby” for mini-planet sightings. */

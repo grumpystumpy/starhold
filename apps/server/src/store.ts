@@ -620,6 +620,10 @@ function structuralHint(universe: UniverseState): string {
     mix(player.eventLog?.length ?? 0);
     mix(player.starshards ?? 0);
     mix(player.highscoreStarshardsClaimed ? 1 : 0);
+    mix(player.achievements?.unlocked.length ?? 0);
+    mix(player.achievements?.shipsDestroyed ?? 0);
+    mix(player.achievements?.expeditions ?? 0);
+    mix(player.achievements?.pirateBasesDestroyed ?? 0);
     mixStr(player.season?.seasonId ?? "");
     mix(player.season?.combat ?? 0);
     mix(player.season?.economy ?? 0);
