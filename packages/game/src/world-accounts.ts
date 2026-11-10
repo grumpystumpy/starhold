@@ -1,11 +1,49 @@
-import type { PlayerState, UniverseState } from "./types.js";
+import type { FleetMission, PlayerState, UniverseState } from "./types.js";
 import { ensureUniverseShape } from "./world-bootstrap.js";
 
-/** True only when the save field is explicitly on. Absent means off. */
+/** True only when the save field is present. Absent means off. */
 export function isVacationMode(
-  player: { vacationMode?: boolean } | null | undefined,
+  player: { vacationMode?: { startedAt?: number } } | null | undefined,
 ): boolean {
-  return player?.vacationMode === true;
+  const startedAt = player?.vacationMode?.startedAt;
+  return typeof startedAt === "number" && Number.isFinite(startedAt);
+}
+
+/** When vacation was turned on, or null when it is off. */
+export function vacationStartedAt(
+  player: { vacationMode?: { startedAt?: number } } | null | undefined,
+): number | null {
+  return isVacationMode(player) ? player!.vacationMode!.startedAt! : null;
+}
+
+/**
+ * True when this Joint Strike was opened before the defender turned vacation on.
+ * A missing group or an off defender is false.
+ */
+export function acsGroupPredatesVacation(
+  universe: UniverseState,
+  groupId: string | null | undefined,
+  defender: PlayerState | null | undefined,
+): boolean {
+  const start = vacationStartedAt(defender);
+  if (start == null || !groupId) return false;
+  const createdAt = universe.acsGroups?.[groupId]?.createdAt;
+  return typeof createdAt === "number" && createdAt < start;
+}
+
+/**
+ * True when this hostile fleet was launched before vacation, or it is joining
+ * a Joint Strike that was opened before vacation.
+ */
+export function fleetPredatesVacation(
+  universe: UniverseState,
+  fleet: Pick<FleetMission, "departedAt" | "acsGroupId">,
+  defender: PlayerState | null | undefined,
+): boolean {
+  const start = vacationStartedAt(defender);
+  if (start == null) return true;
+  if (fleet.departedAt < start) return true;
+  return acsGroupPredatesVacation(universe, fleet.acsGroupId, defender);
 }
 
 export type VacationModeResult =
@@ -20,12 +58,16 @@ export function setVacationMode(
   universe: UniverseState,
   playerId: string,
   enabled: boolean,
+  now = Date.now(),
 ): VacationModeResult {
   ensureUniverseShape(universe);
   const player = universe.players[playerId];
   if (!player) return { ok: false, error: "Player not found." };
-  if (enabled) player.vacationMode = true;
-  else delete player.vacationMode;
+  if (enabled) {
+    if (!isVacationMode(player)) player.vacationMode = { startedAt: now };
+  } else {
+    delete player.vacationMode;
+  }
   return { ok: true, player };
 }
 

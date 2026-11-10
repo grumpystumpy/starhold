@@ -1,5 +1,6 @@
 import {
   EXPEDITION_SLOT,
+  isVacationMode,
   NEWBIE_PROTECTION_POINTS,
   SHIP_ORDER,
   SHIPS,
@@ -371,7 +372,7 @@ export function fleetComposer(
     sampleTarget,
     sampleShips,
   );
-  const vacationOn = view.player.vacationMode === true;
+  const vacationOn = isVacationMode(view.player);
   const vacationReason = "Vacation mode is on. New fleets cannot launch.";
   const step: FleetStep = draft?.step === 2 ? 2 : 1;
   const speedPercent = clampFleetSpeed(draft?.speedPercent ?? 100);

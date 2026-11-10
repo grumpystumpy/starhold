@@ -177,7 +177,7 @@ describe("fleet send two-step", () => {
 
   it("blocks the fleet composer while vacation mode is on", () => {
     const base = view();
-    base.player.vacationMode = true;
+    base.player.vacationMode = { startedAt: 1 };
     const html = fleetComposer(base, false, draft({ step: 1, counts: { scout: 1 } }));
     assert.match(html, /Vacation mode is on\. New fleets cannot launch\./);
     assert.match(buttonTag(html, "fleet-next"), /disabled/);

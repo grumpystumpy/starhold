@@ -1,5 +1,6 @@
 import {
   CURRENT_RELEASE_ID,
+  isVacationMode,
   type OfficerId,
   type PlayerClassId,
 } from "@starhold/game";
@@ -143,7 +144,7 @@ export async function doSetVacationMode(enabled: boolean): Promise<void> {
     await settleMutation({
       err,
       failureFallback: "Couldn't change vacation mode.",
-      applied: (view) => (view.player.vacationMode === true) === enabled,
+      applied: (view) => isVacationMode(view.player) === enabled,
       successNotice: () =>
         enabled ? "Vacation mode is on." : "Vacation mode is off.",
     });

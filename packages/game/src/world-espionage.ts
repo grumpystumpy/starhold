@@ -5,7 +5,7 @@ import type {
   PlanetState,
   UniverseState,
 } from "./types.js";
-import { isVacationMode } from "./world-accounts.js";
+import { fleetPredatesVacation, isVacationMode } from "./world-accounts.js";
 import { playerBoosts } from "./world-boosts.js";
 import { isMovingFortress } from "./world-mini.js";
 import { noteOnboardingRecon } from "./world-onboarding.js";
@@ -19,7 +19,11 @@ export function resolveEspionage(
   const spy = universe.players[fleet.ownerPlayerId];
   const targetOwner = universe.players[target.ownerPlayerId];
   if (!spy || !targetOwner) return;
-  if (isVacationMode(targetOwner) && target.ownerPlayerId !== fleet.ownerPlayerId) {
+  if (
+    isVacationMode(targetOwner) &&
+    target.ownerPlayerId !== fleet.ownerPlayerId &&
+    !fleetPredatesVacation(universe, fleet, targetOwner)
+  ) {
     return;
   }
 

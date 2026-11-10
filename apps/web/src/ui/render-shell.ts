@@ -4,6 +4,7 @@ import {
   DAILY_LOGIN_METAL,
   PRODUCTION_MULT,
   STARSHARDS_DAILY_LOGIN,
+  isVacationMode,
   levelBonuses,
   type PlayerView,
 } from "@starhold/game";
@@ -221,8 +222,8 @@ function planetSwitcher(
 
 /** Visible while vacation mode is on. Empty when the field is absent or off. */
 export function vacationBannerHtml(view: PlayerView): string {
-  if (view.player.vacationMode !== true) return "";
-  return `<p class="vacation-banner" role="status" data-testid="vacation-banner">Vacation mode is on. Fleets already out finish and return home. You cannot send new fleets, and other commanders cannot attack you.</p>`;
+  if (!isVacationMode(view.player)) return "";
+  return `<p class="vacation-banner" role="status" data-testid="vacation-banner">Vacation mode is on. Your fleets already out finish and return home. You cannot send new fleets. Attacks already on the way still arrive. New attacks cannot be sent.</p>`;
 }
 
 /** Keep the banner in step with the view when the shell is patched in place. */

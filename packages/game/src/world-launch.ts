@@ -159,6 +159,7 @@ export function launchFleet(
     opts.asteroidId,
     opts.pirateBaseId,
     opts.alienBaseId,
+    opts.acsGroupId,
   );
   if (!target.ok) return target;
   const {

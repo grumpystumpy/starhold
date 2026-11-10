@@ -36,10 +36,11 @@ describe("vacation banner", () => {
     assert.equal(player.vacationMode, undefined);
     assert.equal(vacationBannerHtml(playerView(universe, player.id, now)), "");
     assert.doesNotMatch(html(), /data-testid="vacation-banner"/);
-    player.vacationMode = true;
+    player.vacationMode = { startedAt: now };
     assert.match(html(), /data-testid="vacation-banner"/);
     assert.match(html(), /cannot send new fleets/);
-    player.vacationMode = undefined;
+    assert.match(html(), /Attacks already on the way still arrive/);
+    delete player.vacationMode;
     assert.doesNotMatch(html(), /data-testid="vacation-banner"/);
   });
 });

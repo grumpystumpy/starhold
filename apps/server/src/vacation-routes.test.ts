@@ -28,7 +28,7 @@ describe("vacation mode route", () => {
     });
     assert.equal(join.status, 200);
     const view = (await join.json()) as {
-      player: { id: string; name: string; vacationMode?: boolean };
+      player: { id: string; name: string; vacationMode?: { startedAt: number } };
       planet: { resources: { metal: number }; buildings: { metalMine: number } };
       fleets: unknown[];
     };
@@ -65,7 +65,7 @@ describe("vacation mode route", () => {
     });
     assert.equal(on.status, 200);
     const enabled = (await on.json()) as typeof owner.view;
-    assert.equal(enabled.player.vacationMode, true);
+    assert.equal(typeof enabled.player.vacationMode?.startedAt, "number");
     assert.equal(enabled.player.name, "Hold");
     assert.equal(enabled.planet.buildings.metalMine, metalMine);
     assert.ok(enabled.planet.resources.metal >= metal);

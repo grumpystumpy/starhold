@@ -22,7 +22,7 @@ function vacationModeHtml(on: boolean, busy: boolean): string {
     <div data-testid="vacation-mode">
       <h3>Vacation mode</h3>
       <p data-testid="vacation-mode-state">${state}</p>
-      <p class="hint">While it is on, fleets already out finish and return home. You cannot send new fleets. Pirate raids skip you, and other commanders cannot attack you.</p>
+      <p class="hint">While it is on, your fleets already out finish and return home, and you cannot send new fleets. Attacks already on the way still arrive, including a Joint Strike that was already open. New attacks cannot be sent. Pirate raids skip you.</p>
       <button type="button" data-vacation-mode="${next}" data-testid="vacation-mode-toggle" ${busy ? "disabled" : ""}>${label}</button>
     </div>`;
 }

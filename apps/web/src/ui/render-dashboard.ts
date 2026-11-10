@@ -1,4 +1,4 @@
-import type { PlayerView } from "@starhold/game";
+import { isVacationMode, type PlayerView } from "@starhold/game";
 import { session } from "../session";
 import type { NavPage } from "./nav";
 import type { FleetDraft } from "./render-fleets";
@@ -20,7 +20,7 @@ export function mainColumnHtml(
         session.security,
         session.recoveryCodes,
         busy,
-        view.player.vacationMode === true,
+        isVacationMode(view.player),
       );
     case "credits":
       return creditsPageHtml();

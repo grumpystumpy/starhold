@@ -48,7 +48,7 @@ import {
 import { maybeDestroyMoonWithTitans } from "./world-round2.js";
 import { awardSeasonPvpWin, isSeasonPvpMission } from "./world-seasons.js";
 import { addDebris, subtractCargo } from "./world-tick.js";
-import { isVacationMode } from "./world-accounts.js";
+import { fleetPredatesVacation, isVacationMode } from "./world-accounts.js";
 import { isNewbieBonusActive, NEWBIE_DEFENSE_MULT } from "./world-protection.js";
 
 /** Resolve outbound raid at target; mutates fleet cargo/ships/reportId. */
@@ -62,7 +62,8 @@ export function resolveRaidArrival(
   const defenderOwner = universe.players[target.ownerPlayerId];
   if (
     isVacationMode(defenderOwner) &&
-    target.ownerPlayerId !== fleet.ownerPlayerId
+    target.ownerPlayerId !== fleet.ownerPlayerId &&
+    !fleetPredatesVacation(universe, fleet, defenderOwner)
   ) {
     return;
   }

@@ -5,9 +5,11 @@ import { fileURLToPath } from "node:url";
 import {
   activePirateBases,
   advanceUniverse,
+  createAlliance,
   createUniverse,
   graduateNewbieProtection,
   isVacationMode,
+  joinAlliance,
   joinUniverse,
   launchFleet,
   migrateOrResetUniverse,
@@ -30,7 +32,7 @@ describe("vacation mode", () => {
 
     const on = setVacationMode(universe, home.player.id, true);
     assert.equal(on.ok, true);
-    assert.equal(home.player.vacationMode, true);
+    assert.equal(typeof home.player.vacationMode?.startedAt, "number");
     const blocked = launchFleet(
       universe,
       home.player.id,
@@ -98,35 +100,125 @@ describe("vacation mode", () => {
     assert.equal(allowed.ok, true);
   });
 
-  it("turns back an attack that arrives after vacation starts", () => {
+  it("lets an in-flight attack land with combat after the target turns vacation on", () => {
     const universe = createUniverse("Vacation inbound", 8);
     const attacker = joinUniverse(universe, "Raider", 30_000_000);
     const defender = joinUniverse(universe, "Away", 30_000_001);
     graduateNewbieProtection(universe, universe.players[defender.player.id]!);
     universe.planets[attacker.planet.id]!.ships.scout = 4;
     universe.planets[attacker.planet.id]!.resources.deuterium = 500;
-    const defenderShips = universe.planets[defender.planet.id]!.ships.scout ?? 0;
+    universe.planets[defender.planet.id]!.ships.scout = 1;
+    const launchedAt = 30_000_100;
     const launch = launchFleet(
       universe,
       attacker.player.id,
       defender.planet.id,
       "raid",
       { scout: 2 },
-      30_000_100,
+      launchedAt,
     );
     assert.equal(launch.ok, true);
     if (!launch.ok) return;
-    assert.equal(setVacationMode(universe, defender.player.id, true).ok, true);
+    assert.equal(launch.fleet.phase, "outbound");
+    assert.ok(launch.fleet.departedAt < launchedAt + 1_000);
+    const turned = setVacationMode(
+      universe,
+      defender.player.id,
+      true,
+      launchedAt + 1_000,
+    );
+    assert.equal(turned.ok, true);
+    assert.equal(universe.fleets[launch.fleet.id]?.phase, "outbound");
     advanceUniverse(universe, launch.fleet.arrivesAt);
     const mid = universe.fleets[launch.fleet.id];
     assert.ok(mid);
     assert.equal(mid.phase, "returning");
-    assert.equal(mid.reportId, null);
-    assert.equal(Object.keys(universe.reports).length, 0);
-    assert.equal(universe.planets[defender.planet.id]!.ships.scout ?? 0, defenderShips);
-    advanceUniverse(universe, mid.arrivesAt);
-    assert.equal(universe.fleets[launch.fleet.id], undefined);
-    assert.equal(universe.planets[attacker.planet.id]!.ships.scout, 4);
+    assert.ok(mid.reportId);
+    const report = universe.reports[mid.reportId];
+    assert.ok(report);
+    assert.ok(report.outcome === "attacker_win" || report.outcome === "defender_win");
+    assert.equal(universe.planets[defender.planet.id]!.ships.scout ?? 0, 0);
+  });
+
+  it("joins a Joint Strike opened before vacation and rejects a new one", () => {
+    const universe = createUniverse("Vacation ACS", 100, 100);
+    const leader = joinUniverse(universe, "Leader", 80_000_000_000);
+    const wing = joinUniverse(universe, "Wing", 80_000_000_001);
+    const target = joinUniverse(universe, "Target", 80_000_000_002);
+    const t0 = 80_000_010_000;
+    assert.equal(
+      createAlliance(universe, leader.player.id, "Strike Force", "stk", "open", t0).ok,
+      true,
+    );
+    const allyId = universe.players[leader.player.id]!.allianceId!;
+    assert.equal(
+      joinAlliance(universe, wing.player.id, { allianceId: allyId }, t0 + 1).ok,
+      true,
+    );
+    graduateNewbieProtection(universe, universe.players[target.player.id]!);
+    universe.planets[leader.planet.id]!.ships.interceptor = 20;
+    universe.planets[wing.planet.id]!.ships.interceptor = 20;
+    universe.planets[leader.planet.id]!.resources.deuterium = 50_000;
+    universe.planets[wing.planet.id]!.resources.deuterium = 50_000;
+
+    const lead = launchFleet(universe, {
+      playerId: leader.player.id,
+      mission: "raid",
+      ships: { interceptor: 8 },
+      targetPlanetId: target.planet.id,
+      openAcs: true,
+      now: t0 + 10_000,
+    });
+    assert.equal(lead.ok, true);
+    if (!lead.ok) return;
+    const acsId = lead.fleet.acsGroupId;
+    assert.ok(acsId);
+    const openedAt = universe.acsGroups![acsId]!.createdAt;
+    assert.equal(
+      setVacationMode(universe, target.player.id, true, openedAt + 5_000).ok,
+      true,
+    );
+    assert.equal(universe.fleets[lead.fleet.id]?.phase, "outbound");
+
+    const join = launchFleet(universe, {
+      playerId: wing.player.id,
+      mission: "raid",
+      ships: { interceptor: 4 },
+      targetPlanetId: target.planet.id,
+      acsGroupId: acsId,
+      now: openedAt + 6_000,
+    });
+    assert.equal(join.ok, true);
+    if (!join.ok) return;
+    assert.equal(join.fleet.acsGroupId, acsId);
+    assert.equal(universe.acsGroups![acsId]!.fleetIds.length, 2);
+    assert.ok(join.fleet.departedAt > universe.players[target.player.id]!.vacationMode!.startedAt);
+
+    const outsider = joinUniverse(universe, "Out", 80_000_000_003);
+    assert.equal(
+      createAlliance(
+        universe,
+        outsider.player.id,
+        "Second Force",
+        "sec",
+        "open",
+        openedAt + 7_000,
+      ).ok,
+      true,
+    );
+    universe.planets[outsider.planet.id]!.ships.interceptor = 10;
+    universe.planets[outsider.planet.id]!.resources.deuterium = 50_000;
+    const fresh = launchFleet(universe, {
+      playerId: outsider.player.id,
+      mission: "raid",
+      ships: { interceptor: 2 },
+      targetPlanetId: target.planet.id,
+      openAcs: true,
+      now: openedAt + 8_000,
+    });
+    assert.equal(fresh.ok, false);
+    if (!fresh.ok) assert.equal(fresh.error, VACATION_ATTACK_BLOCKED);
+    assert.equal(universe.acsGroups![acsId]!.fleetIds.length, 2);
   });
 
   it("lets fleets already out finish and return home", () => {
