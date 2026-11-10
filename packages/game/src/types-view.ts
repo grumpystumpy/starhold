@@ -579,6 +579,12 @@ export interface PlayerState {
    * Missing on older saves. A newer catalog id shows the popup again.
    */
   whatsNewDismissedReleaseId?: string;
+  /**
+   * Last authenticated `/api/state` read, in ms.
+   * Missing on older saves. Written at most once per hour.
+   * Galaxy inactivity reads this; a missing value is not inactive.
+   */
+  lastActiveAt?: number;
   /** Synthetic empire alerts. Missing on old saves — migrate to []. */
   eventLog?: EventLogEntry[];
   /** Open monthly season counters. Missing on older saves until the next read. */
@@ -815,6 +821,11 @@ export interface GalaxySlot extends PlanetArtFields {
   playerId: string | null;
   playerName: string | null;
   allianceTag: string | null;
+  /**
+   * `i` after 7 days without an authenticated state read, `I` after 28.
+   * Omitted when `player.lastActiveAt` is missing or more recent.
+   */
+  inactivity?: "i" | "I";
   pointsHint: number;
   empirePoints?: number;
   debris: { metal: number; crystal: number } | null;
@@ -839,6 +850,8 @@ export interface GalaxyMiniBody extends PlanetArtFields {
   coords: Coordinates;
   isOwn: boolean;
   playerName: string | null;
+  /** Same marks as `GalaxySlot.inactivity`. Omitted when unknown or recent. */
+  inactivity?: "i" | "I";
   debris: { metal: number; crystal: number } | null;
 }
 

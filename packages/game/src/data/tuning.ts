@@ -2112,3 +2112,14 @@ export const ALLIANCE_MARKERS_MAX = 30;
 export const ALLIANCE_MARKER_TTL_MS = 72 * 60 * 60 * 1000;
 /** Marker / strike note cap. */
 export const ALLIANCE_MARKER_NOTE_MAX = 80;
+
+/**
+ * Galaxy inactivity. `player.lastActiveAt` is the last authenticated
+ * `/api/state` read. A missing value is not inactive.
+ */
+/** Minimum gap between writes of `player.lastActiveAt`. */
+export const PLAYER_ACTIVITY_STAMP_MS = 60 * 60 * 1000;
+/** Galaxy mark `i`. */
+export const PLAYER_INACTIVE_MS = 7 * 24 * 60 * 60 * 1000;
+/** Galaxy mark `I`. */
+export const PLAYER_LONG_INACTIVE_MS = 28 * 24 * 60 * 60 * 1000;
