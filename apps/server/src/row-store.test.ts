@@ -8,6 +8,7 @@ import {
   advanceUniverse,
   applyNpcRaidOnNpc,
   applyNpcRaidOnPlanet,
+  createAlienBase,
   createPirateBase,
   createUniverse,
   empirePoints,
@@ -2740,5 +2741,222 @@ describe("row save review fixes", () => {
     assert.equal(done, true);
     assert.ok(totalPlayers >= 115);
     assert.ok(maxQueries <= 50);
+  });
+
+  it("adds save_npc_bases without a destructive migration", () => {
+    const sql = readFileSync(
+      fileURLToPath(new URL("../../../migrations/0003_npc_bases.sql", import.meta.url)),
+      "utf8",
+    );
+    assert.match(sql, /CREATE TABLE IF NOT EXISTS save_npc_bases/);
+    assert.doesNotMatch(sql, /\bDROP\b/i);
+    assert.doesNotMatch(sql, /\bRENAME\b/i);
+    assert.doesNotMatch(sql, /\bALTER\b/i);
+  });
+
+  it("moves blob bases into rows once and keeps an in-flight pirate fleet", async () => {
+    const NOW = 1_700_000_000_000;
+    const { db } = sqliteD1();
+    const source = createUniverse("Blob pirates", 8, 8, { lazySeed: true });
+    if (source.seedCursor) source.seedCursor.done = true;
+    source.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
+    const { player } = joinUniverse(source, "Keeper", NOW);
+    const home = source.planets[player.homePlanetId]!;
+    const base = createPirateBase(source.seed ?? source.id, home.coords.galaxy, home.coords.system + 1, 4, NOW, 3);
+    base.ships = { ...base.ships, hauler: 9 };
+    const alien = createAlienBase(source, home.coords.galaxy, home.coords.system + 2, 5, NOW, player.id);
+    alien.name = "Kept visitor";
+    source.pirateBases = { [base.id]: base };
+    source.alienBases = { [alien.id]: alien };
+    source.fleets = {
+      "raid-keep": {
+        id: "raid-keep",
+        ownerPlayerId: "npc_pirates",
+        originPlanetId: base.id,
+        originPirateBaseId: base.id,
+        targetPlanetId: home.id,
+        targetPlayerId: player.id,
+        targetCoords: { ...home.coords },
+        mission: "raid",
+        ships: { hauler: 4 },
+        cargo: { metal: 3, crystal: 0, deuterium: 0 },
+        departedAt: NOW,
+        arrivesAt: NOW + 60_000,
+        phase: "outbound",
+        reportId: null,
+      },
+    };
+    await migrateAll(db, source);
+    const stored = await db
+      .prepare("SELECT version, doc FROM save_world WHERE id = 'world'")
+      .bind()
+      .first<{ version: number; doc: string }>();
+    const fat = JSON.parse(stored!.doc) as UniverseState;
+    fat.pirateBases = { [base.id]: base };
+    fat.alienBases = { [alien.id]: alien };
+    const fatText = JSON.stringify(fat);
+    await db.prepare("UPDATE save_world SET doc = ? WHERE id = 'world'").bind(fatText).run();
+    await db.prepare("DELETE FROM save_npc_bases").bind().run();
+
+    let writes = 0;
+    const counting: D1Like = {
+      prepare(sql: string): D1Stmt {
+        const stmt = db.prepare(sql);
+        let bound: D1Stmt = stmt;
+        const api: D1Stmt = {
+          bind(...values: unknown[]) {
+            bound = stmt.bind(...values);
+            return api;
+          },
+          async first<T>() {
+            return bound.first<T>();
+          },
+          async all<T>() {
+            return bound.all<T>();
+          },
+          async run() {
+            if (/\b(INSERT|UPDATE|DELETE)\b/i.test(sql)) writes += 1;
+            return bound.run();
+          },
+        };
+        return api;
+      },
+      async batch(statements) {
+        return db.batch(statements);
+      },
+    };
+
+    const firstLoad = await loadWorkingSet(counting, { full: true });
+    assert.ok(writes > 0, "legacy blob did not write rows");
+    const slim = await db
+      .prepare("SELECT doc FROM save_world WHERE id = 'world'")
+      .bind()
+      .first<{ doc: string }>();
+    const slimDoc = JSON.parse(slim!.doc) as UniverseState;
+    assert.deepEqual(slimDoc.pirateBases, {});
+    assert.deepEqual(slimDoc.alienBases, {});
+    assert.ok(slim!.doc.length < fatText.length);
+    assert.equal(firstLoad.universe.pirateBases?.[base.id]?.ships.hauler, 9);
+    assert.equal(firstLoad.universe.alienBases?.[alien.id]?.name, "Kept visitor");
+    assert.equal(firstLoad.universe.fleets["raid-keep"]?.phase, "outbound");
+    assert.equal(firstLoad.universe.fleets["raid-keep"]?.ships.hauler, 4);
+    assert.equal(firstLoad.universe.planets[home.id]?.ownerPlayerId, player.id);
+    const migrated = migrateOrResetUniverse(structuredClone(firstLoad.universe));
+    assert.equal(migrated.didReset, false);
+    assert.equal(migrated.universe.fleets["raid-keep"]?.phase, "outbound");
+    assert.equal(migrated.universe.fleets["raid-keep"]?.ships.hauler, 4);
+    assert.equal(migrated.universe.players[player.id]?.name, "Keeper");
+    const rowsAfter = await db
+      .prepare("SELECT kind, galaxy, version, doc FROM save_npc_bases ORDER BY kind, galaxy")
+      .bind()
+      .all<{ kind: string; galaxy: number; version: number; doc: string }>();
+    assert.equal(rowsAfter.results?.length, 2);
+
+    writes = 0;
+    const secondLoad = await loadWorkingSet(counting, { full: true });
+    assert.equal(writes, 0, "second load wrote the base table again");
+    const rowsAgain = await db
+      .prepare("SELECT kind, galaxy, version, doc FROM save_npc_bases ORDER BY kind, galaxy")
+      .bind()
+      .all<{ kind: string; galaxy: number; version: number; doc: string }>();
+    assert.deepEqual(rowsAgain.results, rowsAfter.results);
+    assert.equal(secondLoad.universe.fleets["raid-keep"]?.ships.hauler, 4);
+    assert.equal(secondLoad.universe.pirateBases?.[base.id]?.ships.hauler, 9);
+    const worldAgain = await db
+      .prepare("SELECT doc FROM save_world WHERE id = 'world'")
+      .bind()
+      .first<{ doc: string }>();
+    assert.equal(worldAgain?.doc, slim!.doc);
+  });
+
+  it("stores 750 pirate bases outside the world document", async () => {
+    const NOW = 1_700_000_000_000;
+    const { db } = sqliteD1();
+    const source = createUniverse("Seven fifty", 8, 8, { lazySeed: true });
+    if (source.seedCursor) source.seedCursor.done = true;
+    source.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
+    source.pirateBases = {};
+    source.alienBases = {};
+    let placed = 0;
+    for (let galaxy = 1; galaxy <= MAP_GALAXIES && placed < PIRATE_TARGET_BASE_COUNT; galaxy += 1) {
+      for (let system = 1; system <= 75 && placed < PIRATE_TARGET_BASE_COUNT; system += 1) {
+        const base = createPirateBase(source.seed ?? source.id, galaxy, system, 8, NOW, 1);
+        base.nextRaidAt = NOW + 86_400_000;
+        source.pirateBases[base.id] = base;
+        placed += 1;
+      }
+    }
+    assert.equal(placed, 750);
+    const fat = JSON.stringify({
+      ...source,
+      players: {},
+      planets: {},
+      fleets: {},
+      reports: {},
+      spyReports: {},
+      expeditionReports: {},
+      asteroids: {},
+      debris: {},
+    });
+    await migrateAll(db, source);
+    const stored = await db
+      .prepare("SELECT doc FROM save_world WHERE id = 'world'")
+      .bind()
+      .first<{ doc: string }>();
+    const doc = JSON.parse(stored!.doc) as UniverseState;
+    assert.deepEqual(doc.pirateBases, {});
+    assert.deepEqual(doc.alienBases, {});
+    assert.ok(
+      stored!.doc.length * 5 < fat.length,
+      `world doc ${stored!.doc.length} bytes did not shrink from ${fat.length}`,
+    );
+    const count = await db
+      .prepare("SELECT COUNT(*) AS n FROM save_npc_bases")
+      .bind()
+      .first<{ n: number }>();
+    assert.equal(count?.n, MAP_GALAXIES);
+    const loaded = await loadWorkingSet(db, { full: true });
+    assert.equal(Object.keys(loaded.universe.pirateBases ?? {}).length, 750);
+    assert.equal(loaded.universe.npcBaseCount, 750);
+    console.log(
+      `npc base world bytes slim=${stored!.doc.length} fat=${fat.length} galaxyRows=${count?.n}`,
+    );
+  });
+
+  it("pages NPC bases and does not mint a second roster", async () => {
+    const NOW = 1_700_000_000_000;
+    const { db } = sqliteD1();
+    const source = createUniverse("Paged bases", 8, 8, { lazySeed: true });
+    if (source.seedCursor) source.seedCursor.done = true;
+    source.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
+    source.pirateBases = {};
+    const perGalaxy = 20;
+    for (const galaxy of [1, 2]) {
+      for (let index = 0; index < perGalaxy; index += 1) {
+        const base = createPirateBase(source.seed ?? source.id, galaxy, index + 1, 8, NOW, 0);
+        base.nextRaidAt = NOW + 86_400_000;
+        base.lastGrewAt = NOW;
+        base.lastFreeSpawnAt = NOW;
+        source.pirateBases[base.id] = base;
+      }
+    }
+    const total = perGalaxy * 2;
+    await migrateAll(db, source);
+    const store = createD1Store(db);
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "POST", cpuMs: 0 },
+      () =>
+        withUniverse((loaded) => {
+          assert.equal(loaded.skipPirateTopUp, true);
+          const seen = Object.values(loaded.pirateBases ?? {});
+          assert.equal(seen.length, perGalaxy);
+          assert.equal(new Set(seen.map((base) => base.coords.galaxy)).size, 1);
+          tickPirates(loaded, NOW);
+        }, { npc: true }),
+    );
+    const kept = await loadWorkingSet(db, { full: true });
+    assert.equal(Object.keys(kept.universe.pirateBases ?? {}).length, total);
+    const ids = Object.keys(kept.universe.pirateBases ?? {});
+    assert.equal(new Set(ids).size, total);
   });
 });

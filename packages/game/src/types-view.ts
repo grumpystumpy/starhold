@@ -747,6 +747,17 @@ export interface UniverseState {
    */
   npcPlayerPageCursor?: string;
   /**
+   * How many pirate and alien base bodies live in `save_npc_bases`.
+   * `0` means a read can skip that table. Absent on a world document that
+   * still carries the bodies inline.
+   */
+  npcBaseCount?: number;
+  /**
+   * Next galaxy (1..MAP_GALAXIES) for the 10-minute NPC base page.
+   * Absent means galaxy 1. A short visit wraps back to 1.
+   */
+  npcBaseGalaxyCursor?: number;
+  /**
    * Workers bootstrap. Absent on Vercel universes that were seeded in one
    * shot. `done` means minis, asteroids, and the pirate roster match a
    * full seed.
