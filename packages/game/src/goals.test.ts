@@ -12,6 +12,12 @@ import {
   GOAL_DAILY_RESEARCH_STARSHARDS,
   GOAL_DAILY_SHIPS,
   GOAL_DAILY_SHIP_METAL,
+  GOAL_WEEKLY_BUILDING_METAL,
+  GOAL_WEEKLY_BUILDINGS,
+  GOAL_WEEKLY_RESEARCH,
+  GOAL_WEEKLY_RESEARCH_STARSHARDS,
+  GOAL_WEEKLY_SHIP_METAL,
+  GOAL_WEEKLY_SHIPS,
   GOALS,
 } from "./data/tuning.js";
 import { emptyFleetShips, storageFor } from "./formulas.js";
@@ -324,5 +330,159 @@ describe("goal hooks", () => {
     assert.equal(buildingGoal?.claimed, false);
     assert.equal(researchGoal?.claimed, false);
     assert.equal(shipsGoal?.claimed, false);
+  });
+});
+
+describe("weekly goals board", () => {
+  it("counts weekly progress, pays once, and clears it on Monday", () => {
+    const universe = createUniverse("Weekly Board", 1);
+    const { player, planet } = joinUniverse(universe, "Weekly", WED);
+    const body = universe.planets[planet.id]!;
+    body.buildings.metalStorage = 12;
+    body.buildings.crystalStorage = 12;
+    body.buildings.deutTank = 12;
+
+    const early = claimGoal(universe, player.id, "weeklyResearch", WED);
+    assert.equal(early.ok, false);
+    if (!early.ok) {
+      assert.match(early.error, /0 \/ 4/);
+      assert.equal(early.error.includes("_"), false);
+    }
+
+    noteGoalMetric(player, "buildingUpgrade", GOAL_WEEKLY_BUILDINGS, WED);
+    noteGoalMetric(player, "researchComplete", GOAL_WEEKLY_RESEARCH, WED);
+    noteGoalMetric(player, "shipBuild", GOAL_WEEKLY_SHIPS, WED);
+    const open = ensureGoalBoard(player, WED);
+    assert.equal(open.progress.weeklyBuildingUpgrades, GOAL_WEEKLY_BUILDINGS);
+    assert.equal(open.progress.weeklyResearch, GOAL_WEEKLY_RESEARCH);
+    assert.equal(open.progress.weeklyShips, GOAL_WEEKLY_SHIPS);
+    assert.equal(open.progress.dailyBuildingUpgrades, GOAL_DAILY_BUILDINGS);
+
+    const metalBefore = universe.planets[planet.id]!.resources.metal;
+    const shardsBefore = universe.players[player.id]!.starshards ?? 0;
+    const paidBuild = claimGoal(universe, player.id, "weeklyBuildingUpgrades", WED);
+    assert.equal(paidBuild.ok, true);
+    assert.equal(
+      universe.planets[planet.id]!.resources.metal,
+      metalBefore + GOAL_WEEKLY_BUILDING_METAL,
+    );
+    const paidBuildAgain = claimGoal(
+      universe,
+      player.id,
+      "weeklyBuildingUpgrades",
+      WED,
+    );
+    assert.equal(paidBuildAgain.ok, false);
+    assert.equal(
+      universe.planets[planet.id]!.resources.metal,
+      metalBefore + GOAL_WEEKLY_BUILDING_METAL,
+    );
+
+    const paidResearch = claimGoal(universe, player.id, "weeklyResearch", WED);
+    assert.equal(paidResearch.ok, true);
+    assert.equal(
+      universe.players[player.id]!.starshards,
+      shardsBefore + GOAL_WEEKLY_RESEARCH_STARSHARDS,
+    );
+    const paidResearchAgain = claimGoal(universe, player.id, "weeklyResearch", WED);
+    assert.equal(paidResearchAgain.ok, false);
+    assert.equal(
+      universe.players[player.id]!.starshards,
+      shardsBefore + GOAL_WEEKLY_RESEARCH_STARSHARDS,
+    );
+
+    const shipMetalBefore = universe.planets[planet.id]!.resources.metal;
+    const paidShips = claimGoal(universe, player.id, "weeklyShips", WED);
+    assert.equal(paidShips.ok, true);
+    assert.equal(
+      universe.planets[planet.id]!.resources.metal,
+      shipMetalBefore + GOAL_WEEKLY_SHIP_METAL,
+    );
+    const paidShipsAgain = claimGoal(universe, player.id, "weeklyShips", WED);
+    assert.equal(paidShipsAgain.ok, false);
+
+    const nextMonday = Date.UTC(2026, 9, 19, 0, 0, 0);
+    const rolled = ensureGoalBoard(player, nextMonday);
+    assert.equal(rolled.weeklyKey, utcWeekKey(nextMonday));
+    assert.notEqual(rolled.weeklyKey, utcWeekKey(WED));
+    assert.equal(rolled.progress.weeklyBuildingUpgrades, undefined);
+    assert.equal(rolled.progress.weeklyResearch, undefined);
+    assert.equal(rolled.progress.weeklyShips, undefined);
+    assert.equal(rolled.claimed.includes("weeklyResearch"), false);
+    const missed = claimGoal(universe, player.id, "weeklyResearch", nextMonday);
+    assert.equal(missed.ok, false);
+    assert.equal(
+      universe.players[player.id]!.starshards,
+      shardsBefore + GOAL_WEEKLY_RESEARCH_STARSHARDS,
+    );
+  });
+
+  it("keeps weekly mission progress when only the UTC day rolls", () => {
+    const universe = createUniverse("Weekly Day", 1);
+    const { player } = joinUniverse(universe, "Daykeep", WED);
+    noteGoalMetric(player, "buildingUpgrade", 4, WED);
+    noteGoalMetric(player, "researchComplete", 2, WED);
+    noteGoalMetric(player, "shipBuild", 11, WED);
+    const after = ensureGoalBoard(player, THU);
+    assert.equal(after.dailyKey, "2026-10-15");
+    assert.equal(after.progress.dailyBuildingUpgrades, undefined);
+    assert.equal(after.progress.dailyResearch, undefined);
+    assert.equal(after.progress.dailyShips, undefined);
+    assert.equal(after.progress.weeklyBuildingUpgrades, 4);
+    assert.equal(after.progress.weeklyResearch, 2);
+    assert.equal(after.progress.weeklyShips, 11);
+    assert.equal(after.weeklyKey, utcWeekKey(WED));
+  });
+
+  it("counts a finished building upgrade on the weekly board", () => {
+    const universe = createUniverse("Weekly Build", 8);
+    const { player, planet } = joinUniverse(universe, "Mason", WED);
+    const body = universe.planets[planet.id]!;
+    body.resources = { metal: 500_000, crystal: 500_000, deuterium: 500_000 };
+    const queued = queueBuildingUpgrade(universe, player.id, "metalMine", WED);
+    assert.equal(queued.ok, true);
+    const doneAt = universe.planets[planet.id]!.buildQueue[0]!.completesAt;
+    advanceUniverse(universe, doneAt);
+    const view = playerView(universe, player.id, doneAt);
+    assert.equal(
+      view.goals.find((goal) => goal.id === "weeklyBuildingUpgrades")?.progress,
+      1,
+    );
+    assert.equal(
+      view.goals.find((goal) => goal.id === "dailyBuildingUpgrades")?.progress,
+      1,
+    );
+  });
+
+  it("starts an old save with no weekly fields at empty weekly progress", () => {
+    const universe = createUniverse("No Weekly Fields", 1);
+    const { player } = joinUniverse(universe, "Legacy", WED);
+    player.goals = {
+      dailyKey: "2026-10-14",
+      progress: { dailyPirateWins: 2 },
+      claimed: [],
+    };
+    assert.equal(player.goals.weeklyKey, undefined);
+
+    const board = ensureGoalBoard(player, WED);
+    assert.equal(board.dailyKey, "2026-10-14");
+    assert.equal(board.weeklyKey, utcWeekKey(WED));
+    assert.equal(board.progress.dailyPirateWins, 2);
+    assert.equal(board.progress.weeklyPirateWins, undefined);
+    assert.equal(board.progress.weeklyExpeditions, undefined);
+    assert.equal(board.progress.weeklyBuildingUpgrades, undefined);
+    assert.equal(board.progress.weeklyResearch, undefined);
+    assert.equal(board.progress.weeklyShips, undefined);
+
+    const view = playerView(universe, player.id, WED);
+    for (const goal of view.goals) {
+      if (goal.cadence !== "weekly") continue;
+      assert.equal(goal.progress, 0, goal.id);
+      assert.equal(goal.claimed, false, goal.id);
+    }
+    assert.equal(
+      view.goals.find((goal) => goal.id === "dailyPirateWins")?.progress,
+      2,
+    );
   });
 });

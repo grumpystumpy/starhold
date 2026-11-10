@@ -118,6 +118,32 @@ Dismissing the briefing hides the suggestion. Restore shows it again. When every
 
 Fleet composer hides built-in `moonDestruction` and `miniPlanetDestruction` until the player owns that hull or meets its research and shipyard level. `expedition`, `raid`, `miniPlanetCapture`, and custom presets stay visible. The presets remain on the save, and the galaxy preset buttons are unchanged.
 
+## Weekly goals
+
+Daily and weekly goals share `player.goals` on the universe document (`dailyKey`, optional `weeklyKey`, `progress`, `claimed`). No new table and no extra query on a page load. Older saves omit `weeklyKey` and any weekly progress keys. `migrateOrResetUniverse` leaves them in place (`didReset` stays false, in-flight fleets stay). The next read in `ensureGoalBoard` (`packages/game/src/world-goals.ts`) stamps the open ISO week (`YYYY-Www`, Monday 00:00 UTC) and starts weekly progress at zero. A matching `dailyKey` keeps that day's progress and claims.
+
+The same `noteGoalMetric` calls that advance daily missions also advance the weekly row for that metric. A claim pays once per id per open period. Rolling the day clears only daily ids. Rolling the week clears only weekly ids. Unclaimed rewards from a closed period are dropped. Resource rewards still have to fit in storage on the active world.
+
+Tuning lives in `packages/game/src/data/tuning.ts` (`GOALS`).
+
+| Id | Counts | Target | Reward |
+| --- | --- | --- | --- |
+| `weeklyPirateWins` | pirate wins | 12 | 100 Starshards |
+| `weeklyExpeditions` | expedition arrivals | 20 | 12,000 metal, 6,000 crystal, 3,000 deuterium |
+| `weeklyBuildingUpgrades` | finished building upgrades | 12 | 9,000 metal, 4,500 crystal, 1,500 deuterium |
+| `weeklyResearch` | finished research | 4 | 60 Starshards |
+| `weeklyShips` | ships built | 40 | 15,000 metal, 7,500 crystal, 3,000 deuterium |
+
+| Surface | Selector | Route |
+| --- | --- | --- |
+| Overview daily ready count | `data-testid="overview-daily-missions-ready"` | link to the Goals page |
+| Overview weekly ready count | `data-testid="overview-weekly-missions-ready"` | same Goals link (`overview-weekly-goals-link`) |
+| Week board | `data-testid="goals-weekly"` | rendered by `render-goals.ts` from `render-pages.ts` |
+| One row | `data-testid="goal-<id>"` | progress `goal-progress-<id>`, claim `claim-goal-<id>` |
+| Claim | button `data-claim-goal` | `POST /api/claim-goal` `{ playerId, goalId }` |
+
+`POST /api/claim-goal` is the existing goal claim. It is not called on a normal page load.
+
 ## OAuth sign-in
 
 Email + password signup, login, claim, logout, and `/api/auth/me` are unchanged. Google and Discord are optional and env-gated. If a provider's client id and secret are unset, its button is omitted and its routes return `404 { error: "provider not configured" }`. `GET /api/auth/providers` always includes `passwordAuth: true`.
