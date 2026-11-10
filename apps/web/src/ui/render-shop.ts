@@ -1,4 +1,12 @@
-import type { PlayerView } from "@starhold/game";
+import {
+  assessResourceMerchant,
+  quoteResourceMerchant,
+  RESOURCE_MERCHANT_FEE_PERCENT,
+  RESOURCE_MERCHANT_VALUE,
+  type MerchantResource,
+  type PlayerView,
+  type Resources,
+} from "@starhold/game";
 import { fmt } from "./format";
 import { escapeAttr, escapeHtml } from "./render-escape";
 import {
@@ -6,6 +14,177 @@ import {
   skillsPanelHtml,
 } from "./render-officers-skills";
 import { shopTabFromUrl, type ShopTab } from "./nav";
+
+export type MerchantDraft = {
+  give: MerchantResource;
+  get: MerchantResource;
+  amount: string;
+};
+
+const DEFAULT_MERCHANT_DRAFT: MerchantDraft = {
+  give: "metal",
+  get: "deuterium",
+  amount: "",
+};
+
+let merchantDraft: MerchantDraft = { ...DEFAULT_MERCHANT_DRAFT };
+
+function isMerchantResource(value: string | undefined): value is MerchantResource {
+  return value === "metal" || value === "crystal" || value === "deuterium";
+}
+
+function resourceWord(id: MerchantResource): string {
+  switch (id) {
+    case "metal":
+      return "Metal";
+    case "crystal":
+      return "Crystal";
+    case "deuterium":
+      return "Deuterium";
+    default: {
+      const neverId: never = id;
+      return neverId;
+    }
+  }
+}
+
+function parseMerchantAmount(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (!/^[0-9]+$/.test(trimmed)) return null;
+  const amount = Number(trimmed);
+  return Number.isSafeInteger(amount) ? amount : null;
+}
+
+export function merchantFormState(input: {
+  give: string;
+  get: string;
+  amount: string;
+  have: Resources;
+  storage: Resources;
+  busy: boolean;
+}): { preview: string; error: string; disabled: boolean } {
+  const parsed = parseMerchantAmount(input.amount);
+  if (parsed === null) {
+    return {
+      preview: "Enter an amount to see the exact output.",
+      error: input.amount.trim() === "" ? "" : "Enter a whole amount.",
+      disabled: true,
+    };
+  }
+  const assessment = assessResourceMerchant({
+    give: input.give,
+    get: input.get,
+    amount: parsed,
+    have: input.have,
+    storage: input.storage,
+  });
+  const receive = isMerchantResource(input.get) ? input.get : "resources";
+  let preview = "Enter an amount to see the exact output.";
+  if (assessment.output != null && assessment.output > 0) {
+    preview = `You receive ${assessment.output} ${receive}.`;
+  } else if (assessment.output === 0) {
+    preview = "This amount returns nothing after the fee.";
+  }
+  return {
+    preview,
+    error: assessment.ok ? "" : assessment.error,
+    disabled: input.busy || !assessment.ok,
+  };
+}
+
+function merchantExample(): string {
+  const amount = RESOURCE_MERCHANT_VALUE.metal * 1000;
+  const quote = quoteResourceMerchant("metal", "deuterium", amount);
+  if (!quote.ok) return "";
+  return `${amount} metal returns ${quote.output} deuterium after the ${RESOURCE_MERCHANT_FEE_PERCENT}% fee.`;
+}
+
+function merchantOption(value: MerchantResource, selected: MerchantResource): string {
+  const picked = value === selected ? " selected" : "";
+  return `<option value="${value}"${picked}>${resourceWord(value)}</option>`;
+}
+
+export function resourceMerchantSection(
+  view: PlayerView,
+  draft: MerchantDraft = merchantDraft,
+  busy = false,
+): string {
+  const have = view.planet.resources;
+  const storage = view.economy.storage;
+  const state = merchantFormState({ ...draft, have, storage, busy });
+  const give = isMerchantResource(draft.give) ? draft.give : "metal";
+  const get = isMerchantResource(draft.get) ? draft.get : "deuterium";
+  const options = (selected: MerchantResource) =>
+    (["metal", "crystal", "deuterium"] as const).map((id) => merchantOption(id, selected)).join("");
+  const error = state.error
+    ? `<p class="blocked-reason" role="status" id="resource-merchant-error" data-testid="resource-merchant-error" data-merchant-error>${escapeHtml(state.error)}</p>`
+    : `<p class="blocked-reason" role="status" id="resource-merchant-error" data-testid="resource-merchant-error" data-merchant-error hidden></p>`;
+  return `<section class="shop-resource-merchant" data-testid="resource-merchant" data-planet-id="${escapeAttr(view.planet.id)}" data-busy="${busy ? "true" : "false"}" data-have-metal="${have.metal}" data-have-crystal="${have.crystal}" data-have-deuterium="${have.deuterium}" data-storage-metal="${storage.metal}" data-storage-crystal="${storage.crystal}" data-storage-deuterium="${storage.deuterium}">
+    <h3>Resource merchant</h3>
+    <p>Swap metal, crystal, and deuterium on ${escapeHtml(view.planet.name)}, the planet you have open. ${RESOURCE_MERCHANT_VALUE.metal} metal = ${RESOURCE_MERCHANT_VALUE.crystal} crystal = ${RESOURCE_MERCHANT_VALUE.deuterium} deuterium. Free — no Starshard cost. ${escapeHtml(merchantExample())}</p>
+    <div class="shop-merchant-fields">
+      <label>Give
+        <select data-merchant-give data-testid="merchant-give" ${busy ? "disabled" : ""}>${options(give)}</select>
+      </label>
+      <label>Receive
+        <select data-merchant-get data-testid="merchant-get" ${busy ? "disabled" : ""}>${options(get)}</select>
+      </label>
+      <label>Amount
+        <input type="number" min="1" step="1" inputmode="numeric" data-merchant-amount data-testid="merchant-amount" value="${escapeAttr(draft.amount)}" ${busy ? "disabled" : ""} />
+      </label>
+    </div>
+    <p data-testid="resource-merchant-preview" data-merchant-preview>${escapeHtml(state.preview)}</p>
+    <div class="shop-trade-actions">
+      <button type="button" data-merchant-trade data-testid="merchant-trade" ${state.disabled ? "disabled" : ""} ${state.error ? 'aria-describedby="resource-merchant-error"' : ""}>Trade</button>
+      ${error}
+    </div>
+  </section>`;
+}
+
+export function captureMerchantDraft(scope: ParentNode): void {
+  const give = scope.querySelector<HTMLSelectElement>("[data-merchant-give]")?.value;
+  const get = scope.querySelector<HTMLSelectElement>("[data-merchant-get]")?.value;
+  const amount = scope.querySelector<HTMLInputElement>("[data-merchant-amount]")?.value;
+  if (!isMerchantResource(give) || !isMerchantResource(get) || amount === undefined) return;
+  merchantDraft = { give, get, amount };
+}
+
+export function syncResourceMerchant(scope: ParentNode): void {
+  const section = scope.querySelector<HTMLElement>('[data-testid="resource-merchant"]');
+  if (!section) return;
+  const giveEl = section.querySelector<HTMLSelectElement>("[data-merchant-give]");
+  const getEl = section.querySelector<HTMLSelectElement>("[data-merchant-get]");
+  const amountEl = section.querySelector<HTMLInputElement>("[data-merchant-amount]");
+  const preview = section.querySelector<HTMLElement>("[data-merchant-preview]");
+  const error = section.querySelector<HTMLElement>("[data-merchant-error]");
+  const button = section.querySelector<HTMLButtonElement>("[data-merchant-trade]");
+  if (!giveEl || !getEl || !amountEl || !preview || !error || !button) return;
+  if (isMerchantResource(giveEl.value) && isMerchantResource(getEl.value)) {
+    merchantDraft = { give: giveEl.value, get: getEl.value, amount: amountEl.value };
+  }
+  const state = merchantFormState({
+    give: giveEl.value,
+    get: getEl.value,
+    amount: amountEl.value,
+    have: {
+      metal: Number(section.dataset.haveMetal ?? 0),
+      crystal: Number(section.dataset.haveCrystal ?? 0),
+      deuterium: Number(section.dataset.haveDeuterium ?? 0),
+    },
+    storage: {
+      metal: Number(section.dataset.storageMetal ?? 0),
+      crystal: Number(section.dataset.storageCrystal ?? 0),
+      deuterium: Number(section.dataset.storageDeuterium ?? 0),
+    },
+    busy: section.dataset.busy === "true",
+  });
+  preview.textContent = state.preview;
+  error.textContent = state.error;
+  error.hidden = state.error === "";
+  button.disabled = state.disabled;
+  if (state.error) button.setAttribute("aria-describedby", error.id);
+  else button.removeAttribute("aria-describedby");
+}
 
 function resourcesPanel(view: PlayerView, busy: boolean): string {
   const balance = view.starshards ?? 0;
@@ -35,7 +214,8 @@ function resourcesPanel(view: PlayerView, busy: boolean): string {
       <button type="button" data-trade-resources="buy" data-testid="trade-buy-resources" ${busy || !canBuy ? "disabled" : ""}>Buy resource bundle · ${fmt(1500)} ✦</button>
       <button type="button" data-trade-resources="sell" data-testid="trade-sell-resources" ${busy || !canSell ? "disabled" : ""}>Sell resource bundle · +${fmt(1500)} ✦</button>
     </div>
-  </section>`;
+  </section>
+  ${resourceMerchantSection(view, merchantDraft, busy)}`;
 }
 
 const TAB_LABELS: Record<ShopTab, string> = {

@@ -13,6 +13,7 @@ import {
   type FleetDraft,
 } from "./render-fleets";
 import { dashboardHtml, mainColumnHtml } from "./render-dashboard";
+import { captureMerchantDraft } from "./render-shop";
 import type { UiHandlers } from "./render-helpers";
 import {
   eventsBannerHtml,
@@ -74,6 +75,7 @@ export function renderApp(
   }
 
   syncBackdrop(true, state.activePage);
+  captureMerchantDraft(root);
 
   const fleetDraft = fleetDraftForPage(root, state.activePage);
   watchFleetLaunches(state.view, state.onEventsRefresh);
