@@ -2752,6 +2752,8 @@ describe("row save review fixes", () => {
     assert.doesNotMatch(sql, /\bDROP\b/i);
     assert.doesNotMatch(sql, /\bRENAME\b/i);
     assert.doesNotMatch(sql, /\bALTER\b/i);
+    console.log("MIGRATION_FILE migrations/0003_npc_bases.sql");
+    console.log(sql);
   });
 
   it("moves blob bases into rows once and keeps an in-flight pirate fleet", async () => {
@@ -2959,4 +2961,215 @@ describe("row save review fixes", () => {
     const ids = Object.keys(kept.universe.pirateBases ?? {});
     assert.equal(new Set(ids).size, total);
   });
+
+  it("loads a main 72096eb world-blob save without reset, then does not copy twice", async () => {
+    const snap = JSON.parse(
+      readFileSync(fileURLToPath(new URL("./fixtures/main-72096eb-npc-blob-save.json", import.meta.url)), "utf8"),
+    ) as {
+      builtOn: string;
+      world: Array<{ id: string; version: number; doc: string }>;
+      players: Array<{ id: string; version: number; doc: string }>;
+      planets: Array<{ id: string; owner_id: string; galaxy: number; system: number; slot: number; kind: string; version: number; doc: string }>;
+      fleets: Array<{ id: string; owner_id: string; target_owner_id: string; version: number; doc: string }>;
+      meta: Array<{ id: string; value: string }>;
+      expect: {
+        fleet: { id: string; phase: string; ships: { hauler: number }; arrivesAt: number };
+        bases: Array<{ id: string; kind: string; coords: { galaxy: number; system: number; slot: number }; level: number; name: string }>;
+      };
+    };
+    const { db } = sqliteD1();
+    await ensureRowTables(db);
+    const world = snap.world[0]!;
+    await db.prepare("INSERT INTO save_world (id, version, doc) VALUES (?, ?, ?)").bind(world.id, world.version, world.doc).run();
+    for (const row of snap.players) {
+      await db.prepare("INSERT INTO save_players (id, version, doc) VALUES (?, ?, ?)").bind(row.id, row.version, row.doc).run();
+    }
+    for (const row of snap.planets) {
+      await db.prepare(
+        "INSERT INTO save_planets (id, owner_id, galaxy, system, slot, kind, version, doc) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      ).bind(row.id, row.owner_id, row.galaxy, row.system, row.slot, row.kind, row.version, row.doc).run();
+    }
+    for (const row of snap.fleets) {
+      await db.prepare(
+        "INSERT INTO save_fleets (id, owner_id, target_owner_id, version, doc) VALUES (?, ?, ?, ?, ?)",
+      ).bind(row.id, row.owner_id, row.target_owner_id, row.version, row.doc).run();
+    }
+    for (const row of snap.meta) {
+      await db.prepare("INSERT INTO save_meta (id, value) VALUES (?, ?)").bind(row.id, row.value).run();
+    }
+
+    let writes = 0;
+    const counting = countingD1(db, () => {
+      writes += 1;
+    });
+    const firstLoad = await loadWorkingSet(counting, { full: true });
+    const migrated = migrateOrResetUniverse(structuredClone(firstLoad.universe));
+    const fleet = migrated.universe.fleets[snap.expect.fleet.id];
+    const bases = [
+      ...Object.values(migrated.universe.pirateBases ?? {}).map((base) => ({
+        id: base.id,
+        kind: "pirate",
+        coords: base.coords,
+        level: base.level,
+        name: base.name,
+      })),
+      ...Object.values(migrated.universe.alienBases ?? {}).map((base) => ({
+        id: base.id,
+        kind: "alien",
+        coords: base.coords,
+        level: base.level,
+        name: base.name,
+      })),
+    ].sort((a, b) => a.id.localeCompare(b.id));
+    const rowsAfter = await db.prepare("SELECT kind, galaxy, version, doc FROM save_npc_bases ORDER BY kind, galaxy").bind().all<{
+      kind: string;
+      galaxy: number;
+      version: number;
+      doc: string;
+    }>();
+    const firstReport = {
+      builtOn: snap.builtOn,
+      didReset: migrated.didReset,
+      fleet: fleet
+        ? { id: fleet.id, phase: fleet.phase, ships: fleet.ships, arrivesAt: fleet.arrivesAt, originPirateBaseId: fleet.originPirateBaseId }
+        : null,
+      bases,
+      npcRows: rowsAfter.results?.length,
+      copyWrites: writes,
+    };
+    console.log(`SAVE_COMPAT_FIRST ${JSON.stringify(firstReport)}`);
+    assert.equal(migrated.didReset, false);
+    assert.equal(fleet?.phase, "outbound");
+    assert.equal(fleet?.ships.hauler, 4);
+    assert.deepEqual(bases, [...snap.expect.bases].sort((a, b) => a.id.localeCompare(b.id)));
+    assert.ok(writes > 0);
+
+    writes = 0;
+    const secondLoad = await loadWorkingSet(counting, { full: true });
+    const rowsAgain = await db.prepare("SELECT kind, galaxy, version, doc FROM save_npc_bases ORDER BY kind, galaxy").bind().all<{
+      kind: string;
+      galaxy: number;
+      version: number;
+      doc: string;
+    }>();
+    const secondBases = [
+      ...Object.values(secondLoad.universe.pirateBases ?? {}),
+      ...Object.values(secondLoad.universe.alienBases ?? {}),
+    ].map((base) => base.id).sort();
+    console.log(`SAVE_COMPAT_SECOND ${JSON.stringify({ copyWrites: writes, baseIds: secondBases, rowsUnchanged: JSON.stringify(rowsAgain.results) === JSON.stringify(rowsAfter.results) })}`);
+    assert.equal(writes, 0);
+    assert.deepEqual(rowsAgain.results, rowsAfter.results);
+    assert.equal(secondBases.length, bases.length);
+    assert.equal(new Set(secondBases).size, bases.length);
+  });
+
+  it("finishes a partial npc-base copy on the next load without duplicating bases", async () => {
+    const snap = JSON.parse(
+      readFileSync(fileURLToPath(new URL("./fixtures/main-72096eb-npc-blob-save.json", import.meta.url)), "utf8"),
+    ) as {
+      world: Array<{ id: string; version: number; doc: string }>;
+      players: Array<{ id: string; version: number; doc: string }>;
+      planets: Array<{ id: string; owner_id: string; galaxy: number; system: number; slot: number; kind: string; version: number; doc: string }>;
+      fleets: Array<{ id: string; owner_id: string; target_owner_id: string; version: number; doc: string }>;
+      meta: Array<{ id: string; value: string }>;
+    };
+    const { db } = sqliteD1();
+    await ensureRowTables(db);
+    const world = snap.world[0]!;
+    await db.prepare("INSERT INTO save_world (id, version, doc) VALUES (?, ?, ?)").bind(world.id, world.version, world.doc).run();
+    for (const row of snap.players) {
+      await db.prepare("INSERT INTO save_players (id, version, doc) VALUES (?, ?, ?)").bind(row.id, row.version, row.doc).run();
+    }
+    for (const row of snap.planets) {
+      await db.prepare(
+        "INSERT INTO save_planets (id, owner_id, galaxy, system, slot, kind, version, doc) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      ).bind(row.id, row.owner_id, row.galaxy, row.system, row.slot, row.kind, row.version, row.doc).run();
+    }
+    for (const row of snap.fleets) {
+      await db.prepare(
+        "INSERT INTO save_fleets (id, owner_id, target_owner_id, version, doc) VALUES (?, ?, ?, ?, ?)",
+      ).bind(row.id, row.owner_id, row.target_owner_id, row.version, row.doc).run();
+    }
+    const blob = JSON.parse(world.doc) as UniverseState;
+    const galaxyOne = Object.values(blob.pirateBases ?? {}).filter((base) => base.coords.galaxy === 1);
+    assert.ok(galaxyOne.length >= 2);
+    const partial = { [galaxyOne[0]!.id]: galaxyOne[0]! };
+    await db.prepare(
+      "INSERT INTO save_npc_bases (kind, galaxy, destroyed, version, doc) VALUES ('pirate', 1, 0, 1, ?)",
+    ).bind(JSON.stringify(partial)).run();
+    console.log(`PARTIAL_BEFORE ${JSON.stringify({
+      blobPirates: Object.keys(blob.pirateBases ?? {}),
+      blobAliens: Object.keys(blob.alienBases ?? {}),
+      storedPirateGalaxy1: Object.keys(partial),
+    })}`);
+
+    let writes = 0;
+    const counting = countingD1(db, () => {
+      writes += 1;
+    });
+    const loaded = await loadWorkingSet(counting, { full: true });
+    const seen = [
+      ...Object.values(loaded.universe.pirateBases ?? {}),
+      ...Object.values(loaded.universe.alienBases ?? {}),
+    ].map((base) => ({ id: base.id, coords: base.coords, level: base.level })).sort((a, b) => a.id.localeCompare(b.id));
+    const stored = await db.prepare("SELECT kind, galaxy, doc FROM save_npc_bases ORDER BY kind, galaxy").bind().all<{
+      kind: string;
+      galaxy: number;
+      doc: string;
+    }>();
+    const rowIds = (stored.results ?? []).map((row) => ({
+      kind: row.kind,
+      galaxy: row.galaxy,
+      ids: Object.keys(JSON.parse(row.doc) as object).sort(),
+    }));
+    console.log(`PARTIAL_AFTER ${JSON.stringify({ bases: seen, rows: rowIds, copyWrites: writes })}`);
+    assert.equal(seen.length, 4);
+    assert.equal(new Set(seen.map((base) => base.id)).size, 4);
+    assert.deepEqual(
+      seen.map((base) => base.id),
+      [...Object.keys(blob.pirateBases ?? {}), ...Object.keys(blob.alienBases ?? {})].sort(),
+    );
+    const pirateGalaxy = rowIds.find((row) => row.kind === "pirate" && row.galaxy === 1);
+    assert.deepEqual(pirateGalaxy?.ids, galaxyOne.map((base) => base.id).sort());
+
+    const migrated = migrateOrResetUniverse(structuredClone(loaded.universe));
+    assert.equal(migrated.didReset, false);
+    assert.equal(migrated.universe.fleets["raid-main"]?.phase, "outbound");
+
+    writes = 0;
+    await loadWorkingSet(counting, { full: true });
+    const storedAgain = await db.prepare("SELECT kind, galaxy, version, doc FROM save_npc_bases ORDER BY kind, galaxy").bind().all();
+    console.log(`PARTIAL_SECOND ${JSON.stringify({ copyWrites: writes, rowCount: storedAgain.results?.length })}`);
+    assert.equal(writes, 0);
+    assert.equal(storedAgain.results?.length, stored.results?.length);
+  });
 });
+
+function countingD1(inner: D1Like, onWrite: () => void): D1Like {
+  return {
+    prepare(sql: string): D1Stmt {
+      const stmt = inner.prepare(sql);
+      let bound: D1Stmt = stmt;
+      const api: D1Stmt = {
+        bind(...values: unknown[]) {
+          bound = stmt.bind(...values);
+          return api;
+        },
+        async first<T>() {
+          return bound.first<T>();
+        },
+        async all<T>() {
+          return bound.all<T>();
+        },
+        async run() {
+          if (/\b(INSERT|UPDATE|DELETE)\b/i.test(sql)) onWrite();
+          return bound.run();
+        },
+      };
+      return api;
+    },
+    async batch(statements) {
+      return inner.batch(statements);
+    },
+  };
+}

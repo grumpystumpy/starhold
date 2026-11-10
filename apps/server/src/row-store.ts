@@ -1744,6 +1744,26 @@ async function loadAllNpcBases(db: D1Like, into: LoadedRows): Promise<void> {
   into.npcBaseGalaxy = null;
 }
 
+function mergedGalaxyDoc(
+  stored: string | null,
+  blob: Record<string, PirateBase | AlienBase>,
+): { doc: string; destroyed: number; added: number } {
+  const prior = stored ? (timedParse(stored) as Record<string, PirateBase | AlienBase>) : {};
+  let added = 0;
+  for (const [id, base] of Object.entries(blob)) {
+    if (prior[id]) continue;
+    prior[id] = base;
+    added += 1;
+  }
+  const destroyed = Object.values(prior).some((base) => base.destroyedAt != null) ? 1 : 0;
+  return { doc: sortedGalaxyDoc(prior), destroyed, added };
+}
+
+/**
+ * Copy bases out of an old world document.
+ * A row that already exists keeps its bases. Blob ids missing from that row are added.
+ * A second call sees an empty world map and does not write.
+ */
 async function adoptLegacyNpcBases(
   db: D1Like,
   loaded: LoadedRows,
@@ -1757,20 +1777,44 @@ async function adoptLegacyNpcBases(
     alienBases: aliens,
   });
   if (!drafts.length) return false;
-  loaded.universe.npcBaseCount = Object.keys(pirates).length + Object.keys(aliens).length;
+  const stored = await all<NpcGalaxyRow>(db, NPC_BASE_SELECT);
+  const byKey = new Map(stored.map((row) => [galaxyKey(row.kind === "alien" ? "alien" : "pirate", row.galaxy), row]));
   const stmts: D1Stmt[] = [];
-  for (const group of chunkRows(drafts, SQL_ROWS)) {
-    const tuple = "(?, ?, ?, 1, ?)";
+  const seen = new Set<string>();
+  let bodies = 0;
+  for (const draft of drafts) {
+    seen.add(draft.key);
+    const blob = timedParse(draft.doc) as Record<string, PirateBase | AlienBase>;
+    const existing = byKey.get(draft.key);
+    const merged = mergedGalaxyDoc(existing?.doc ?? null, blob);
+    bodies += Object.keys(timedParse(merged.doc) as object).length;
+    if (!existing) {
+      stmts.push(
+        bind(
+          db,
+          `INSERT INTO save_npc_bases (kind, galaxy, destroyed, version, doc) VALUES (?, ?, ?, 1, ?)`,
+          [draft.kind, draft.galaxy, merged.destroyed, merged.doc],
+        ),
+      );
+      continue;
+    }
+    if (merged.added === 0) continue;
+    const version = existing.version + 1;
     stmts.push(
       bind(
         db,
-        `INSERT INTO save_npc_bases (kind, galaxy, destroyed, version, doc) VALUES ${group
-          .map(() => tuple)
-          .join(", ")} ON CONFLICT(kind, galaxy) DO NOTHING`,
-        group.flatMap((row) => [row.kind, row.galaxy, row.destroyed, row.doc]),
+        `UPDATE save_npc_bases SET destroyed = ?, doc = ?, version = ?
+         WHERE kind = ? AND galaxy = ? AND version = ?`,
+        [merged.destroyed, merged.doc, version, draft.kind, draft.galaxy, existing.version],
       ),
     );
   }
+  for (const row of stored) {
+    const key = galaxyKey(row.kind === "alien" ? "alien" : "pirate", row.galaxy);
+    if (seen.has(key)) continue;
+    bodies += Object.keys(timedParse(row.doc) as object).length;
+  }
+  loaded.universe.npcBaseCount = bodies;
   const nextVersion = worldVersion + 1;
   stmts.push(
     bind(
