@@ -76,10 +76,24 @@ function fleetSaveFor(
   return suggestion;
 }
 
+function fleetSaveNote(suggestion: FleetSaveSuggestion): string {
+  const id = escapeAttr(suggestion.attackId);
+  switch (suggestion.mission) {
+    case "expedition":
+      return `<span class="hint" data-testid="fleet-save-note-${id}">Expedition. Expeditions can meet ambushes.</span>`;
+    case "deploy":
+      return "";
+    default: {
+      const unexpected: never = suggestion.mission;
+      return unexpected;
+    }
+  }
+}
+
 function fleetSaveControls(suggestion: FleetSaveSuggestion | null): string {
   if (!suggestion) return "";
   const id = escapeAttr(suggestion.attackId);
-  return `<span class="event-fleet-save"><button type="button" data-fleet-save="${id}" data-testid="fleet-save-${id}">Send fleet away</button><button type="button" class="ghost" data-fleet-save-dismiss="${id}" data-testid="fleet-save-dismiss-${id}" aria-label="Dismiss send fleet away">Dismiss</button></span>`;
+  return `<span class="event-fleet-save"><button type="button" data-fleet-save="${id}" data-testid="fleet-save-${id}">Send fleet away</button>${fleetSaveNote(suggestion)}<button type="button" class="ghost" data-fleet-save-dismiss="${id}" data-testid="fleet-save-dismiss-${id}" aria-label="Dismiss send fleet away">Dismiss</button></span>`;
 }
 
 function renderCoordLink(c: { galaxy: number; system: number; slot: number } | string): string {

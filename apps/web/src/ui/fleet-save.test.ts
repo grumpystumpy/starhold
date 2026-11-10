@@ -1,8 +1,14 @@
 import "../test-dom";
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
-import type { FleetMission, PlayerView } from "@starhold/game";
-import { FLEET_SAVE_MIN_LEAD_MS } from "@starhold/game";
+import {
+  createUniverse,
+  FLEET_SAVE_MIN_LEAD_MS,
+  joinUniverse,
+  playerView,
+  type FleetMission,
+  type PlayerView,
+} from "@starhold/game";
 import { doDismissFleetSave } from "../main-actions-fleet";
 import { doOpenFleetSave } from "../main-actions-session";
 import { root, session, setPaintImpl } from "../session";
@@ -174,20 +180,85 @@ describe("fleet save reminder", () => {
     assert.equal(fleetDraftForPage(root, "overview"), null);
   });
 
-  it("offers transport to own coordinates when that is the prefill", () => {
+  it("offers an expedition to deep space and labels the ambush", () => {
     const draft = fleetDraftForFleetSave({
-      mission: "transport",
+      mission: "expedition",
       ships: { scout: 2 },
       targetPlanetId: null,
-      targetCoords: { galaxy: 1, system: 2, slot: 4 },
+      targetCoords: { galaxy: 1, system: 2, slot: 16 },
     });
     const html = fleetComposer(view(), false, draft);
-    assert.match(html, /Own coordinates 1:2:4/);
-    assert.match(html, /value="coords:1:2:4" selected/);
+    assert.match(html, /Deep space 1:2:16/);
+    assert.match(html, /value="coords:1:2:16" selected/);
     assert.match(html, /value="2" data-fleet-count="scout"/);
     assert.match(html, /data-testid="fleet-send-review"/);
+    assert.equal(draft.mission, "expedition");
     assert.equal(draft.step, 2);
+    const banner = eventsBannerHtml(
+      view({
+        hostileInbound: [fleet("raid-9")],
+        fleetSave: [
+          {
+            attackId: "raid-9",
+            originPlanetId: "home",
+            mission: "expedition",
+            ships: { scout: 2 },
+            targetPlanetId: null,
+            targetCoords: { galaxy: 1, system: 2, slot: 16 },
+            arrivesAt: NOW + 120_000,
+          },
+        ],
+      }),
+      NOW,
+    );
+    assert.match(banner, /data-testid="fleet-save-raid-9"/);
+    assert.match(banner, /data-testid="fleet-save-note-raid-9"/);
+    assert.match(banner, /Expedition\. Expeditions can meet ambushes\./);
     assert.deepEqual(blankFleetDraft().counts, {});
+  });
+
+  it("shows no button when a one-world commander cannot send an expedition", () => {
+    const universe = createUniverse("No Expedition Slot", 8);
+    const joined = joinUniverse(universe, "Solo", NOW);
+    joined.planet.ships.scout = 3;
+    const home = joined.planet;
+    universe.fleets.out = {
+      id: "out",
+      ownerPlayerId: joined.player.id,
+      originPlanetId: home.id,
+      targetPlanetId: null,
+      targetPlayerId: null,
+      targetCoords: { ...home.coords, slot: 16 },
+      mission: "expedition",
+      ships: {},
+      cargo: { metal: 0, crystal: 0, deuterium: 0 },
+      departedAt: NOW,
+      arrivesAt: NOW + 90_000,
+      phase: "outbound",
+      reportId: null,
+    };
+    universe.fleets.incoming = {
+      id: "incoming",
+      ownerPlayerId: "npc_pirates",
+      originPlanetId: "",
+      originPirateBaseId: "pir-1",
+      targetPlanetId: home.id,
+      targetPlayerId: joined.player.id,
+      targetCoords: { ...home.coords },
+      mission: "raid",
+      ships: {},
+      cargo: { metal: 0, crystal: 0, deuterium: 0 },
+      departedAt: NOW,
+      arrivesAt: NOW + 120_000,
+      phase: "outbound",
+      reportId: null,
+    };
+    const seen = playerView(universe, joined.player.id, NOW);
+    const html = eventsBannerHtml(seen, seen.now);
+    assert.match(html, /Hostile incoming/);
+    assert.equal(seen.fleetSave, undefined);
+    assert.doesNotMatch(html, /data-testid="fleet-save-/);
+    assert.doesNotMatch(html, /Send fleet away/);
   });
 
   it("opens the fleet page from the reminder without launching", async () => {

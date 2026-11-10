@@ -185,16 +185,6 @@ export function fleetComposer(
     void _exhaustive;
   }
 
-  if (mission === "transport" && draft?.targetCoords) {
-    const c = draft.targetCoords;
-    const value = `coords:${c.galaxy}:${c.system}:${c.slot}`;
-    if (!options.some((option) => option.includes(`value="${value}"`))) {
-      options.push(
-        `<option value="${value}">Own coordinates ${fmtCoords(c)}</option>`,
-      );
-    }
-  }
-
   if (
     draft?.targetCoords &&
     (mission === "raid" || mission === "pirateRaid")

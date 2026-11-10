@@ -1,15 +1,25 @@
-import { SHIP_ORDER } from "./catalog.js";
+import { EXPEDITION_SLOT, SHIP_ORDER } from "./catalog.js";
 import { FLEET_SAVE_MIN_LEAD_MS } from "./data/tuning.js";
+import {
+  classBonuses,
+  maxFleetSlots,
+  normalizeFleetShips,
+  validateSwarmCarry,
+} from "./formulas.js";
 import { isStationaryShip } from "./formulas-round3.js";
 import { coordDistance } from "./formulas-travel.js";
 import type {
+  Coordinates,
   FleetMission,
   FleetShips,
   PlanetState,
+  PlayerState,
   UniverseState,
 } from "./types.js";
 import type { FleetSaveSuggestion } from "./types-view.js";
-import { isMiniPlanet } from "./world-mini.js";
+import { playerBoosts } from "./world-boosts.js";
+import { resolveLaunchTarget } from "./world-launch-target.js";
+import { empireDriftBeaconCount, isMiniPlanet } from "./world-mini.js";
 
 /**
  * Prefills for the fleet-events "Send fleet away" reminder.
@@ -32,18 +42,89 @@ export function fleetSaveSuggestions(
     if (!origin || origin.ownerPlayerId !== playerId) continue;
     const ships = mobileShips(origin);
     if (!ships) continue;
+    if (!swarmOk(player, ships)) continue;
+    if (!fleetSlotFree(universe, player, now)) continue;
     const haven = nearestHaven(universe, playerId, origin);
+    if (haven) {
+      out.push({
+        attackId: fleet.id,
+        originPlanetId: origin.id,
+        mission: "deploy",
+        ships,
+        targetPlanetId: haven.id,
+        targetCoords: null,
+        arrivesAt: fleet.arrivesAt,
+      });
+      continue;
+    }
+    const targetCoords = expeditionCoords(origin);
+    if (!expeditionTargetOk(universe, player, origin, ships, targetCoords)) {
+      continue;
+    }
     out.push({
       attackId: fleet.id,
       originPlanetId: origin.id,
-      mission: haven ? "deploy" : "transport",
+      mission: "expedition",
       ships,
-      targetPlanetId: haven?.id ?? null,
-      targetCoords: haven ? null : { ...origin.coords },
+      targetPlanetId: null,
+      targetCoords,
       arrivesAt: fleet.arrivesAt,
     });
   }
   return out;
+}
+
+function expeditionCoords(origin: PlanetState): Coordinates {
+  return {
+    galaxy: origin.coords.galaxy,
+    system: origin.coords.system,
+    slot: EXPEDITION_SLOT,
+  };
+}
+
+function swarmOk(player: PlayerState, ships: Partial<FleetShips>): boolean {
+  return validateSwarmCarry(
+    normalizeFleetShips(ships),
+    player.research.swarmHold ?? 0,
+  ).ok;
+}
+
+function fleetSlotFree(
+  universe: UniverseState,
+  player: PlayerState,
+  now: number,
+): boolean {
+  const boosts = playerBoosts(player, now);
+  const cls = classBonuses(player.playerClass?.classId);
+  const cap =
+    maxFleetSlots(player.research.computerTech ?? 0) +
+    boosts.fleetSlots +
+    cls.fleetSlots +
+    empireDriftBeaconCount(universe, player.id);
+  const active = Object.values(universe.fleets).filter(
+    (fleet) => fleet.ownerPlayerId === player.id,
+  ).length;
+  return active < cap;
+}
+
+/** Same deep-space rules as launch. A full slot (needs more Stellar Cartography) is unavailable. */
+function expeditionTargetOk(
+  universe: UniverseState,
+  player: PlayerState,
+  origin: PlanetState,
+  ships: Partial<FleetShips>,
+  targetCoords: Coordinates,
+): boolean {
+  const target = resolveLaunchTarget(
+    universe,
+    player,
+    origin,
+    "expedition",
+    normalizeFleetShips(ships),
+    undefined,
+    targetCoords,
+  );
+  return target.ok;
 }
 
 function isSaveableRaid(

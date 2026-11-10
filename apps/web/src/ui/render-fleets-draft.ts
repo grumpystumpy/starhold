@@ -173,7 +173,7 @@ function readCargo(form: ParentNode): Partial<Resources> {
 
 /** Fleet-save reminder. Ships are filled and the review step is open. Nothing is sent. */
 export function fleetDraftForFleetSave(prefill: {
-  mission: "deploy" | "transport";
+  mission: "deploy" | "expedition";
   ships: Partial<FleetShips>;
   targetPlanetId: string | null;
   targetCoords: Coordinates | null;

@@ -889,12 +889,12 @@ export interface FleetSaveSuggestion {
   /** Incoming hostile fleet id. Dismissal is per this attack. */
   attackId: string;
   originPlanetId: string;
-  mission: "deploy" | "transport";
+  mission: "deploy" | "expedition";
   /** Docked non-stationary ships. Stationary hulls are left out. */
   ships: Partial<FleetShips>;
-  /** Nearest other planet or moon. Null for the single-world transport fallback. */
+  /** Nearest other planet or moon. Null when the save is an expedition. */
   targetPlanetId: string | null;
-  /** Origin coordinates when the fallback is transport. Null on deploy. */
+  /** Deep-space coordinates for an expedition. Null on deploy. */
   targetCoords: Coordinates | null;
   arrivesAt: number;
 }

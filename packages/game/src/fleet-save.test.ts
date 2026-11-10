@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { EXPEDITION_SLOT } from "./catalog.js";
 import { FLEET_SAVE_MIN_LEAD_MS } from "./data/tuning.js";
 import { normalizeFleetShips } from "./formulas-travel.js";
 import type { Coordinates, FleetMission, PlanetState, UniverseState } from "./types.js";
@@ -7,6 +8,7 @@ import {
   createUniverse,
   fleetSaveSuggestions,
   joinUniverse,
+  launchFleet,
   playerView,
 } from "./world.js";
 
@@ -121,8 +123,9 @@ describe("fleet save suggestions", () => {
     assert.equal(row?.targetPlanetId, "a-haven");
   });
 
-  it("uses transport to own coordinates when no other planet or moon exists", () => {
+  it("sends a one-world commander on an expedition the server accepts", () => {
     const { universe, playerId, home } = stage();
+    home.resources.deuterium = 50_000;
     addBody(
       universe,
       playerId,
@@ -137,9 +140,47 @@ describe("fleet save suggestions", () => {
       [raid(playerId, home, NOW + 120_000)],
       NOW,
     );
-    assert.equal(row?.mission, "transport");
+    assert.ok(row);
+    assert.equal(row?.mission, "expedition");
+    assert.equal(row?.originPlanetId, home.id);
     assert.equal(row?.targetPlanetId, null);
-    assert.deepEqual(row?.targetCoords, home.coords);
+    assert.equal(row?.targetCoords?.slot, EXPEDITION_SLOT);
+    assert.equal(row?.targetCoords?.galaxy, home.coords.galaxy);
+    assert.equal(row?.targetCoords?.system, home.coords.system);
+    assert.deepEqual(row?.ships, { scout: 4 });
+    const launch = launchFleet(universe, {
+      playerId,
+      originPlanetId: row!.originPlanetId,
+      mission: row!.mission,
+      ships: row!.ships,
+      targetCoords: row!.targetCoords ?? undefined,
+      now: NOW,
+    });
+    assert.equal(launch.ok, true, launch.ok ? "" : launch.error);
+    if (!launch.ok) return;
+    assert.equal(launch.fleet.mission, "expedition");
+    assert.equal(launch.fleet.targetCoords.slot, EXPEDITION_SLOT);
+  });
+
+  it("hides the reminder when a one-world commander has no free expedition slot", () => {
+    const { universe, playerId, home } = stage();
+    universe.fleets.out = raid(playerId, home, NOW + 90_000, {
+      id: "out",
+      ownerPlayerId: playerId,
+      mission: "expedition",
+      targetPlanetId: null,
+      targetPlayerId: null,
+      targetCoords: { ...home.coords, slot: EXPEDITION_SLOT },
+    });
+    assert.deepEqual(
+      fleetSaveSuggestions(
+        universe,
+        playerId,
+        [raid(playerId, home, NOW + 120_000)],
+        NOW,
+      ),
+      [],
+    );
   });
 
   it("skips spies, short notice, stationary hangars, and own fleets", () => {
