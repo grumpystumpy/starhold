@@ -38,6 +38,8 @@ export const ROW_LOCK_MS = 2_500;
 const CHUNK = 25;
 /** D1 rejects a compound SELECT with 6 or more terms. Keep every multi-row write at or under 5. */
 const SQL_ROWS = 5;
+/** NPC ten-minute player page. Keeps that cron off a full save_players doc read (STARHOLD-D). */
+export const NPC_PLAYER_PAGE = 25;
 
 export class RowStaleError extends Error {
   constructor() {
@@ -1467,13 +1469,45 @@ async function loadScheduledRows(
   }
 }
 
+/**
+ * One id-ordered page of players for the NPC cron.
+ * A cursor past the last id reads the first page in the same call.
+ * A short page clears the cursor so the next run is not stuck at the end.
+ */
+async function loadNpcPlayerPage(db: D1Like, loaded: LoadedRows): Promise<void> {
+  const readPage = (after: string) =>
+    all<{ id: string }>(
+      db,
+      "SELECT id FROM save_players WHERE id > ? ORDER BY id ASC LIMIT ?",
+      after,
+      NPC_PLAYER_PAGE,
+    );
+  const start = loaded.universe.npcPlayerPageCursor ?? "";
+  let idRows = await readPage(start);
+  if (idRows.length === 0 && start !== "") idRows = await readPage("");
+  const ids = idRows.map((row) => row.id);
+  if (ids.length === 0 || ids.length < NPC_PLAYER_PAGE) delete loaded.universe.npcPlayerPageCursor;
+  else loaded.universe.npcPlayerPageCursor = ids[ids.length - 1];
+  if (!ids.length) return;
+  const list = inList(ids);
+  const rows = await all<{ id: string; version: number; doc: string }>(
+    db,
+    `SELECT id, version, doc FROM save_players WHERE id IN (${list.clause})`,
+    ...list.values,
+  );
+  applyPlayerRows(loaded, rows);
+}
+
 export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined): Promise<LoadedRows> {
   const requestedIds = [...new Set((work?.playerIds ?? []).filter(Boolean))] as string[];
   const planetIds = [...new Set((work?.planetIds ?? []).filter((id): id is string => Boolean(id)))];
   const wide =
     Boolean(work?.maintenance || work?.full) ||
     (requestedIds.length === 0 && !work?.catalog && !work?.npc);
-  const batchCoreRows = Boolean(work?.npc || wide);
+  // Maintenance and other wide reads still take every player.
+  // The NPC cron pages by id so it does not scan every player doc at once.
+  const pageNpc = Boolean(work?.npc) && !wide;
+  const batchCoreRows = wide;
   let world: { version: number; doc: string } | null;
   let playerRows: Array<{ id: string; version: number; doc: string }> | undefined;
   let planetRows: Array<{ id: string; version: number; doc: string }> | undefined;
@@ -1520,7 +1554,7 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
     planetDocs: new Map(),
   };
   if (playerRows) applyPlayerRows(loaded, playerRows);
-  else await loadPlayers(db, loaded);
+  else if (!pageNpc) await loadPlayers(db, loaded);
   if (planetRows) applyPlanetRows(loaded, planetRows);
   const placePirates = Boolean(work?.npc) || pirateSitesNeeded(loaded.universe);
   let occupancyLoaded = false;
@@ -1531,6 +1565,19 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
     await loadMessages(db, loaded, "", []);
     await loadAllSystems(db, loaded);
   } else if (work?.npc) {
+    if (pageNpc) {
+      await loadNpcPlayerPage(db, loaded);
+      const ownerIds = Object.keys(loaded.universe.players);
+      if (ownerIds.length) {
+        const owners = inList(ownerIds);
+        await loadPlanetDocs(
+          db,
+          loaded,
+          `SELECT id, version, doc FROM save_planets WHERE owner_id IN (${owners.clause})`,
+          owners.values,
+        );
+      }
+    }
     await loadScheduledRows(
       db,
       loaded,
@@ -1539,7 +1586,7 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
       placePirates,
     );
     occupancyLoaded = placePirates;
-    // Raids need owned bodies. Placement also needs every occupied slot, below.
+    // Raids need the owned bodies on this page. Placement still needs occupied slots.
   } else if (work?.catalog) {
     const stubs = await all<{
       id: string;

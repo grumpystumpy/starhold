@@ -110,6 +110,7 @@ import {
   pickOrSeedMiniForDiscovery,
 } from "./world-mini.js";
 import {
+  pirateGalaxyAcceptsSpawn,
   alienCombatResearchForOpponent,
   alienShipsForTier,
   createAlienBase,
@@ -576,7 +577,7 @@ export function resolveExpeditionArrival(
         fleet.targetCoords.galaxy,
         `${fleet.id}:new-pirate-base:${now}`,
       );
-      if (site) {
+      if (site && pirateGalaxyAcceptsSpawn(universe, site.galaxy)) {
         const base = createPirateBase(
           universe.seed ?? universe.id,
           site.galaxy,

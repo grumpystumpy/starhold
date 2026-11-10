@@ -51,7 +51,7 @@ import {
 } from "./world-alliances.js";
 import { galaxyMarkerOverlay } from "./world-alliance-intel.js";
 import { listOpenAcsForAlliance } from "./world-acs.js";
-import { advanceUniverse } from "./world-arrival.js";
+import { advancePlanetNow, advanceUniverse } from "./world-arrival.js";
 import { asteroidsInSystem } from "./world-asteroids.js";
 import {
   canClaimDailyLogin,
@@ -353,8 +353,22 @@ export function playerView(
   now = Date.now(),
   galaxy?: number,
   system?: number,
+  options?: { skipUniverseTick?: boolean },
 ): PlayerView {
-  advanceUniverse(universe, now);
+  if (options?.skipUniverseTick) {
+    const player = universe.players[playerId];
+    if (player) {
+      for (const id of new Set([
+        ...(player.planetIds ?? []),
+        player.homePlanetId,
+        player.activePlanetId,
+      ])) {
+        advancePlanetNow(universe, id, now);
+      }
+    }
+  } else {
+    advanceUniverse(universe, now);
+  }
   ensureUniverseShape(universe);
   const player = universe.players[playerId];
   if (!player) throw new Error("Unknown player.");
