@@ -77,9 +77,11 @@ import {
   doSelectPlanet,
   doDeleteMessages,
   doMarkEventsRead,
+  doDismissFleetSave,
   doGalaxyFleetAction,
   doGalaxyFleetPreset,
   doGalaxySpy,
+  doOpenFleetSave,
   doSetAllianceJoinMode,
   doSetAllianceClass,
   doSetAllianceRole,
@@ -250,6 +252,22 @@ export function bindClickHandlers(): void {
       if (closestActionEl(target, "[data-event-read-all]")) {
         ev.preventDefault();
         void doMarkEventsRead();
+        return;
+      }
+
+      const fleetSave = closestActionEl(target, "[data-fleet-save]");
+      if (fleetSave) {
+        ev.preventDefault();
+        const attackId = fleetSave.getAttribute("data-fleet-save");
+        if (attackId) void doOpenFleetSave(attackId);
+        return;
+      }
+
+      const fleetSaveDismiss = closestActionEl(target, "[data-fleet-save-dismiss]");
+      if (fleetSaveDismiss) {
+        ev.preventDefault();
+        const attackId = fleetSaveDismiss.getAttribute("data-fleet-save-dismiss");
+        if (attackId) doDismissFleetSave(attackId);
         return;
       }
 

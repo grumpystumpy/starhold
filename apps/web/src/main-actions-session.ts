@@ -1,4 +1,10 @@
-import { MAP_GALAXIES, MAP_SYSTEMS, type PlayerView } from "@starhold/game";
+import {
+  FLEET_SAVE_MIN_LEAD_MS,
+  MAP_GALAXIES,
+  MAP_SYSTEMS,
+  type FleetSaveSuggestion,
+  type PlayerView,
+} from "@starhold/game";
 import {
   ApiError,
   OVERLOAD_MESSAGE,
@@ -36,7 +42,8 @@ import {
   setFlash,
   stripJoinParams,
 } from "./session";
-import { syncSessionUrl } from "./ui/router";
+import { fleetDraftForFleetSave } from "./ui/render-fleets-draft";
+import { navigateTo, syncSessionUrl } from "./ui/router";
 import { captureGameEvent, identifyCommander } from "./telemetry";
 import { settleMutation } from "./recover-action";
 
@@ -924,6 +931,48 @@ export async function doGalaxyGalaxyNav(dir: "prev" | "next"): Promise<void> {
     ? current >= MAP_GALAXIES ? 1 : current + 1
     : current <= 1 ? MAP_GALAXIES : current - 1;
   return doGalaxyJump(next, session.galaxySystem ?? session.view.galaxy.system);
+}
+
+/** Opens the fleet page prefilled. Does not launch. */
+export async function doOpenFleetSave(attackId: string): Promise<void> {
+  const view = session.view;
+  if (!view) return;
+  if (session.busy) {
+    setFlash("error", "Still applying the last action — try again in a moment.");
+    schedulePaint();
+    return;
+  }
+  const suggestion = fleetSaveSuggestion(view.fleetSave, attackId, view.now);
+  if (!suggestion) return;
+  session.pendingFleetSaveDraft = fleetDraftForFleetSave(suggestion);
+  if (view.planet.id !== suggestion.originPlanetId) {
+    await doSelectPlanet(suggestion.originPlanetId);
+    if (session.view?.planet.id !== suggestion.originPlanetId) {
+      session.pendingFleetSaveDraft = null;
+      return;
+    }
+  }
+  if (session.activePage !== "fleet") navigateTo("fleet");
+  else if (session.pendingFleetSaveDraft) schedulePaint();
+  const name = session.view?.planet.name;
+  setFlash(
+    "notice",
+    name
+      ? `Review the save from ${name}, then send.`
+      : "Review the save, then send.",
+  );
+  schedulePaint();
+}
+
+function fleetSaveSuggestion(
+  rows: FleetSaveSuggestion[] | undefined,
+  attackId: string,
+  now: number,
+): FleetSaveSuggestion | null {
+  const suggestion = rows?.find((row) => row.attackId === attackId) ?? null;
+  if (!suggestion) return null;
+  if (suggestion.arrivesAt - now <= FLEET_SAVE_MIN_LEAD_MS) return null;
+  return suggestion;
 }
 
 export async function doSelectPlanet(planetId: string): Promise<void> {

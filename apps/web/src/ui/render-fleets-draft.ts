@@ -171,6 +171,30 @@ function readCargo(form: ParentNode): Partial<Resources> {
   };
 }
 
+/** Fleet-save reminder. Ships are filled and the review step is open. Nothing is sent. */
+export function fleetDraftForFleetSave(prefill: {
+  mission: "deploy" | "transport";
+  ships: Partial<FleetShips>;
+  targetPlanetId: string | null;
+  targetCoords: Coordinates | null;
+}): FleetDraft {
+  const counts = { ...prefill.ships };
+  return {
+    targetPlanetId: prefill.targetPlanetId,
+    targetCoords: prefill.targetCoords ? { ...prefill.targetCoords } : null,
+    asteroidId: null,
+    pirateBaseId: null,
+    alienBaseId: null,
+    mission: prefill.mission,
+    counts,
+    cargo: {},
+    openAcs: false,
+    acsGroupId: "",
+    speedPercent: 100,
+    step: fleetShipTotal(counts) > 0 ? 2 : 1,
+  };
+}
+
 /** Raid form state for a Joint Strike deep-link, before the fleet form exists. */
 export function fleetDraftWithAcsPrefill(
   base: FleetDraft | null,

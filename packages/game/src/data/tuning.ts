@@ -1680,6 +1680,11 @@ export const PIRATE_STRENGTH_MULT = 0.5;
  * The term itself is never zero. Aliens do not use it.
  */
 export const PIRATE_RAID_DISTANCE_REF = 400;
+/**
+ * Hide the fleet-save reminder when a hostile raid arrives in this long or sooner.
+ * The player still has to send; this only gates the suggestion.
+ */
+export const FLEET_SAVE_MIN_LEAD_MS = 60_000;
 export const PIRATE_TECH_OFFSET = 3;
 
 /** Max catch-up raid firings per base per tick (lazy Hobby path). */

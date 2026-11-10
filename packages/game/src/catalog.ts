@@ -520,6 +520,7 @@ export {
   ALLIANCE_MARKERS_MAX,
   ALLIANCE_MARKER_TTL_MS,
   ALLIANCE_MARKER_NOTE_MAX,
+  FLEET_SAVE_MIN_LEAD_MS,
 } from "./data/tuning.js";
 
 export const STARTING_RESOURCES = {
