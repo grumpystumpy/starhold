@@ -234,4 +234,12 @@ Plates are mapped in `apps/web/src/ui/assets.ts` (`BUILDING_ART`, `SHIP_ART`, `D
 
 Every referenced file is listed in `docs/ART_CREDITS.md`. game-icons.net lines on the Credits page use the required CC BY 3.0 credit. Capital hulls, shield-style defenses, Jump Gate, Chrono Lathe, Mantle Loom, the deuterium chip, and officer portraits stay on the original plates. No save fields were added.
 
+## Sound
+
+A fleet arriving home and a new combat report can each play one short tone. Sound is off until the commander turns it on. The switch sits in the side nav under Settings (`data-testid="sound-settings"`, button `data-testid="sound-toggle"`). It is stored in localStorage under `starhold-sound` (`1` on, any other value or a missing key off). It is not a save field. Older saves are unchanged. No route and no table were added.
+
+`apps/web/src/settings.ts` compares the last signed-in view with the next one. A fleet return is an own fleet that was `returning` and is now gone. A combat report is a report id that was not in the previous view. The first view after sign-in only records that baseline. Nothing plays before a click or key press, and the tone player is not called while the switch is off. The tones are WebAudio oscillators. There is no audio file and no new dependency.
+
+`apps/web/src/ui/sound-settings.ts` paints the switch. `apps/web/src/ui/render-shell.ts` places it in the side nav. `apps/web/src/ui/styles-shell.css` gives the on state the accent color and puts the row on its own line on a narrow screen. `apps/web/src/ui/render-app.ts` runs the comparison on each signed-in paint and clears the baseline on the join screen. `apps/web/src/main-handlers-click.ts` toggles the switch. `apps/web/src/main.ts` arms playback on a later click or key once the switch is on. `apps/web/package.json` runs `apps/web/src/settings.test.ts`. This entry is in `docs/FEATURE_MAP.md`.
+
 

@@ -49,6 +49,7 @@ import {
 import { wireJointStrikeForm } from "./main-actions-alliances";
 import { ensureDelegatedHandlers } from "./main-handlers";
 import { initTelemetry } from "./telemetry";
+import { installSoundGestureArm } from "./settings";
 import { startPwa } from "./pwa";
 import {
   sharedReportCodeFromSearch,
@@ -112,6 +113,7 @@ function paint(): void {
 }
 
 setPaintImpl(paint);
+installSoundGestureArm(typeof document === "undefined" ? null : document);
 
 async function resumePlayer(
   playerId: string,

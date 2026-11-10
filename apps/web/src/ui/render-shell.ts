@@ -13,6 +13,7 @@ import { planetDiscHtml } from "./planet-disc";
 import { NAV_LABELS, NAV_PAGES, type NavPage } from "./nav";
 import { creditsHref, creditsNavHtml } from "./render-credits";
 import { accountNavHtml, securityHref } from "./render-security";
+import { soundSettingsHtml } from "./sound-settings";
 import { flashHtml, resBlock } from "./render-chrome";
 import { escapeAttr, escapeHtml } from "./render-escape";
 import { hrefForPage } from "./router";
@@ -181,6 +182,7 @@ function leftNav(view: PlayerView, active: NavPage): string {
         }).join("")}
         ${accountNavHtml(Boolean(session.account), session.accountMenu === "security", securityHref(`?${params.toString()}`))}
         ${creditsNavHtml(session.accountMenu === "credits", creditsHref(`?${params.toString()}`))}
+        ${soundSettingsHtml()}
       </ul>
     </nav>`;
 }
