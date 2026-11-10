@@ -742,6 +742,11 @@ export interface UniverseState {
   /** Raid-only cursor for alternating Workers NPC AI slices. */
   aiRaidCatchUpCursor?: string | null;
   /**
+   * Last player id loaded by a full NPC cron page.
+   * Absent on older saves and after a short page, which starts again at the first id.
+   */
+  npcPlayerPageCursor?: string;
+  /**
    * Workers bootstrap. Absent on Vercel universes that were seeded in one
    * shot. `done` means minis, asteroids, and the pirate roster match a
    * full seed.

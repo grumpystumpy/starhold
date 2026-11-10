@@ -186,6 +186,10 @@ Email reset is off until a provider is configured. Set `EMAIL_PROVIDER=resend`, 
 A failed order re-checks state once. If that read times out or never returns a view, the flash is "Couldn't confirm. Check and tap again if needed." "Not applied — tap again." is only used when a view proves the order did not land. Account actions (join, login, signup, password, recovery codes) never show the overload "checking" line unless a state read follows. The galaxy jump field uses `inputmode="decimal"`.
 
 
+## NPC player page (STARHOLD-D)
+
+The */10 NPC cron still calls `withUniverse` with `{ npc: true }`. That pass, in `apps/server/src/row-store.ts`, no longer reads every `save_players` document in one shot. It pages with `SELECT id FROM save_players WHERE id > ? ORDER BY id ASC LIMIT ?`, then loads that page's player rows, the planets those players own, and the systems those planets sit in. Pirate raids resolve against the owners on the loaded page. Optional world field `npcPlayerPageCursor` (`packages/game/src/types-view.ts`) stores the last id of a full page. Older saves omit it. A short page clears it so the next run starts at the first id, and a cursor past the last id loads the first page in that same run. Maintenance and `work.full` still load every player.
+
 ## CPU bursts and pirate smoke retries
 
 `npm run perf:cpu-burst` posts 10 `POST /api/build-ship` calls and 10 `POST /api/build-defense` calls back to back. On `wrangler dev --local` with `STARHOLD_CPU_PROFILE=1`, the warm run's `x-starhold-cpu-ms` max was 69 ms for both bursts, over the 10 ms free-plan limit. Build rules are unchanged. Numbers and the method are in `docs/cloudflare.md`. The UI smoke signs up a fresh commander, up to 5 times, when the home galaxy has no pirate. It logs `pirate-home-retries:N`, still requires the galaxy page to show `galaxy-pirate`, and fails with a different message when a pirate exists only outside those home galaxies or when no pirate base was found. State reads for that search stay within 5×399.
