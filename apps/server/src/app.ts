@@ -32,6 +32,10 @@ import {
   claimPlayerGoal,
   classCatalog,
   createAlliance,
+  acceptAllianceNap,
+  cancelAllianceRelation,
+  declareAllianceWar,
+  offerAllianceNap,
   deleteFleetPreset,
   discoverMiniPlanet,
   disbandAlliance,
@@ -1241,6 +1245,70 @@ export function createApp(): Hono {
   });
 
   mountAllianceIntelRoutes(app);
+
+  app.post("/api/alliance/diplomacy/nap", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      allianceId?: string;
+    };
+    if (!body.playerId || !body.allianceId) {
+      return c.json({ error: "playerId and allianceId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = offerAllianceNap(universe, body.playerId!, body.allianceId!);
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    }, { playerIds: [body.playerId] });
+  });
+
+  app.post("/api/alliance/diplomacy/nap/accept", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      allianceId?: string;
+    };
+    if (!body.playerId || !body.allianceId) {
+      return c.json({ error: "playerId and allianceId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = acceptAllianceNap(universe, body.playerId!, body.allianceId!);
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    }, { playerIds: [body.playerId] });
+  });
+
+  app.post("/api/alliance/diplomacy/war", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      allianceId?: string;
+    };
+    if (!body.playerId || !body.allianceId) {
+      return c.json({ error: "playerId and allianceId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = declareAllianceWar(universe, body.playerId!, body.allianceId!);
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    }, { playerIds: [body.playerId] });
+  });
+
+  app.post("/api/alliance/diplomacy/cancel", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      allianceId?: string;
+    };
+    if (!body.playerId || !body.allianceId) {
+      return c.json({ error: "playerId and allianceId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = cancelAllianceRelation(
+        universe,
+        body.playerId!,
+        body.allianceId!,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    }, { playerIds: [body.playerId] });
+  });
 
   app.post("/api/alliance/disband", async (c) => {
     const body = (await c.req.json().catch(() => ({}))) as {

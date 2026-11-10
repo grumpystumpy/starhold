@@ -7,9 +7,13 @@ import type {
   PlayerView,
 } from "@starhold/game";
 import {
+  acceptAllianceNapRequest,
   approveAllianceRequest,
+  cancelAllianceRelationRequest,
   cancelAllianceRequest,
   createAllianceRequest,
+  declareAllianceWarRequest,
+  offerAllianceNapRequest,
   deleteAllianceIntelRequest,
   deleteAllianceMarkerRequest,
   disbandAllianceRequest,
@@ -721,6 +725,125 @@ export function fleetStrikeTarget(): {
   );
   const mission = selected?.value === "pirateRaid" ? "pirateRaid" : "raid";
   return { coords, mission };
+}
+
+function hasRelation(
+  view: PlayerView,
+  allianceId: string,
+  kind: "nap" | "war",
+  status: "pending" | "active",
+): boolean {
+  return (
+    view.alliance?.relations?.some(
+      (row) =>
+        row.allianceId === allianceId && row.kind === kind && row.status === status,
+    ) ?? false
+  );
+}
+
+export async function doOfferAllianceNap(allianceId: string): Promise<void> {
+  if (!session.view) return;
+  if (session.busy) {
+    setFlash("error", "Still applying the last action — try again in a moment.");
+    schedulePaint();
+    return;
+  }
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    session.view = await offerAllianceNapRequest(session.view.player.id, allianceId);
+    setFlash("notice", "Non-aggression pact offered.");
+  } catch (err) {
+    await settleMutation({
+      err,
+      failureFallback: "Pact offer failed.",
+      applied: (view) => hasRelation(view, allianceId, "nap", "pending"),
+      successNotice: () => "Non-aggression pact offered.",
+    });
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doAcceptAllianceNap(allianceId: string): Promise<void> {
+  if (!session.view) return;
+  if (session.busy) {
+    setFlash("error", "Still applying the last action — try again in a moment.");
+    schedulePaint();
+    return;
+  }
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    session.view = await acceptAllianceNapRequest(session.view.player.id, allianceId);
+    setFlash("notice", "Non-aggression pact accepted.");
+  } catch (err) {
+    await settleMutation({
+      err,
+      failureFallback: "Could not accept the pact.",
+      applied: (view) => hasRelation(view, allianceId, "nap", "active"),
+      successNotice: () => "Non-aggression pact accepted.",
+    });
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doDeclareAllianceWar(allianceId: string): Promise<void> {
+  if (!session.view) return;
+  if (session.busy) {
+    setFlash("error", "Still applying the last action — try again in a moment.");
+    schedulePaint();
+    return;
+  }
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    session.view = await declareAllianceWarRequest(session.view.player.id, allianceId);
+    setFlash("notice", "War declared.");
+  } catch (err) {
+    await settleMutation({
+      err,
+      failureFallback: "Could not declare war.",
+      applied: (view) => hasRelation(view, allianceId, "war", "active"),
+      successNotice: () => "War declared.",
+    });
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doCancelAllianceRelation(allianceId: string): Promise<void> {
+  if (!session.view) return;
+  if (session.busy) {
+    setFlash("error", "Still applying the last action — try again in a moment.");
+    schedulePaint();
+    return;
+  }
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    session.view = await cancelAllianceRelationRequest(session.view.player.id, allianceId);
+    setFlash("notice", "Relation cancelled.");
+  } catch (err) {
+    await settleMutation({
+      err,
+      failureFallback: "Could not cancel that relation.",
+      applied: (view) =>
+        !(view.alliance?.relations ?? []).some((row) => row.allianceId === allianceId),
+      successNotice: () => "Relation cancelled.",
+    });
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
 }
 
 export async function doInviteAlliance(targetPlayerId: string): Promise<void> {

@@ -197,12 +197,16 @@ export function galaxyPanel(
         : "";
       const moon = s.hasMoon ? " · Moon" : "";
       const tag = s.allianceTag ? ` [${escapeHtml(s.allianceTag)}]` : "";
+      const stance =
+        s.diplomacy === "nap" || s.diplomacy === "war"
+          ? ` <span class="diplomacy-tag" data-diplomacy="${s.diplomacy}" data-testid="galaxy-diplomacy-${s.coords.slot}">${s.diplomacy === "nap" ? "NAP" : "WAR"}</span>`
+          : "";
       const points =
         s.playerId && typeof s.empirePoints === "number"
           ? ` · ${fmtCompact(s.empirePoints)} pts`
           : "";
       const who = s.playerName
-        ? `${escapeHtml(s.playerName)}${tag}${s.isOwn ? " (you)" : ""}${s.isMini ? " · Mini" : ""}${points}${moon}`
+        ? `${escapeHtml(s.playerName)}${tag}${stance}${s.isOwn ? " (you)" : ""}${s.isMini ? " · Mini" : ""}${points}${moon}`
         : "Empty";
       const marker = s.allianceMarker;
       const tip = marker
@@ -369,8 +373,12 @@ export function galaxyPanel(
           const debris = hasDebris
             ? ` · debris ${fmt(mini.debris!.metal)}/${fmt(mini.debris!.crystal)}`
             : "";
+          const miniStance =
+            mini.diplomacy === "nap" || mini.diplomacy === "war"
+              ? ` <span class="diplomacy-tag" data-diplomacy="${mini.diplomacy}" data-testid="galaxy-diplomacy-mini-${escapeAttr(mini.planetId)}">${mini.diplomacy === "nap" ? "NAP" : "WAR"}</span>`
+              : "";
           const who = mini.playerName
-            ? `${escapeHtml(mini.playerName)}${mini.isOwn ? " (you)" : ""}`
+            ? `${escapeHtml(mini.playerName)}${miniStance}${mini.isOwn ? " (you)" : ""}`
             : escapeHtml(mini.name);
           const slotNum = `<span class="galaxy-slot-num" data-testid="galaxy-mini-slot-num-${mini.coords.slot}">${fmt(mini.coords.slot)}</span>`;
           let miniActions = "";

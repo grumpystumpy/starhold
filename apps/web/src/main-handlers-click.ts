@@ -43,8 +43,12 @@ import {
   doConfirmEmailReset,
   doRevokeOtherSessions,
   doTradeResources,
+  doAcceptAllianceNap,
+  doCancelAllianceRelation,
   doCreateAlliance,
+  doDeclareAllianceWar,
   doDeleteAllianceIntel,
+  doOfferAllianceNap,
   doDeleteAllianceMarker,
   doDeleteFleetPreset,
   doDisbandAlliance,
@@ -105,6 +109,7 @@ import {
   toggleBattleReplay,
 } from "./ui/render-fleets-panels";
 import { readFleetForm } from "./main-fleet-form";
+import { napAttackDecision, napAttackWarning } from "./ui/nap-attack";
 import {
   fleetDraftAfterBack,
   fleetDraftAfterNext,
@@ -881,6 +886,36 @@ export function bindClickHandlers(): void {
         return;
       }
 
+      const diplomacyOffer = closestActionEl(target, "[data-diplomacy-offer]");
+      if (diplomacyOffer) {
+        ev.preventDefault();
+        const kind = diplomacyOffer.getAttribute("data-diplomacy-offer");
+        const select = root.querySelector<HTMLSelectElement>(
+          "[data-testid='alliance-diplomacy-target']",
+        );
+        const id = select?.value ?? "";
+        if (!id) return;
+        if (kind === "nap") void doOfferAllianceNap(id);
+        else if (kind === "war") void doDeclareAllianceWar(id);
+        return;
+      }
+
+      const diplomacyAccept = closestActionEl(target, "[data-diplomacy-accept]");
+      if (diplomacyAccept) {
+        ev.preventDefault();
+        const id = diplomacyAccept.getAttribute("data-diplomacy-accept");
+        if (id) void doAcceptAllianceNap(id);
+        return;
+      }
+
+      const diplomacyCancel = closestActionEl(target, "[data-diplomacy-cancel]");
+      if (diplomacyCancel) {
+        ev.preventDefault();
+        const id = diplomacyCancel.getAttribute("data-diplomacy-cancel");
+        if (id) void doCancelAllianceRelation(id);
+        return;
+      }
+
       const kickBtn = closestActionEl(target, "[data-alliance-kick]");
       if (kickBtn) {
         ev.preventDefault();
@@ -1194,6 +1229,19 @@ export function bindClickHandlers(): void {
       if (!draft) {
         setFlash("error", "Pick a target and ships.");
         schedulePaint();
+        return;
+      }
+      const napWarning = session.view
+        ? napAttackWarning(session.view, {
+            mission: draft.mission,
+            planetId: draft.targetPlanetId,
+            coords: draft.targetCoords,
+          })
+        : null;
+      if (
+        napAttackDecision(napWarning, (message) => globalThis.confirm(message)) ===
+        "stop"
+      ) {
         return;
       }
       void doLaunchFleet(draft);
