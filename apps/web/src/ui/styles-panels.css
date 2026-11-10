@@ -1347,3 +1347,38 @@ code {
   color: var(--muted);
   font-size: 0.85rem;
 }
+
+.sim-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.sim-columns .fleet-ship {
+  grid-template-columns: minmax(0, 1fr) 4.5rem;
+}
+
+.sim-spy,
+.sim-paste,
+.sim-seed {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0.4rem 0 0.6rem;
+  min-width: 0;
+}
+
+.sim-spy select,
+.sim-paste textarea,
+.sim-seed input {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.sim-result {
+  overflow-x: auto;
+  min-width: 0;
+}
