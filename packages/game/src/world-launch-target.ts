@@ -331,6 +331,14 @@ export function resolveLaunchTarget(
       if (targetPlanet.ownerPlayerId === player.id) {
         return { ok: false, error: "Cannot occupy your own body." };
       }
+      const defender = universe.players[targetPlanet.ownerPlayerId];
+      if (defender && isNewbieProtected(universe, defender)) {
+        const cap = NEWBIE_PROTECTION_POINTS.toLocaleString("en-US");
+        return {
+          ok: false,
+          error: `Target is under newbie protection (under ${cap} points).`,
+        };
+      }
     }
   }
 

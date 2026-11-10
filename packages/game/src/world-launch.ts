@@ -332,7 +332,7 @@ export function launchFleet(
     player.attackedPiratesAt = now;
   }
   if (
-    opts.mission === "raid" &&
+    (opts.mission === "raid" || opts.mission === "occupy") &&
     targetPlayerId &&
     targetPlayerId !== player.id &&
     universe.players[targetPlayerId]
