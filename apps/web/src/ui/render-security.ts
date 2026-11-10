@@ -14,6 +14,19 @@ function fmtWhen(ts: number): string {
   return new Date(ts).toISOString().slice(0, 16).replace("T", " ");
 }
 
+function vacationModeHtml(on: boolean, busy: boolean): string {
+  const state = on ? "Vacation mode is on." : "Vacation mode is off.";
+  const label = on ? "Turn off vacation mode" : "Turn on vacation mode";
+  const next = on ? "off" : "on";
+  return `
+    <div data-testid="vacation-mode">
+      <h3>Vacation mode</h3>
+      <p data-testid="vacation-mode-state">${state}</p>
+      <p class="hint">While it is on, fleets already out finish and return home. You cannot send new fleets. Pirate raids skip you, and other commanders cannot attack you.</p>
+      <button type="button" data-vacation-mode="${next}" data-testid="vacation-mode-toggle" ${busy ? "disabled" : ""}>${label}</button>
+    </div>`;
+}
+
 /** Account-menu link. Omitted unless the player is signed in. */
 export function accountNavHtml(signedIn: boolean, active: boolean, href: string): string {
   if (!signedIn) return "";
@@ -24,9 +37,11 @@ export function securityPageHtml(
   status: SecurityPanelStatus | null,
   codes: readonly string[] | null,
   busy: boolean,
+  vacationOn = false,
 ): string {
+  const vacation = vacationModeHtml(vacationOn, busy);
   if (!status) {
-    return `<section class="panel" data-testid="security-panel"><h2>Security</h2><p>Loading security…</p></section>`;
+    return `<section class="panel" data-testid="security-panel"><h2>Security</h2><p>Loading security…</p>${vacation}</section>`;
   }
   const codeBlock =
     codes && codes.length > 0
@@ -62,6 +77,7 @@ export function securityPageHtml(
         </div>
       </form>
       ${codeBlock}
+      ${vacation}
     </section>`;
 }
 

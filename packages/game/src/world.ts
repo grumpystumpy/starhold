@@ -6,7 +6,11 @@ export {
 } from "./world-bootstrap.js";
 export {
   claimPlayerToAccount,
+  isVacationMode,
   playerForAccount,
+  setVacationMode,
+  VACATION_ATTACK_BLOCKED,
+  VACATION_SEND_BLOCKED,
 } from "./world-accounts.js";
 export { advancePlanet } from "./world-tick.js";
 export {

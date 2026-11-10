@@ -16,7 +16,12 @@ export function mainColumnHtml(
   const menu = session.accountMenu;
   switch (menu) {
     case "security":
-      return securityPageHtml(session.security, session.recoveryCodes, busy);
+      return securityPageHtml(
+        session.security,
+        session.recoveryCodes,
+        busy,
+        view.player.vacationMode === true,
+      );
     case "credits":
       return creditsPageHtml();
     case null:

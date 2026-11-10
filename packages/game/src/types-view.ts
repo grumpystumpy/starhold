@@ -504,6 +504,11 @@ export interface PlayerState {
   createdAt: number;
   /** First launch of a PvP attack; permanently forfeits newbie protection. */
   newbieForfeitedAt?: number;
+  /**
+   * Vacation mode. Missing or any value other than true means off.
+   * Older saves omit it.
+   */
+  vacationMode?: boolean;
   /** Last launch time when this player attacked a pirate or alien base. */
   attackedPiratesAt?: number;
   /** Player level — starts at 1, no max (Round 2). */

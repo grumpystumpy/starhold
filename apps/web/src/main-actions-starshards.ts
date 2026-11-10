@@ -13,6 +13,7 @@ import {
   claimOnboarding,
   dismissOnboarding,
   dismissWhatsNew,
+  setVacationMode,
   raiseOfficerLevel,
   tradeResources,
   unlockSkillNode,
@@ -119,6 +120,32 @@ export async function doClaimOnboarding(stepId: string): Promise<void> {
       failureFallback: "Briefing claim failed.",
       applied: (view) => view.player.onboarding?.claimed?.includes(stepId) ?? false,
       successNotice: () => `Claimed ${title}.`,
+    });
+  } finally {
+    session.busy = false;
+    releaseActionFocus();
+    schedulePaint();
+  }
+}
+
+export async function doSetVacationMode(enabled: boolean): Promise<void> {
+  if (!session.view || session.busy) return;
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    session.view = await setVacationMode(session.view.player.id, enabled);
+    setFlash(
+      "notice",
+      enabled ? "Vacation mode is on." : "Vacation mode is off.",
+    );
+  } catch (err) {
+    await settleMutation({
+      err,
+      failureFallback: "Couldn't change vacation mode.",
+      applied: (view) => (view.player.vacationMode === true) === enabled,
+      successNotice: () =>
+        enabled ? "Vacation mode is on." : "Vacation mode is off.",
     });
   } finally {
     session.busy = false;

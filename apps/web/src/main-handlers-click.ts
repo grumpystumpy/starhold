@@ -80,6 +80,7 @@ import {
   doGalaxyFleetAction,
   doGalaxyFleetPreset,
   doGalaxySpy,
+  doSetVacationMode,
   doSetAllianceJoinMode,
   doSetAllianceClass,
   doSetAllianceRole,
@@ -315,6 +316,14 @@ export function bindClickHandlers(): void {
       if (closestActionEl(target, "[data-security-revoke]")) {
         ev.preventDefault();
         void doRevokeOtherSessions();
+        return;
+      }
+
+      const vacationToggle = closestActionEl(target, "[data-vacation-mode]");
+      if (vacationToggle) {
+        ev.preventDefault();
+        const next = vacationToggle.getAttribute("data-vacation-mode");
+        if (next === "on" || next === "off") void doSetVacationMode(next === "on");
         return;
       }
 

@@ -162,6 +162,18 @@ Optional save fields (older rows omit them and still load): `account.sessionEpoc
 
 Password change and recover are rate-limited. The join screen's Forgot password? link opens the recover form. It does not replace email + password signup or login.
 
+## Vacation mode
+
+A signed-in commander turns vacation mode on or off from Security (`/security`), `data-testid="vacation-mode-toggle"`. While it is on, the shell shows `data-testid="vacation-banner"`. The fleet composer disables Next and Send and shows the same rejection beside the button.
+
+Optional save field `player.vacationMode`. Missing means off. Turning it off deletes the field. `ensureUniverseShape` does not write it, so older saves stay absent. Fleets already in flight finish and return home. New launches from that commander are rejected. Pirate target selection in `pickRaidTarget` (`packages/game/src/world-pirates.ts`) skips that commander's planets. Alien selection is unchanged. Another commander's raid, espionage, or occupy against them is rejected, including a fleet that arrives after vacation starts: it returns without combat. `packages/game/src/fixtures/in-flight-fleet-save.json` is a main-branch universe with one deploy still in flight and no vacation field; `migrateOrResetUniverse` keeps that fleet and leaves the field unset.
+
+| Action | Route | Who |
+| --- | --- | --- |
+| Turn on or off | `POST /api/vacation` `{ playerId, enabled }` | owning session (401 without a cookie, 403 for another commander) |
+
+The route is not called on a normal page load. The flag lives on `PlayerState` in `packages/game/src/types-view.ts`. `setVacationMode` and `isVacationMode` are in `packages/game/src/world-accounts.ts`. Send rejection is in `packages/game/src/world-launch.ts`. Incoming attack rejection is in `packages/game/src/world-launch-target.ts`, and an already-flying raid is turned back in `packages/game/src/world-arrival-raid.ts` (espionage in `packages/game/src/world-espionage.ts`). The toggle is `apps/web/src/ui/render-security.ts`. The banner is `apps/web/src/ui/render-shell.ts`. The route is `apps/server/src/app.ts`. Tests: `packages/game/src/vacation-mode.test.ts`.
+
 ## Mini-planet occupation
 
 An occupy win on a mini planet already captures it: `ownerPlayerId` and `planetIds` move to the occupier. While that occupation is active, occupied means owned. The occupier can queue buildings, ships, and defenses there (field caps and mini-kind limits still apply), and mine income stays on the mini instead of the 30/70 split. A non-mini occupation is unchanged, including the yard blocks and the split. When the occupation ends, the capturer keeps the mini until a later capture or vacate. No new save fields.

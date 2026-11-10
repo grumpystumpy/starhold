@@ -30,6 +30,7 @@ import { emptyCargo, ensureUniverseShape } from "./world-bootstrap.js";
 import type { FleetActionResult } from "./world-queues.js";
 import { resolveActionPlanet } from "./world-queues.js";
 import { attachFleetToAcs } from "./world-acs.js";
+import { isVacationMode, VACATION_SEND_BLOCKED } from "./world-accounts.js";
 import { resolveLaunchTarget } from "./world-launch-target.js";
 import { empireDriftBeaconCount } from "./world-mini.js";
 
@@ -101,6 +102,9 @@ export function launchFleet(
   const now = opts.now ?? Date.now();
   const player = universe.players[opts.playerId];
   if (!player) return { ok: false, error: "Unknown player." };
+  if (isVacationMode(player)) {
+    return { ok: false, error: VACATION_SEND_BLOCKED };
+  }
   if (!MISSIONS.includes(opts.mission)) {
     return { ok: false, error: "Unknown mission type." };
   }

@@ -371,6 +371,8 @@ export function fleetComposer(
     sampleTarget,
     sampleShips,
   );
+  const vacationOn = view.player.vacationMode === true;
+  const vacationReason = "Vacation mode is on. New fleets cannot launch.";
   const step: FleetStep = draft?.step === 2 ? 2 : 1;
   const speedPercent = clampFleetSpeed(draft?.speedPercent ?? 100);
   const selectedShips = orbitShipIds.reduce((sum, id) => {
@@ -379,10 +381,16 @@ export function fleetComposer(
     return sum + Math.min(have, Math.max(0, Math.floor(raw)));
   }, 0);
   const nextDisabled =
-    busy || orbitShipIds.length === 0 || selectedShips < 1 || !swarmCheck.ok;
+    busy ||
+    vacationOn ||
+    orbitShipIds.length === 0 ||
+    selectedShips < 1 ||
+    !swarmCheck.ok;
   const nextReason = busy
     ? null
-    : orbitShipIds.length === 0
+    : vacationOn
+      ? vacationReason
+      : orbitShipIds.length === 0
       ? "No ships in orbit on this colony."
       : selectedShips < 1
         ? "Select at least one ship."
@@ -551,7 +559,9 @@ export function fleetComposer(
   const slotsFull = fleetActive >= fleetCap;
   const sendReason = busy
     ? null
-    : selectedShips < 1
+    : vacationOn
+      ? vacationReason
+      : selectedShips < 1
       ? "Select at least one ship."
       : !swarmCheck.ok
         ? swarmCheck.error
@@ -563,7 +573,7 @@ export function fleetComposer(
               ? `Not enough deuterium for fuel (need ${preview.fuel}).`
               : null;
   const sendDisabled =
-    busy || launchBlocked || selectedShips < 1 || slotsFull || fuelShort;
+    busy || vacationOn || launchBlocked || selectedShips < 1 || slotsFull || fuelShort;
   const ownTarget =
     (selectedPlanetId != null &&
       view.ownedPlanets.some((p) => p.id === selectedPlanetId)) ||

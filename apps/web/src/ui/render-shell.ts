@@ -219,6 +219,31 @@ function planetSwitcher(
     </aside>`;
 }
 
+/** Visible while vacation mode is on. Empty when the field is absent or off. */
+export function vacationBannerHtml(view: PlayerView): string {
+  if (view.player.vacationMode !== true) return "";
+  return `<p class="vacation-banner" role="status" data-testid="vacation-banner">Vacation mode is on. Fleets already out finish and return home. You cannot send new fleets, and other commanders cannot attack you.</p>`;
+}
+
+/** Keep the banner in step with the view when the shell is patched in place. */
+export function syncVacationBanner(root: ParentNode, view: PlayerView): void {
+  const shell = root.querySelector<HTMLElement>('[data-testid="game-shell"]');
+  if (!shell) return;
+  const next = vacationBannerHtml(view);
+  const existing = shell.querySelector<HTMLElement>('[data-testid="vacation-banner"]');
+  if (!next) {
+    existing?.remove();
+    return;
+  }
+  if (!existing) {
+    const header = shell.querySelector("header");
+    if (header) header.insertAdjacentHTML("afterend", next);
+    else shell.insertAdjacentHTML("afterbegin", next);
+    return;
+  }
+  if (existing.outerHTML !== next) existing.outerHTML = next;
+}
+
 /** One-time release notes. Empty once this commander dismissed the current key. */
 export function whatsNewHtml(
   view: PlayerView,
@@ -327,6 +352,7 @@ export function shellHtml(
           </div>
         </div>
       </header>
+      ${vacationBannerHtml(view)}
       <div data-flash-slot>${flashHtml(state.error, state.notice)}</div>
       <button type="button" class="idle-pause" data-testid="idle-pause"${session.idlePaused ? "" : " hidden"}>Paused, tap to resume</button>
       ${resourceBar(view, state.busy)}

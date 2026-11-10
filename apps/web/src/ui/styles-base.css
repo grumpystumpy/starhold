@@ -297,6 +297,16 @@ button.ghost {
   align-items: center;
 }
 
+.vacation-banner {
+  margin: 0 0 0.75rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--warn) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn) 55%, transparent);
+  color: var(--text);
+  font-weight: 600;
+}
+
 .topbar-newbie-badge {
   display: inline-flex;
   align-items: center;
