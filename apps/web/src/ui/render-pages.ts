@@ -295,7 +295,7 @@ export function shipyardPage(view: PlayerView, busy: boolean): string {
           ? `<p class="hint" data-testid="shipyard-need-class">Choose a class on Overview to unlock class-exclusive hulls.</p>`
           : ""
       }
-      ${buildable.map((id) => shipRow(id, planet, busy, mods.shipCostMult, mods.shipTimeMult, view.universe.speed)).join("")}
+      ${buildable.map((id) => shipRow(id, planet, busy, mods.shipCostMult, mods.shipTimeMult, view.universe.speed, view.player.research)).join("")}
       ${
         shipQueueHtml(planet, now) ||
         `<p class="hint">Raise the Shipyard facility to unlock hulls.</p>`
