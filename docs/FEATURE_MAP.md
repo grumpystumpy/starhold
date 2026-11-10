@@ -22,6 +22,8 @@ Leader can promote and demote Officers and kick anyone except themselves. Office
 
 Chat stores 200 messages and returns at most 50. The client polls `GET /api/alliance/chat?since=` only while the Alliances page is open, after the existing 30s `/api/state` poll.
 
+The 30s `/api/state` poll sets `X-Starhold-State-Tick` to `skipped` or `advanced`. A skipped poll does not run `advanceUniverse`. It still refreshes mine output on that player's planets, and hostile fleets already in flight stay on the view. The poll advances when a build, yard, or research queue needs a start or completion, an officer hire has expired, a fleet that belongs to or targets the player has arrived or its swarm is ready to grow, a Joint Strike window should lock, an occupation involves the player or has ended, a mini planet is due to drift, one of the player's spy reports is past its TTL, the commander's season month has rolled, the universe seed is unfinished, the seasonal boss timer has fired, or a pirate or alien raid is due on a read that is allowed to run raids. A poll that advances saves the same universe a full tick would have saved.
+
 Kick, leave, and disband detach that player's Joint Strike (ACS) fleets: outbound and holding both return home, `acsGroupId` clears, and the group cancels if it drops below `ACS_MIN_FLEETS_TO_RESOLVE`. Combat math is unchanged.
 
 Tags render as `Name [TAG]` on galaxy rows and `[TAG] Name` on commander highscore rows.

@@ -9,7 +9,11 @@ export {
   playerForAccount,
 } from "./world-accounts.js";
 export { advancePlanet } from "./world-tick.js";
-export { advancePlanetNow, advanceUniverse } from "./world-arrival.js";
+export {
+  advancePlanetNow,
+  advanceUniverse,
+  playerStateTickDue,
+} from "./world-arrival.js";
 export { bindTickBudget, npcJobBudget, workersTickBudget } from "./tick-budget.js";
 export type { TickBudget } from "./tick-budget.js";
 export type { ActionResult, FleetActionResult } from "./world-queues.js";
