@@ -11,6 +11,7 @@ import {
   createPirateBase,
   createUniverse,
   empirePoints,
+  graduateNewbieProtection,
   joinUniverse,
   launchFleet,
   migrateOrResetUniverse,
@@ -1126,6 +1127,127 @@ describe("row save review fixes", () => {
     assert.equal(again.universe.planets.plnt_fixture_row?.resources.metal, 123456);
     assert.equal(again.universe.planets.plnt_fixture_row?.buildings.metalMine, 7);
     assert.equal(again.universe.players.plyr_fixture_row?.research.energyTech, 3);
+  });
+
+  it("resolves a pirate raid dispatched on the paginated NPC path exactly once", async () => {
+    const NOW = 1_700_000_000_000;
+    const { db, raw } = sqliteD1();
+    const source = createUniverse("Paged raid", 8, 8, { lazySeed: true });
+    if (source.seedCursor) source.seedCursor.done = true;
+    source.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
+    const { player } = joinUniverse(source, "Defender", NOW - 10 * 86_400_000);
+    player.createdAt = NOW - 10 * 86_400_000;
+    const body = source.planets[player.homePlanetId]!;
+    body.buildings = {
+      ...body.buildings,
+      metalMine: 20,
+      crystalMine: 20,
+      solarPlant: 20,
+      metalStorage: 20,
+      crystalStorage: 20,
+      deutTank: 20,
+    };
+    body.defenses = emptyDefenses();
+    body.ships = { ...emptyFleetShips(), hauler: 80 };
+    body.resources = { metal: 80_000, crystal: 40_000, deuterium: 20_000 };
+    graduateNewbieProtection(source, player);
+    assert.ok(empirePoints(source, player) >= NEWBIE_PROTECTION_POINTS);
+    const base = createPirateBase(
+      source.seed ?? source.id,
+      body.coords.galaxy,
+      Math.min(MAP_SYSTEMS, body.coords.system + 1),
+      2,
+      NOW,
+    );
+    base.ships = { ...emptyFleetShips(), hauler: 400 };
+    base.nextRaidAt = NOW;
+    base.lastRaidAt = NOW - 1;
+    base.lastGrewAt = NOW;
+    base.lastFreeSpawnAt = NOW;
+    source.pirateBases = { [base.id]: base };
+    source.alienBases = {};
+    await migrateAll(db, source);
+
+    const insert = raw.prepare("INSERT INTO save_players (id, version, doc) VALUES (?, 1, ?)");
+    for (let index = 0; index < NPC_PLAYER_PAGE + 15; index += 1) {
+      const id = `z_page_${String(index).padStart(3, "0")}`;
+      insert.run(
+        id,
+        JSON.stringify({
+          id,
+          name: id,
+          planetIds: [],
+          homePlanetId: "",
+          activePlanetId: "",
+          eventLog: [],
+        }),
+      );
+    }
+    const lateId = `z_page_${String(NPC_PLAYER_PAGE + 14).padStart(3, "0")}`;
+    const store = createD1Store(db);
+    let fleetId = "";
+    let arrivesAt = 0;
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "POST", cpuMs: 0 },
+      () =>
+        withUniverse((loaded) => {
+          assert.equal(Object.keys(loaded.players).length, NPC_PLAYER_PAGE);
+          assert.equal(Boolean(loaded.players[player.id]), true);
+          assert.equal(loaded.players[lateId], undefined);
+          assert.equal(typeof loaded.npcPlayerPageCursor, "string");
+          assert.equal(Boolean(loaded.skipNpcRaids), false);
+          loaded.skipPirateTopUp = true;
+          loaded.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
+          tickPirates(loaded, NOW);
+          const fleets = Object.values(loaded.fleets).filter(
+            (fleet) => fleet.ownerPlayerId === "npc_pirates" && fleet.targetPlayerId === player.id,
+          );
+          assert.equal(fleets.length, 1);
+          const fleet = fleets[0]!;
+          assert.equal(fleet.mission, "raid");
+          assert.equal(fleet.phase, "outbound");
+          assert.equal(fleet.originPirateBaseId, base.id);
+          assert.ok(fleet.arrivesAt > fleet.departedAt);
+          assert.equal(loaded.pirateBases?.[base.id]?.recentRaidTargets?.[body.id], NOW);
+          assert.equal(
+            Object.values(loaded.reports ?? {}).filter((report) => report.missionId === base.id).length,
+            0,
+          );
+          fleetId = fleet.id;
+          arrivesAt = fleet.arrivesAt;
+        }, { npc: true }),
+    );
+
+    const reportsForBase = (loaded: UniverseState) =>
+      Object.values(loaded.reports ?? {}).filter((report) => report.missionId === base.id);
+
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "POST", cpuMs: 0 },
+      () =>
+        withUniverse((loaded) => {
+          assert.equal(loaded.fleets[fleetId]?.phase, "outbound");
+          assert.equal(loaded.fleets[fleetId]?.targetPlayerId, player.id);
+          loaded.skipPirateTopUp = true;
+          loaded.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
+          advanceUniverse(loaded, arrivesAt);
+          assert.equal(reportsForBase(loaded).length, 1);
+          assert.notEqual(loaded.fleets[fleetId]?.phase, "outbound");
+        }, { playerIds: [player.id] }),
+    );
+
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "POST", cpuMs: 0 },
+      () =>
+        withUniverse((loaded) => {
+          loaded.skipPirateTopUp = true;
+          loaded.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
+          const before = reportsForBase(loaded).map((report) => report.id).sort();
+          assert.equal(before.length, 1);
+          advanceUniverse(loaded, arrivesAt);
+          assert.deepEqual(reportsForBase(loaded).map((report) => report.id).sort(), before);
+          assert.notEqual(loaded.fleets[fleetId]?.phase, "outbound");
+        }, { playerIds: [player.id] }),
+    );
   });
 
   it("saves battle debris for npc and player fights without blowing the query budget", async () => {
