@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { EXPEDITION_SLOT, SHIPS, SHIP_ORDER } from "./catalog.js";
+import { EXPEDITION_SLOT, PIRATE_TARGET_BASE_COUNT, SHIPS, SHIP_ORDER } from "./catalog.js";
 import {
   EXPEDITION_BLACK_HOLE_CHANCE,
   EXPEDITION_NEW_ALIEN_BASE_ROLL_COUNT,
@@ -18,8 +18,10 @@ import {
   resolveExpeditionArrival,
 } from "./world-expedition.js";
 import {
+  activePirateBases,
   advanceUniverse,
   createUniverse,
+  ensurePiratePopulation,
   joinUniverse,
   launchFleet,
   migrateOrResetUniverse,
@@ -178,10 +180,14 @@ describe("P2 expeditions", () => {
 
   it("spawns new pirate base and new alien base in target galaxy on free slot, falling back to ambush when galaxy full", () => {
     const universe = createUniverse("New NPC Base Test", 8);
+    universe.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
     const p = joinUniverse(universe, "Pioneer", 100_000);
     const planet = universe.planets[p.planet.id]!;
     planet.ships.hauler = 10;
     planet.resources.deuterium = 10_000;
+    const spare = activePirateBases(universe).find((base) => !base.seasonalBoss);
+    assert.ok(spare);
+    delete universe.pirateBases![spare!.id];
 
     // 1. Spawn New Pirate Base
     let timeP = 100_100;
@@ -308,6 +314,43 @@ describe("P2 expeditions", () => {
     const reportFull = universe.expeditionReports[fFull.reportId!];
     // Falls back to pirate ambush
     assert.match(reportFull.summary, /pirate ambush/i);
+  });
+
+  it("does not spawn a pirate base when the living cap is full", () => {
+    const universe = createUniverse("Cap expedition", 8);
+    const p = joinUniverse(universe, "Pioneer", 100_000);
+    const planet = universe.planets[p.planet.id]!;
+    planet.ships.hauler = 10;
+    planet.resources.deuterium = 10_000;
+    ensurePiratePopulation(universe, 100_000);
+    assert.equal(activePirateBases(universe).length, PIRATE_TARGET_BASE_COUNT);
+    let time = 100_100;
+    const fleetId = "flt_cap_pirate";
+    while (
+      expeditionBlackHoleRoll(fleetId, time) ||
+      expeditionKindFromRoll(expeditionRoll(fleetId, time)) !== "newPirateBase"
+    ) {
+      time++;
+    }
+    const fleet = {
+      id: fleetId,
+      ownerPlayerId: p.player.id,
+      mission: "expedition" as const,
+      originPlanetId: planet.id,
+      targetCoords: { galaxy: 1, system: 1, slot: EXPEDITION_SLOT },
+      ships: { hauler: 10 },
+      cargo: { metal: 0, crystal: 0, deuterium: 0 },
+      arrivesAt: time,
+      returnsAt: time + 1000,
+      phase: "outbound" as const,
+    };
+    const before = activePirateBases(universe).length;
+    resolveExpeditionArrival(universe, fleet, time);
+    assert.equal(activePirateBases(universe).length, before);
+    const report = universe.expeditionReports[fleet.reportId!];
+    assert.ok(report);
+    assert.match(report.summary, /pirate ambush/i);
+    assert.equal(report.newPirateBaseId, undefined);
   });
 
   it("launches to deep-space slot and returns with a report", () => {

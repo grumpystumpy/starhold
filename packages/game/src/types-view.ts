@@ -739,6 +739,8 @@ export interface UniverseState {
   /** Lazy AI catch-up cursor (Hobby bounded batch). */
   lastAiSimAt?: number;
   aiCatchUpCursor?: string | null;
+  /** Raid-only cursor for alternating Workers NPC AI slices. */
+  aiRaidCatchUpCursor?: string | null;
   /**
    * Workers bootstrap. Absent on Vercel universes that were seeded in one
    * shot. `done` means minis, asteroids, and the pirate roster match a

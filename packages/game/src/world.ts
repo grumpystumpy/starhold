@@ -193,6 +193,7 @@ export {
   applyNpcRaidOnPlanet,
   createAlienBase,
   createPirateBase,
+  cullExcessPirateBases,
   ensurePiratePopulation,
   findNearestOpenSlot1,
   pirateBaseAtCoords,

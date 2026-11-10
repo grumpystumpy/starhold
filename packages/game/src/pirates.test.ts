@@ -10,11 +10,15 @@ import {
   ALIEN_SPLIT_LEVEL,
   MAP_GALAXIES,
   MAP_SYSTEMS,
+  NPC_AI_BATCH_SIZE,
   NPC_JOB_LEVELUP_BUDGET,
   NPC_JOB_RAID_BUDGET,
   PIRATE_DESTROY_STARSHARDS_BASE,
   PIRATE_DESTROY_STARSHARDS_PER_TIER,
   PIRATE_EXCLUDED_SHIP_IDS,
+  ALIEN_STRENGTH_MULT,
+  PIRATE_FREE_SHIP_BASE,
+  PIRATE_FREE_SHIP_PER_LEVEL,
   PIRATE_FREE_SPAWN_INTERVAL_MS,
   PIRATE_FATIGUE_EXTRA_HITS,
   PIRATE_FATIGUE_FIRST_HITS,
@@ -26,19 +30,31 @@ import {
   ALIEN_RAID_PERIOD_MS,
   PIRATE_RAID_POWER_FACTOR,
   PIRATE_RAID_POWER_FLOOR,
+  PIRATE_BASES_PER_GALAXY,
+  PIRATE_SAME_TARGET_COOLDOWN_MS,
+  PIRATE_SPLIT_CHILD_COUNT,
   PIRATE_SPLIT_LEVEL,
   PIRATE_TARGET_BASE_COUNT,
+  SHIP_ORDER,
   SHIPS,
 } from "./catalog.js";
 import {
+  NPC_AI_SLICE_INTERVAL_MS,
   PIRATE_BOSS_COOLDOWN_MS,
   PIRATE_BOSS_DURATION_MS,
   PIRATE_BOSS_MOTHERSHIPS,
   PIRATE_BOSS_RESOURCE_REWARD_MULT,
   PIRATE_BOSS_STARSHARD_REWARD_MULT,
   PIRATE_BOSS_TIER,
+  PIRATE_BOSS_TIERS,
+  PIRATE_RAID_DISTANCE_REF,
+  PIRATE_RAID_LEVEL_POWER_BONUS,
+  PIRATE_RAID_POWER_FACTOR_PLAYER,
+  PIRATE_STRENGTH_MULT,
+  PIRATE_TECH_OFFSET,
 } from "./data/tuning.js";
 import {
+  coordDistance,
   emptyDefenses,
   defenseCombatPower,
   computeRaidLoot,
@@ -46,6 +62,7 @@ import {
   emptyFleetShips,
   fleetCombatPower,
   fleetShipCount,
+  flightSecondsOneWay,
   resolveCombat,
 } from "./formulas.js";
 import {
@@ -54,8 +71,11 @@ import {
   advanceUniverse,
   bindTickBudget,
   createAlienBase,
+  applyNpcRaidOnNpc,
   createUniverse,
+  cullExcessPirateBases,
   ensurePiratePopulation,
+  graduateNewbieProtection,
   galaxyViewFor,
   joinUniverse,
   launchFleet,
@@ -76,11 +96,7 @@ import {
   tryAlienExpeditionFind,
 } from "./world.js";
 import type { TickBudget } from "./tick-budget.js";
-import type { FleetMission, UniverseState } from "./types.js";
-import {
-  PIRATE_RAID_POWER_FACTOR_PLAYER,
-  PIRATE_TECH_OFFSET,
-} from "./data/tuning.js";
+import type { FleetMission, FleetShips, PlayerView, UniverseState } from "./types.js";
 import {
   ALIEN_RAID_POWER_FACTOR_MAX,
   ALIEN_RAID_POWER_FACTOR_MIN,
@@ -93,13 +109,18 @@ import {
   createPirateBase,
   findNearestOpenSlot1,
   resolveAlienRaidArrival,
+  alienShipsForTier,
   pirateFatigueMult,
+  piratePlanetPickWeight,
+  pirateRaidDistanceWeight,
+  pirateRaidPowerFactor,
   recordPirateHit,
   pirateCombatResearch,
   pirateCombatResearchForOpponent,
   scaleAlienRaidFleet,
   resolvePirateRaidArrival,
 } from "./world-pirates.js";
+import { eventPresentation, eventsBannerHtml } from "../../../apps/web/src/ui/render-events.ts";
 
 let restoreInputs: (() => void) | undefined;
 beforeEach(() => {
@@ -109,6 +130,40 @@ afterEach(() => {
   restoreInputs?.();
   restoreInputs = undefined;
 });
+
+function assertPirateGalaxiesAtCap(universe: UniverseState): void {
+  const counts = new Array<number>(MAP_GALAXIES + 1).fill(0);
+  for (const base of activePirateBases(universe)) {
+    if (base.seasonalBoss || base.id === universe.pirateBossBaseId) continue;
+    counts[base.coords.galaxy] += 1;
+  }
+  for (let galaxy = 1; galaxy <= MAP_GALAXIES; galaxy++) {
+    assert.ok(
+      counts[galaxy]! <= PIRATE_BASES_PER_GALAXY,
+      `galaxy ${galaxy} has ${counts[galaxy]} living non-boss bases`,
+    );
+  }
+}
+
+function piratePlayerFleets(universe: UniverseState, playerId: string): FleetMission[] {
+  return Object.values(universe.fleets).filter(
+    (fleet) => fleet.ownerPlayerId === "npc_pirates" && fleet.targetPlayerId === playerId,
+  );
+}
+
+/** Resolve in-flight pirate player raids without letting the same tick launch another. */
+function resolveDuePiratePlayerRaids(universe: UniverseState, playerId: string): void {
+  const fleets = piratePlayerFleets(universe, playerId).filter((fleet) => fleet.phase === "outbound");
+  assert.ok(fleets.length >= 1, "pirate planet raid launched a fleet");
+  const when = Math.max(...fleets.map((fleet) => fleet.arrivesAt));
+  for (const base of Object.values(universe.pirateBases ?? {})) {
+    base.nextRaidAt = Math.max(base.nextRaidAt, when + 1);
+    base.lastGrewAt = Math.max(base.lastGrewAt, when);
+    base.lastFreeSpawnAt = Math.max(base.lastFreeSpawnAt, when);
+  }
+  universe.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
+  advanceUniverse(universe, when);
+}
 
 describe("pirate balance helpers", () => {
   it("pays Starshards by tier on destroy (1% pirate, 2% alien)", () => {
@@ -160,7 +215,7 @@ describe("pirate balance helpers", () => {
   });
 });
 
-describe("pirate density 200 + zero aliens", () => {
+describe("pirate density cap + zero aliens", () => {
   it("spawns one server-wide seasonal mothership boss with rare rewards", () => {
     const universe = createUniverse("Seasonal boss", 8);
     universe.skipNpcRaids = true;
@@ -170,6 +225,16 @@ describe("pirate density 200 + zero aliens", () => {
     assert.ok(boss?.seasonalBoss);
     assert.equal(boss.tier, PIRATE_BOSS_TIER);
     assert.equal(boss.ships.swarmMothership, PIRATE_BOSS_MOTHERSHIPS);
+    const ordinaryBossTier = pirateShipsForTier(PIRATE_BOSS_TIER);
+    let bossHasUnscaledHull = false;
+    for (const id of SHIP_ORDER) {
+      if (id === "swarmMothership") continue;
+      const bossCount = boss.ships[id] ?? 0;
+      const halved = ordinaryBossTier[id] ?? 0;
+      assert.equal(Math.floor(bossCount * PIRATE_STRENGTH_MULT + 1e-9), halved);
+      if (bossCount > halved) bossHasUnscaledHull = true;
+    }
+    assert.equal(bossHasUnscaledHull, true);
     assert.equal(universe.pirateBossActiveUntil, now + PIRATE_BOSS_DURATION_MS);
     assert.equal(
       boss.resources.metal,
@@ -287,8 +352,10 @@ describe("pirate density 200 + zero aliens", () => {
     assert.equal(universe.pirateBossNextSpawnAt, 0);
   });
 
-  it("seeds exactly toward PIRATE_TARGET_BASE_COUNT=200", () => {
-    assert.equal(PIRATE_TARGET_BASE_COUNT, 200);
+  it("seeds exactly toward PIRATE_BASES_PER_GALAXY * MAP_GALAXIES", () => {
+    assert.equal(PIRATE_BASES_PER_GALAXY, 75);
+    assert.equal(PIRATE_SAME_TARGET_COOLDOWN_MS, 4 * 60 * 60 * 1000);
+    assert.equal(PIRATE_TARGET_BASE_COUNT, PIRATE_BASES_PER_GALAXY * MAP_GALAXIES);
     assert.equal(ALIEN_INITIAL_BASE_COUNT, 0);
     const universe = createUniverse("Pirate Drift", 8);
     const living = activePirateBases(universe);
@@ -308,7 +375,7 @@ describe("pirate density 200 + zero aliens", () => {
     assert.equal(systemsWith.size, living.length);
   });
 
-  it("migration top-up reaches 200 without wiping players", () => {
+  it("migration top-up reaches the living cap without wiping players", () => {
     const universe = createUniverse("Topup Drift", 8);
     const { player, planet } = joinUniverse(universe, "Keeper", 100_000);
     const playerPlanetId = planet.id;
@@ -331,6 +398,190 @@ describe("pirate density 200 + zero aliens", () => {
     assert.equal(activePirateBases(universe).length, before);
   });
 
+  it("culls a crowded universe to the living cap and keeps the seasonal boss", () => {
+    const now = 1_800_000_000_000;
+    const universe = createUniverse("Cull Drift", 8);
+    universe.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
+    const seed = universe.seed ?? universe.id;
+    const boss = activePirateBases(universe).find((base) => !base.seasonalBoss)!;
+    boss.seasonalBoss = true;
+    boss.name = "Seasonal Pirate Mothership";
+    boss.level = 40;
+    boss.tier = 40;
+    boss.lastRaidAt = now;
+    universe.pirateBossBaseId = boss.id;
+    universe.pirateBossActiveUntil = now + 86_400_000;
+    const occupied = new Set(
+      activePirateBases(universe).map((base) => `${base.coords.galaxy}:${base.coords.system}`),
+    );
+    let living = occupied.size;
+    for (let galaxy = 1; galaxy <= MAP_GALAXIES && living < 1096; galaxy++) {
+      for (let system = 1; system <= MAP_SYSTEMS && living < 1096; system++) {
+        const key = `${galaxy}:${system}`;
+        if (occupied.has(key)) continue;
+        const base = createPirateBase(seed, galaxy, system, 15, now, 0);
+        base.lastRaidAt = now - living;
+        base.nextRaidAt = now + PIRATE_RAID_PERIOD_MS;
+        universe.pirateBases![base.id] = base;
+        occupied.add(key);
+        living += 1;
+      }
+    }
+    assert.equal(activePirateBases(universe).length, 1096);
+    const doomed = activePirateBases(universe)
+      .filter((base) => base.id !== boss.id)
+      .sort(
+        (a, b) =>
+          (a.lastRaidAt ?? 0) - (b.lastRaidAt ?? 0) ||
+          (a.level ?? 0) - (b.level ?? 0) ||
+          (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+      )[0]!;
+    const { player, planet } = joinUniverse(universe, "Keeper", now);
+    planet.resources.metal = 123_456;
+    planet.buildings.metalMine = 4;
+    const fleet: FleetMission = {
+      id: "fleet-keep",
+      ownerPlayerId: player.id,
+      originPlanetId: planet.id,
+      targetPlanetId: null,
+      targetPlayerId: null,
+      targetCoords: { ...doomed.coords },
+      targetPirateBaseId: doomed.id,
+      mission: "pirateRaid",
+      ships: { ...emptyFleetShips(), scout: 1 },
+      cargo: { metal: 0, crystal: 0, deuterium: 0 },
+      departedAt: now - 1000,
+      arrivesAt: now + 60_000,
+      phase: "outbound",
+      reportId: null,
+    };
+    universe.fleets[fleet.id] = fleet;
+    const reportsBefore = Object.keys(universe.reports).length;
+    const eventsBefore = player.eventLog?.length ?? 0;
+    const removed = cullExcessPirateBases(universe, now);
+    assert.equal(removed, 1096 - PIRATE_TARGET_BASE_COUNT);
+    assert.equal(activePirateBases(universe).length, PIRATE_TARGET_BASE_COUNT);
+    assertPirateGalaxiesAtCap(universe);
+    assert.equal(universe.pirateBases![boss.id]?.destroyedAt, null);
+    assert.equal(universe.pirateBases![boss.id]?.seasonalBoss, true);
+    assert.equal(universe.pirateBossBaseId, boss.id);
+    assert.equal(universe.pirateBases![doomed.id], undefined);
+    assert.equal(universe.fleets[fleet.id]?.ships.scout, 1);
+    assert.equal(Object.keys(universe.reports).length, reportsBefore);
+    assert.equal(player.eventLog?.length ?? 0, eventsBefore);
+    for (const base of Object.values(universe.pirateBases ?? {})) {
+      base.nextRaidAt = now + PIRATE_RAID_PERIOD_MS;
+      base.lastGrewAt = now + 1000;
+      base.lastFreeSpawnAt = now + 1000;
+    }
+    tickPirates(universe, now + 1000);
+    assert.equal(activePirateBases(universe).length, PIRATE_TARGET_BASE_COUNT);
+    assertPirateGalaxiesAtCap(universe);
+    assert.equal(universe.pirateBases![boss.id]?.seasonalBoss, true);
+    assert.equal(universe.pirateBases![boss.id]?.destroyedAt, null);
+    assert.equal(universe.fleets[fleet.id]?.targetPirateBaseId, doomed.id);
+  });
+
+  it("ensurePiratePopulation does not grow past the living cap", () => {
+    const now = 1_700_000_000_000;
+    const universe = createUniverse("Cap top-up", 8);
+    universe.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
+    const keep = activePirateBases(universe)
+      .filter((base) => !base.seasonalBoss)
+      .slice(0, 5);
+    universe.pirateBases = Object.fromEntries(keep.map((base) => [base.id, base]));
+    ensurePiratePopulation(universe, now);
+    assert.equal(activePirateBases(universe).length, PIRATE_TARGET_BASE_COUNT);
+    assertPirateGalaxiesAtCap(universe);
+    ensurePiratePopulation(universe, now);
+    assert.equal(activePirateBases(universe).length, PIRATE_TARGET_BASE_COUNT);
+    assertPirateGalaxiesAtCap(universe);
+  });
+
+  it("does not split a base when the living cap is full", () => {
+    const universe = createUniverse("Split cap", 8);
+    universe.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
+    ensurePiratePopulation(universe, 1_700_000_000_000);
+    const base = activePirateBases(universe).find((entry) => !entry.seasonalBoss)!;
+    base.level = 24;
+    base.tier = 24;
+    base.splitDone = false;
+    base.lastGrewAt = 0;
+    const beforeIds = new Set(activePirateBases(universe).map((entry) => entry.id));
+    assert.equal(beforeIds.size, PIRATE_TARGET_BASE_COUNT);
+    tickPirates(universe, PIRATE_LEVEL_GROWTH_INTERVAL_MS + 1);
+    const living = activePirateBases(universe);
+    assert.equal(living.length, PIRATE_TARGET_BASE_COUNT);
+    assert.equal(living.filter((entry) => !beforeIds.has(entry.id)).length, 0);
+    assert.equal(universe.pirateBases![base.id]?.splitDone, true);
+  });
+
+  it("loads a 1096-pirate save without reset, then caps living bases", () => {
+    const now = 1_800_000_000_000;
+    const universe = createUniverse("Old crowd", 8);
+    const { player, planet } = joinUniverse(universe, "Keeper", now);
+    planet.resources.metal = 123_456;
+    planet.buildings.metalMine = 4;
+    const boss = activePirateBases(universe).find((base) => !base.seasonalBoss)!;
+    boss.seasonalBoss = true;
+    universe.pirateBossBaseId = boss.id;
+    universe.pirateBossActiveUntil = now + 86_400_000;
+    universe.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
+    const seed = universe.seed ?? universe.id;
+    const occupied = new Set(
+      activePirateBases(universe).map((base) => `${base.coords.galaxy}:${base.coords.system}`),
+    );
+    let living = occupied.size;
+    for (let galaxy = 1; galaxy <= MAP_GALAXIES && living < 1096; galaxy++) {
+      for (let system = 1; system <= MAP_SYSTEMS && living < 1096; system++) {
+        const key = `${galaxy}:${system}`;
+        if (occupied.has(key)) continue;
+        const base = createPirateBase(seed, galaxy, system, 15, now, 0);
+        universe.pirateBases![base.id] = base;
+        occupied.add(key);
+        living += 1;
+      }
+    }
+    const fleet: FleetMission = {
+      id: "fleet-keep",
+      ownerPlayerId: player.id,
+      originPlanetId: planet.id,
+      targetPlanetId: null,
+      targetPlayerId: null,
+      targetCoords: { ...planet.coords },
+      mission: "deploy",
+      ships: { ...emptyFleetShips(), scout: 2 },
+      cargo: { metal: 10, crystal: 0, deuterium: 0 },
+      departedAt: now - 1000,
+      arrivesAt: now + 60_000,
+      phase: "outbound",
+      reportId: null,
+    };
+    universe.fleets[fleet.id] = fleet;
+    assert.equal(activePirateBases(universe).length, 1096);
+    const loaded = migrateOrResetUniverse(JSON.parse(JSON.stringify(universe)));
+    assert.equal(loaded.didReset, false);
+    assert.equal(loaded.universe.aiRaidCatchUpCursor, undefined);
+    assert.equal(loaded.universe.players[player.id]?.name, "Keeper");
+    assert.equal(loaded.universe.planets[planet.id]?.resources.metal, 123_456);
+    assert.equal(loaded.universe.planets[planet.id]?.buildings.metalMine, 4);
+    assert.equal(loaded.universe.fleets[fleet.id]?.ships.scout, 2);
+    assert.equal(loaded.universe.fleets[fleet.id]?.cargo.metal, 10);
+    for (const base of Object.values(loaded.universe.pirateBases ?? {})) {
+      base.nextRaidAt = now + PIRATE_RAID_PERIOD_MS;
+      base.lastGrewAt = now + 1000;
+      base.lastFreeSpawnAt = now + 1000;
+    }
+    tickPirates(loaded.universe, now + 1000);
+    assert.equal(activePirateBases(loaded.universe).length, PIRATE_TARGET_BASE_COUNT);
+    assertPirateGalaxiesAtCap(loaded.universe);
+    assert.equal(loaded.universe.pirateBases![boss.id]?.recentRaidTargets, undefined);
+    assert.equal(loaded.universe.pirateBases![boss.id]?.seasonalBoss, true);
+    assert.equal(loaded.universe.pirateBases![boss.id]?.destroyedAt, null);
+    assert.equal(loaded.universe.fleets[fleet.id]?.ships.scout, 2);
+    assert.equal(loaded.universe.planets[planet.id]?.resources.metal, 123_456);
+  });
+
   it("advancing does not reseed or strengthen existing pirate bases", () => {
     const universe = createUniverse("Existing pirate bases", 8);
     const bases = activePirateBases(universe).filter((base) => !base.seasonalBoss);
@@ -341,17 +592,216 @@ describe("pirate density 200 + zero aliens", () => {
       level: base.level,
     }));
     advanceUniverse(universe, Date.now() + 1_000);
-    const after = activePirateBases(universe).filter((base) => !base.seasonalBoss);
-    assert.equal(after.length, before.length);
-    assert.deepEqual(
-      after.map((base) => ({
-        id: base.id,
-        ships: base.ships,
-        defenses: base.defenses,
-        level: base.level,
-      })),
-      before,
+    const living = activePirateBases(universe);
+    const after = living.filter((base) => !base.seasonalBoss);
+    const bosses = living.filter((base) => base.seasonalBoss);
+    assert.equal(living.length, PIRATE_TARGET_BASE_COUNT);
+    assert.equal(bosses.length, 1);
+    assert.equal(after.length, before.length - 1);
+    const beforeById = new Map(before.map((row) => [row.id, row]));
+    for (const base of after) {
+      assert.deepEqual(
+        {
+          id: base.id,
+          ships: base.ships,
+          defenses: base.defenses,
+          level: base.level,
+        },
+        beforeById.get(base.id),
+      );
+    }
+  });
+});
+
+describe("B7-95/96 per-galaxy cap and same-target cooldown", () => {
+  it("culls every over-full galaxy down to 75 times MAP_GALAXIES", () => {
+    const now = 1_800_000_000_000;
+    const universe = createUniverse("Per galaxy cull", 8);
+    universe.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
+    const seed = universe.seed ?? universe.id;
+    const boss = activePirateBases(universe).find((base) => !base.seasonalBoss)!;
+    boss.seasonalBoss = true;
+    boss.name = "Seasonal Pirate Mothership";
+    universe.pirateBossBaseId = boss.id;
+    const occupied = new Set(
+      activePirateBases(universe).map((base) => `${base.coords.galaxy}:${base.coords.system}`),
     );
+    const extra = 10;
+    for (let galaxy = 1; galaxy <= MAP_GALAXIES; galaxy++) {
+      let added = 0;
+      for (let system = 1; system <= MAP_SYSTEMS && added < extra; system++) {
+        const key = `${galaxy}:${system}`;
+        if (occupied.has(key)) continue;
+        const base = createPirateBase(seed, galaxy, system, 14, now, 1);
+        base.lastRaidAt = now - (galaxy * 1000 + added);
+        universe.pirateBases![base.id] = base;
+        occupied.add(key);
+        added += 1;
+      }
+      assert.equal(added, extra, `galaxy ${galaxy} could not take ${extra} more bases`);
+    }
+    const before = activePirateBases(universe).length;
+    assert.ok(before > PIRATE_BASES_PER_GALAXY * MAP_GALAXIES);
+    const reportsBefore = Object.keys(universe.reports ?? {}).length;
+    const eventsBefore = Object.values(universe.players).reduce(
+      (sum, player) => sum + (player.eventLog?.length ?? 0),
+      0,
+    );
+    const fleetCountBefore = Object.keys(universe.fleets).length;
+    const removed = cullExcessPirateBases(universe, now);
+    assert.ok(removed > 0);
+    assert.equal(removed, before - PIRATE_BASES_PER_GALAXY * MAP_GALAXIES);
+    assert.equal(activePirateBases(universe).length, PIRATE_BASES_PER_GALAXY * MAP_GALAXIES);
+    assert.equal(activePirateBases(universe).length, PIRATE_TARGET_BASE_COUNT);
+    assertPirateGalaxiesAtCap(universe);
+    assert.equal(universe.pirateBases![boss.id]?.destroyedAt, null);
+    assert.equal(universe.pirateBases![boss.id]?.seasonalBoss, true);
+    assert.equal(Object.keys(universe.reports ?? {}).length, reportsBefore);
+    assert.equal(
+      Object.values(universe.players).reduce(
+        (sum, player) => sum + (player.eventLog?.length ?? 0),
+        0,
+      ),
+      eventsBefore,
+    );
+    assert.equal(Object.keys(universe.fleets).length, fleetCountBefore);
+    ensurePiratePopulation(universe, now);
+    assert.equal(activePirateBases(universe).length, PIRATE_TARGET_BASE_COUNT);
+    assertPirateGalaxiesAtCap(universe);
+  });
+
+  it("tops up a short galaxy and refuses a galaxy already at 75", () => {
+    const now = 1_700_000_000_000;
+    const universe = createUniverse("Galaxy room", 8);
+    universe.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
+    const spare = activePirateBases(universe).find(
+      (base) => base.coords.galaxy === 2 && !base.seasonalBoss,
+    );
+    assert.ok(spare);
+    delete universe.pirateBases![spare!.id];
+    const galaxy1Before = activePirateBases(universe).filter(
+      (base) => base.coords.galaxy === 1 && !base.seasonalBoss && base.id !== universe.pirateBossBaseId,
+    ).length;
+    assert.equal(galaxy1Before, PIRATE_BASES_PER_GALAXY);
+    ensurePiratePopulation(universe, now);
+    const galaxy1After = activePirateBases(universe).filter(
+      (base) => base.coords.galaxy === 1 && !base.seasonalBoss && base.id !== universe.pirateBossBaseId,
+    ).length;
+    const galaxy2After = activePirateBases(universe).filter(
+      (base) => base.coords.galaxy === 2 && !base.seasonalBoss && base.id !== universe.pirateBossBaseId,
+    ).length;
+    assert.equal(galaxy1After, PIRATE_BASES_PER_GALAXY);
+    assert.equal(galaxy2After, PIRATE_BASES_PER_GALAXY);
+    assert.equal(activePirateBases(universe).length, PIRATE_TARGET_BASE_COUNT);
+    assertPirateGalaxiesAtCap(universe);
+    ensurePiratePopulation(universe, now);
+    assert.equal(activePirateBases(universe).length, PIRATE_TARGET_BASE_COUNT);
+  });
+
+  it("does not select the same player planet twice inside 4 hours", () => {
+    const now = 1_700_000_000_000;
+    const universe = createUniverse("Same target cooldown", 8);
+    universe.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
+    const joined = joinUniverse(universe, "Target", now - 100 * 86_400_000);
+    const player = universe.players[joined.player.id]!;
+    player.attackedPiratesAt = now - 1000;
+    graduateNewbieProtection(universe, player);
+    const home = universe.planets[joined.planet.id]!;
+    universe.planets = { [home.id]: home };
+    const base = activePirateBases(universe).find((entry) => !entry.seasonalBoss)!;
+    base.ships = { ...emptyFleetShips(), interceptor: 30 };
+    universe.pirateBases = { [base.id]: base };
+    universe.alienBases = {};
+    const first = pickRaidTarget(universe, base, now, "pirate");
+    assert.equal(first?.kind, "planet");
+    if (first?.kind !== "planet") return;
+    assert.equal(first.planet.id, home.id);
+    applyNpcRaidOnPlanet(universe, base, home, now, "pirate", () => {});
+    assert.equal(base.recentRaidTargets?.[home.id], now);
+    assert.equal(pickRaidTarget(universe, base, now + 60_000, "pirate"), null);
+    const opened = pickRaidTarget(
+      universe,
+      base,
+      now + PIRATE_SAME_TARGET_COOLDOWN_MS,
+      "pirate",
+    );
+    assert.equal(opened?.kind, "planet");
+    if (opened?.kind === "planet") assert.equal(opened.planet.id, home.id);
+    const stale: Record<string, number> = {
+      [home.id]: now - PIRATE_SAME_TARGET_COOLDOWN_MS,
+      "gone-target": now - PIRATE_SAME_TARGET_COOLDOWN_MS - 1,
+    };
+    base.recentRaidTargets = stale;
+    const pruned = pickRaidTarget(universe, base, now, "pirate");
+    assert.equal(pruned?.kind, "planet");
+    assert.equal(base.recentRaidTargets, undefined);
+  });
+
+  it("does not select the same NPC target twice inside 4 hours", () => {
+    const now = 1_700_000_000_000;
+    const universe = createUniverse("Npc target cooldown", 8);
+    const seed = universe.seed ?? universe.id;
+    const left = createPirateBase(seed, 1, 20, 4, now, 3);
+    const right = createPirateBase(seed, 2, 21, 4, now, 3);
+    left.ships = { ...emptyFleetShips(), interceptor: 1 };
+    right.ships = { ...emptyFleetShips(), interceptor: 400 };
+    universe.pirateBases = { [left.id]: left, [right.id]: right };
+    universe.alienBases = {};
+    universe.planets = {};
+    const first = pickRaidTarget(universe, left, now, "pirate");
+    assert.equal(first?.kind, "pirate");
+    if (first?.kind !== "pirate") return;
+    assert.equal(first.other.id, right.id);
+    applyNpcRaidOnNpc(universe, left, right, now, () => {}, () => {});
+    assert.equal(left.recentRaidTargets?.[right.id], now);
+    assert.equal(right.destroyedAt, null);
+    assert.equal(pickRaidTarget(universe, left, now + 1000, "pirate"), null);
+    const later = pickRaidTarget(
+      universe,
+      left,
+      now + PIRATE_SAME_TARGET_COOLDOWN_MS,
+      "pirate",
+    );
+    assert.equal(later?.kind, "pirate");
+    if (later?.kind === "pirate") assert.equal(later.other.id, right.id);
+  });
+
+  it("loads an old pirate save with no cooldown field and keeps an in-flight fleet", () => {
+    const now = 1_800_000_000_000;
+    const universe = createUniverse("Old cooldown field", 8);
+    const { player, planet } = joinUniverse(universe, "Keeper", now);
+    planet.resources.metal = 222_333;
+    planet.buildings.metalMine = 3;
+    for (const base of Object.values(universe.pirateBases ?? {})) {
+      delete base.recentRaidTargets;
+    }
+    const fleet: FleetMission = {
+      id: "fleet-old",
+      ownerPlayerId: player.id,
+      originPlanetId: planet.id,
+      targetPlanetId: null,
+      targetPlayerId: null,
+      targetCoords: { ...planet.coords },
+      mission: "deploy",
+      ships: { ...emptyFleetShips(), scout: 1 },
+      cargo: { metal: 4, crystal: 0, deuterium: 0 },
+      departedAt: now - 1000,
+      arrivesAt: now + 60_000,
+      phase: "outbound",
+      reportId: null,
+    };
+    universe.fleets[fleet.id] = fleet;
+    const loaded = migrateOrResetUniverse(JSON.parse(JSON.stringify(universe)));
+    assert.equal(loaded.didReset, false);
+    assert.equal(loaded.universe.players[player.id]?.name, "Keeper");
+    assert.equal(loaded.universe.planets[planet.id]?.resources.metal, 222_333);
+    assert.equal(loaded.universe.planets[planet.id]?.buildings.metalMine, 3);
+    assert.equal(loaded.universe.fleets[fleet.id]?.ships.scout, 1);
+    assert.equal(loaded.universe.fleets[fleet.id]?.mission, "deploy");
+    assert.equal(loaded.universe.fleets[fleet.id]?.arrivesAt, now + 60_000);
+    const sample = activePirateBases(loaded.universe)[0];
+    assert.ok(sample);
+    assert.equal(sample!.recentRaidTargets, undefined);
   });
 });
 
@@ -486,6 +936,17 @@ describe("pirate growth, free spawn defenses, split", () => {
     base.tier = 24;
     base.splitDone = false;
     base.lastGrewAt = 0;
+    universe.skipPirateTopUp = true;
+    universe.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
+    const others = activePirateBases(universe).filter(
+      (entry) =>
+        entry.id !== base.id &&
+        !entry.seasonalBoss &&
+        entry.coords.galaxy === base.coords.galaxy,
+    );
+    for (const extra of others.slice(0, PIRATE_SPLIT_CHILD_COUNT)) {
+      delete universe.pirateBases![extra.id];
+    }
     const before = activePirateBases(universe).length;
     tickPirates(universe, PIRATE_LEVEL_GROWTH_INTERVAL_MS + 1);
     const afterBase = universe.pirateBases![base.id]!;
@@ -822,6 +1283,10 @@ describe("NPC soft raids", () => {
       tickPirates(universe, now);
       assert.equal(body.resources.metal, 500);
       assert.equal(body.resources.crystal, 500);
+      assert.equal(
+        Object.values(universe.fleets).some((fleet) => fleet.ownerPlayerId === "npc_pirates"),
+        false,
+      );
       for (const base of activePirateBases(universe).slice(0, 20)) {
         assert.ok(base.nextRaidAt > now - PIRATE_RAID_PERIOD_MS);
       }
@@ -833,6 +1298,105 @@ describe("NPC soft raids", () => {
 });
 
 describe("workers tick budget", () => {
+  it("uses grow-only and raid-only slices", () => {
+    assert.equal(NPC_AI_BATCH_SIZE, 50);
+    assert.equal(NPC_AI_SLICE_INTERVAL_MS, 10 * 60 * 1000);
+    assert.equal(
+      NPC_JOB_RAID_BUDGET,
+      Math.ceil(PIRATE_TARGET_BASE_COUNT / 18) + 6,
+    );
+    const now = 1_700_000_000_000;
+    const growAt = now + NPC_AI_SLICE_INTERVAL_MS;
+    const raidAt = now;
+    const growUniverse = createUniverse("Grow-only NPC slice", 8);
+    growUniverse.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
+    for (const base of activePirateBases(growUniverse)) {
+      base.lastGrewAt = growAt + 1;
+      base.lastFreeSpawnAt = growAt + 1;
+      base.nextRaidAt = growAt - 1;
+    }
+    let budget = npcJobBudget();
+    bindTickBudget(() => budget);
+    try {
+      tickPirates(growUniverse, growAt);
+      assert.ok(
+        activePirateBases(growUniverse).every((base) => base.nextRaidAt <= growAt),
+        "grow slice fired a raid",
+      );
+
+      const raidUniverse = createUniverse("Raid-only NPC slice", 8);
+      raidUniverse.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
+      const before = new Map(
+        activePirateBases(raidUniverse).map((base) => [
+          base.id,
+          {
+            level: base.level,
+            lastGrewAt: base.lastGrewAt,
+            lastFreeSpawnAt: base.lastFreeSpawnAt,
+            ships: { ...base.ships },
+          },
+        ]),
+      );
+      for (const base of activePirateBases(raidUniverse)) {
+        base.lastGrewAt = raidAt - PIRATE_LEVEL_GROWTH_INTERVAL_MS;
+        base.lastFreeSpawnAt = 0;
+        base.nextRaidAt = raidAt + PIRATE_RAID_PERIOD_MS;
+      }
+      budget = npcJobBudget();
+      tickPirates(raidUniverse, raidAt);
+      for (const base of activePirateBases(raidUniverse)) {
+        const previous = before.get(base.id)!;
+        assert.equal(base.level, previous.level);
+        assert.equal(base.lastGrewAt, raidAt - PIRATE_LEVEL_GROWTH_INTERVAL_MS);
+        assert.equal(base.lastFreeSpawnAt, 0);
+        assert.deepEqual(base.ships, previous.ships);
+      }
+    } finally {
+      bindTickBudget(() => undefined);
+    }
+  });
+
+  it("resumes the grow cursor after an intervening raid slice", () => {
+    const now = 1_700_000_000_000;
+    const growAt = now + NPC_AI_SLICE_INTERVAL_MS;
+    const universe = createUniverse("NPC grow cursor", 8);
+    universe.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
+    for (const base of activePirateBases(universe)) {
+      base.lastGrewAt = growAt - PIRATE_LEVEL_GROWTH_INTERVAL_MS;
+      base.lastFreeSpawnAt = growAt + 1;
+      base.nextRaidAt = growAt + PIRATE_RAID_PERIOD_MS;
+    }
+    let budget = npcJobBudget();
+    budget.levelUps = 1000;
+    bindTickBudget(() => budget);
+    try {
+      tickPirates(universe, growAt);
+      const firstCursor = universe.aiCatchUpCursor;
+      assert.ok(firstCursor);
+      const firstLevels = activePirateBases(universe).filter(
+        (base) => base.lastGrewAt === growAt,
+      ).length;
+      assert.ok(firstLevels > 0);
+      assert.equal(firstLevels <= NPC_AI_BATCH_SIZE, true);
+
+      budget = npcJobBudget();
+      tickPirates(universe, now + 2 * NPC_AI_SLICE_INTERVAL_MS);
+      assert.equal(universe.aiCatchUpCursor, firstCursor);
+
+      budget = npcJobBudget();
+      budget.levelUps = 1000;
+      tickPirates(universe, now + 3 * NPC_AI_SLICE_INTERVAL_MS);
+      assert.ok(universe.aiCatchUpCursor);
+      assert.notEqual(universe.aiCatchUpCursor, firstCursor);
+      assert.ok(
+        activePirateBases(universe).filter((base) => base.lastGrewAt === growAt).length >
+          firstLevels,
+      );
+    } finally {
+      bindTickBudget(() => undefined);
+    }
+  });
+
   it("closed-form free spawn matches interval steps at the current level", () => {
     const universe = createUniverse("Spawn Exact", 8);
     const base = activePirateBases(universe)[0]!;
@@ -857,7 +1421,7 @@ describe("workers tick budget", () => {
     bindTickBudget(() => budget);
     try {
       const universe = createUniverse("Raid Budget", 8);
-      const now = PIRATE_RAID_PERIOD_MS * 4;
+      const now = PIRATE_RAID_PERIOD_MS * 4 + NPC_AI_SLICE_INTERVAL_MS;
       for (const base of activePirateBases(universe)) {
         base.lastGrewAt = now + 1;
         base.lastFreeSpawnAt = now + 1;
@@ -866,6 +1430,13 @@ describe("workers tick budget", () => {
       const base = activePirateBases(universe)[0]!;
       // 0 is treated as "unset" and rescheduled into the future.
       base.nextRaidAt = 1;
+      // A lost raid now removes every sent hull. A gun keeps this base
+      // alive so the raid budget can pause and resume its backlog.
+      base.defenses = {
+        ...emptyDefenses(),
+        ...base.defenses,
+        laserBattery: Math.max(1, base.defenses?.laserBattery ?? 0),
+      };
       const step = (): TickBudget => ({
         raids: 1,
         levelUps: 50,
@@ -881,7 +1452,7 @@ describe("workers tick budget", () => {
       const mid = universe.pirateBases![base.id]!.nextRaidAt;
       assert.ok(mid > 0);
       assert.ok(mid <= now);
-      assert.equal(universe.aiCatchUpCursor, `${now}:${base.id}`);
+      assert.equal(universe.aiRaidCatchUpCursor, `${now}:${base.id}`);
       budget = step();
       tickPirates(universe, now);
       assert.ok(universe.pirateBases![base.id]!.nextRaidAt > mid);
@@ -920,16 +1491,26 @@ describe("workers tick budget", () => {
       budget.raids = 1;
       bindTickBudget(() => budget);
       let runs = 0;
+      let at = now;
       do {
-        tickPirates(split, now + runs * 10 * 60 * 1000);
+        tickPirates(split, at);
         runs += 1;
-        assert.ok(runs <= 4, "bounded catch-up did not resume");
+        assert.ok(runs <= 5, "bounded catch-up did not resume");
         budget = npcJobBudget();
         budget.raids = 1;
-      } while (split.aiCatchUpCursor);
+        at += NPC_AI_SLICE_INTERVAL_MS;
+      } while (split.aiRaidCatchUpCursor);
 
-      assert.equal(runs, 3);
-      assert.deepEqual(split, full);
+      assert.equal(runs, 5);
+      assert.equal(split.aiRaidCatchUpCursor, null);
+      assert.ok(split.aiCatchUpCursor, "grow cursor must remain independent");
+      for (const [id, base] of Object.entries(full.pirateBases ?? {})) {
+        assert.equal(split.pirateBases?.[id]?.nextRaidAt, base.nextRaidAt);
+      }
+      assert.equal(
+        split.alienBases?.[alien.id]?.nextRaidAt,
+        full.alienBases?.[alien.id]?.nextRaidAt,
+      );
     } finally {
       bindTickBudget(() => undefined);
       if (previous == null) delete process.env.STARHOLD_E2E;
@@ -943,23 +1524,29 @@ describe("workers tick budget", () => {
     try {
       const now = 1_700_000_000_000;
       const levelWork = createUniverse("NPC level-up caps", 8);
+      levelWork.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
       const levelBases = activePirateBases(levelWork);
       const initialLevels = new Map(levelBases.map((base) => [base.id, base.level]));
+      const growNow = now + NPC_AI_SLICE_INTERVAL_MS;
       for (const base of levelBases) {
-        base.lastGrewAt = now - PIRATE_LEVEL_GROWTH_INTERVAL_MS;
-        base.lastFreeSpawnAt = now + 1;
-        base.nextRaidAt = now + PIRATE_RAID_PERIOD_MS;
+        base.lastGrewAt = growNow - PIRATE_LEVEL_GROWTH_INTERVAL_MS;
+        base.lastFreeSpawnAt = growNow + 1;
+        base.nextRaidAt = growNow + PIRATE_RAID_PERIOD_MS;
       }
       let budget = npcJobBudget();
       bindTickBudget(() => budget);
-      tickPirates(levelWork, now);
+      tickPirates(levelWork, growNow);
       const levelsGained = levelBases.reduce(
         (sum, base) => sum + base.level - initialLevels.get(base.id)!,
         0,
       );
-      assert.equal(levelsGained, NPC_JOB_LEVELUP_BUDGET);
+      const eligibleBatch = Object.values(levelWork.pirateBases ?? {})
+        .slice(0, NPC_AI_BATCH_SIZE)
+        .filter((base) => !base.seasonalBoss).length;
+      assert.equal(levelsGained, Math.min(eligibleBatch, NPC_JOB_LEVELUP_BUDGET));
 
       const raidWork = createUniverse("NPC raid caps", 8);
+      raidWork.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
       const raidBases = activePirateBases(raidWork);
       for (const base of raidBases) {
         base.lastGrewAt = now + 1;
@@ -977,6 +1564,7 @@ describe("workers tick budget", () => {
       const end = start + 24 * 60 * 60 * 1000;
       const step = 10 * 60 * 1000;
       const reference = createUniverse("NPC raid schedule", 8);
+      reference.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
       const referenceBases = activePirateBases(reference);
       for (const base of referenceBases) {
         base.lastGrewAt = end + 1;
@@ -1014,9 +1602,10 @@ describe("workers tick budget", () => {
       let runs = 0;
       while (
         split.aiCatchUpCursor ||
+        split.aiRaidCatchUpCursor ||
         Object.values(split.pirateBases ?? {}).some((base) => base.nextRaidAt <= end)
       ) {
-        assert.ok(runs < 12, "budgeted NPC cron did not catch up");
+        assert.ok(runs < 400, "budgeted NPC cron did not catch up");
         budget = npcJobBudget();
         tickPirates(split, end);
         runs += 1;
@@ -1067,7 +1656,7 @@ describe("workers tick budget", () => {
       for (const base of Object.values(universe.pirateBases ?? {})) {
         if (base.destroyedAt == null && base.nextRaidAt <= end) backlog += 1;
       }
-      for (let run = 0; backlog > 0 && run < 20; run += 1) {
+      for (let run = 0; backlog > 0 && run < 400; run += 1) {
         budget = npcJobBudget();
         tickPirates(universe, end);
         backlog = Object.values(universe.pirateBases ?? {}).filter(
@@ -1099,6 +1688,13 @@ describe("workers tick budget", () => {
         other.lastGrewAt = now;
         other.lastFreeSpawnAt = now;
         other.lastRaidAt = 0;
+        // A lost raid removes every sent hull. Guns keep the base alive so
+        // lastRaidAt is visible after the detachment is gone.
+        other.defenses = {
+          ...emptyDefenses(),
+          ...other.defenses,
+          laserBattery: Math.max(1, other.defenses?.laserBattery ?? 0),
+        };
         if (index < 12) {
           other.nextRaidAt = now - 1;
           dueIds.add(other.id);
@@ -1212,13 +1808,17 @@ describe("pirate spread across galaxies", () => {
         assert.ok(galaxiesExact.has(g), `Seed ${seed} target=${MAP_GALAXIES} missing galaxy ${g}`);
       }
 
-      // Test with target = PIRATE_TARGET_BASE_COUNT (200)
-      const sites200 = collectPirateSpawnSites(universe, seed, PIRATE_TARGET_BASE_COUNT);
-      assert.equal(sites200.length, PIRATE_TARGET_BASE_COUNT);
+      // Test with target = the derived living cap.
+      const sitesCap = collectPirateSpawnSites(universe, seed, PIRATE_TARGET_BASE_COUNT);
+      assert.equal(sitesCap.length, PIRATE_TARGET_BASE_COUNT);
       const perGalaxy = new Array<number>(MAP_GALAXIES + 1).fill(0);
-      for (const site of sites200) perGalaxy[site.galaxy] += 1;
+      for (const site of sitesCap) perGalaxy[site.galaxy] += 1;
       for (let g = 1; g <= MAP_GALAXIES; g++) {
-        assert.ok(perGalaxy[g] >= 1, `Seed ${seed} target=200 has 0 pirates in galaxy ${g}`);
+        assert.ok(
+          perGalaxy[g] >= 1,
+          `Seed ${seed} target=${PIRATE_TARGET_BASE_COUNT} has 0 pirates in galaxy ${g}`,
+        );
+        assert.ok(perGalaxy[g]! <= PIRATE_BASES_PER_GALAXY);
       }
     }
   });
@@ -1399,6 +1999,7 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
     delete process.env.STARHOLD_E2E;
     try {
       tickPirates(universe2, nowB + 1000);
+      resolveDuePiratePlayerRaids(universe2, playerB.id);
 
       const report = Object.values(universe2.reports ?? {}).find(
         (entry) =>
@@ -1490,18 +2091,29 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
       universe.alienBases = {};
 
       const defenderPower2 = fleetCombatPower(planetState.ships, player.research) + defenseCombatPower(planetState.defenses ?? {}, player.research);
+      const levelFactor = pirateRaidPowerFactor(
+        PIRATE_RAID_POWER_FACTOR_PLAYER,
+        pirateBase.level,
+      );
       const expectedPirateRaid = scalePirateRaidFleet(
         pirateBase.ships,
         defenderPower2,
         planetState.ships,
-        PIRATE_RAID_POWER_FACTOR_PLAYER,
+        levelFactor,
       );
 
       assert.equal(PIRATE_RAID_POWER_FACTOR_PLAYER, 0.70);
+      assert.equal(PIRATE_RAID_LEVEL_POWER_BONUS, 0.5);
+      assert.equal(
+        levelFactor,
+        PIRATE_RAID_POWER_FACTOR_PLAYER *
+          (1 + PIRATE_RAID_LEVEL_POWER_BONUS * (pirateBase.level / PIRATE_MAX_LEVEL)),
+      );
       assert.equal(expectedPirateRaid.cruiser ?? 0, 0, "pirate raid caps cruisers at 0 due to strong-ship cap");
-      assert.ok(fleetCombatPower(expectedPirateRaid) <= defenderPower2 * PIRATE_RAID_POWER_FACTOR_PLAYER + 1e-6);
+      assert.ok(fleetCombatPower(expectedPirateRaid) <= defenderPower2 * levelFactor + 1e-6);
 
       tickPirates(universe, now + 3000);
+      resolveDuePiratePlayerRaids(universe, player.id);
 
       const pirateReport = Object.values(universe.reports ?? {}).find(
         (entry) =>
@@ -1614,6 +2226,13 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
     const base = activePirateBases(original)[0]!;
     original.pirateBases = { [base.id]: base };
     base.nextRaidAt = now;
+    // A total loss now removes every sent hull. One gun keeps the base
+    // alive so the loaded save can still launch the follow-up raid.
+    base.defenses = {
+      ...emptyDefenses(),
+      ...base.defenses,
+      laserBattery: Math.max(1, base.defenses?.laserBattery ?? 0),
+    };
 
     const savedJson = JSON.stringify(original);
     assert.ok(typeof savedJson === "string");
@@ -1627,6 +2246,7 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
 
     try {
       tickPirates(universe, now + 1000);
+      resolveDuePiratePlayerRaids(universe, player.id);
 
       const raidReport = Object.values(universe.reports ?? {}).find(
         (entry) => entry.defenderPlayerId === player.id && entry.missionId === base.id,
@@ -2098,6 +2718,542 @@ describe("pirate attack fatigue (B7-09)", () => {
       1.0 * pirateFatigueMult(planet, now),
     );
     assert.ok(Math.abs(effectiveWeight - 0.495) < 1e-9);
+  });
+});
+
+describe("B7-99/100/101 pirate level, loss, and strength", () => {
+  const NOW = 1_700_000_000_000;
+
+  function raidStage(name: string) {
+    const universe = createUniverse(name, 1, 1, { lazySeed: true });
+    universe.skipPirateTopUp = true;
+    const { player, planet } = joinUniverse(universe, "Defender", NOW - 10 * 86_400_000);
+    player.createdAt = NOW - 10 * 86_400_000;
+    player.attackedPiratesAt = NOW - 1000;
+    const body = universe.planets[planet.id]!;
+    body.buildings = { metalMine: 20, crystalMine: 20, solarPlant: 20 };
+    body.defenses = emptyDefenses();
+    body.ships = emptyFleetShips();
+    return { universe, player, body };
+  }
+
+  function defenderPower(body: UniverseState["planets"][string], universe: UniverseState): number {
+    const owner = universe.players[body.ownerPlayerId];
+    return (
+      fleetCombatPower(body.ships, owner?.research) +
+      defenseCombatPower(body.defenses ?? emptyDefenses(), owner?.research)
+    );
+  }
+
+  function hangarMinus(before: FleetShips, sent: FleetShips): FleetShips {
+    const out = emptyFleetShips();
+    for (const id of SHIP_ORDER) out[id] = Math.max(0, (before[id] ?? 0) - (sent[id] ?? 0));
+    return out;
+  }
+
+  it("scales raid detachment power with pirate level", () => {
+    assert.equal(PIRATE_RAID_LEVEL_POWER_BONUS, 0.5);
+    assert.equal(pirateRaidPowerFactor(PIRATE_RAID_POWER_FACTOR_PLAYER, 0), PIRATE_RAID_POWER_FACTOR_PLAYER);
+    assert.equal(
+      pirateRaidPowerFactor(PIRATE_RAID_POWER_FACTOR, PIRATE_MAX_LEVEL),
+      PIRATE_RAID_POWER_FACTOR * (1 + PIRATE_RAID_LEVEL_POWER_BONUS),
+    );
+    const stock = { ...emptyFleetShips(), interceptor: 1000 };
+    const powers: number[] = [];
+    for (const level of [0, 50, PIRATE_MAX_LEVEL]) {
+      const { universe, body } = raidStage(`level-${level}`);
+      body.ships = { ...emptyFleetShips(), interceptor: 10 };
+      const power = defenderPower(body, universe);
+      const expected = scalePirateRaidFleet(
+        stock,
+        power,
+        body.ships,
+        pirateRaidPowerFactor(PIRATE_RAID_POWER_FACTOR_PLAYER, level),
+      );
+      const base = createPirateBase(
+        universe.seed ?? universe.id,
+        body.coords.galaxy,
+        Math.min(MAP_SYSTEMS, body.coords.system + 1),
+        2,
+        NOW,
+        level,
+      );
+      base.ships = { ...stock };
+      universe.pirateBases = { [base.id]: base };
+      applyNpcRaidOnPlanet(universe, base, body, NOW, "pirate", () => {});
+      const report = Object.values(universe.reports ?? {}).find((entry) => entry.missionId === base.id);
+      assert.ok(report);
+      assert.deepEqual(report.attackerBefore, expected);
+      powers.push(fleetCombatPower(report.attackerBefore));
+    }
+    assert.ok(powers[1]! > powers[0]!, `mid ${powers[1]} vs low ${powers[0]}`);
+    assert.ok(powers[2]! > powers[1]!, `cap ${powers[2]} vs mid ${powers[1]}`);
+
+    const tiny = { ...emptyFleetShips(), interceptor: 1 };
+    const cappedLow = scalePirateRaidFleet(
+      tiny,
+      10_000,
+      tiny,
+      pirateRaidPowerFactor(PIRATE_RAID_POWER_FACTOR_PLAYER, 0),
+    );
+    const cappedHigh = scalePirateRaidFleet(
+      tiny,
+      10_000,
+      tiny,
+      pirateRaidPowerFactor(PIRATE_RAID_POWER_FACTOR_PLAYER, PIRATE_MAX_LEVEL),
+    );
+    assert.deepEqual(cappedLow, cappedHigh);
+
+    const { universe } = raidStage("npc-level");
+    const seed = universe.seed ?? universe.id;
+    const removed: number[] = [];
+    for (const level of [0, PIRATE_MAX_LEVEL]) {
+      const defender = createPirateBase(seed, 1, 3, 3, NOW, 1);
+      defender.ships = { ...emptyFleetShips(), scout: 8 };
+      defender.defenses = emptyDefenses();
+      const research = pirateCombatResearch(defender);
+      const otherPower =
+        fleetCombatPower(defender.ships, research) +
+        defenseCombatPower(defender.defenses, research);
+      const attacker = createPirateBase(seed, 1, 4, 3, NOW, level);
+      attacker.ships = { ...emptyFleetShips(), hauler: 2000 };
+      const before = { ...attacker.ships };
+      const expected = scalePirateRaidFleet(
+        before,
+        otherPower,
+        undefined,
+        pirateRaidPowerFactor(PIRATE_RAID_POWER_FACTOR, level),
+      );
+      universe.pirateBases = { [attacker.id]: attacker, [defender.id]: defender };
+      applyNpcRaidOnNpc(universe, attacker, defender, NOW + level, () => {}, () => {});
+      assert.deepEqual(attacker.ships, hangarMinus(before, expected));
+      const gone = fleetShipCount(before) - fleetShipCount(attacker.ships);
+      assert.equal(gone, fleetShipCount(expected));
+      removed.push(gone);
+    }
+    assert.ok(removed[1]! > removed[0]!, `high ${removed[1]} vs low ${removed[0]}`);
+  });
+
+  it("removes the full sent detachment when a pirate raid does not win", () => {
+    const { universe, body } = raidStage("pirate-loss");
+    body.ships = { ...emptyFleetShips(), hauler: 80 };
+    const base = createPirateBase(
+      universe.seed ?? universe.id,
+      body.coords.galaxy,
+      Math.min(MAP_SYSTEMS, body.coords.system + 1),
+      2,
+      NOW,
+      0,
+    );
+    const before = { ...emptyFleetShips(), hauler: 400 };
+    base.ships = { ...before };
+    universe.pirateBases = { [base.id]: base };
+    applyNpcRaidOnPlanet(universe, base, body, NOW, "pirate", () => {});
+    const report = Object.values(universe.reports ?? {}).find((entry) => entry.missionId === base.id);
+    assert.ok(report);
+    assert.notEqual(report.outcome, "attacker_win");
+    const sentCount = fleetShipCount(report.attackerBefore);
+    const survived = fleetShipCount(report.attackerAfter);
+    assert.ok(sentCount > 0);
+    assert.ok(survived > 0, `need survivors to prove they do not return, outcome ${report.outcome} sent ${sentCount}`);
+    assert.deepEqual(base.ships, hangarMinus(before, report.attackerBefore));
+    const softFactor = Math.min(1, 0.5 + (survived / sentCount) * 0.5);
+    const softKept = Math.floor((before.hauler ?? 0) * softFactor + 1e-9);
+    assert.notEqual(base.ships.hauler, softKept);
+  });
+
+  it("on a pirate win removes only destroyed sent ships", () => {
+    const { universe, body } = raidStage("pirate-win");
+    body.ships = { ...emptyFleetShips(), interceptor: 20 };
+    const base = createPirateBase(
+      universe.seed ?? universe.id,
+      body.coords.galaxy,
+      Math.min(MAP_SYSTEMS, body.coords.system + 1),
+      2,
+      NOW,
+      PIRATE_MAX_LEVEL,
+    );
+    const before = { ...emptyFleetShips(), interceptor: 500 };
+    base.ships = { ...before };
+    universe.pirateBases = { [base.id]: base };
+    applyNpcRaidOnPlanet(universe, base, body, NOW, "pirate", () => {});
+    const report = Object.values(universe.reports ?? {}).find((entry) => entry.missionId === base.id);
+    assert.ok(report);
+    assert.equal(report.outcome, "attacker_win");
+    let destroyed = 0;
+    for (const id of SHIP_ORDER) {
+      const sent = report.attackerBefore[id] ?? 0;
+      const lived = report.attackerAfter[id] ?? 0;
+      const lost = Math.max(0, sent - lived);
+      destroyed += lost;
+      assert.equal(base.ships[id] ?? 0, Math.max(0, (before[id] ?? 0) - lost));
+    }
+    assert.ok(destroyed > 0, "win must destroy some sent hulls so the old 50% floor would differ");
+    const sentCount = fleetShipCount(report.attackerBefore);
+    const survived = fleetShipCount(report.attackerAfter);
+    const softFactor = Math.min(1, 0.5 + (survived / sentCount) * 0.5);
+    const softInterceptors = Math.floor((before.interceptor ?? 0) * softFactor + 1e-9);
+    assert.notEqual(base.ships.interceptor, softInterceptors);
+  });
+
+  it("halves ordinary pirate ships and leaves the boss payout table alone", () => {
+    assert.equal(PIRATE_STRENGTH_MULT, 0.5);
+    assert.equal(ALIEN_STRENGTH_MULT, 1.5);
+    const tier = 40;
+    const rawScout = 2 + Math.floor(tier * 0.4);
+    const rawInterceptor = Math.max(1, Math.floor(tier * 0.25));
+    assert.equal(
+      pirateShipsForTier(tier).scout,
+      Math.floor(rawScout * PIRATE_STRENGTH_MULT + 1e-9),
+    );
+    assert.equal(
+      pirateShipsForTier(tier).interceptor,
+      Math.floor(rawInterceptor * PIRATE_STRENGTH_MULT + 1e-9),
+    );
+    assert.equal(
+      alienShipsForTier(tier).scout,
+      Math.floor(rawScout * ALIEN_STRENGTH_MULT + 1e-9),
+    );
+
+    const level = 8;
+    const total = PIRATE_FREE_SHIP_BASE + PIRATE_FREE_SHIP_PER_LEVEL * level;
+    const rawFreeScout = Math.floor((total * 7) / 10);
+    const rawFreeInterceptor = total - rawFreeScout;
+    const spawned = pirateFreeSpawnShips(level);
+    assert.equal(spawned.scout, Math.floor(rawFreeScout * PIRATE_STRENGTH_MULT + 1e-9));
+    assert.equal(spawned.interceptor, Math.floor(rawFreeInterceptor * PIRATE_STRENGTH_MULT + 1e-9));
+    assert.ok(fleetShipCount(pirateFreeSpawnShips(20)) > fleetShipCount(pirateFreeSpawnShips(1)));
+
+    assert.equal(PIRATE_BOSS_TIERS.top1.starshards, 500);
+    assert.equal(PIRATE_BOSS_TIERS.top1.resources.metal, 100_000);
+    assert.equal(PIRATE_BOSS_TIERS.top1.resources.crystal, 50_000);
+    assert.equal(PIRATE_BOSS_TIERS.top1.resources.deuterium, 25_000);
+    assert.equal(PIRATE_BOSS_TIERS.top10.minShare, 0.1);
+    assert.equal(PIRATE_BOSS_TIERS.top10.starshards, 150);
+    assert.equal(PIRATE_BOSS_TIERS.top10.resources.metal, 40_000);
+    assert.equal(PIRATE_BOSS_TIERS.participant.minShare, 0.01);
+    assert.equal(PIRATE_BOSS_TIERS.participant.starshards, 40);
+    assert.equal(PIRATE_BOSS_TIERS.participant.resources.deuterium, 2_500);
+  });
+
+  it("keeps an in-flight fleet when an older save loads", () => {
+    const { universe, player, body } = raidStage("save-compat");
+    body.resources.metal = 222_333;
+    body.buildings.metalMine = 4;
+    const fleet: FleetMission = {
+      id: "fleet-b7-99-inflight",
+      ownerPlayerId: player.id,
+      originPlanetId: body.id,
+      targetPlanetId: null,
+      targetPlayerId: null,
+      targetCoords: { ...body.coords },
+      mission: "deploy",
+      ships: { ...emptyFleetShips(), scout: 2 },
+      cargo: { metal: 9, crystal: 0, deuterium: 0 },
+      departedAt: NOW - 1000,
+      arrivesAt: NOW + 60_000,
+      phase: "outbound",
+      reportId: null,
+    };
+    universe.fleets[fleet.id] = fleet;
+    const loaded = migrateOrResetUniverse(JSON.parse(JSON.stringify(universe)));
+    assert.equal(loaded.didReset, false);
+    assert.equal(loaded.universe.fleets[fleet.id]?.ships.scout, 2);
+    assert.equal(loaded.universe.fleets[fleet.id]?.mission, "deploy");
+    assert.equal(loaded.universe.fleets[fleet.id]?.arrivesAt, NOW + 60_000);
+    assert.equal(loaded.universe.planets[body.id]?.resources.metal, 222_333);
+    assert.equal(loaded.universe.planets[body.id]?.buildings.metalMine, 4);
+    assert.equal(loaded.universe.players[player.id]?.name, "Defender");
+  });
+
+  it("aliens keep the soft hangar scale", () => {
+    const { universe, player, body } = raidStage("alien-soft");
+    body.ships = { ...emptyFleetShips(), cruiser: 40 };
+    const alien = createAlienBase(
+      universe,
+      body.coords.galaxy,
+      Math.min(MAP_SYSTEMS, body.coords.system + 1),
+      2,
+      NOW,
+      player.id,
+      10,
+    );
+    const before = { ...emptyFleetShips(), interceptor: 200 };
+    alien.ships = { ...before };
+    alien.buildupEndsAt = NOW - 1;
+    universe.alienBases = { [alien.id]: alien };
+    applyNpcRaidOnPlanet(universe, alien, body, NOW, "alien", () => {});
+    const report = Object.values(universe.reports ?? {}).find((entry) => entry.missionId === alien.id);
+    assert.ok(report);
+    const sent = fleetShipCount(report.attackerBefore);
+    const survived = fleetShipCount(report.attackerAfter);
+    assert.ok(sent > 0);
+    const factor = Math.min(1, 0.5 + (survived / sent) * 0.5);
+    assert.equal(
+      alien.ships.interceptor,
+      Math.floor((before.interceptor ?? 0) * factor + 1e-9),
+    );
+  });
+});
+
+describe("B7-97/98 pirate distance and flight raids", () => {
+  const NOW = 1_700_000_000_000;
+
+  function stage(name: string) {
+    const universe = createUniverse(name, 1, 1, { lazySeed: true });
+    universe.skipPirateTopUp = true;
+    universe.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
+    universe.seedCursor = { at: 0, pirates: 0, done: true };
+    const { player, planet } = joinUniverse(universe, "Defender", NOW - 10 * 86_400_000);
+    player.createdAt = NOW - 10 * 86_400_000;
+    player.attackedPiratesAt = NOW - 1000;
+    graduateNewbieProtection(universe, player);
+    const body = universe.planets[planet.id]!;
+    body.buildings = {
+      metalMine: 20,
+      crystalMine: 20,
+      solarPlant: 20,
+      metalStorage: 20,
+      crystalStorage: 20,
+      deutTank: 20,
+    };
+    body.defenses = emptyDefenses();
+    body.ships = emptyFleetShips();
+    body.resources = { metal: 80_000, crystal: 40_000, deuterium: 20_000 };
+    return { universe, player, body };
+  }
+
+  function parkPirate(
+    universe: UniverseState,
+    body: UniverseState["planets"][string],
+    ships: FleetShips,
+    level = 0,
+  ) {
+    const base = createPirateBase(
+      universe.seed ?? universe.id,
+      body.coords.galaxy,
+      Math.min(MAP_SYSTEMS, body.coords.system + 1),
+      2,
+      NOW,
+      level,
+    );
+    base.ships = { ...ships };
+    base.nextRaidAt = NOW;
+    base.lastGrewAt = NOW;
+    base.lastFreeSpawnAt = NOW;
+    universe.pirateBases = { [base.id]: base };
+    universe.alienBases = {};
+    return base;
+  }
+
+  it("distance weight matches 1/(1+(d/400)^2) and lowers farther planets", () => {
+    assert.equal(PIRATE_RAID_DISTANCE_REF, 400);
+    const weight = (d: number) => 1 / (1 + (d / PIRATE_RAID_DISTANCE_REF) ** 2);
+    assert.ok(Math.abs(pirateRaidDistanceWeight(5) - weight(5)) < 1e-12);
+    assert.ok(pirateRaidDistanceWeight(5) > 0.999);
+    assert.equal(pirateRaidDistanceWeight(400), 0.5);
+    assert.ok(Math.abs(pirateRaidDistanceWeight(1000) - weight(1000)) < 1e-12);
+    assert.ok(pirateRaidDistanceWeight(1000) > 0.13 && pirateRaidDistanceWeight(1000) < 0.14);
+
+    const { universe, body } = stage("distance");
+    const base = parkPirate(universe, body, { ...emptyFleetShips(), scout: 10 });
+    const near = {
+      ...body,
+      id: "near-world",
+      coords: {
+        galaxy: base.coords.galaxy,
+        system: base.coords.system,
+        slot: Math.min(15, base.coords.slot + 1),
+      },
+    };
+    const far = {
+      ...body,
+      id: "far-world",
+      coords: {
+        galaxy: base.coords.galaxy + 2,
+        system: 1,
+        slot: 1,
+      },
+    };
+    const nearW = piratePlanetPickWeight(universe, near, NOW, base);
+    const farW = piratePlanetPickWeight(universe, far, NOW, base);
+    assert.ok(nearW > 0 && farW > 0);
+    assert.ok(nearW > farW);
+    const nearD = pirateRaidDistanceWeight(coordDistance(base.coords, near.coords));
+    const farD = pirateRaidDistanceWeight(coordDistance(base.coords, far.coords));
+    assert.ok(Math.abs(nearW / farW - nearD / farD) < 1e-9);
+    assert.ok(coordDistance(base.coords, far.coords) > coordDistance(base.coords, near.coords));
+  });
+
+  it("launches a pirate fleet whose flight time matches flightSecondsOneWay", () => {
+    const { universe, player, body } = stage("flight");
+    body.ships = { ...emptyFleetShips(), scout: 6 };
+    const before = { ...emptyFleetShips(), scout: 30, interceptor: 12 };
+    const base = parkPirate(universe, body, before);
+    delete universe.skipNpcRaids;
+    tickPirates(universe, NOW);
+    const fleet = piratePlayerFleets(universe, player.id)[0];
+    assert.ok(fleet);
+    assert.equal(fleet!.ownerPlayerId, "npc_pirates");
+    assert.equal(fleet!.mission, "raid");
+    assert.equal(fleet!.phase, "outbound");
+    assert.equal(fleet!.originPirateBaseId, base.id);
+    assert.equal(fleet!.targetPlanetId, body.id);
+    assert.equal(fleet!.targetPlayerId, player.id);
+    assert.equal(base.recentRaidTargets?.[body.id], NOW);
+    const sent = fleetShipCount(fleet!.ships);
+    assert.ok(sent > 0);
+    assert.equal(fleetShipCount(base.ships), fleetShipCount(before) - sent);
+    const seconds = flightSecondsOneWay(
+      base.coords,
+      body.coords,
+      fleet!.ships,
+      universe.fleetSpeed,
+      0,
+      null,
+      0,
+    );
+    assert.equal(fleet!.arrivesAt - fleet!.departedAt, seconds * 1000);
+    assert.equal(Object.keys(universe.reports ?? {}).length, 0);
+  });
+
+  it("lists the outbound pirate raid as hostile incoming", () => {
+    const { universe, player, body } = stage("incoming");
+    body.ships = { ...emptyFleetShips(), scout: 6 };
+    parkPirate(universe, body, { ...emptyFleetShips(), scout: 30, interceptor: 12 });
+    delete universe.skipNpcRaids;
+    tickPirates(universe, NOW);
+    const fleet = piratePlayerFleets(universe, player.id)[0];
+    assert.ok(fleet);
+    assert.ok(fleet!.arrivesAt > fleet!.departedAt);
+    const view = playerView(universe, player.id, fleet!.departedAt);
+    assert.ok(view.hostileInbound.some((entry) => entry.id === fleet!.id));
+    assert.equal(eventPresentation(fleet!, true).label, "Hostile incoming");
+    const banner = eventsBannerHtml(
+      {
+        now: fleet!.departedAt,
+        player: { id: player.id },
+        fleets: [],
+        hostileInbound: [fleet!],
+        ownedPlanets: [],
+        roster: [],
+      } as unknown as PlayerView,
+      fleet!.departedAt,
+    );
+    assert.match(banner, /Hostile incoming/);
+    assert.match(banner, /event-hostile/);
+  });
+
+  it("drops a lost pirate fleet on arrival and does not return survivors", () => {
+    const { universe, player, body } = stage("flight-loss");
+    body.ships = { ...emptyFleetShips(), hauler: 80 };
+    const before = { ...emptyFleetShips(), hauler: 400 };
+    const base = parkPirate(universe, body, before);
+    delete universe.skipNpcRaids;
+    tickPirates(universe, NOW);
+    const fleet = piratePlayerFleets(universe, player.id)[0]!;
+    const hangarAfterLaunch = { ...base.ships };
+    assert.deepEqual(hangarAfterLaunch, {
+      ...emptyFleetShips(),
+      hauler: (before.hauler ?? 0) - (fleet.ships.hauler ?? 0),
+    });
+    const sent = fleetShipCount(fleet.ships);
+    resolveDuePiratePlayerRaids(universe, player.id);
+    const report = Object.values(universe.reports ?? {}).find((entry) => entry.missionId === base.id);
+    assert.ok(report);
+    assert.notEqual(report!.outcome, "attacker_win");
+    assert.ok(fleetShipCount(report!.attackerAfter) > 0);
+    assert.equal(fleetShipCount(report!.attackerBefore), sent);
+    assert.equal(universe.fleets[fleet.id], undefined);
+    assert.equal(
+      Object.values(universe.fleets).some((entry) => entry.ownerPlayerId === "npc_pirates"),
+      false,
+    );
+    assert.deepEqual(base.ships, hangarAfterLaunch);
+    const reports = Object.keys(universe.reports ?? {}).length;
+    advanceUniverse(universe, fleet.arrivesAt);
+    assert.equal(Object.keys(universe.reports ?? {}).length, reports);
+    assert.deepEqual(base.ships, hangarAfterLaunch);
+  });
+
+  it("brings survivors and loot home after a pirate win, once", () => {
+    const { universe, player, body } = stage("flight-win");
+    body.ships = { ...emptyFleetShips(), interceptor: 20 };
+    const before = { ...emptyFleetShips(), interceptor: 500 };
+    const base = parkPirate(universe, body, before, PIRATE_MAX_LEVEL);
+    const resourcesBefore = { ...base.resources };
+    delete universe.skipNpcRaids;
+    tickPirates(universe, NOW);
+    const fleet = piratePlayerFleets(universe, player.id)[0]!;
+    resolveDuePiratePlayerRaids(universe, player.id);
+    const report = Object.values(universe.reports ?? {}).find((entry) => entry.missionId === base.id);
+    assert.ok(report);
+    assert.equal(report!.outcome, "attacker_win");
+    const returning = universe.fleets[fleet.id];
+    assert.ok(returning);
+    assert.equal(returning!.phase, "returning");
+    assert.equal(fleetShipCount(returning!.ships), fleetShipCount(report!.attackerAfter));
+    assert.ok((returning!.cargo.metal ?? 0) + (returning!.cargo.crystal ?? 0) > 0);
+    assert.equal(fleetShipCount(base.ships), fleetShipCount(before) - fleetShipCount(report!.attackerBefore));
+    const homeAt = returning!.arrivesAt;
+    base.nextRaidAt = homeAt + 1;
+    base.lastGrewAt = homeAt;
+    base.lastFreeSpawnAt = homeAt;
+    advanceUniverse(universe, homeAt);
+    assert.equal(universe.fleets[fleet.id], undefined);
+    let destroyed = 0;
+    for (const id of SHIP_ORDER) {
+      const sent = report!.attackerBefore[id] ?? 0;
+      const lived = report!.attackerAfter[id] ?? 0;
+      destroyed += Math.max(0, sent - lived);
+      assert.equal(base.ships[id] ?? 0, Math.max(0, (before[id] ?? 0) - Math.max(0, sent - lived)));
+    }
+    assert.ok(destroyed > 0);
+    assert.ok(base.resources.metal >= resourcesBefore.metal);
+    assert.ok(
+      base.resources.metal + base.resources.crystal >
+        resourcesBefore.metal + resourcesBefore.crystal,
+    );
+    const settled = { ...base.ships };
+    const banked = { ...base.resources };
+    advanceUniverse(universe, homeAt);
+    assert.deepEqual(base.ships, settled);
+    assert.deepEqual(base.resources, banked);
+  });
+
+  it("keeps an in-flight pirate fleet across save load", () => {
+    const { universe, player, body } = stage("flight-save");
+    const base = parkPirate(universe, body, { ...emptyFleetShips(), scout: 4 });
+    const fleet: FleetMission = {
+      id: "fleet-b7-98-inflight",
+      ownerPlayerId: "npc_pirates",
+      originPlanetId: base.id,
+      originPirateBaseId: base.id,
+      targetPlanetId: body.id,
+      targetPlayerId: player.id,
+      targetCoords: { ...body.coords },
+      mission: "raid",
+      ships: { ...emptyFleetShips(), scout: 2 },
+      cargo: { metal: 0, crystal: 0, deuterium: 0 },
+      departedAt: NOW,
+      arrivesAt: NOW + 3_600_000,
+      phase: "outbound",
+      reportId: null,
+    };
+    universe.fleets[fleet.id] = fleet;
+    const loaded = migrateOrResetUniverse(JSON.parse(JSON.stringify(universe)));
+    assert.equal(loaded.didReset, false);
+    assert.equal(loaded.universe.fleets[fleet.id]?.ships.scout, 2);
+    assert.equal(loaded.universe.fleets[fleet.id]?.mission, "raid");
+    assert.equal(loaded.universe.fleets[fleet.id]?.phase, "outbound");
+    assert.equal(loaded.universe.fleets[fleet.id]?.originPirateBaseId, base.id);
+    assert.equal(loaded.universe.fleets[fleet.id]?.arrivesAt, NOW + 3_600_000);
+    assert.equal(loaded.universe.players[player.id]?.name, "Defender");
+    assert.equal(loaded.universe.planets[body.id]?.resources.metal, 80_000);
+    assert.equal(loaded.universe.planets[body.id]?.buildings.metalMine, 20);
+    advanceUniverse(loaded.universe, NOW + 1000);
+    assert.equal(loaded.universe.fleets[fleet.id]?.phase, "outbound");
+    assert.equal(loaded.universe.fleets[fleet.id]?.ships.scout, 2);
   });
 });
 
