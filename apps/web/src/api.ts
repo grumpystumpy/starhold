@@ -218,6 +218,7 @@ interface UnchangedStateBody {
   unchanged: true;
   now: number;
   resources: Resources;
+  ownedPlanetResources?: Array<{ id: string; resources: Resources }>;
 }
 
 function isUnchangedState(
@@ -523,6 +524,12 @@ export async function fetchState(
         resources: data.resources,
         lastTickAt: data.now,
       },
+      ownedPlanets: cached.view.ownedPlanets.map((body) => {
+        const updated = data.ownedPlanetResources?.find(
+          (entry) => entry.id === body.id,
+        );
+        return updated ? { ...body, resources: updated.resources } : body;
+      }),
     };
     stateCache.set(key, { etag: etag ?? cached.etag, view });
     onStatePollOk();

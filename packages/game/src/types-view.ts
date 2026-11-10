@@ -902,6 +902,10 @@ export interface PlayerView {
       jumpGateLevel: number;
       /** Research Lab level on this body (empire research uses the best). */
       researchLab: number;
+      resources: Resources;
+      buildQueueHead: Pick<BuildQueueItem, "buildingId" | "targetLevel"> | null;
+      shipQueueHead: Pick<ShipQueueItem, "shipId" | "count"> | null;
+      defenseQueueHead: Pick<DefenseQueueItem, "defenseId" | "count"> | null;
     }
   >;
   economy: EconomySnapshot;

@@ -514,6 +514,22 @@ export function playerView(
           isMini: isMiniBody(universe, p),
           jumpGateLevel: p.buildings.jumpGate ?? 0,
           researchLab: p.buildings.researchLab ?? 0,
+          resources: p.resources,
+          buildQueueHead: p.buildQueue[0]
+            ? {
+                buildingId: p.buildQueue[0].buildingId,
+                targetLevel: p.buildQueue[0].targetLevel,
+              }
+            : null,
+          shipQueueHead: p.shipQueue[0]
+            ? { shipId: p.shipQueue[0].shipId, count: p.shipQueue[0].count }
+            : null,
+          defenseQueueHead: p.defenseQueue[0]
+            ? {
+                defenseId: p.defenseQueue[0].defenseId,
+                count: p.defenseQueue[0].count,
+              }
+            : null,
           ...art,
         };
       })

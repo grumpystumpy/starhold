@@ -11,7 +11,14 @@ export function stateRevision(view: PlayerView): string {
   const { now: _now, planet, ...rest } = view;
   const { resources: _resources, lastTickAt: _lastTickAt, ...planetRest } =
     planet;
-  const body = JSON.stringify({ ...rest, planet: planetRest });
+  const { ownedPlanets, ...restWithoutOwnedPlanets } = rest;
+  const body = JSON.stringify({
+    ...restWithoutOwnedPlanets,
+    ownedPlanets: (ownedPlanets ?? []).map(
+      ({ resources: _stocks, ...body }) => body,
+    ),
+    planet: planetRest,
+  });
   return createHash("sha1").update(body).digest("base64url").slice(0, 22);
 }
 
@@ -31,6 +38,7 @@ export interface UnchangedState {
   unchanged: true;
   now: number;
   resources: Resources;
+  ownedPlanetResources: Array<{ id: string; resources: Resources }>;
 }
 
 /**
@@ -46,6 +54,10 @@ export function respondWithPlayerView(c: Context, view: PlayerView): Response {
       unchanged: true,
       now: view.now,
       resources: view.planet.resources,
+      ownedPlanetResources: view.ownedPlanets.map(({ id, resources }) => ({
+        id,
+        resources,
+      })),
     };
     return c.json(body);
   }
