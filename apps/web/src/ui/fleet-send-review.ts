@@ -281,11 +281,7 @@ export function renderFleetSendReview(review: FleetSendReview): string {
       ? escapeHtml(review.returnText)
       : `${escapeHtml(review.returnText)} Clock ${escapeHtml(review.returnClock)}.`;
   const cargoRow = review.transport
-    ? row(
-        "Cargo",
-        "fleet-transfer-cargo",
-        `${fmt(review.transport.cargoUsed)} used / ${fmt(review.transport.cargoAvailable)} available`,
-      )
+    ? `<p data-testid="fleet-transfer-cargo"><strong>Cargo</strong> ${fmt(review.transport.cargoUsed)} used / ${fmt(review.transport.cargoAvailable)} available</p>`
     : "";
   const transfer = review.transport;
   const overCapacity =
@@ -304,10 +300,10 @@ export function renderFleetSendReview(review: FleetSendReview): string {
         ${row("Flight out", "fleet-review-outbound", `<span data-testid="fleet-flight">${duration}</span>`)}
         ${row("Arrival", "fleet-review-arrival", arrival)}
         ${row("Launch fuel", "fleet-review-fuel", fuel)}
-        ${cargoRow}
         ${row("Return", "fleet-review-return", returnValue)}
         ${row("Hold", "fleet-review-hold", escapeHtml(review.holdText))}
       </dl>
+      ${cargoRow}
       ${overCapacity}
       <p class="hint" data-testid="fleet-review-limit">${escapeHtml(review.limitText)}</p>
       <p class="hint" data-testid="fleet-speed-note">${escapeHtml(review.speedNote)}</p>
