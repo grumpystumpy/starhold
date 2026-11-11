@@ -56,6 +56,107 @@ export function peekEmailReset(): boolean {
   return emailResetCache;
 }
 
+/** Cached public board slice. `null` means the lobby route failed. */
+export type LobbyTeaser = {
+  commanders: number;
+  top: Array<{ rank: number; name: string; points: number }>;
+};
+
+const LOBBY_TOP = 5;
+let lobbyCache: LobbyTeaser | null | undefined;
+let lobbyPromise: Promise<LobbyTeaser | null> | null = null;
+
+export function resetLobbyTeaserCacheForTests(): void {
+  lobbyCache = undefined;
+  lobbyPromise = null;
+}
+
+/** Commander count and the top names. Omits the mothership (not on the board row). */
+export function lobbyTeaserHtml(lobby: LobbyTeaser): string {
+  const rows = lobby.top.slice(0, LOBBY_TOP);
+  const list = rows.length
+    ? `<ol class="lobby-top" data-testid="lobby-top">${rows
+        .map(
+          (row) =>
+            `<li data-testid="lobby-commander"><span class="lobby-rank">${fmt(row.rank)}</span><span class="lobby-name">${escapeHtml(row.name)}</span><span class="lobby-points">${fmt(row.points)}</span></li>`,
+        )
+        .join("")}</ol>`
+    : "";
+  const label = lobby.commanders === 1 ? "commander" : "commanders";
+  return `<aside class="lobby-teaser" data-testid="lobby-teaser">
+      <p data-testid="lobby-commander-count">${fmt(lobby.commanders)} ${label}</p>
+      ${list}
+    </aside>`;
+}
+
+function lobbyFromBody(body: unknown): LobbyTeaser | null {
+  if (!body || typeof body !== "object") return null;
+  const record = body as { commanders?: unknown; top?: unknown };
+  if (typeof record.commanders !== "number" || !Number.isFinite(record.commanders)) {
+    return null;
+  }
+  if (!Array.isArray(record.top)) return null;
+  const top: LobbyTeaser["top"] = [];
+  for (const item of record.top) {
+    if (top.length >= LOBBY_TOP) break;
+    if (!item || typeof item !== "object") continue;
+    const row = item as { rank?: unknown; name?: unknown; points?: unknown };
+    if (typeof row.name !== "string") continue;
+    if (typeof row.points !== "number" || !Number.isFinite(row.points)) continue;
+    top.push({
+      rank:
+        typeof row.rank === "number" && Number.isFinite(row.rank)
+          ? row.rank
+          : top.length + 1,
+      name: row.name,
+      points: row.points,
+    });
+  }
+  return { commanders: record.commanders, top };
+}
+
+/** One fetch per page load. A failure leaves the join screen unchanged. */
+export function loadLobbyTeaser(): Promise<LobbyTeaser | null> {
+  if (lobbyCache !== undefined) return Promise.resolve(lobbyCache);
+  if (!lobbyPromise) {
+    lobbyPromise = fetch("/api/lobby", { credentials: "same-origin" })
+      .then(async (res) => {
+        if (!res.ok) return null;
+        return lobbyFromBody(await res.json());
+      })
+      .catch(() => null)
+      .then((value) => {
+        lobbyCache = value;
+        return value;
+      });
+  }
+  return lobbyPromise;
+}
+
+function paintLobbyTeaser(root: HTMLElement, lobby: LobbyTeaser): void {
+  if (root.querySelector("[data-testid='lobby-teaser']")) return;
+  const panel = root.querySelector(".join-panel");
+  if (!panel) return;
+  panel.insertAdjacentHTML("afterbegin", lobbyTeaserHtml(lobby));
+}
+
+function lobbyHasCommanders(lobby: LobbyTeaser): boolean {
+  return lobby.commanders > 0 || lobby.top.length > 0;
+}
+
+function queueLobbyTeaser(root: HTMLElement): void {
+  if (lobbyCache && lobbyHasCommanders(lobbyCache)) {
+    paintLobbyTeaser(root, lobbyCache);
+    return;
+  }
+  if (lobbyCache !== undefined) return;
+  void loadLobbyTeaser().then((lobby) => {
+    if (!lobby || !lobbyHasCommanders(lobby)) return;
+    if (!root.querySelector("#join-form")) return;
+    paintLobbyTeaser(root, lobby);
+  });
+}
+
 /** Buttons for configured providers only. An empty list renders nothing. */
 export function oauthButtonsHtml(providers: readonly string[]): string {
   const buttons = providers.filter((provider) => provider in OAUTH_BUTTON_LABEL);
@@ -298,6 +399,7 @@ export function renderJoin(root: HTMLElement, state: JoinScreenState): void {
       passwordInput.value = state.passwordDraft ?? "";
     }
     queueOAuthButtons(root, state);
+    queueLobbyTeaser(root);
     return;
   }
 
@@ -306,6 +408,7 @@ export function renderJoin(root: HTMLElement, state: JoinScreenState): void {
     oauthProviders: state.oauthProviders ?? peekOAuthProviders() ?? [],
   });
   queueOAuthButtons(root, state);
+  queueLobbyTeaser(root);
 
   const input = root.querySelector<HTMLInputElement>("#commander");
   input?.focus();
