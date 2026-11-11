@@ -736,6 +736,38 @@ a.message-title:hover {
   font-variant-numeric: tabular-nums;
 }
 
+.planet-abandon {
+  margin: 0 0 1rem;
+}
+
+.abandon-colony-dialog {
+  max-width: 24rem;
+  color: var(--text);
+  background: var(--bg1);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 1rem 1.1rem;
+}
+
+.abandon-colony-dialog::backdrop {
+  background: rgba(8, 12, 16, 0.62);
+}
+
+.abandon-colony-dialog h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.abandon-colony-dialog p {
+  margin: 0.55rem 0 1rem;
+}
+
+.abandon-colony-dialog form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .layout {
   display: grid;
   grid-template-columns: 1.4fr 1fr;

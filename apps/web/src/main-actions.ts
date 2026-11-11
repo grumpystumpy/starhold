@@ -12,6 +12,7 @@ export {
   doGalaxyJump,
   doGalaxyGalaxyNav,
   doSelectPlanet,
+  doAbandonColony,
   doRenamePlanet,
   doRelocateFortress,
   doSignup,

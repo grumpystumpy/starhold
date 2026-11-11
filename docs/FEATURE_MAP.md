@@ -166,6 +166,18 @@ Password change and recover are rate-limited. The join screen's Forgot password?
 
 An occupy win on a mini planet already captures it: `ownerPlayerId` and `planetIds` move to the occupier. While that occupation is active, occupied means owned. The occupier can queue buildings, ships, and defenses there (field caps and mini-kind limits still apply), and mine income stays on the mini instead of the 30/70 split. A non-mini occupation is unchanged, including the yard blocks and the split. When the occupation ends, the capturer keeps the mini until a later capture or vacate. No new save fields.
 
+## Abandon colony
+
+A commander can abandon an owned colony that is not the homeworld. `abandonColony` in `packages/game/src/world-abandon-colony.ts` removes that planet and its moon from `universe.planets` and from `player.planetIds`. Buildings, docked ships, defenses, and resources on both bodies are lost. Debris at those coordinates stays. If `activePlanetId` was the colony or its moon, it switches to `homePlanetId`. `ownedPlanetCount` drops by one, so `empireColonyCap` has a free slot and those coordinates can be colonized again.
+
+The homeworld cannot be abandoned. A moon cannot be abandoned by itself. If the commander has any fleet in flight whose origin or target is that planet or its moon, abandon is rejected and they are told to wait for the fleet to return. Other players' fleets already flying at the colony stay in `fleets`. Arrival still follows `packages/game/src/world-arrival.ts` when the target is missing. This is not occupation and does not call `abandonOccupation`.
+
+| Action | Route | Who |
+| --- | --- | --- |
+| Abandon colony | `POST /api/abandon-colony` `{ playerId, planetId }` | owning session (401 without a cookie, 403 for another commander) |
+
+Overview shows Abandon colony only on a non-home owned planet, next to Rename colony. The confirm dialog names the colony and warns that buildings, docked ships, defenses, resources, and any moon are lost. The route is not called on a normal page load and adds nothing to the 30s `/api/state` poll. No new save fields. This entry is in `docs/FEATURE_MAP.md`.
+
 ## Test safety nets
 
 Cross-version fixtures live in `apps/server/src/fixtures/`. `pre-row-save.json` is a schema-2 universe blob (the pre-row-save shape) with single-object build and research queues. `pre-onboarding-boss-save.json` is a schema-4 universe with no `player.onboarding` and no `pirateBoss*` fields. `pre-oauth-account.json` is an account row with email, peppered password hash, and `playerId` only — no `sessionEpoch`, `recoveryCodeHashes`, or OAuth fields. Both universes keep an unfinished `seedCursor` so normalize does not reseed the full map. `packages/game/src/cross-version-save.test.ts` loads each universe through `migrateOrResetUniverse`, asserts `didReset` is false, and checks resources, buildings, research, the in-flight fleet, and queues. One short tick must not throw. `apps/server/src/cross-version-account.test.ts` loads the same blobs through the KV universe reader and the account through `getAccountById` / `authenticateEmailPassword`.

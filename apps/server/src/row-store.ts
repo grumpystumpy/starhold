@@ -2015,6 +2015,23 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
     planetUpdates,
   );
 
+  const livePlanets = new Set(Object.keys(universe.planets));
+  const planetDeletes: unknown[][] = [];
+  for (const [id, version] of loaded.planetVersions) {
+    if (livePlanets.has(id)) continue;
+    planetDeletes.push([id, version]);
+  }
+  for (const group of chunkRows(planetDeletes, SQL_ROWS)) {
+    const clause = group.map(() => "(id = ? AND version = ?)").join(" OR ");
+    stmts.push(bind(db, `DELETE FROM save_planets WHERE ${clause}`, group.flat()));
+    stmts.push(
+      bind(db, "INSERT INTO save_assert (ok) SELECT CASE WHEN changes() = ? THEN 1 ELSE 0 END", [
+        group.length,
+      ]),
+    );
+    guards += 1;
+  }
+
   const liveFleets = new Set(Object.keys(universe.fleets ?? {}));
   const fleetDeletes: unknown[][] = [];
   for (const [id, version] of loaded.fleetVersions) {
@@ -2378,6 +2395,9 @@ function changed(loaded: LoadedRows): boolean {
   for (const planet of Object.values(universe.planets)) {
     if (loaded.stubPlanetIds.has(planet.id) && !loaded.fullPlanetIds.has(planet.id)) continue;
     if (planetChanged(loaded, planet, stable(planet))) return true;
+  }
+  for (const id of loaded.planetVersions.keys()) {
+    if (!universe.planets[id]) return true;
   }
   for (const fleet of Object.values(universe.fleets ?? {})) {
     if (stable(fleet) !== loaded.fingerprints.get(`fleet:${fleet.id}`)) return true;
