@@ -332,6 +332,18 @@ export interface AllianceRecord {
    * Missing on older saves — no class, no bonus. Never required.
    */
   allianceClass?: AllianceClassId | null;
+  /**
+   * Short public recruitment line. Missing on older saves.
+   * Not copied onto the 30s state poll.
+   */
+  recruitmentBlurb?: string;
+  /** Public Recruiting flag. Missing on older saves — treat as false. */
+  recruiting?: boolean;
+  /**
+   * Shown when a commander opens a request-mode apply.
+   * Missing on older saves. Not copied onto the 30s state poll.
+   */
+  applicationNote?: string;
 }
 
 export interface AllianceMemberView {
@@ -374,6 +386,16 @@ export interface AllianceListEntry {
   joinMode: AllianceJoinMode;
   memberCount: number;
   maxMembers: number;
+}
+
+/**
+ * Alliances-page directory row. Loaded from `GET /api/alliance/list` only.
+ * The state poll keeps using `AllianceListEntry` without these fields.
+ */
+export interface AllianceRecruitingEntry extends AllianceListEntry {
+  recruitmentBlurb: string;
+  recruiting: boolean;
+  applicationNote: string;
 }
 
 /** Cached alliance rank row. Rebuilt with the player highscore board. */

@@ -1,12 +1,16 @@
 import {
+  ALLIANCE_APPLICATION_NOTE_MAX,
   ALLIANCE_CLASS_BONUSES,
   ALLIANCE_CLASS_ORDER,
+  ALLIANCE_RECRUITMENT_BLURB_MAX,
   DEFENSES,
   SHIPS,
   type AllianceClassId,
   type AllianceGalaxyMarker,
   type AllianceIntelStamp,
   type AllianceJoinMode,
+  type AllianceListEntry,
+  type AllianceRecruitingEntry,
   type AllianceRole,
   type PlayerView,
 } from "@starhold/game";
@@ -208,6 +212,81 @@ function allianceClassSection(
   </div>`;
 }
 
+/** Page-scoped directory and the open request-apply panel. Not part of `/api/state`. */
+export interface AlliancePageExtras {
+  directory?: AllianceRecruitingEntry[] | null;
+  requestAllianceId?: string | null;
+}
+
+type DirectoryRow = AllianceListEntry & Partial<AllianceRecruitingEntry>;
+
+function recruitingRow(row: DirectoryRow): row is AllianceRecruitingEntry {
+  return typeof row.recruiting === "boolean";
+}
+
+function recruitingFlagHtml(row: AllianceRecruitingEntry): string {
+  const label = row.recruiting ? "Recruiting" : "Not recruiting";
+  return `<span class="meta" data-testid="alliance-recruiting-${escapeAttr(row.id)}" data-recruiting="${row.recruiting ? "1" : "0"}">${escapeHtml(label)}</span>`;
+}
+
+function recruitingBlurbHtml(row: AllianceRecruitingEntry): string {
+  if (!row.recruitmentBlurb) return "";
+  return `<span class="alliance-blurb" data-testid="alliance-blurb-${escapeAttr(row.id)}">${escapeHtml(row.recruitmentBlurb)}</span>`;
+}
+
+function requestConfirmHtml(row: DirectoryRow, busy: boolean): string {
+  const note = row.applicationNote ?? "";
+  const noteHtml = note
+    ? `<p class="hint" data-testid="alliance-application-note">${escapeHtml(note)}</p>`
+    : `<p class="hint" data-testid="alliance-application-note">No application note.</p>`;
+  return `<div class="alliance-request-confirm" data-testid="alliance-request-confirm-${escapeAttr(row.id)}">
+      ${noteHtml}
+      <span class="alliance-member-actions">
+        <button type="button" data-alliance-request-confirm="${escapeAttr(row.id)}" data-testid="alliance-request-send-${escapeAttr(row.id)}" ${busy ? "disabled" : ""}>Confirm request</button>
+        <button type="button" data-alliance-request-dismiss data-testid="alliance-request-dismiss" ${busy ? "disabled" : ""}>Cancel</button>
+      </span>
+    </div>`;
+}
+
+function recruitmentSummary(
+  allianceId: string,
+  page: AlliancePageExtras | null | undefined,
+): string {
+  const row = page?.directory?.find((entry) => entry.id === allianceId);
+  if (!row) return "";
+  const blurb = row.recruitmentBlurb
+    ? ` · <span data-testid="alliance-recruitment-blurb">${escapeHtml(row.recruitmentBlurb)}</span>`
+    : "";
+  return `<p class="hint" data-testid="alliance-recruitment-summary"><span data-testid="alliance-recruiting-flag">${row.recruiting ? "Recruiting" : "Not recruiting"}</span>${blurb}</p>`;
+}
+
+function recruitingForm(
+  allianceId: string,
+  page: AlliancePageExtras | null | undefined,
+  busy: boolean,
+): string {
+  const loaded = Array.isArray(page?.directory);
+  const row = page?.directory?.find((entry) => entry.id === allianceId);
+  const blurb = row?.recruitmentBlurb ?? "";
+  const note = row?.applicationNote ?? "";
+  const recruiting = row?.recruiting === true;
+  const disabled = busy || !loaded;
+  const lock = disabled ? "disabled" : "";
+  return `<form id="alliance-recruiting-form" class="alliance-form alliance-recruiting-form" data-testid="alliance-recruiting-form">
+      <label>Recruitment blurb
+        <input type="text" name="alliance-recruitment-blurb" data-testid="alliance-recruitment-blurb" maxlength="${ALLIANCE_RECRUITMENT_BLURB_MAX}" value="${escapeAttr(blurb)}" ${lock} />
+      </label>
+      <label class="alliance-recruiting-check">
+        <input type="checkbox" name="alliance-recruiting" data-testid="alliance-recruiting-flag-input" ${recruiting ? "checked" : ""} ${lock} />
+        Recruiting
+      </label>
+      <label>Application note
+        <textarea name="alliance-application-note" data-testid="alliance-application-note-input" maxlength="${ALLIANCE_APPLICATION_NOTE_MAX}" ${lock}>${escapeHtml(note)}</textarea>
+      </label>
+      <button type="submit" data-testid="alliance-recruiting-save" ${lock}>Save recruiting</button>
+    </form>`;
+}
+
 function joinModeLabel(mode: AllianceJoinMode): string {
   if (mode === "invite") return "Invite only";
   if (mode === "request") return "Request";
@@ -234,8 +313,12 @@ function createFormHtml(busy: boolean): string {
     </form>`;
 }
 
-function directoryHtml(view: PlayerView, busy: boolean): string {
-  const rows = view.allianceDirectory ?? [];
+function directoryHtml(
+  view: PlayerView,
+  busy: boolean,
+  page?: AlliancePageExtras | null,
+): string {
+  const rows: DirectoryRow[] = page?.directory ?? view.allianceDirectory ?? [];
   if (rows.length === 0) {
     return `<p class="hint" data-testid="alliance-directory-empty">No alliances yet — create the first.</p>`;
   }
@@ -255,16 +338,23 @@ function directoryHtml(view: PlayerView, busy: boolean): string {
             a.joinMode === "request" &&
             a.memberCount < a.maxMembers;
           const sentHere = !view.alliance && pendingId === a.id;
+          const requestOpen = page?.requestAllianceId === a.id;
           const action = canJoin
             ? `<button type="button" data-alliance-join="${escapeAttr(a.id)}" data-testid="alliance-join-${escapeAttr(a.id)}" ${busy ? "disabled" : ""}>Join</button>`
             : canRequest
-              ? `<button type="button" data-alliance-request="${escapeAttr(a.id)}" data-testid="alliance-request-${escapeAttr(a.id)}" ${busy ? "disabled" : ""}>Request</button>`
+              ? requestOpen
+                ? requestConfirmHtml(a, busy)
+                : `<button type="button" data-alliance-request="${escapeAttr(a.id)}" data-testid="alliance-request-${escapeAttr(a.id)}" ${busy ? "disabled" : ""}>Request</button>`
               : sentHere
                 ? `<span data-testid="alliance-request-sent-${escapeAttr(a.id)}">Request sent</span> <button type="button" data-alliance-request-cancel data-testid="alliance-request-cancel" ${busy ? "disabled" : ""}>Cancel</button>`
                 : "";
+          const recruiting = recruitingRow(a)
+            ? `${recruitingFlagHtml(a)}${recruitingBlurbHtml(a)}`
+            : "";
           return `<li class="alliance-dir-row" data-testid="alliance-dir-${escapeAttr(a.id)}">
             <span><strong>[${escapeHtml(a.tag)}]</strong> ${escapeHtml(a.name)}</span>
             <span class="meta">${fmt(a.memberCount)}/${fmt(a.maxMembers)} · ${escapeHtml(joinModeLabel(a.joinMode))}</span>
+            ${recruiting}
             ${action}
           </li>`;
         })
@@ -341,7 +431,11 @@ function requestsHtml(view: PlayerView, busy: boolean): string {
     </ul>`;
 }
 
-export function alliancesPageHtml(view: PlayerView, busy: boolean): string {
+export function alliancesPageHtml(
+  view: PlayerView,
+  busy: boolean,
+  page?: AlliancePageExtras | null,
+): string {
   const alliance = view.alliance;
   if (!alliance) {
     return `
@@ -351,7 +445,7 @@ export function alliancesPageHtml(view: PlayerView, busy: boolean): string {
         <h3>Create</h3>
         ${createFormHtml(busy)}
         <h3>Directory</h3>
-        ${directoryHtml(view, busy)}
+        ${directoryHtml(view, busy, page)}
       </section>`;
   }
 
@@ -368,6 +462,7 @@ export function alliancesPageHtml(view: PlayerView, busy: boolean): string {
           </label>
           <button type="button" data-alliance-disband data-testid="alliance-disband-btn" ${busy ? "disabled" : ""}>Disband</button>
         </div>
+        ${recruitingForm(alliance.id, page, busy)}
         ${
           alliance.joinMode === "invite"
             ? `<form id="alliance-invite-form" class="alliance-form" data-testid="alliance-invite-form">
@@ -395,6 +490,7 @@ export function alliancesPageHtml(view: PlayerView, busy: boolean): string {
         ${escapeHtml(alliance.name)} · ${escapeHtml(joinModeLabel(alliance.joinMode))} ·
         ${fmt(alliance.memberCount)}/${fmt(alliance.maxMembers)} · you are ${escapeHtml(roleLabel(alliance.myRole))}
       </p>
+      ${recruitmentSummary(alliance.id, page)}
       ${rosterHtml(view, busy)}
       ${requestsHtml(view, busy)}
       ${allianceClassSection(alliance, busy)}
@@ -406,6 +502,6 @@ export function alliancesPageHtml(view: PlayerView, busy: boolean): string {
         <button type="button" data-alliance-leave data-testid="alliance-leave-btn" ${busy ? "disabled" : ""}>Leave alliance</button>
       </div>
       <h3>Directory</h3>
-      ${directoryHtml(view, busy)}
+      ${directoryHtml(view, busy, page)}
     </section>`;
 }

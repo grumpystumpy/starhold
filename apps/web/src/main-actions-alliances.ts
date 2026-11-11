@@ -17,10 +17,12 @@ import {
   joinAllianceRequest,
   kickAllianceRequest,
   leaveAllianceRequest,
+  fetchAllianceRecruitingDirectory,
   postAllianceChatRequest,
   proposeAllianceStrikeRequest,
   rejectAllianceRequest,
   setAllianceJoinModeRequest,
+  setAllianceRecruitingRequest,
   setAllianceClassRequest,
   setAllianceRoleRequest,
   shareAllianceIntelRequest,
@@ -54,6 +56,52 @@ export function wireJointStrikeForm(prefill: AcsPrefill): boolean {
   }
   target.value = match.value;
   return true;
+}
+
+let allianceListGeneration = 0;
+let allianceListLoadedFor: string | null = null;
+let allianceListFlight: number | null = null;
+let alliancePageArmed = false;
+
+/** Load recruiting fields once per Alliances-page visit. Not part of the 30s poll. */
+export function ensureAllianceRecruitingDirectory(): void {
+  const playerId = session.view?.player.id;
+  if (session.activePage !== "alliances" || !playerId) {
+    if (alliancePageArmed) {
+      alliancePageArmed = false;
+      allianceListGeneration += 1;
+      allianceListLoadedFor = null;
+    }
+    if (session.allianceRequestId) session.allianceRequestId = null;
+    return;
+  }
+  alliancePageArmed = true;
+  if (allianceListLoadedFor === `${allianceListGeneration}:${playerId}`) return;
+  if (allianceListFlight === allianceListGeneration) return;
+  const generation = allianceListGeneration;
+  allianceListFlight = generation;
+  void fetchAllianceRecruitingDirectory(playerId)
+    .then((directory) => {
+      if (generation !== allianceListGeneration) return;
+      if (session.activePage !== "alliances") return;
+      if (session.view?.player.id !== playerId) return;
+      session.alliancePageDirectory = directory;
+      allianceListLoadedFor = `${generation}:${playerId}`;
+      schedulePaint();
+    })
+    .catch(() => {
+      if (generation !== allianceListGeneration) return;
+      allianceListLoadedFor = `${generation}:${playerId}`;
+    })
+    .finally(() => {
+      if (allianceListFlight === generation) allianceListFlight = null;
+    });
+}
+
+export function reloadAllianceRecruitingDirectory(): void {
+  allianceListLoadedFor = null;
+  allianceListGeneration += 1;
+  ensureAllianceRecruitingDirectory();
 }
 
 function releaseActionFocus(): void {
@@ -118,6 +166,7 @@ export async function doCreateAlliance(
       joinMode,
     });
     setFlash("notice", `Alliance [${session.view.alliance?.tag ?? tag}] created.`);
+    reloadAllianceRecruitingDirectory();
   } catch (err) {
     const beforeAllianceId = session.view?.alliance?.id;
     await settleMutation({
@@ -147,6 +196,7 @@ export async function doJoinAlliance(allianceId: string): Promise<void> {
       allianceId,
     });
     setFlash("notice", `Joined [${session.view.alliance?.tag ?? ""}].`);
+    reloadAllianceRecruitingDirectory();
   } catch (err) {
     const beforeAllianceId = session.view?.alliance?.id;
     await settleMutation({
@@ -184,6 +234,7 @@ export async function doRequestAllianceJoin(allianceId: string): Promise<void> {
     } else {
       setFlash("notice", "Request sent.");
     }
+    reloadAllianceRecruitingDirectory();
   } catch (err) {
     await settleMutation({
       err,
@@ -240,6 +291,7 @@ export async function doApproveAllianceRequest(targetPlayerId: string): Promise<
       targetPlayerId,
     );
     setFlash("notice", "Request approved.");
+    reloadAllianceRecruitingDirectory();
   } catch (err) {
     await settleMutation({
       err,
@@ -299,6 +351,7 @@ export async function doLeaveAlliance(): Promise<void> {
   try {
     session.view = await leaveAllianceRequest(session.view.player.id);
     setFlash("notice", "Left alliance.");
+    reloadAllianceRecruitingDirectory();
   } catch (err) {
     const beforeAllianceId = session.view?.alliance?.id;
     await settleMutation({
@@ -326,6 +379,7 @@ export async function doDisbandAlliance(): Promise<void> {
   try {
     session.view = await disbandAllianceRequest(session.view.player.id);
     setFlash("notice", "Alliance disbanded.");
+    reloadAllianceRecruitingDirectory();
   } catch (err) {
     const beforeAllianceId = session.view?.alliance?.id;
     await settleMutation({
@@ -356,6 +410,7 @@ export async function doKickAllianceMember(targetPlayerId: string): Promise<void
       targetPlayerId,
     );
     setFlash("notice", "Member kicked.");
+    reloadAllianceRecruitingDirectory();
   } catch (err) {
     const beforeMember = session.view?.alliance?.members.some(
       (m) => m.playerId === targetPlayerId,
@@ -434,6 +489,41 @@ export async function doSetAllianceJoinMode(
       failureFallback: "Join mode change failed.",
       applied: (view) => view.alliance?.joinMode === joinMode,
       successNotice: () => `Join mode: ${joinMode}.`,
+    });
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doSetAllianceRecruiting(
+  recruitmentBlurb: string,
+  recruiting: boolean,
+  applicationNote: string,
+): Promise<void> {
+  if (!session.view) return;
+  if (session.busy) {
+    setFlash("error", "Still applying the last action — try again in a moment.");
+    schedulePaint();
+    return;
+  }
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    session.view = await setAllianceRecruitingRequest(session.view.player.id, {
+      recruitmentBlurb,
+      recruiting,
+      applicationNote,
+    });
+    setFlash("notice", "Recruiting updated.");
+    reloadAllianceRecruitingDirectory();
+  } catch (err) {
+    await settleMutation({
+      err,
+      failureFallback: "Recruiting update failed.",
+      applied: () => false,
+      successNotice: () => "Recruiting updated.",
     });
   } finally {
     session.busy = false;

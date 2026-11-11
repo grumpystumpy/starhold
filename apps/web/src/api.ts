@@ -1,6 +1,7 @@
 import type {
   AcsPrefill,
   AllianceChatMessage,
+  AllianceRecruitingEntry,
   BuildingId,
   Coordinates,
   DefenseId,
@@ -1006,6 +1007,32 @@ export async function setAllianceJoinModeRequest(
     body: JSON.stringify({ playerId, joinMode }),
   });
   return parse<PlayerView>(res);
+}
+
+export async function setAllianceRecruitingRequest(
+  playerId: string,
+  input: {
+    recruitmentBlurb: string;
+    recruiting: boolean;
+    applicationNote: string;
+  },
+): Promise<PlayerView> {
+  const res = await credFetch("/api/alliance/set-recruiting", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, ...input }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export async function fetchAllianceRecruitingDirectory(
+  playerId: string,
+): Promise<AllianceRecruitingEntry[]> {
+  const res = await credFetch(
+    `/api/alliance/list?playerId=${encodeURIComponent(playerId)}`,
+  );
+  const body = await parse<{ alliances?: AllianceRecruitingEntry[] }>(res);
+  return body.alliances ?? [];
 }
 
 export async function setAllianceClassRequest(

@@ -44,6 +44,7 @@ import {
   POLL_INTERVAL_MS,
   silentRefresh,
   refreshAllianceChatIfOpen,
+  ensureAllianceRecruitingDirectory,
   startPolling,
 } from "./main-actions";
 import { wireJointStrikeForm } from "./main-actions-alliances";
@@ -103,6 +104,7 @@ function paint(): void {
     },
   );
   ensureDelegatedHandlers();
+  ensureAllianceRecruitingDirectory();
   if (session.pendingAcsPrefill && session.activePage === "fleet") {
     const formUp = Boolean(root.querySelector("#fleet-form"));
     if (wireJointStrikeForm(session.pendingAcsPrefill) || formUp) {
