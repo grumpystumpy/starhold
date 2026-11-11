@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
+import type { PlayerView } from "@starhold/game";
 import {
   ApiError,
+  applyDeletedMessages,
   fetchPublicCombatReport,
   fetchState,
   GET_TIMEOUT_MS,
@@ -142,6 +144,99 @@ describe("safe JSON parse", () => {
     assert.equal(seen[0]?.ctx?.path, "/api/upgrade");
     assert.equal(seen[0]?.ctx?.kind, "overload");
     assert.doesNotMatch(seen[0]?.message ?? "", /Universe busy|\?/);
+  });
+});
+
+describe("page-scoped state", () => {
+  it("keeps omitted slices from the previous snapshot", async () => {
+    const original = globalThis.fetch;
+    let phase = 0;
+    globalThis.fetch = async (input, init) => {
+      phase += 1;
+      const url = String(input);
+      if (phase === 1) {
+        assert.equal(url.includes("page="), false);
+        return new Response(
+          JSON.stringify({
+            now: 1,
+            player: { id: "scoped", eventLog: [{ id: "e", title: "Keep" }] },
+            planet: { id: "pl", resources: { metal: 1, crystal: 0, deuterium: 0 } },
+            galaxy: { galaxy: 1, system: 2, slots: [{ planetId: "pl" }] },
+            reports: [{ id: "report-1" }],
+            spyReports: [],
+            expeditionReports: [],
+            shopCatalog: { beam: { id: "beam" } },
+            highscores: [{ playerId: "scoped" }],
+            roster: [{ id: "scoped" }],
+            allianceDirectory: [{ id: "ally" }],
+            officerCatalog: [{ id: "eng" }],
+            skillCatalog: [{ id: "sk" }],
+          }),
+          { status: 200, headers: { "content-type": "application/json", etag: "full" } },
+        );
+      }
+      assert.match(url, /page=overview/);
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      assert.equal(headers["If-None-Match"], "full");
+      return new Response(
+        JSON.stringify({
+          now: 2,
+          omitted: ["galaxy", "messages", "shop", "highscores", "roster", "alliances"],
+          messagesOmitted: true,
+          inboxUnread: 3,
+          player: { id: "scoped", eventLog: [] },
+          planet: { id: "pl", resources: { metal: 9, crystal: 0, deuterium: 0 } },
+          galaxy: { galaxy: 1, system: 2, slots: [] },
+          reports: [],
+          spyReports: [],
+          expeditionReports: [],
+          shopCatalog: {},
+          highscores: [],
+          roster: [],
+          allianceDirectory: [],
+          catalogsOmitted: true,
+        }),
+        { status: 200, headers: { "content-type": "application/json", etag: "slim" } },
+      );
+    };
+    try {
+      const full = await fetchState("scoped-player");
+      const slim = await fetchState("scoped-player", undefined, undefined, {
+        page: "overview",
+        base: full,
+      });
+      assert.equal(slim.galaxy.slots.length, 1);
+      assert.equal(slim.player.eventLog?.[0]?.title, "Keep");
+      assert.equal(slim.reports.length, 1);
+      assert.equal(slim.messagesOmitted, true);
+      assert.equal(slim.inboxUnread, 3);
+      assert.equal(slim.planet.resources.metal, 9);
+      assert.equal(Object.keys(slim.shopCatalog).length, 1);
+      assert.equal(slim.highscores.length, 1);
+      assert.equal(slim.roster.length, 1);
+      assert.equal(slim.allianceDirectory.length, 1);
+      assert.equal(slim.officerCatalog[0]?.id, "eng");
+      assert.equal(slim.omitted, undefined);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it("drops a deleted category without a replacement view", () => {
+    const view = {
+      player: { id: "p", eventLog: [{ id: "a" }] },
+      reports: [{ id: "r" }],
+      spyReports: [{ id: "s" }],
+      expeditionReports: [{ id: "e" }],
+    } as unknown as PlayerView;
+    const alerts = applyDeletedMessages(view, "alerts");
+    assert.equal(alerts.player.eventLog?.length, 0);
+    assert.equal(alerts.reports.length, 1);
+    const all = applyDeletedMessages(view, "all");
+    assert.equal(all.reports.length, 0);
+    assert.equal(all.spyReports.length, 0);
+    assert.equal(all.expeditionReports.length, 0);
+    assert.equal(all.messagesOmitted, false);
   });
 });
 

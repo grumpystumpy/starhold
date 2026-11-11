@@ -2,8 +2,9 @@ import "./test-dom";
 import assert from "node:assert/strict";
 import { after, it } from "node:test";
 import type { BuildQueueItem, DefenseQueueItem, PlayerView, ResearchQueueItem, ShipQueueItem } from "@starhold/game";
+import { OVERLOAD_MESSAGE } from "./api";
 
-const { stopPolling } = await import("./main-actions-session");
+const { POLL_RETRY_DELAY_MS, startPolling, stopPolling } = await import("./main-actions-session");
 const { schedulePaint, session, setPaintImpl } = await import("./session");
 
 type TimerJob = { at: number; callback: TimerHandler };
@@ -285,5 +286,157 @@ it("clears the completion timer when polling stops", async () => {
     assert.equal(fetch.count(), 0);
   } finally {
     fetch.restore();
+  }
+});
+
+it("pauses the 30s poll while hidden and refreshes when shown", async () => {
+  reset();
+  const tracked = mockStateFetch();
+  const listeners = new Set<() => void>();
+  let visibility: "visible" | "hidden" = "visible";
+  const originalDoc = globalThis.document;
+  Object.defineProperty(globalThis, "document", {
+    configurable: true,
+    value: {
+      get visibilityState() {
+        return visibility;
+      },
+      addEventListener(event: string, fn: () => void) {
+        if (event === "visibilitychange") listeners.add(fn);
+      },
+      removeEventListener(event: string, fn: () => void) {
+        if (event === "visibilitychange") listeners.delete(fn);
+      },
+      querySelector: () => null,
+      querySelectorAll: () => [],
+      createElement: () => ({ prepend() {} }),
+      documentElement: {},
+    },
+  });
+  try {
+    window.addEventListener = () => {};
+    window.removeEventListener = () => {};
+    session.view = view();
+    startPolling("p1");
+    await advanceBy(30_000);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(tracked.count(), 1);
+    visibility = "hidden";
+    for (const fn of listeners) fn();
+    await advanceBy(60_000);
+    assert.equal(tracked.count(), 1);
+    visibility = "visible";
+    for (const fn of listeners) fn();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(tracked.count(), 2);
+    await advanceBy(30_000);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(tracked.count(), 3);
+  } finally {
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: originalDoc,
+    });
+    tracked.restore();
+    stopPolling();
+  }
+});
+
+it("retries one 503 on the poll before showing the overload line", async () => {
+  reset();
+  const original = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    if (calls === 1) {
+      return new Response("<html>Error 1102</html>", {
+        status: 503,
+        headers: { "content-type": "text/html" },
+      });
+    }
+    return new Response(JSON.stringify(view()), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  try {
+    session.view = view();
+    session.error = null;
+    const { silentRefresh } = await import("./main-actions-session");
+    const pending = silentRefresh("p1");
+    for (let i = 0; i < 8 && timers.size === 0; i++) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    await advanceBy(POLL_RETRY_DELAY_MS);
+    await pending;
+    assert.equal(calls, 2);
+    assert.equal(session.error, null);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+it("uses the overload message after a second 503 and not Server unreachable", async () => {
+  reset();
+  const original = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response("<html>Error 503</html>", {
+      status: 503,
+      headers: { "content-type": "text/html" },
+    });
+  try {
+    session.view = view();
+    session.error = null;
+    const { silentRefresh } = await import("./main-actions-session");
+    const pending = silentRefresh("p1");
+    for (let i = 0; i < 8 && timers.size === 0; i++) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    await advanceBy(POLL_RETRY_DELAY_MS);
+    await pending;
+    assert.equal(session.error, OVERLOAD_MESSAGE);
+    assert.equal(session.error?.includes("Server unreachable"), false);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+it("fetches messages when that page opens", async () => {
+  reset();
+  const original = globalThis.fetch;
+  let url = "";
+  const win = window as unknown as {
+    location: { href: string; pathname: string; search: string; hash: string };
+    history: { replaceState: () => void; pushState: () => void };
+  };
+  const previousLocation = win.location;
+  const previousHistory = win.history;
+  win.location = {
+    href: "http://localhost/overview",
+    pathname: "/overview",
+    search: "",
+    hash: "",
+  };
+  win.history = { replaceState() {}, pushState() {} };
+  globalThis.fetch = async (input) => {
+    url = String(input);
+    return new Response(JSON.stringify(view()), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  try {
+    session.view = view();
+    const { navigateTo } = await import("./ui/router");
+    navigateTo("messages");
+    for (let i = 0; i < 8 && url === ""; i++) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    assert.match(url, /page=messages/);
+  } finally {
+    win.location = previousLocation;
+    win.history = previousHistory;
+    globalThis.fetch = original;
   }
 });

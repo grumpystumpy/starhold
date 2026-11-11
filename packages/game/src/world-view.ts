@@ -77,6 +77,11 @@ import { empireDriftBeaconCount, empireRelicResearchTimeFactor, playerKnowsMini 
 import { seasonLeaderboardView } from "./world-seasons.js";
 import { SHOP_ITEMS } from "./world-shop-items.js";
 import { getDebris } from "./world-tick.js";
+import { inboxUnreadAlertCount } from "./world-inbox.js";
+import {
+  omittedStateSections,
+  type StatePollInclude,
+} from "./world-poll.js";
 import {
   isNewbieBonusActive,
   NEWBIE_BONUS_DURATION_MS,
@@ -347,13 +352,34 @@ function maybeGrantHighscoreStarshards(
   universe.players[player.id] = player;
 }
 
+function sectionWanted(
+  include: StatePollInclude | undefined,
+  key: keyof StatePollInclude,
+): boolean {
+  if (!include) return true;
+  return include[key] === true;
+}
+
+function emptyGalaxy(galaxy: number, system: number): GalaxyView {
+  return {
+    galaxy,
+    system,
+    slots: [],
+    minis: [],
+    deepSpace: { coords: { galaxy, system, slot: DEEP_SPACE_SLOT } },
+    asteroids: [],
+    pirateBase: null,
+    alienBase: null,
+  };
+}
+
 export function playerView(
   universe: UniverseState,
   playerId: string,
   now = Date.now(),
   galaxy?: number,
   system?: number,
-  options?: { skipUniverseTick?: boolean },
+  options?: { skipUniverseTick?: boolean; include?: StatePollInclude },
 ): PlayerView {
   if (options?.skipUniverseTick) {
     const player = universe.players[playerId];
@@ -373,11 +399,33 @@ export function playerView(
   const player = universe.players[playerId];
   if (!player) throw new Error("Unknown player.");
   pruneExpiredOfficers(player, now);
-  const provided = highscoreSource?.();
-  const highscores = provided?.rows ?? highscoresBoard(universe);
-  const allianceProvided = allianceRankSource?.();
-  const allianceHighscores = allianceProvided ?? allianceRankBoard(universe);
-  maybeGrantHighscoreStarshards(universe, playerId, highscores);
+  const include = options?.include;
+  const wantMessages = sectionWanted(include, "messages");
+  const wantGalaxy = sectionWanted(include, "galaxy");
+  const wantHighscores = sectionWanted(include, "highscores");
+  const wantRoster = sectionWanted(include, "roster") || wantHighscores;
+  const wantShop = sectionWanted(include, "shop");
+  const wantAlliances = sectionWanted(include, "alliances");
+  const cachedBoard = highscoreSource?.();
+  if (cachedBoard?.rows) {
+    maybeGrantHighscoreStarshards(universe, playerId, cachedBoard.rows);
+  }
+  const highscores = wantHighscores
+    ? (cachedBoard?.rows ?? highscoresBoard(universe))
+    : [];
+  if (wantHighscores && !cachedBoard?.rows) {
+    maybeGrantHighscoreStarshards(universe, playerId, highscores);
+  }
+  const allianceProvided = wantHighscores ? allianceRankSource?.() : undefined;
+  const allianceHighscores = wantHighscores
+    ? (allianceProvided ?? allianceRankBoard(universe))
+    : [];
+  const hallOfFame = wantHighscores
+    ? (cachedBoard?.hallOfFame ?? combatHallOfFame(universe))
+    : [];
+  const hallOfShame = wantHighscores
+    ? (cachedBoard?.hallOfShame ?? combatHallOfShame(universe))
+    : [];
   const pointsById = new Map(
     highscores.map((row) => [row.playerId, row.points]),
   );
@@ -415,29 +463,38 @@ export function playerView(
     .sort((a, b) => a.arrivesAt - b.arrivesAt);
 
   const hiddenReports = new Set(player.hiddenReportIds ?? []);
-  const reports = Object.values(universe.reports)
-    .filter(
-      (r) =>
-        (r.attackerPlayerId === playerId ||
-          r.defenderPlayerId === playerId ||
-          r.acsParticipantIds?.includes(playerId) === true) &&
-        !hiddenReports.has(r.id),
-    )
-    .sort((a, b) => b.at - a.at)
-    .slice(0, 12);
+  const reports = wantMessages
+    ? Object.values(universe.reports)
+        .filter(
+          (r) =>
+            (r.attackerPlayerId === playerId ||
+              r.defenderPlayerId === playerId ||
+              r.acsParticipantIds?.includes(playerId) === true) &&
+            !hiddenReports.has(r.id),
+        )
+        .sort((a, b) => b.at - a.at)
+        .slice(0, 12)
+    : [];
 
-  const spyReports = Object.values(universe.spyReports)
-    .filter((r) => r.spyPlayerId === playerId)
-    .sort((a, b) => b.at - a.at)
-    .slice(0, 12);
+  const spyReports = wantMessages
+    ? Object.values(universe.spyReports)
+        .filter((r) => r.spyPlayerId === playerId)
+        .sort((a, b) => b.at - a.at)
+        .slice(0, 12)
+    : [];
 
-  const expeditionReports = Object.values(universe.expeditionReports ?? {})
-    .filter((r) => r.playerId === playerId)
-    .sort((a, b) => b.at - a.at)
-    .slice(0, 12);
+  const expeditionReports = wantMessages
+    ? Object.values(universe.expeditionReports ?? {})
+        .filter((r) => r.playerId === playerId)
+        .sort((a, b) => b.at - a.at)
+        .slice(0, 12)
+    : [];
 
   const g = galaxy ?? planet.coords.galaxy;
   const s = system ?? planet.coords.system;
+  const galaxySlice = wantGalaxy
+    ? galaxyViewFor(universe, playerId, g, s, now)
+    : emptyGalaxy(g, s);
   const artCtx = createPlanetArtContext(universe);
   const planetArt = artForBody(universe, planet, artCtx);
 
@@ -487,20 +544,24 @@ export function playerView(
       remainingMs: Math.max(0, b.expiresAt - now),
     }));
 
-  const shopCatalog = Object.fromEntries(
-    Object.entries(SHOP_ITEMS).map(([key, item]) => [
-      key,
-      {
-        id: item.id,
-        name: item.name,
-        category: item.category,
-        tier: item.tier,
-        bonus: item.bonus,
-        starshards: item.starshards,
-        description: item.description,
-      },
-    ]),
-  );
+  const shopCatalog = wantShop
+    ? Object.fromEntries(
+        Object.entries(SHOP_ITEMS).map(([key, item]) => [
+          key,
+          {
+            id: item.id,
+            name: item.name,
+            category: item.category,
+            tier: item.tier,
+            bonus: item.bonus,
+            starshards: item.starshards,
+            description: item.description,
+          },
+        ]),
+      )
+    : {};
+  const wirePlayer = wantMessages ? player : { ...player, eventLog: [] };
+  const directory = wantAlliances ? allianceDirectory(universe) : [];
 
   return {
     now,
@@ -510,7 +571,7 @@ export function playerView(
       speed: universe.speed,
       fleetSpeed: universe.fleetSpeed,
     },
-    player,
+    player: wirePlayer,
     planet,
     planetArt,
     ownedPlanets: player.planetIds
@@ -553,19 +614,23 @@ export function playerView(
       ),
       storage: storageForPlanet(universe, planet, now),
     },
-    roster: provided
-      ? [
-          ...highscoreRoster(provided.rows),
-          ...publicRoster(universe, pointsById).filter(
-            (entry) => entry.id === playerId && !provided.rows.some((row) => row.playerId === playerId),
-          ),
-        ]
-      : publicRoster(universe, pointsById),
+    roster: wantRoster
+      ? cachedBoard
+        ? [
+            ...highscoreRoster(cachedBoard.rows),
+            ...publicRoster(universe, pointsById).filter(
+              (entry) =>
+                entry.id === playerId &&
+                !cachedBoard.rows.some((row) => row.playerId === playerId),
+            ),
+          ]
+        : publicRoster(universe, pointsById)
+      : [],
     highscores,
     allianceHighscores,
-    hallOfFame: provided?.hallOfFame ?? combatHallOfFame(universe),
-    hallOfShame: provided?.hallOfShame ?? combatHallOfShame(universe),
-    galaxy: galaxyViewFor(universe, playerId, g, s, now),
+    hallOfFame,
+    hallOfShame,
+    galaxy: galaxySlice,
     fleets,
     fleetSlotCap,
     expeditionSlotCap,
@@ -591,7 +656,7 @@ export function playerView(
     occupation: occupationForPlanet(universe, planet.id, now),
     alliance: allianceViewFor(universe, playerId, now),
     pendingAllianceRequest: pendingAllianceRequestFor(universe, player),
-    allianceDirectory: allianceDirectory(universe),
+    allianceDirectory: directory,
     openAcsGroups: listOpenAcsForAlliance(universe, player.allianceId),
     goals: goalsView(player, now),
     onboarding: onboardingViewFor(universe, player),
@@ -607,5 +672,14 @@ export function playerView(
     pirateBoss: pirateBossSummary(universe, playerId, now),
     activeItemBuffs,
     shopCatalog,
+    ...(include
+      ? {
+          omitted: omittedStateSections(include),
+          messagesOmitted: !wantMessages,
+          ...(!wantMessages
+            ? { inboxUnread: inboxUnreadAlertCount(universe, playerId) }
+            : {}),
+        }
+      : {}),
   };
 }

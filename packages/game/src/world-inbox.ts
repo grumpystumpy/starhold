@@ -87,3 +87,41 @@ export function deletePlayerMessages(
   universe.players[playerId] = player;
   return { ok: true, removed };
 }
+
+/**
+ * Unread alert rows the inbox would show. Combat, spy, and expedition
+ * reports are not unread. A raid alert hidden by its combat report is skipped.
+ */
+export function inboxUnreadAlertCount(
+  universe: UniverseState,
+  playerId: string,
+): number {
+  const player = universe.players[playerId];
+  if (!player) return 0;
+  const reports = universe.reports ?? {};
+  let unread = 0;
+  for (const entry of player.eventLog ?? []) {
+    if (entry.readAt != null) continue;
+    if (entry.kind === "raidAlert") {
+      const reportId = entry.meta?.reportId;
+      if (typeof reportId === "string" && reports[reportId]) continue;
+      const pirateBaseId = entry.meta?.pirateBaseId;
+      if (typeof pirateBaseId === "string") {
+        let hidden = false;
+        for (const report of Object.values(reports)) {
+          if (
+            report.defenderPlayerId === playerId &&
+            report.missionId === pirateBaseId &&
+            report.at === entry.createdAt
+          ) {
+            hidden = true;
+            break;
+          }
+        }
+        if (hidden) continue;
+      }
+    }
+    unread += 1;
+  }
+  return unread;
+}

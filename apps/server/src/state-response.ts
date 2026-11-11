@@ -38,8 +38,11 @@ export interface UnchangedState {
  * Catalogs are static for a deploy; a client that already has them sends
  * `X-Starhold-Have-Catalogs: 1` and we leave them off the wire.
  */
-export function respondWithPlayerView(c: Context, view: PlayerView): Response {
-  const revision = stateRevision(view);
+export function respondWithPlayerView(
+  c: Context,
+  view: PlayerView,
+  revision = stateRevision(view),
+): Response {
   c.header("ETag", `"${revision}"`);
   if (ifNoneMatchHits(c.req.header("If-None-Match"), revision)) {
     const body: UnchangedState = {

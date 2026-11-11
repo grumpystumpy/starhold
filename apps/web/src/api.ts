@@ -490,22 +490,48 @@ export async function joinGame(name: string): Promise<PlayerView> {
   return parse<PlayerView>(res);
 }
 
+function mergeScopedView(base: PlayerView, incoming: PlayerView): PlayerView {
+  const omitted = new Set(incoming.omitted ?? []);
+  const view: PlayerView = { ...incoming };
+  if (omitted.has("galaxy")) view.galaxy = base.galaxy;
+  if (omitted.has("messages")) {
+    view.reports = base.reports;
+    view.spyReports = base.spyReports;
+    view.expeditionReports = base.expeditionReports;
+    view.player = { ...view.player, eventLog: base.player.eventLog };
+    view.messagesOmitted = true;
+  }
+  if (omitted.has("highscores")) {
+    view.highscores = base.highscores;
+    view.allianceHighscores = base.allianceHighscores;
+    view.hallOfFame = base.hallOfFame;
+    view.hallOfShame = base.hallOfShame;
+  }
+  if (omitted.has("roster")) view.roster = base.roster;
+  if (omitted.has("shop")) view.shopCatalog = base.shopCatalog;
+  if (omitted.has("alliances")) view.allianceDirectory = base.allianceDirectory;
+  delete view.omitted;
+  return view;
+}
+
 export async function fetchState(
   playerId: string,
   galaxy?: number,
   system?: number,
-  opts?: { fresh?: boolean },
+  opts?: { fresh?: boolean; page?: string; base?: PlayerView | null },
 ): Promise<PlayerView> {
   const params = new URLSearchParams();
   params.set("playerId", playerId);
   if (galaxy) params.set("galaxy", String(galaxy));
   if (system) params.set("system", String(system));
+  if (opts?.page) params.set("page", opts.page);
   const key = stateCacheKey(playerId, galaxy, system);
   const cached = stateCache.get(key);
   const fresh = opts?.fresh === true;
   const headers: Record<string, string> = {};
   if (!fresh && cached?.etag) headers["If-None-Match"] = cached.etag;
-  if (!fresh && (cached?.view.officerCatalog?.length ?? 0) > 0) {
+  const catalogSource = cached?.view ?? opts?.base ?? null;
+  if (!fresh && (catalogSource?.officerCatalog?.length ?? 0) > 0) {
     headers["X-Starhold-Have-Catalogs"] = "1";
   }
   const res = await credFetch(`/api/state?${params.toString()}`, { headers });
@@ -513,36 +539,66 @@ export async function fetchState(
   const data = await parse<
     PlayerView | UnchangedStateBody | CatalogOmittedBody
   >(res);
+  const prior = cached?.view ?? opts?.base ?? null;
   if (isUnchangedState(data)) {
-    if (!cached) throw new Error("State unchanged without a cached view.");
+    if (!prior) throw new Error("State unchanged without a cached view.");
     const view: PlayerView = {
-      ...cached.view,
+      ...prior,
       now: data.now,
       planet: {
-        ...cached.view.planet,
+        ...prior.planet,
         resources: data.resources,
         lastTickAt: data.now,
       },
     };
-    stateCache.set(key, { etag: etag ?? cached.etag, view });
+    stateCache.set(key, { etag: etag ?? cached?.etag ?? null, view });
     onStatePollOk();
     return view;
   }
   let view: PlayerView = data;
   if ("catalogsOmitted" in data && data.catalogsOmitted) {
-    if (!cached?.view.officerCatalog || !cached.view.skillCatalog) {
+    if (!prior?.officerCatalog || !prior.skillCatalog) {
       throw new Error("Catalogs omitted without a cached catalog.");
     }
     const { catalogsOmitted: _omitted, ...rest } = data;
     view = {
       ...rest,
-      officerCatalog: cached.view.officerCatalog,
-      skillCatalog: cached.view.skillCatalog,
+      officerCatalog: prior.officerCatalog,
+      skillCatalog: prior.skillCatalog,
     };
+  }
+  if (prior && view.omitted && view.omitted.length > 0) {
+    view = mergeScopedView(prior, view);
+  } else if (view.omitted) {
+    delete view.omitted;
   }
   stateCache.set(key, { etag, view });
   onStatePollOk();
   return view;
+}
+
+/** Drop message rows the server just deleted, without a full player view. */
+export function applyDeletedMessages(
+  view: PlayerView,
+  category: "all" | "combat" | "spy" | "alerts",
+): PlayerView {
+  const clear = (bucket: "combat" | "spy" | "alerts") =>
+    category === "all" || category === bucket;
+  const next: PlayerView = {
+    ...view,
+    player: { ...view.player },
+    reports: view.reports,
+    spyReports: view.spyReports,
+    expeditionReports: view.expeditionReports,
+    messagesOmitted: false,
+  };
+  if (clear("alerts")) next.player = { ...next.player, eventLog: [] };
+  if (clear("spy")) next.spyReports = [];
+  if (clear("combat")) {
+    next.reports = [];
+    next.expeditionReports = [];
+  }
+  return next;
 }
 
 export async function markEventsRead(
@@ -865,13 +921,13 @@ export async function raiseOfficerLevel(
 export async function deleteMessages(
   playerId: string,
   category: "all" | "combat" | "spy" | "alerts",
-): Promise<PlayerView> {
+): Promise<{ ok: true; removed: number }> {
   const res = await credFetch("/api/delete-messages", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ playerId, category }),
   });
-  return parse<PlayerView>(res);
+  return parse(res);
 }
 
 export async function unlockSkillNode(

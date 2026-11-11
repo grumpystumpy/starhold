@@ -1,4 +1,5 @@
 import { MAP_GALAXIES, MAP_SYSTEMS, type PlayerView } from "@starhold/game";
+import type { NavPage } from "./ui/nav";
 import {
   ApiError,
   OVERLOAD_MESSAGE,
@@ -36,12 +37,23 @@ import {
   setFlash,
   stripJoinParams,
 } from "./session";
-import { syncSessionUrl } from "./ui/router";
+import { setOnPageChange, syncSessionUrl } from "./ui/router";
 import { captureGameEvent, identifyCommander } from "./telemetry";
 import { settleMutation } from "./recover-action";
 
 /** Background refresh cadence. Actions apply their own response immediately. */
 export const POLL_INTERVAL_MS = 30_000;
+/** One silent retry before a poll shows an overload flash. */
+export const POLL_RETRY_DELAY_MS = 400;
+const SCOPED_REFRESH_PAGES: ReadonlySet<NavPage> = new Set([
+  "messages",
+  "seasons",
+  "galaxy",
+  "fleet",
+  "highscore",
+  "shop",
+  "alliances",
+]);
 const QUEUE_COMPLETION_REFRESH_DELAY_MS = 250;
 const MAX_STALE_COMPLETION_MS = 5_000;
 /** No input for this long: stop polling until the player interacts. */
@@ -395,6 +407,55 @@ export function silentRefresh(
   return promise;
 }
 
+function isPollOverload(err: unknown): boolean {
+  if (!(err instanceof ApiError)) return false;
+  return (
+    err.kind === "overload" ||
+    err.kind === "busy" ||
+    err.status === 502 ||
+    err.status === 503 ||
+    err.status === 504 ||
+    err.status === 1102
+  );
+}
+
+function pollFailureMessage(
+  err: unknown,
+  errorLabel: string,
+  prefixLabel: boolean,
+): string {
+  if (isPollOverload(err)) return OVERLOAD_MESSAGE;
+  if (err instanceof Error) {
+    return prefixLabel ? `${errorLabel}: ${err.message}` : err.message;
+  }
+  return errorLabel;
+}
+
+function waitForPollRetry(): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, POLL_RETRY_DELAY_MS);
+  });
+}
+
+async function fetchPolledState(
+  playerId: string,
+  galaxy: number | undefined,
+  system: number | undefined,
+): Promise<PlayerView> {
+  const load = () =>
+    fetchState(playerId, galaxy, system, {
+      page: session.activePage,
+      base: session.view,
+    });
+  try {
+    return await load();
+  } catch (err) {
+    if (!isPollOverload(err)) throw err;
+    await waitForPollRetry();
+    return await load();
+  }
+}
+
 async function refreshOnce(
   playerId: string,
   errorLabel: string,
@@ -404,24 +465,24 @@ async function refreshOnce(
   try {
     const g = session.galaxyGalaxy ?? session.view?.galaxy.galaxy;
     const s = session.galaxySystem ?? session.view?.galaxy.system;
-    const view = await fetchState(playerId, g, s);
+    const view = await fetchPolledState(playerId, g, s);
     if (gen !== refreshGen) return;
     session.view = view;
     schedulePaint();
   } catch (err) {
     if (gen !== refreshGen) return;
     if (!session.error || Date.now() >= session.flashUntil) {
-      const message =
-        err instanceof Error
-          ? prefixLabel
-            ? `${errorLabel}: ${err.message}`
-            : err.message
-          : errorLabel;
-      setFlash("error", message);
+      setFlash("error", pollFailureMessage(err, errorLabel, prefixLabel));
       schedulePaint();
     }
   }
 }
+
+setOnPageChange((page) => {
+  if (!session.view) return;
+  if (!SCOPED_REFRESH_PAGES.has(page)) return;
+  void silentRefresh(session.view.player.id);
+});
 
 setAfterPlayerMutation(() => {
   invalidateCachedState();
