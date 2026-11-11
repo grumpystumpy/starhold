@@ -434,6 +434,15 @@ it("fetches messages when that page opens", async () => {
       await new Promise<void>((resolve) => setImmediate(resolve));
     }
     assert.match(url, /page=messages/);
+    url = "";
+    session.view = {
+      ...view(),
+      roster: [{ id: "p1" }],
+      galaxy: { galaxy: 1, system: 1, slots: [{ planetId: "pl1" }] },
+    } as unknown as PlayerView;
+    navigateTo("fleet");
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(url, "");
   } finally {
     win.location = previousLocation;
     win.history = previousHistory;

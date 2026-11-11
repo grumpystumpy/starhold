@@ -359,9 +359,13 @@ export function createApp(): Hono {
           }
           c.header("X-Starhold-State-Tick", tickDue ? "advanced" : "skipped");
           c.header("X-Starhold-Player-View", "built");
+          // A due tick can write a combat report. Keep that list even when
+          // the open page is not Messages, or the client would hold an empty inbox.
+          const viewInclude =
+            tickDue && page ? { ...include, messages: true } : include;
           const view = playerView(universe, playerId, now, galaxy, system, {
             skipUniverseTick: !tickDue,
-            ...(page ? { include } : {}),
+            ...(page ? { include: viewInclude } : {}),
           });
           const revision = playerPollRevision(
             universe,

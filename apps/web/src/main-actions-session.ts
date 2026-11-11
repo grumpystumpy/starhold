@@ -478,10 +478,21 @@ async function refreshOnce(
   }
 }
 
+function pageNeedsScopedFetch(page: NavPage, view: PlayerView): boolean {
+  if (!SCOPED_REFRESH_PAGES.has(page)) return false;
+  // The fleet composer is already on screen. A refresh here repaints it
+  // mid-entry. Fleet still polls, and the slice is loaded when slots exist.
+  if (page === "fleet") {
+    return view.galaxy.slots.length === 0 || view.roster.length === 0;
+  }
+  return true;
+}
+
 setOnPageChange((page) => {
-  if (!session.view) return;
-  if (!SCOPED_REFRESH_PAGES.has(page)) return;
-  void silentRefresh(session.view.player.id);
+  const view = session.view;
+  if (!view) return;
+  if (!pageNeedsScopedFetch(page, view)) return;
+  void silentRefresh(view.player.id);
 });
 
 setAfterPlayerMutation(() => {

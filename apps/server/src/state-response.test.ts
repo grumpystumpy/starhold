@@ -264,6 +264,53 @@ describe("player state payload", () => {
     );
   });
 
+  it("keeps the combat report when a fleet-page poll resolves the arrival", async () => {
+    const now = 1_700_000_300_000;
+    const originalNow = Date.now;
+    Date.now = () => now;
+    try {
+      const app = createApp();
+      const join = async (name: string) => {
+        const response = await app.request("/api/join", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        });
+        return (await response.json()) as PlayerView;
+      };
+      const defender = await join("FleetPageDefender");
+      const attacker = await join("FleetPageAttacker");
+      await withUniverse((universe) => {
+        universe.planets[attacker.planet.id]!.ships.scout = 1;
+        universe.planets[attacker.planet.id]!.resources.deuterium = 50_000;
+        universe.players[defender.player.id]!.newbieForfeitedAt = now;
+        const launch = launchFleet(
+          universe,
+          attacker.player.id,
+          defender.planet.id,
+          "raid",
+          { scout: 1 },
+          now,
+        );
+        assert.equal(launch.ok, true, launch.ok ? "" : launch.error);
+        if (!launch.ok) throw new Error(launch.error);
+        launch.fleet.arrivesAt = now;
+      });
+
+      const response = await app.request(
+        `/api/state?playerId=${encodeURIComponent(attacker.player.id)}&page=fleet`,
+      );
+      const view = (await response.json()) as PlayerView;
+
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("X-Starhold-State-Tick"), "advanced");
+      assert.equal(view.messagesOmitted, false);
+      assert.ok(view.reports.length >= 1);
+    } finally {
+      Date.now = originalNow;
+    }
+  });
+
   it("deletes messages without building a player view", async () => {
     const app = createApp();
     const join = await app.request("/api/join", {

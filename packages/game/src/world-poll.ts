@@ -219,19 +219,38 @@ export function playerPollRevision(
       mix(group.joinClosesAt);
       mix(group.fleetIds.length);
     }
-    if (include.alliances) {
-      const alliance = universe.alliances?.[player.allianceId];
-      if (alliance) {
-        const chat = alliance.chat ?? [];
-        const last = chat[chat.length - 1];
-        mixStr(alliance.name);
-        mixStr(alliance.tag);
-        mixStr(alliance.joinMode);
-        mix(Object.keys(alliance.members).length);
-        mix(chat.length);
-        mixStr(last?.id ?? "");
-        mix(last?.createdAt ?? 0);
-        mix((alliance.pendingRequests ?? []).length);
+    const alliance = universe.alliances?.[player.allianceId];
+    if (alliance && (include.alliances || include.galaxy)) {
+      const chat = alliance.chat ?? [];
+      const last = chat[chat.length - 1];
+      mixStr(alliance.name);
+      mixStr(alliance.tag);
+      mixStr(alliance.joinMode);
+      mix(Object.keys(alliance.members).length);
+      mix(chat.length);
+      mixStr(last?.id ?? "");
+      mix(last?.createdAt ?? 0);
+      mix((alliance.pendingRequests ?? []).length);
+      for (const stamp of alliance.intel ?? []) {
+        mixStr(stamp.id);
+        mix(stamp.createdAt);
+        mix(stamp.expiresAt ?? 0);
+      }
+      for (const marker of alliance.markers ?? []) {
+        if (
+          include.galaxy &&
+          !include.alliances &&
+          (marker.coords.galaxy !== (galaxy ?? marker.coords.galaxy) ||
+            marker.coords.system !== (system ?? marker.coords.system))
+        ) {
+          continue;
+        }
+        mixStr(marker.id);
+        mix(marker.coords.galaxy);
+        mix(marker.coords.system);
+        mix(marker.coords.slot);
+        mixStr(marker.note);
+        mix(marker.createdAt);
       }
     }
   }
