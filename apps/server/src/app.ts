@@ -74,6 +74,7 @@ import {
   rollSeasons,
   saveFleetPreset,
   setActivePlanet,
+  tryFormMoon,
   setAllianceJoinMode,
   setAllianceClass,
   setAllianceRole,
@@ -1596,6 +1597,11 @@ export function createApp(): Hono {
         inbox?: boolean;
         /** Remember the current release key. Same write as Got it. */
         dismissWhatsNew?: boolean;
+        /**
+         * Form this commander's moon (if needed) and set System Scanner to
+         * this level. Local Playwright only. Does not touch other players.
+         */
+        scannerMoonLevel?: number;
         occupyMini?: boolean;
         occupyNonMini?: boolean;
         occupierPlayerId?: string;
@@ -1771,6 +1777,39 @@ export function createApp(): Hono {
         if (body.dismissWhatsNew === true) {
           const dismissed = dismissWhatsNew(universe, player.id);
           if (!dismissed.ok) return c.json({ error: dismissed.error }, 400);
+        }
+        if (typeof body.scannerMoonLevel === "number" && Number.isFinite(body.scannerMoonLevel)) {
+          const level = Math.max(0, Math.floor(body.scannerMoonLevel));
+          const parent =
+            planet.kind === "moon"
+              ? universe.planets[planet.parentPlanetId ?? ""]
+              : planet;
+          if (!parent || parent.kind === "moon") {
+            return c.json({ error: "No planet for a scanner moon." }, 400);
+          }
+          let moon =
+            parent.moonId && universe.planets[parent.moonId]?.kind === "moon"
+              ? universe.planets[parent.moonId]
+              : undefined;
+          if (!moon) {
+            const debris = { metal: 5_000_000, crystal: 0, deuterium: 0 };
+            for (let i = 0; i < 80 && !moon; i++) {
+              const formed = tryFormMoon(
+                universe,
+                parent,
+                debris,
+                `e2e_scanner_${player.id}_${i}`,
+                Date.now() + i,
+              );
+              if (formed) moon = formed;
+            }
+          }
+          if (!moon) return c.json({ error: "Could not form a scanner moon." }, 500);
+          moon.buildings.sensorArray = level;
+          if (level >= 1 && (moon.buildings.lunarBase ?? 0) < 1) {
+            moon.buildings.lunarBase = 1;
+          }
+          universe.planets[moon.id] = moon;
         }
         return c.json(playerView(universe, body.playerId!));
       });
