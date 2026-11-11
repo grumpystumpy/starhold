@@ -234,4 +234,8 @@ Plates are mapped in `apps/web/src/ui/assets.ts` (`BUILDING_ART`, `SHIP_ART`, `D
 
 Every referenced file is listed in `docs/ART_CREDITS.md`. game-icons.net lines on the Credits page use the required CC BY 3.0 credit. Capital hulls, shield-style defenses, Jump Gate, Chrono Lathe, Mantle Loom, the deuterium chip, and officer portraits stay on the original plates. No save fields were added.
 
+## Galaxy
+
+Expansionist commanders (`playerClass.classId` `"expansionist"`, the colonizing class in `PLAYER_CLASS_BONUSES`) see a colony preview on each empty galaxy slot (no planet). The line is `data-testid="galaxy-slot-climate-<slot>"` inside the slot label in `apps/web/src/ui/render-fleets-panels.ts`. It shows temperature from `temperatureKForSlot(slot)`, production multipliers from `productionMultForSlot(slot)` (metal, crystal, deuterium, energy), and the typical field band `FIELD_CENTER_BY_SLOT[slot] ± FIELD_BAND` floored at `FIELD_MIN`. That is the same band `rollPlanetFields` uses. The universe seed is not applied, so the line is the band, not one planet's rolled cap. Miner, Explorer, Fleeter, and a commander with no class see the empty slot unchanged. Occupied slots stay unchanged for every class. The numbers are computed in the client from `GalaxySlot.coords.slot` when the galaxy panel renders. They are not added to the 30s `/api/state` poll, and `galaxyViewFor` is unchanged. No save fields. This entry lives in `docs/FEATURE_MAP.md`.
+
 
