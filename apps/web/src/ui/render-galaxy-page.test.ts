@@ -136,8 +136,8 @@ describe("galaxy page rendering", () => {
     // Spec B7-17: Slot number element precedes planet disc, label without "N. "
     assert.match(html, /<span class="galaxy-slot-num" data-testid="galaxy-slot-num-1">1<\/span>/);
     assert.match(html, /<span class="galaxy-slot-num" data-testid="galaxy-slot-num-2">2<\/span>/);
-    assert.match(html, /<span class="galaxy-slot-label">Alpha \[ACE\] \(you\)/);
-    assert.match(html, /<span class="galaxy-slot-label">Rival \[FOE\]/);
+    assert.match(html, /<span class="galaxy-slot-label"><button type="button" class="commander-name" data-open-commander="p1" data-testid="galaxy-commander-1" aria-label="Commander dossier for Alpha">Alpha<\/button> \[ACE\] \(you\)/);
+    assert.match(html, /<span class="galaxy-slot-label"><button type="button" class="commander-name" data-open-commander="p2" data-testid="galaxy-commander-2" aria-label="Commander dossier for Rival">Rival<\/button> \[FOE\]/);
     assert.match(html, /<span class="galaxy-slot-label">Empty<\/span>/);
 
     // Spec B7-13: foreign moon has Destroy moon preset icon
@@ -269,9 +269,9 @@ describe("galaxy page rendering", () => {
 
     const html = pageHtml("galaxy", view, false, null);
 
-    assert.match(html, /<span class="galaxy-slot-label">Tagged \[&lt;X&amp;&gt;\]/);
+    assert.match(html, /<span class="galaxy-slot-label"><button type="button" class="commander-name" data-open-commander="pa" data-testid="galaxy-commander-1" aria-label="Commander dossier for Tagged">Tagged<\/button> \[&lt;X&amp;&gt;\]/);
     assert.doesNotMatch(html, /\[<X&>\]/);
-    assert.match(html, /<span class="galaxy-slot-label">Loner(?! \[)/);
+    assert.match(html, /<span class="galaxy-slot-label"><button type="button" class="commander-name" data-open-commander="pb" data-testid="galaxy-commander-2" aria-label="Commander dossier for Loner">Loner<\/button>(?! \[)/);
   });
 
   it("banners an active seasonal boss with a one-click raid prefill", () => {

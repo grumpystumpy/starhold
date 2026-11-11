@@ -13,6 +13,7 @@ import {
 import { fmt, fmtCompact, fmtCoords, fmtCoordsLink, fmtEta, remainingSeconds } from "./format";
 import { planetDiscHtml } from "./planet-disc";
 import { escapeAttr, escapeHtml } from "./render-escape";
+import { commanderNameButton, uniqueCommanderId } from "./commander-dossier";
 import { formatBossCountdown } from "./render-seasons";
 import { infoTooltip } from "./render-tooltips";
 
@@ -201,8 +202,18 @@ export function galaxyPanel(
         s.playerId && typeof s.empirePoints === "number"
           ? ` · ${fmtCompact(s.empirePoints)} pts`
           : "";
+      const nameHtml =
+        s.playerId && s.playerName
+          ? commanderNameButton(
+              s.playerId,
+              s.playerName,
+              `galaxy-commander-${s.coords.slot}`,
+            )
+          : s.playerName
+            ? escapeHtml(s.playerName)
+            : "";
       const who = s.playerName
-        ? `${escapeHtml(s.playerName)}${tag}${s.isOwn ? " (you)" : ""}${s.isMini ? " · Mini" : ""}${points}${moon}`
+        ? `${nameHtml}${tag}${s.isOwn ? " (you)" : ""}${s.isMini ? " · Mini" : ""}${points}${moon}`
         : "Empty";
       const marker = s.allianceMarker;
       const tip = marker
@@ -369,8 +380,12 @@ export function galaxyPanel(
           const debris = hasDebris
             ? ` · debris ${fmt(mini.debris!.metal)}/${fmt(mini.debris!.crystal)}`
             : "";
+          const miniCommanderId = uniqueCommanderId(
+            view.highscores,
+            mini.playerName,
+          );
           const who = mini.playerName
-            ? `${escapeHtml(mini.playerName)}${mini.isOwn ? " (you)" : ""}`
+            ? `${miniCommanderId ? commanderNameButton(miniCommanderId, mini.playerName, `galaxy-mini-commander-${mini.planetId}`) : escapeHtml(mini.playerName)}${mini.isOwn ? " (you)" : ""}`
             : escapeHtml(mini.name);
           const slotNum = `<span class="galaxy-slot-num" data-testid="galaxy-mini-slot-num-${mini.coords.slot}">${fmt(mini.coords.slot)}</span>`;
           let miniActions = "";
