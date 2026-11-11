@@ -376,6 +376,16 @@ export interface AllianceListEntry {
   maxMembers: number;
 }
 
+export type HighscoreCategoryId = "buildings" | "fleet" | "research" | "defense";
+
+/** Cached category boards. Missing rows are empty lists. */
+export interface CategoryHighscores {
+  buildings: HighscoreEntry[];
+  fleet: HighscoreEntry[];
+  research: HighscoreEntry[];
+  defense: HighscoreEntry[];
+}
+
 /** Cached alliance rank row. Rebuilt with the player highscore board. */
 export interface AllianceRankEntry {
   rank: number;
