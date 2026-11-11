@@ -1129,6 +1129,48 @@ export async function deleteAllianceMarkerRequest(
   return parse<PlayerView>(res);
 }
 
+export interface CommanderMailMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  body: string;
+  createdAt: number;
+}
+
+export async function fetchCommanderMail(
+  since?: number,
+): Promise<{ messages: CommanderMailMessage[] }> {
+  const query =
+    since != null && Number.isFinite(since)
+      ? `?since=${encodeURIComponent(String(since))}`
+      : "";
+  const res = await credFetch(`/api/mail${query}`);
+  return parse(res);
+}
+
+export async function postCommanderMail(
+  to: string,
+  body: string,
+): Promise<{ message: CommanderMailMessage }> {
+  const res = await credFetch("/api/mail", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ to, body }),
+  });
+  return parse(res);
+}
+
+export async function deleteCommanderMailRequest(
+  deleteId: string,
+): Promise<{ ok: true }> {
+  const res = await credFetch("/api/mail", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ deleteId }),
+  });
+  return parse(res);
+}
+
 export async function proposeAllianceStrikeRequest(opts: {
   coords: Coordinates;
   note?: string;

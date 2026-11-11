@@ -606,8 +606,23 @@ a.message-title:hover {
   padding: 0.25rem 0.5rem;
 }
 
+.commander-mail-form {
+  max-width: 100%;
+}
+
+.commander-mail-form input[name="commander-mail-body"] {
+  flex: 1 1 12rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.commander-mail-line {
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 560px) {
   .alliance-chat-form,
+  .commander-mail-form,
   .galaxy-alliance-tools,
   .galaxy-slot-side {
     flex-direction: column;

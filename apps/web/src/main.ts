@@ -44,6 +44,7 @@ import {
   POLL_INTERVAL_MS,
   silentRefresh,
   refreshAllianceChatIfOpen,
+  refreshCommanderMailIfOpen,
   startPolling,
 } from "./main-actions";
 import { wireJointStrikeForm } from "./main-actions-alliances";
@@ -59,6 +60,7 @@ import { accountMenuFromPath } from "./ui/nav";
 import {
   ensurePopstateHandler,
   pageFromLocation,
+  setPageEnterHook,
   syncSessionUrl,
 } from "./ui/router";
 import { peekEmailReset } from "./ui/render-chrome-join";
@@ -158,6 +160,9 @@ async function resumePlayer(
 }
 
 async function boot(): Promise<void> {
+  setPageEnterHook(() => {
+    void refreshCommanderMailIfOpen();
+  });
   startPwa();
   void initTelemetry();
   ensureDelegatedHandlers();
@@ -329,6 +334,7 @@ window.starhold = {
     if (!session.view) return;
     await silentRefresh(session.view.player.id);
     await refreshAllianceChatIfOpen();
+    await refreshCommanderMailIfOpen();
   },
   pollIntervalMs: POLL_INTERVAL_MS,
   idlePauseMs: IDLE_PAUSE_MS,

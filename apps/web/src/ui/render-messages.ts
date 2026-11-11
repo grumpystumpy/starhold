@@ -89,6 +89,74 @@ export function currentConfirmDelete(): InboxFilter | null {
   return confirmDelete;
 }
 
+export interface CommanderMailLine {
+  id: string;
+  senderId: string;
+  senderName: string;
+  body: string;
+  createdAt: number;
+}
+
+let mailTab = false;
+let mailLines: CommanderMailLine[] = [];
+let mailToDraft = "";
+let mailBodyDraft = "";
+
+export function setMessagesMailTab(next: boolean): void {
+  mailTab = next;
+}
+
+export function messagesMailTabOpen(): boolean {
+  return mailTab;
+}
+
+export function commanderMailLines(): readonly CommanderMailLine[] {
+  return mailLines;
+}
+
+export function replaceCommanderMail(lines: CommanderMailLine[]): void {
+  mailLines = [...lines].sort(
+    (a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id),
+  );
+}
+
+export function mergeCommanderMail(incoming: CommanderMailLine[]): boolean {
+  if (!incoming.length) return false;
+  const byId = new Map(mailLines.map((line) => [line.id, line]));
+  let added = false;
+  for (const line of incoming) {
+    if (!byId.has(line.id)) {
+      byId.set(line.id, line);
+      added = true;
+    }
+  }
+  if (!added) return false;
+  mailLines = [...byId.values()].sort(
+    (a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id),
+  );
+  return true;
+}
+
+export function removeCommanderMail(id: string): void {
+  mailLines = mailLines.filter((line) => line.id !== id);
+}
+
+export function setMailComposeDraft(to?: string, body?: string): void {
+  if (to !== undefined) mailToDraft = to;
+  if (body !== undefined) mailBodyDraft = body;
+}
+
+export function setMailReplyTarget(name: string): void {
+  mailToDraft = name;
+}
+
+export function clearCommanderMailClient(): void {
+  mailTab = false;
+  mailLines = [];
+  mailToDraft = "";
+  mailBodyDraft = "";
+}
+
 function fmtWhen(at: number): string {
   if (!Number.isFinite(at) || at <= 0) return "—";
   try {
@@ -602,7 +670,7 @@ export function inboxUnreadCount(view: PlayerView): number {
   return unread;
 }
 
-function filterButton(id: InboxFilter, label: string, active: InboxFilter): string {
+function filterButton(id: InboxFilter, label: string, active: InboxFilter | null): string {
   const pressed = id === active;
   return `<button type="button" class="ghost inbox-filter${pressed ? " active" : ""}" data-inbox-filter="${id}" data-testid="inbox-filter-${id}" aria-pressed="${pressed ? "true" : "false"}">${label}</button>`;
 }
@@ -711,7 +779,7 @@ export function messagesPageHtml(
       </ul>`;
 
   const markAll =
-    unread > 0
+    !mailTab && unread > 0
       ? `<button type="button" class="ghost" data-event-read-all data-testid="mark-all-read" ${busy ? "disabled" : ""}>Mark all read</button>`
       : "";
   const deleteCount =
@@ -723,21 +791,58 @@ export function messagesPageHtml(
           ? spyCount
           : alertCount;
 
+  const activeFilter = mailTab ? null : filter;
+  const mailList = mailLines.length
+    ? mailLines
+        .map((line) => {
+          return `<article class="commander-mail-line" data-testid="commander-mail-${escapeAttr(line.id)}">
+            <p><strong>${escapeHtml(line.senderName)}</strong> <span class="meta">${escapeHtml(fmtWhen(line.createdAt))}</span></p>
+            <p class="commander-mail-body">${escapeHtml(line.body)}</p>
+            <button type="button" class="ghost" data-mail-reply="${escapeAttr(line.senderName)}" data-testid="mail-reply-${escapeAttr(line.id)}" ${busy ? "disabled" : ""}>Reply</button>
+            <button type="button" class="ghost" data-mail-delete="${escapeAttr(line.id)}" data-testid="mail-delete-${escapeAttr(line.id)}" ${busy ? "disabled" : ""}>Delete</button>
+          </article>`;
+        })
+        .join("")
+    : `<p class="hint" data-testid="commander-mail-empty">No private mail yet.</p>`;
+  const mailPanel = `
+    <section data-testid="commander-mail">
+      <p class="hint" data-testid="commander-mail-summary">Private notes between commanders. ${fmt(mailLines.length)} in your inbox.</p>
+      <div class="commander-mail-log" data-testid="commander-mail-log">${mailList}</div>
+      <form id="commander-mail-form" class="alliance-form commander-mail-form" data-testid="commander-mail-form">
+        <label>To
+          <input type="text" name="commander-mail-to" data-testid="commander-mail-to" maxlength="24" required value="${escapeAttr(mailToDraft)}" ${busy ? "disabled" : ""} />
+        </label>
+        <label>Message
+          <input type="text" name="commander-mail-body" data-testid="commander-mail-body" maxlength="500" required value="${escapeAttr(mailBodyDraft)}" ${busy ? "disabled" : ""} />
+        </label>
+        <button type="submit" data-testid="commander-mail-send" ${busy ? "disabled" : ""}>Send</button>
+      </form>
+    </section>`;
+
   return `
-    <section class="panel" data-testid="messages-panel" data-inbox-filter="${filter}">
+    <section class="panel" data-testid="messages-panel" data-inbox-filter="${filter}" data-messages-tab="${mailTab ? "mail" : "inbox"}">
       <h2>Messages</h2>
-      <p class="hint" data-testid="messages-summary">All · Combat · Spy · Alerts — ${fmt(items.length)} item${items.length === 1 ? "" : "s"} (${fmt(combatCount)} combat · ${fmt(spyCount)} spy · ${fmt(alertCount)} alerts${unread > 0 ? ` · ${fmt(unread)} unread` : ""}).</p>
+      ${
+        mailTab
+          ? ""
+          : `<p class="hint" data-testid="messages-summary">All · Combat · Spy · Alerts — ${fmt(items.length)} item${items.length === 1 ? "" : "s"} (${fmt(combatCount)} combat · ${fmt(spyCount)} spy · ${fmt(alertCount)} alerts${unread > 0 ? ` · ${fmt(unread)} unread` : ""}).</p>`
+      }
       <div class="inbox-filters" role="tablist" aria-label="Message filters">
-        ${filterButton("all", "All", filter)}
-        ${filterButton("combat", "Combat", filter)}
-        ${filterButton("spy", "Spy", filter)}
-        ${filterButton("alerts", "Alerts", filter)}
+        ${filterButton("all", "All", activeFilter)}
+        ${filterButton("combat", "Combat", activeFilter)}
+        ${filterButton("spy", "Spy", activeFilter)}
+        ${filterButton("alerts", "Alerts", activeFilter)}
+        <button type="button" class="ghost inbox-filter" data-messages-tab="mail" data-testid="messages-tab-mail" aria-pressed="${mailTab ? "true" : "false"}">Mail</button>
         ${markAll}
       </div>
-      <div class="inbox-filters" aria-label="Delete messages">
+      ${
+        mailTab
+          ? mailPanel
+          : `<div class="inbox-filters" aria-label="Delete messages">
         ${deleteControl(filter, deleteCount, busy)}
       </div>
       ${list}
-      ${renderReportSubwindow(view)}
+      ${renderReportSubwindow(view)}`
+      }
     </section>`;
 }

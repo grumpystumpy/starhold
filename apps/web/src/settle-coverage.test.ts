@@ -17,6 +17,11 @@ const nonPostActions = new Set([
 const delegatingActions = new Map([["doGalaxySpy", "doLaunchFleet"]]);
 
 // These POSTs create credentials or sessions; recovery is the user retrying.
+const mailRecoveryActions = new Set([
+  "doSendCommanderMail",
+  "doDeleteCommanderMail",
+]);
+
 const postRecoveryExemptActions = new Set([
   "doJoin",
   "doLogin",
@@ -47,7 +52,8 @@ function argsFor(name: string): unknown[] {
   if (name === "doClaimAnonymous" || name === "doDeleteFleetPreset") return [];
   if (name === "doLaunchFleet") return [{ mission: "transport", target: { galaxy: 1, system: 4, slot: 2 }, ships: { smallCargo: 1 } }];
   if (name === "doCreateAlliance") return ["Test alliance"];
-  if (name === "doDeleteMessages" || name === "doMarkEventsRead") return [["id-1"]];
+  if (name === "doDeleteMessages" || name === "doMarkEventsRead" || name === "doDeleteCommanderMail") return [["id-1"]];
+  if (name === "doSendCommanderMail") return ["Ada", "hello"];
   if (name === "doClaimSeason") return ["combat", "season-1"];
   if (name === "doTradeResources") return ["buy"];
   if (name === "doRelocateFortress") return [2, 8];
@@ -92,6 +98,31 @@ describe("settleMutation coverage for exported POST actions", () => {
           if (postRecoveryExemptActions.has(name)) {
             continue;
           }
+          if (mailRecoveryActions.has(name)) {
+            assert.match(body, /fetchCommanderMail\s*\(/, `${name} must re-read mail after a failed POST`);
+            const events: string[] = [];
+            session.view = initial;
+            session.account = { id: "account-1", email: "test@example.com", playerId: null };
+            session.claimablePlayerId = "p1";
+            session.busy = false;
+            session.error = null;
+            session.notice = null;
+            globalThis.fetch = async (_input, init) => {
+              const method = init?.method ?? "GET";
+              events.push(method);
+              if (method === "GET") {
+                return new Response(JSON.stringify({ messages: [] }), {
+                  status: 200,
+                  headers: { "content-type": "application/json" },
+                });
+              }
+              throw new TypeError("Failed to fetch");
+            };
+            await (module[name] as (...args: unknown[]) => Promise<void>)(...argsFor(name));
+            assert.deepEqual(events, ["POST", "GET"], `${name} must make one POST then one mail read`);
+            covered.push(name);
+            continue;
+          }
           const delegatedAction = delegatingActions.get(name);
           if (delegatedAction) {
             assert.match(body, new RegExp(`${delegatedAction}\\s*\\(`));
@@ -129,7 +160,7 @@ describe("settleMutation coverage for exported POST actions", () => {
       root.querySelector = originalQuerySelector;
       window.setTimeout = originalTimeout;
     }
-    for (const name of [...nonPostActions, ...postRecoveryExemptActions]) assert.ok(exported.has(name), `stale exemption list: ${name}`);
+    for (const name of [...nonPostActions, ...postRecoveryExemptActions, ...mailRecoveryActions]) assert.ok(exported.has(name), `stale exemption list: ${name}`);
     assert.ok(covered.length > 0);
   });
 

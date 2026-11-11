@@ -834,10 +834,18 @@ async function rowSaveReady(): Promise<boolean> {
   }
 }
 
+let onMemoryReset: (() => void) | null = null;
+
+/** Side tables (commander mail) clear with the in-memory universe. */
+export function setMemoryResetHook(fn: (() => void) | null): void {
+  onMemoryReset = fn;
+}
+
 /** Test helper: wipe in-memory universe (no-op for the Redis document). */
 export function resetMemoryUniverse(): void {
   memoryUniverse = null;
   universeCache = null;
+  onMemoryReset?.();
 }
 
 /** Test helper: true after a memory-mode load created the universe. */

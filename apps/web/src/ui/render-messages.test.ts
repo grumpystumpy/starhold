@@ -10,8 +10,12 @@ import {
   inboxUnreadCount,
   messagesPageHtml,
   openReportWindow,
+  clearCommanderMailClient,
+  replaceCommanderMail,
   setConfirmDelete,
   setInboxFilter,
+  setMailReplyTarget,
+  setMessagesMailTab,
 } from "./render-messages";
 import { fmt, fmtCompact } from "./format";
 import { combatBattleExtrasHtml } from "./render-fleets-panels";
@@ -955,5 +959,35 @@ describe("messages inbox", () => {
     assert.match(defenderWinHtml, /data-combat-result="loss"/);
     assert.doesNotMatch(defenderWinHtml, /data-copy-battle-share="c_read_def"/);
     closeReportWindow();
+  });
+
+  it("renders a Mail tab with compose, reply, delete, and escaped text", () => {
+    setMessagesMailTab(true);
+    setMailReplyTarget(`"><script>`);
+    replaceCommanderMail([
+      {
+        id: `id"><x`,
+        senderId: "p2",
+        senderName: `<Ada>`,
+        body: `<img src=x onerror=alert(1)>`,
+        createdAt: 1_700_000_000_000,
+      },
+    ]);
+    try {
+      const html = messagesPageHtml(baseView());
+      assert.match(html, /data-testid="messages-tab-mail"/);
+      assert.match(html, /data-testid="commander-mail-form"/);
+      assert.match(html, /data-testid="commander-mail-to"/);
+      assert.match(html, /data-testid="mail-reply-/);
+      assert.match(html, /data-testid="mail-delete-/);
+      assert.match(html, /&lt;Ada&gt;/);
+      assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
+      assert.doesNotMatch(html, /<script>/);
+      assert.doesNotMatch(html, /<img/);
+      assert.match(html, /value="&quot;&gt;&lt;script&gt;"/);
+      assert.doesNotMatch(html, /data-testid="messages-inbox"/);
+    } finally {
+      clearCommanderMailClient();
+    }
   });
 });

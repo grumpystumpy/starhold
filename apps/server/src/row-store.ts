@@ -168,6 +168,15 @@ const TABLE_SQL = [
   `CREATE TABLE IF NOT EXISTS save_highscores (
     id TEXT PRIMARY KEY, built_at INTEGER NOT NULL, doc TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS save_assert (ok INTEGER NOT NULL CHECK (ok = 1))`,
+  `CREATE TABLE IF NOT EXISTS commander_mail (
+    id TEXT PRIMARY KEY,
+    sender_id TEXT NOT NULL,
+    sender_name TEXT NOT NULL,
+    recipient_id TEXT NOT NULL,
+    body TEXT NOT NULL,
+    created_at INTEGER NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS commander_mail_recipient
+    ON commander_mail (recipient_id, created_at)`,
 ];
 
 const OMIT_KEYS = new Set([
