@@ -326,6 +326,7 @@ export function createApp(): Hono {
     try {
       const galaxy = Number(c.req.query("galaxy") || 0) || undefined;
       const system = Number(c.req.query("system") || 0) || undefined;
+      const includeScannerMoons = c.req.query("scanners") === "1";
       return await withUniverseRead(
         (universe) => {
           const now = Date.now();
@@ -335,6 +336,7 @@ export function createApp(): Hono {
             c,
             playerView(universe, playerId, now, galaxy, system, {
               skipUniverseTick: !tickDue,
+              includeScannerMoons,
             }),
           );
         },

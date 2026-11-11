@@ -351,6 +351,7 @@ describe("galaxy jump controls", () => {
       assert.equal(jumpGets.length, 1);
       assert.match(jumpGets[0], /[?&]galaxy=9(?:&|$)/);
       assert.match(jumpGets[0], /[?&]system=143(?:&|$)/);
+      assert.match(jumpGets[0], /[?&]scanners=1(?:&|$)/);
       assert.equal(urls.filter((line) => line.startsWith("POST ")).length, 0);
       assert.equal(session.galaxyGalaxy, 9);
       assert.equal(session.galaxySystem, 143);
@@ -361,6 +362,7 @@ describe("galaxy jump controls", () => {
       assert.equal(pollGets.length, 1);
       assert.match(pollGets[0], /[?&]galaxy=9(?:&|$)/);
       assert.match(pollGets[0], /[?&]system=143(?:&|$)/);
+      assert.doesNotMatch(pollGets[0], /scanners=1/);
       assert.equal(session.galaxyGalaxy, 9);
       assert.equal(session.galaxySystem, 143);
 
@@ -378,6 +380,7 @@ describe("galaxy jump controls", () => {
       assert.equal(afterAction.length, 1);
       assert.match(afterAction[0], /[?&]galaxy=9(?:&|$)/);
       assert.match(afterAction[0], /[?&]system=143(?:&|$)/);
+      assert.doesNotMatch(afterAction[0], /scanners=1/);
       assert.equal(session.galaxyGalaxy, 9);
       assert.equal(session.galaxySystem, 143);
     } finally {

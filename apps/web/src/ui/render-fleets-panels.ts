@@ -4,6 +4,8 @@ import {
   MAP_SYSTEMS,
   SHIP_ORDER,
   SHIPS,
+  scannerSystemSpans,
+  systemCoveredByScanner,
   type CombatReport,
   type CombatRoundLog,
   type DefenseStock,
@@ -174,11 +176,39 @@ function pirateBossGalaxyBanner(view: PlayerView, busy: boolean): string {
   return `<div class="pirate-boss-banner" data-testid="galaxy-boss-banner"><p>Seasonal mothership${flavor}${clock} · ${fmtCoordsLink(boss.coords)} · ${fmt(boss.hpPct)}% hull · you ${rank}${next}</p><button type="button" data-galaxy-attack-pirates="${coords}" data-galaxy-pirate-base="${escapeAttr(boss.id)}" data-testid="galaxy-raid-boss" ${busy ? "disabled" : ""}>Raid boss</button></div>`;
 }
 
+function scannerOverlayHtml(view: PlayerView): {
+  hint: string;
+  mark: string;
+  inRange: boolean;
+} {
+  const moons = view.scannerMoons ?? [];
+  const spans = scannerSystemSpans(moons, view.galaxy.galaxy);
+  const inRange = systemCoveredByScanner(
+    moons,
+    view.galaxy.galaxy,
+    view.galaxy.system,
+  );
+  if (spans.length === 0) return { hint: "", mark: "", inRange: false };
+  const parts = spans.map((span) =>
+    span.from === span.to ? String(span.from) : `${span.from}–${span.to}`,
+  );
+  const label =
+    spans.length === 1 && spans[0]!.from === spans[0]!.to
+      ? `Scanner: system ${parts[0]}`
+      : `Scanner: systems ${parts.join(", ")}`;
+  const hint = `<p class="hint galaxy-scanner-range" data-testid="galaxy-scanner-range">${escapeHtml(label)}</p>`;
+  const mark = inRange
+    ? `<span class="chip chip-scanner" data-testid="galaxy-scanner-mark">In scanner range</span>`
+    : "";
+  return { hint, mark, inRange };
+}
+
 export function galaxyPanel(
   view: PlayerView,
   busy: boolean,
 ): string {
   const { galaxy } = view;
+  const scanner = scannerOverlayHtml(view);
   const inAlliance = Boolean(view.alliance);
 
   const occupiedCount = galaxy.slots.filter((s) => s.planetId).length;
@@ -312,7 +342,7 @@ export function galaxyPanel(
     <section class="panel" data-testid="galaxy-panel">
       <h2>Galaxy Navigation</h2>
       ${pirateBossGalaxyBanner(view, busy)}
-      <div class="galaxy-system-bar" data-testid="galaxy-system-bar">
+      <div class="galaxy-system-bar${scanner.inRange ? " is-scanner-range" : ""}" data-testid="galaxy-system-bar"${scanner.inRange ? ' data-scanner-in-range="1"' : ""}>
         <div class="galaxy-nav">
           <div class="galaxy-nav-row galaxy-nav-row-system" data-testid="galaxy-nav-row-system">
             <button type="button" data-galaxy-nav="prev" data-testid="galaxy-prev" ${busy ? "disabled" : ""}>◀ System</button>
@@ -333,7 +363,9 @@ export function galaxyPanel(
           <span class="chip chip-debris">${fmt(debrisCount)} Debris</span>
           <span class="chip chip-pirate${galaxy.pirateBase ? " is-active" : ""}">${galaxy.pirateBase ? "Pirate Base" : "Clear Sector"}</span>
           <span class="chip chip-alien${galaxy.alienBase ? " is-active" : ""}">${galaxy.alienBase ? "Alien Threat" : "No Aliens"}</span>
+          ${scanner.mark}
         </div>
+        ${scanner.hint}
         <div class="galaxy-actions" data-testid="galaxy-actions">
           <span class="galaxy-action">
             <button type="button" data-galaxy-max-expeditions data-testid="galaxy-max-expeditions" ${busy ? "disabled" : ""} title="${maxTip.title}">Send max expeditions</button>

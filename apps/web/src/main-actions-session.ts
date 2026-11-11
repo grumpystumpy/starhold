@@ -1,4 +1,9 @@
-import { MAP_GALAXIES, MAP_SYSTEMS, type PlayerView } from "@starhold/game";
+import {
+  MAP_GALAXIES,
+  MAP_SYSTEMS,
+  sensorPhalanxRange,
+  type PlayerView,
+} from "@starhold/game";
 import {
   ApiError,
   OVERLOAD_MESSAGE,
@@ -201,11 +206,87 @@ function scheduleQueueCompletionRefresh(): void {
     if (session.view?.player.id !== playerId) return;
     completedQueueTimes.add(completionKey);
     invalidateCachedState();
-    void silentRefresh(playerId);
+    void silentRefresh(playerId, "Server unreachable", true, {
+      scanners: session.activePage === "galaxy",
+    });
   }, Math.max(0, finishAt - now + QUEUE_COMPLETION_REFRESH_DELAY_MS));
 }
 
-setBeforePaintImpl(scheduleQueueCompletionRefresh);
+/**
+ * Keep the active moon's scanner level on the overlay. The level is already
+ * on `planet.buildings` in every state body, including the 30s poll.
+ * Other moons stay on the last Galaxy-page list until that page reads again.
+ */
+function scannerMoonEntry(planet: NonNullable<PlayerView["planet"]>, level: number) {
+  return {
+    planetId: planet.id,
+    coords: planet.coords,
+    sensorArray: level,
+    range: sensorPhalanxRange(level),
+  };
+}
+
+function sameScannerList(
+  previous: NonNullable<PlayerView["scannerMoons"]>,
+  next: NonNullable<PlayerView["scannerMoons"]>,
+): boolean {
+  return (
+    previous.length === next.length &&
+    previous.every((moon, index) => {
+      const other = next[index];
+      return (
+        other !== undefined &&
+        moon.planetId === other.planetId &&
+        moon.sensorArray === other.sensorArray &&
+        moon.range === other.range &&
+        moon.coords.galaxy === other.coords.galaxy &&
+        moon.coords.system === other.coords.system &&
+        moon.coords.slot === other.coords.slot
+      );
+    })
+  );
+}
+
+export function syncScannerOverlayFromPlanet(): void {
+  const view = session.view;
+  if (!view) return;
+  const stored = view.scannerMoons ?? session.scannerMoons;
+  const planet = view.planet;
+  const liveLevel =
+    planet?.kind === "moon" ? (planet.buildings.sensorArray ?? 0) : 0;
+  if (!stored) {
+    if (planet?.kind !== "moon" || liveLevel < 1) return;
+    const next = [scannerMoonEntry(planet, liveLevel)];
+    session.scannerMoons = next;
+    session.view = { ...view, scannerMoons: next };
+    return;
+  }
+  let next = stored.slice();
+  if (planet?.kind === "moon") {
+    next = next.filter((moon) => moon.planetId !== planet.id);
+    if (liveLevel >= 1) next.push(scannerMoonEntry(planet, liveLevel));
+  }
+  session.scannerMoons = next;
+  const previous = view.scannerMoons ?? [];
+  if (!sameScannerList(previous, next)) {
+    session.view = { ...view, scannerMoons: next };
+  }
+}
+
+setBeforePaintImpl(() => {
+  scheduleQueueCompletionRefresh();
+  syncScannerOverlayFromPlanet();
+  if (
+    session.galaxyScannersDue &&
+    session.activePage === "galaxy" &&
+    session.view
+  ) {
+    session.galaxyScannersDue = false;
+    void silentRefresh(session.view.player.id, "Galaxy scan failed.", false, {
+      scanners: true,
+    });
+  }
+});
 
 /** Push the next background poll out. Does not send a request. */
 export function deferBackgroundPoll(): void {
@@ -375,20 +456,22 @@ export function bumpInFlightRefresh(): void {
   refreshGen += 1;
 }
 
-function refreshKey(playerId: string): string {
+function refreshKey(playerId: string, scanners: boolean): string {
   const g = session.galaxyGalaxy ?? session.view?.galaxy.galaxy ?? "";
   const s = session.galaxySystem ?? session.view?.galaxy.system ?? "";
-  return `${playerId}:${g}:${s}`;
+  return `${playerId}:${g}:${s}:${scanners ? "scanners" : ""}`;
 }
 
 export function silentRefresh(
   playerId: string,
   errorLabel = "Server unreachable",
   prefixLabel = true,
+  opts?: { scanners?: boolean },
 ): Promise<void> {
-  const key = refreshKey(playerId);
+  const scanners = opts?.scanners === true;
+  const key = refreshKey(playerId, scanners);
   if (refreshInFlight?.key === key) return refreshInFlight.promise;
-  const promise = refreshOnce(playerId, errorLabel, prefixLabel).finally(() => {
+  const promise = refreshOnce(playerId, errorLabel, prefixLabel, scanners).finally(() => {
     if (refreshInFlight?.promise === promise) refreshInFlight = null;
   });
   refreshInFlight = { key, promise };
@@ -399,14 +482,35 @@ async function refreshOnce(
   playerId: string,
   errorLabel: string,
   prefixLabel: boolean,
+  scanners = false,
 ): Promise<void> {
   const gen = ++refreshGen;
   try {
     const g = session.galaxyGalaxy ?? session.view?.galaxy.galaxy;
     const s = session.galaxySystem ?? session.view?.galaxy.system;
-    const view = await fetchState(playerId, g, s);
-    if (gen !== refreshGen) return;
+    const view = await fetchState(playerId, g, s, { scanners });
+    if (gen !== refreshGen) {
+      if (
+        scanners &&
+        session.view?.player.id === playerId &&
+        session.scannerMoons == null
+      ) {
+        session.scannerMoons = view.scannerMoons ?? [];
+        session.view = {
+          ...session.view,
+          scannerMoons: session.scannerMoons,
+        };
+        syncScannerOverlayFromPlanet();
+        schedulePaint();
+      }
+      return;
+    }
+    if (scanners) {
+      session.scannerMoons = view.scannerMoons ?? [];
+      if (view.scannerMoons === undefined) view.scannerMoons = [];
+    }
     session.view = view;
+    syncScannerOverlayFromPlanet();
     schedulePaint();
   } catch (err) {
     if (gen !== refreshGen) return;
@@ -487,7 +591,9 @@ async function applyAuthSuccess(opts: {
   let view = opts.view ?? null;
   if (!view?.player?.id && opts.account.playerId) {
     try {
-      view = await fetchState(opts.account.playerId);
+      view = await fetchState(opts.account.playerId, undefined, undefined, {
+        scanners: session.activePage === "galaxy",
+      });
     } catch (err) {
       const status = err instanceof ApiError ? err.status : 0;
       if (status === 404) {
@@ -870,7 +976,9 @@ export async function doRefresh(): Promise<void> {
   session.busy = true;
   schedulePaint();
   try {
-    await silentRefresh(session.view.player.id, "Refresh failed.", false);
+    await silentRefresh(session.view.player.id, "Refresh failed.", false, {
+      scanners: session.activePage === "galaxy",
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -893,7 +1001,9 @@ export async function doGalaxyNav(dir: "prev" | "next"): Promise<void> {
   session.busy = true;
   schedulePaint();
   try {
-    await silentRefresh(session.view.player.id, "Galaxy nav failed.", false);
+    await silentRefresh(session.view.player.id, "Galaxy nav failed.", false, {
+      scanners: true,
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -909,7 +1019,9 @@ export async function doGalaxyJump(galaxy: number, system: number): Promise<void
   session.busy = true;
   schedulePaint();
   try {
-    await silentRefresh(session.view.player.id, "Galaxy nav failed.", false);
+    await silentRefresh(session.view.player.id, "Galaxy nav failed.", false, {
+      scanners: true,
+    });
   } finally {
     session.busy = false;
     schedulePaint();

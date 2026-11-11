@@ -63,6 +63,10 @@ export const session = {
   armedResearch: null as ResearchId | null,
   /** Mark-read armed the same way. `all` marks every unread alert. */
   armedEventRead: null as { kind: "one"; id: string } | { kind: "all" } | null,
+  /** Last Galaxy-page scanner moons. The 30s poll does not refresh this list. */
+  scannerMoons: null as PlayerView["scannerMoons"] | null,
+  /** Opening Galaxy should load scanner moons on that page's state read. */
+  galaxyScannersDue: false,
   /** Galaxy browser system override (null = follow active planet). */
   galaxySystem: null as number | null,
   /** Galaxy browser override (null = follow active planet). */

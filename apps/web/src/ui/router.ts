@@ -115,6 +115,9 @@ export function navigateTo(
     session.security = null;
     session.securityFor = null;
   }
+  if (page === "galaxy" && (session.activePage !== "galaxy" || leftAccountMenu)) {
+    session.galaxyScannersDue = true;
+  }
   if (session.activePage === page) {
     syncSessionUrl({ replace: true, page });
     if (leftAccountMenu) schedulePaint();
@@ -189,6 +192,7 @@ export function ensurePopstateHandler(): void {
       if (!account) session.recoveryCodes = null;
     }
     session.activePage = pageFromLocation();
+    if (session.activePage === "galaxy") session.galaxyScannersDue = true;
     schedulePaint();
   });
 }

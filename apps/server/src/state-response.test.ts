@@ -79,6 +79,34 @@ describe("player state payload", () => {
     assert.equal(body.players[0]?.planetId, joined.player.homePlanetId);
   });
 
+  it("adds scanner moons only when the galaxy page asks for them", async () => {
+    const app = createApp();
+    const join = await app.request("/api/join", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "ScannerPoll" }),
+    });
+    const joined = (await join.json()) as PlayerView;
+    const poll = await app.request(
+      `/api/state?playerId=${encodeURIComponent(joined.player.id)}`,
+    );
+    const pollBody = (await poll.json()) as PlayerView;
+    assert.equal(poll.status, 200);
+    assert.equal(Object.hasOwn(pollBody, "scannerMoons"), false);
+    assert.equal(
+      pollBody.ownedPlanets.some((planet) => "sensorArray" in planet),
+      false,
+    );
+
+    const galaxy = await app.request(
+      `/api/state?playerId=${encodeURIComponent(joined.player.id)}&scanners=1`,
+    );
+    const galaxyBody = (await galaxy.json()) as PlayerView;
+    assert.equal(galaxy.status, 200);
+    assert.ok(Array.isArray(galaxyBody.scannerMoons));
+    assert.equal(galaxyBody.scannerMoons?.length, 0);
+  });
+
   it("sends a tiny body for an unchanged empire and gzips when asked", async () => {
     const app = createApp();
     const join = await app.request("/api/join", {
