@@ -4,6 +4,7 @@ import {
   SHIP_ORDER,
   SHIPS,
 } from "./catalog.js";
+import { moonChanceLabel } from "./world-moons.js";
 import type {
   CombatReport,
   CombatRoundLog,
@@ -306,7 +307,7 @@ export function formatCombatShareCard(
     (report.debrisCreated?.metal ?? 0) + (report.debrisCreated?.crystal ?? 0);
   if (debris > 0) {
     lines.push(
-      `Debris field: ${fmtNum(report.debrisCreated.metal)}/${fmtNum(report.debrisCreated.crystal)}`,
+      `Debris field: ${fmtNum(report.debrisCreated.metal)}/${fmtNum(report.debrisCreated.crystal)} · ${moonChanceLabel(report.debrisCreated)}`,
     );
   }
   if (report.xpAwarded) {

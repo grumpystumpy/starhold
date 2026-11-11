@@ -6,6 +6,7 @@ import {
   closeReportWindow,
   collectInbox,
   combatLossSummary,
+  combatReadoutHtml,
   inboxBucket,
   inboxUnreadCount,
   messagesPageHtml,
@@ -955,5 +956,76 @@ describe("messages inbox", () => {
     assert.match(defenderWinHtml, /data-combat-result="loss"/);
     assert.doesNotMatch(defenderWinHtml, /data-copy-battle-share="c_read_def"/);
     closeReportWindow();
+  });
+
+  it("shows moon chance on combat debris at 0%, mid, and the 20% cap", () => {
+    closeReportWindow();
+    const report = (
+      id: string,
+      debrisCreated: { metal: number; crystal: number; deuterium: number },
+    ) =>
+      ({
+        id,
+        at: 1000,
+        missionId: `m_${id}`,
+        attackerPlayerId: "p1",
+        defenderPlayerId: "p2",
+        attackerName: "Alpha",
+        defenderName: "Bravo",
+        targetCoords: { galaxy: 1, system: 2, slot: 4 },
+        attackerBefore: {},
+        attackerAfter: {},
+        defenderBefore: {},
+        defenderAfter: {},
+        defensesBefore: {},
+        defensesAfter: {},
+        loot: { metal: 0, crystal: 0, deuterium: 0 },
+        debrisCreated,
+        outcome: "attacker_win" as const,
+        rounds: 1,
+        summary: "Debris field",
+      }) as CombatReport;
+
+    const zero = report("c_moon_0", {
+      metal: 249_999,
+      crystal: 0,
+      deuterium: 8_000_000,
+    });
+    const mid = report("c_moon_mid", {
+      metal: 1_000_000,
+      crystal: 0,
+      deuterium: 0,
+    });
+    const cap = report("c_moon_cap", {
+      metal: 6_000_000,
+      crystal: 2_500_000,
+      deuterium: 0,
+    });
+
+    const section = (html: string) =>
+      html.match(/data-testid="combat-debris"[\s\S]*?<\/section>/)?.[0] ?? "";
+
+    const zeroHtml = combatReadoutHtml(zero, "p1");
+    const zeroDebris = section(zeroHtml);
+    assert.match(zeroDebris, /249\.9k metal, 0 crystal, 8M deuterium/);
+    assert.match(zeroDebris, /data-testid="combat-moon-chance"/);
+    assert.match(zeroDebris, /moon chance 0%/);
+    assert.doesNotMatch(zeroDebris, /moon chance 32%/);
+
+    const midDebris = section(combatReadoutHtml(mid, "p1"));
+    assert.match(midDebris, /1M metal, 0 crystal, 0 deuterium/);
+    assert.match(midDebris, /moon chance 4%/);
+
+    const capDebris = section(combatReadoutHtml(cap, "p1"));
+    assert.match(capDebris, /6M metal, 2\.5M crystal, 0 deuterium/);
+    assert.match(capDebris, /moon chance 20%/);
+    assert.doesNotMatch(capDebris, /moon chance 3[0-9]%/);
+
+    const inbox = messagesPageHtml(
+      baseView({ reports: [zero, mid, cap] as PlayerView["reports"] }),
+    );
+    assert.match(inbox, /Debris: 249\.9k metal, 8M deuterium · moon chance 0%/);
+    assert.match(inbox, /Debris: 1M metal · moon chance 4%/);
+    assert.match(inbox, /Debris: 6M metal, 2\.5M crystal · moon chance 20%/);
   });
 });

@@ -27,6 +27,17 @@ export function moonChancePercent(debris: Resources): number {
   return Math.min(MOON_CHANCE_CAP, Math.floor(total / MOON_DEBRIS_PER_PERCENT));
 }
 
+/** Display text for debris already in hand. Does not roll or form a moon. */
+export function moonChanceLabel(
+  debris: { metal?: number; crystal?: number } | null | undefined,
+): string {
+  return `moon chance ${moonChancePercent({
+    metal: debris?.metal ?? 0,
+    crystal: debris?.crystal ?? 0,
+    deuterium: 0,
+  })}%`;
+}
+
 /**
  * Horizon Scanner (`sensorArray`) range in systems (same galaxy).
  * Level 0 → none; level N → ±N systems inclusive of own system.

@@ -169,6 +169,7 @@ export {
 } from "./world-expedition.js";
 export {
   inSensorPhalanxRange,
+  moonChanceLabel,
   moonChancePercent,
   moonRoll,
   ownedPlanetCount,

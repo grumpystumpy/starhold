@@ -2,6 +2,7 @@ import "../test-dom";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { PlayerView } from "@starhold/game";
+import { galaxyPanel } from "./render-fleets-panels";
 import { pageHtml } from "./render-pages";
 
 describe("galaxy page rendering", () => {
@@ -313,5 +314,56 @@ describe("galaxy page rendering", () => {
     };
     const cooling = pageHtml("galaxy", view, false, null);
     assert.doesNotMatch(cooling, /galaxy-boss-banner/);
+  });
+
+  it("shows moon chance on debris badges at 0%, mid, and the 20% cap", () => {
+    const slot = (
+      n: number,
+      debris: { metal: number; crystal: number } | null,
+    ) => ({
+      coords: { galaxy: 1, system: 5, slot: n },
+      planetId: null,
+      playerId: null,
+      playerName: null,
+      allianceTag: null,
+      empirePoints: 0,
+      isOwn: false,
+      hasMoon: false,
+      moonId: null,
+      debris,
+      artId: "normal",
+      artThumbUrl: "/thumb.webp",
+      allianceMarker: null,
+    });
+    const view = {
+      galaxy: {
+        galaxy: 1,
+        system: 5,
+        slots: [
+          slot(1, { metal: 249_999, crystal: 0 }),
+          slot(2, { metal: 750_000, crystal: 250_000 }),
+          slot(3, { metal: 5_000_000, crystal: 4_000_000 }),
+          slot(4, null),
+        ],
+        minis: [],
+        asteroids: [],
+      },
+    } as unknown as PlayerView;
+
+    const html = galaxyPanel(view, false);
+    const badge = (n: number) =>
+      html.match(
+        new RegExp(`data-testid="galaxy-debris-${n}">([^<]*)</span>`),
+      )?.[1] ?? "";
+
+    assert.match(badge(1), /debris 249\.9k\/0/);
+    assert.match(badge(1), /moon chance 0%/);
+    assert.match(badge(2), /debris 750k\/250k/);
+    assert.match(badge(2), /moon chance 4%/);
+    assert.match(badge(3), /debris 5M\/4M/);
+    assert.match(badge(3), /moon chance 20%/);
+    assert.doesNotMatch(badge(3), /moon chance 3[0-9]%/);
+    assert.equal(badge(4), "");
+    assert.doesNotMatch(html, /data-testid="galaxy-debris-4"/);
   });
 });
