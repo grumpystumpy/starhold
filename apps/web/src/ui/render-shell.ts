@@ -161,7 +161,7 @@ function planetDropdown(view: PlayerView, busy: boolean): string {
   return `<label class="nav-dropdown-wrap" data-testid="planet-dropdown-wrap"><span class="nav-dropdown-label">Colony</span><select class="nav-dropdown" data-planet-select data-testid="planet-dropdown" aria-label="Planets, moons, and mini planets" ${busy ? "disabled" : ""}>${options}</select></label>`;
 }
 
-function leftNav(view: PlayerView, active: NavPage): string {
+function leftNav(view: PlayerView, active: NavPage, busy: boolean): string {
   const q = navQuery(view);
   const params = new URLSearchParams();
   params.set("playerId", q.playerId);
@@ -180,6 +180,7 @@ function leftNav(view: PlayerView, active: NavPage): string {
           return `<li><a href="${escapeAttr(href)}" class="nav-link${id === gameActive ? " active" : ""}" data-nav="${id}" data-testid="nav-${id}">${NAV_LABELS[id]}${badge}</a></li>`;
         }).join("")}
         ${accountNavHtml(Boolean(session.account), session.accountMenu === "security", securityHref(`?${params.toString()}`))}
+        ${session.account ? `<li class="nav-invite"><button type="button" class="nav-link" data-copy-invite data-testid="copy-invite" ${busy ? "disabled" : ""}>Copy invite link</button>${session.inviteShareUrl ? `<input class="invite-link-fallback" type="text" readonly value="${escapeAttr(session.inviteShareUrl)}" data-testid="invite-link-fallback" aria-label="Invite link" />` : ""}</li>` : ""}
         ${creditsNavHtml(session.accountMenu === "credits", creditsHref(`?${params.toString()}`))}
       </ul>
     </nav>`;
@@ -331,7 +332,7 @@ export function shellHtml(
       <button type="button" class="idle-pause" data-testid="idle-pause"${session.idlePaused ? "" : " hidden"}>Paused, tap to resume</button>
       ${resourceBar(view, state.busy)}
       <div class="shell-body">
-        ${leftNav(view, activePage)}
+        ${leftNav(view, activePage, state.busy)}
         <main class="shell-main" data-testid="page-${activePage}" id="page-main">
           ${mainHtml}
         </main>

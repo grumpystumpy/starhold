@@ -207,6 +207,8 @@ export function patchLiveChrome(
     '[data-testid="idle-pause"]',
   );
   if (idle) idle.hidden = !session.idlePaused;
+  const copyInvite = root.querySelector<HTMLButtonElement>("[data-copy-invite]");
+  if (copyInvite) copyInvite.disabled = state.busy;
   patchMessagesBadge(root, view);
 
   // Keep empire rail labels in sync without remounting chips.
@@ -285,5 +287,13 @@ export function canPatchShell(
   if (!shell) return false;
   if (shell.dataset.page !== activePage) return false;
   if (shell.dataset.planetId !== view.planet.id) return false;
+  const wantInviteBox = Boolean(session.inviteShareUrl);
+  const hasInviteBox = Boolean(
+    root.querySelector("[data-testid='invite-link-fallback']"),
+  );
+  if (wantInviteBox !== hasInviteBox) return false;
+  const wantCopy = Boolean(session.account);
+  const hasCopy = Boolean(root.querySelector("[data-testid='copy-invite']"));
+  if (wantCopy !== hasCopy) return false;
   return true;
 }

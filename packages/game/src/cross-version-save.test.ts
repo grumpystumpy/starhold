@@ -81,6 +81,8 @@ describe("cross-version save fixtures", () => {
 
     const loaded = migrateOrResetUniverse(structuredClone(raw));
     assert.equal(loaded.didReset, false);
+    assert.equal(raw.invites, undefined);
+    assert.equal(loaded.universe.invites, undefined);
     assert.equal(loaded.universe.id, "uni_fixture_pre_row");
     assert.equal(loaded.universe.schemaVersion, UNIVERSE_SCHEMA_VERSION);
 

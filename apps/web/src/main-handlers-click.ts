@@ -52,6 +52,7 @@ import {
   doGalaxyJump,
   doGalaxyGalaxyNav,
   doClaimAnonymous,
+  doCopyInvite,
   doInviteAlliance,
   doJoin,
   doJoinAlliance,
@@ -156,6 +157,13 @@ export function bindClickHandlers(): void {
 
       const target = ev.target;
       if (!(target instanceof Element)) return;
+
+      const copyInvite = closestActionEl(target, "[data-copy-invite]");
+      if (copyInvite) {
+        ev.preventDefault();
+        void doCopyInvite();
+        return;
+      }
 
       const shopTab = closestActionEl(target, "[data-shop-tab]");
       if (shopTab) {

@@ -7,6 +7,7 @@ export {
   silentRefresh,
   refreshAllianceChatIfOpen,
   doJoin,
+  doCopyInvite,
   doRefresh,
   doGalaxyNav,
   doGalaxyJump,

@@ -713,6 +713,14 @@ export interface UniverseSeedCursor {
   visited?: Record<string, 1>;
 }
 
+/** Short code that places a new home near the inviter. Not a player id. */
+export interface InviteRecord {
+  code: string;
+  playerId: string;
+  createdAt: number;
+  expiresAt: number;
+}
+
 export interface UniverseState {
   id: string;
   name: string;
@@ -769,6 +777,11 @@ export interface UniverseState {
   pirateBossActiveUntil?: number;
   /** Earliest wall-clock time at which the next boss may spawn. */
   pirateBossNextSpawnAt?: number;
+  /**
+   * Friend-home codes. Absent on older saves. Not copied into the 30s
+   * player view. Pruned only when a code is minted.
+   */
+  invites?: Record<string, InviteRecord>;
   /**
    * Set on a player-scoped request. NPC raids and growth run on the
    * maintenance pass instead of the page-load tick. Not persisted.
