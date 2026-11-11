@@ -2011,6 +2011,56 @@ export interface OnboardingStepTuning {
   starshards: number;
 }
 
+/**
+ * Mid-game milestones shown after the commander briefing is finished
+ * or dismissed. Copy only. Completion is computed on read. No rewards.
+ * `jointStrike` is an info card and does not complete.
+ */
+export const MIDGAME_BRIEFING_CARDS = [
+  {
+    id: "extraColony",
+    title: "First extra colony",
+    unlocks:
+      "A second world for mines, storage, and fleets. Stellar Cartography, a Colonizer, then an empty galaxy slot.",
+    targetNavPage: "galaxy",
+  },
+  {
+    id: "firstMoon",
+    title: "First moon",
+    unlocks:
+      "A moon for Lunar Habitat, System Scanner, and Moon Bridge. Moons form from combat debris at a colony.",
+    targetNavPage: "fleets",
+  },
+  {
+    id: "systemScanner",
+    title: "System Scanner",
+    unlocks:
+      "Scans nearby systems for outbound fleets heading to planets and mini planets. Built on a moon.",
+    targetNavPage: "buildings",
+  },
+  {
+    id: "moonBridge",
+    title: "Moon Bridge",
+    unlocks:
+      "Near-instant fleet hops between your moons. Both moons need a Moon Bridge.",
+    targetNavPage: "buildings",
+  },
+  {
+    id: "jointStrike",
+    title: "Joint Strike",
+    unlocks:
+      "Alliance mates join one attack. The join window is 15 minutes and the hold lasts up to 30 minutes.",
+    targetNavPage: "fleets",
+  },
+] as const satisfies readonly {
+  id: string;
+  title: string;
+  unlocks: string;
+  targetNavPage: OnboardingNavPage;
+}[];
+
+export type MidgameCardId = (typeof MIDGAME_BRIEFING_CARDS)[number]["id"];
+
 export const ONBOARDING_STEPS: readonly OnboardingStepTuning[] = [
   {
     id: "metalMine1",

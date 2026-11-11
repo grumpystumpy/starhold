@@ -48,6 +48,7 @@ import {
 import { alliancesPageHtml } from "./render-alliances";
 import { recommendedNext } from "./render-helpers";
 import { goalsPageHtml } from "./render-goals";
+import { midgameBriefingHtml } from "./render-midgame";
 import { onboardingPanelHtml } from "./render-onboarding";
 import { messagesPageHtml } from "./render-messages";
 import { shopPageHtml } from "./render-shop";
@@ -115,6 +116,7 @@ function overviewPage(view: PlayerView, busy: boolean): string {
     <section class="panel" data-testid="overview-panel">
       <h2>Overview</h2>
       ${onboardingPanelHtml(view, busy)}
+      ${midgameBriefingHtml(view, busy)}
       <p class="hint" data-testid="overview-daily-missions-ready">
         Daily missions ready to claim: <a href="${escapeAttr(goalsHref)}" data-nav="goals" data-testid="overview-goals-link"><strong>${fmt(readyDailyMissions)}</strong></a>
       </p>

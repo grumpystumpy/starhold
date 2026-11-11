@@ -114,7 +114,19 @@ The same surfaces show one optional next step (`data-testid="next-goal"`) when a
 
 Distance is the smallest unmet level on a gate. A gate the commander can start now (distance 0) wins. Ties break by the total missing levels, then research in `RESEARCH_ORDER`, then gated buildings (System Scanner, Moon Bridge, Manufacture Line, Land Reclamation, Nano Production), then hulls in `SHIP_ORDER` that declare `researchReq`. The line names the catalog step and why, and links to Buildings or Research. Moon-only gates are omitted when the commander has no moon. When nothing is gated, the element is omitted.
 
-Dismissing the briefing hides the suggestion. Restore shows it again. When every tutorial step is claimed, Overview stays clear and the Goals page keeps the suggestion until Hide suggestion, which uses the same dismiss flag. Restore then reads Show next step.
+Dismissing the briefing hides the suggestion. Restore shows it again. When every tutorial step is claimed, the commander briefing leaves Overview. The Goals page keeps the suggestion until Hide suggestion, which uses the same dismiss flag. Restore then reads Show next step.
+
+Once every `ONBOARDING_STEPS` step is claimed, or the commander briefing is dismissed, Overview shows `data-testid="midgame-briefing"` until `player.midgameBriefingDismissed` is set. The field is optional. Older saves omit it and still load. Reading a view does not create it. There is no reward. Dismiss is `POST /api/midgame/dismiss` `{ playerId, dismissed }` with the same session ownership check as onboarding dismiss, and it is not called on a page load. Card copy lives in `MIDGAME_BRIEFING_CARDS` and is not added to the `/api/state` poll. Completion is computed on read from planet count (worlds that are not moons), moon ownership, and building levels.
+
+| Id | Done when | Page |
+| --- | --- | --- |
+| `extraColony` | At least two owned worlds that are not moons | Galaxy |
+| `firstMoon` | Any owned moon | Fleet |
+| `systemScanner` | System Scanner ≥ 1 on any owned world | Buildings |
+| `moonBridge` | Moon Bridge ≥ 1 on any owned world | Buildings |
+| `jointStrike` | Info only. No completion | Fleet |
+
+`ownedPlanets` already carries Moon Bridge level (`jumpGateLevel`). System Scanner level is `sensorArrayLevel` on that same list, and only when the level is at least 1, so a scanner on a moon you are not viewing still counts and a quiet poll stays the same size.
 
 Fleet composer hides built-in `moonDestruction` and `miniPlanetDestruction` until the player owns that hull or meets its research and shipyard level. `expedition`, `raid`, `miniPlanetCapture`, and custom presets stay visible. The presets remain on the save, and the galaxy preset buttons are unchanged.
 
