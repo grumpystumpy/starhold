@@ -78,6 +78,10 @@ A blocked build or fleet send shows the existing rejection next to that button (
 
 Step 2 of the fleet composer ends with one review (`data-testid="fleet-send-review"`) before Send. It restates the mission, destination coordinates, target type, and target name, then separates flight duration from a clock time labeled with the timezone. Launch fuel is the full-cruise one-way cost. The speed control stays a preview and is not sent. Returning harvest, deploy-to-foreign, and spy missions show an estimated return. Station, transport, Moon Bridge, colonize, expedition, occupy, and combat missions do not promise a guaranteed return. Expedition has no separate hold; Joint Strike explains the 15-minute join window and 30-minute hold cap; occupation explains the two-day cap. Officers, class, and route bonuses are named as missing from the estimate. Changing ships, target, mission, speed, or the Joint Strike controls repaints the review. Ship counts, presets, and send-max are unchanged.
 
+## Buildings / energy preview
+
+On building upgrade rows, buildings that declare `energyUsePerLevel` (Ore Mine `metalMine`, Crystalizer `crystalMine`, Deuterium Extractor `deutSynth`, Land Reclamation `mantleLoom`, Manufacture Line `rigFoundry`, Rift Siphon `riftSiphon`, and Anomaly Lab `anomalyForge`) display the next-level energy use and whether the upgrade will put the active planet into energy deficit. The values are computed client-side using `view.economy.energy.used`, `view.economy.energy.produced`, and `BUILDINGS[id].energyUsePerLevel`. Next energy used is current used plus `energyUsePerLevel`. If next used exceeds produced, the row marks a deficit (for example `Energy 152 → 172 / 160, deficit`). If energy stays in surplus, the next-use preview still appears (for example `Energy 40 → 60 / 100`). Buildings without `energyUsePerLevel` omit the energy preview. No server changes, extra `/api/state` poll payloads, or save fields are added.
+
 ## Onboarding & Fleet Presets
 
 `player.onboarding` is optional (`claimed`, `dismissed`, `recon`). Older saves omit it and still load. `onboardingViewFor` does not write the field. Claiming or dismissing creates it.
