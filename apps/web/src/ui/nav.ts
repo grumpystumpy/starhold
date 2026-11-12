@@ -16,6 +16,19 @@ export const NAV_PAGES = [
 ] as const;
 
 export type NavPage = (typeof NAV_PAGES)[number];
+
+/** Primary bottom bar destinations on phone viewports (<640px). */
+export const PHONE_BOTTOM_NAV_PAGES = [
+  "overview",
+  "fleet",
+  "galaxy",
+  "messages",
+] as const;
+
+/** Remaining NAV_PAGES shown in the "More" menu on phone viewports. */
+export const PHONE_MORE_NAV_PAGES = NAV_PAGES.filter(
+  (page) => !(PHONE_BOTTOM_NAV_PAGES as readonly string[]).includes(page),
+) as readonly NavPage[];
 export type ShopTab = "items" | "resources" | "officers" | "skills";
 
 export const SHOP_TABS: readonly ShopTab[] = [

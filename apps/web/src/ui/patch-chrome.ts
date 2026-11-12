@@ -226,7 +226,7 @@ export function patchLiveChrome(
   return true;
 }
 
-function patchMessagesBadge(root: HTMLElement, view: PlayerView): void {
+export function patchMessagesBadge(root: HTMLElement | ParentNode, view: PlayerView): void {
   const unread = inboxUnreadCount(view);
   const link = root.querySelector<HTMLElement>('[data-testid="nav-messages"]');
   if (link) {
@@ -245,6 +245,29 @@ function patchMessagesBadge(root: HTMLElement, view: PlayerView): void {
       }
     } else if (existing) {
       existing.remove();
+    }
+  }
+
+  const bottomMessages = root.querySelector<HTMLElement>(
+    '[data-testid="bottom-nav-messages"] .bottom-nav-label',
+  );
+  if (bottomMessages) {
+    const existingBadge = bottomMessages.querySelector<HTMLElement>(
+      '[data-testid="bottom-nav-messages-badge"]',
+    );
+    if (unread > 0) {
+      if (existingBadge) {
+        existingBadge.textContent = fmt(unread);
+      } else {
+        const badge = document.createElement("span");
+        badge.className = "nav-badge bottom-nav-badge";
+        if (badge.dataset) badge.dataset.testid = "bottom-nav-messages-badge";
+        else if (typeof badge.setAttribute === "function") badge.setAttribute("data-testid", "bottom-nav-messages-badge");
+        badge.textContent = fmt(unread);
+        bottomMessages.append(badge);
+      }
+    } else if (existingBadge) {
+      existingBadge.remove();
     }
   }
 

@@ -79,6 +79,8 @@ export const session = {
   passwordResetToken: null as string | null,
   /** A 5xx or network failure must not offer a new commander. */
   holdJoin: false,
+  /** Whether the phone bottom nav "More" menu is currently open. */
+  bottomNavMoreOpen: false,
 };
 
 let paintImpl: () => void = () => {};

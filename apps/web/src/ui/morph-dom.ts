@@ -41,7 +41,8 @@ function nodeKey(el: Element): string | null {
     testId !== "cost-tip" &&
     testId !== "info-tip" &&
     testId !== "message-kind" &&
-    testId !== "message-category"
+    testId !== "message-category" &&
+    testId !== "nav-messages-badge"
   ) {
     return `t:${testId}`;
   }

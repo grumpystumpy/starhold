@@ -268,10 +268,30 @@ export function bindClickHandlers(): void {
         return;
       }
 
+      if (closestActionEl(target, "[data-bottom-nav-more]")) {
+        ev.preventDefault();
+        session.bottomNavMoreOpen = !session.bottomNavMoreOpen;
+        schedulePaint();
+        return;
+      }
+
+      if (
+        closestActionEl(target, "[data-bottom-nav-close]") ||
+        target.matches("[data-bottom-nav-backdrop]")
+      ) {
+        ev.preventDefault();
+        session.bottomNavMoreOpen = false;
+        schedulePaint();
+        return;
+      }
+
       const navBtn = closestActionEl(target, "[data-nav]");
       if (navBtn) {
         ev.preventDefault();
         const page = resolveNavPage(navBtn.getAttribute("data-nav"));
+        if (session.bottomNavMoreOpen) {
+          session.bottomNavMoreOpen = false;
+        }
         if (page) navigateTo(page);
         return;
       }

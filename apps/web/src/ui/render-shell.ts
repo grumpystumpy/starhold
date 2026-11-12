@@ -10,7 +10,13 @@ import {
 import { RESOURCE_ART } from "./assets";
 import { fmt, fmtBonusPct, fmtCompact, fmtCoords } from "./format";
 import { planetDiscHtml } from "./planet-disc";
-import { NAV_LABELS, NAV_PAGES, type NavPage } from "./nav";
+import {
+  NAV_LABELS,
+  NAV_PAGES,
+  PHONE_BOTTOM_NAV_PAGES,
+  PHONE_MORE_NAV_PAGES,
+  type NavPage,
+} from "./nav";
 import { creditsHref, creditsNavHtml } from "./render-credits";
 import { accountNavHtml, securityHref } from "./render-security";
 import { flashHtml, resBlock } from "./render-chrome";
@@ -185,6 +191,65 @@ function leftNav(view: PlayerView, active: NavPage): string {
     </nav>`;
 }
 
+export function bottomNavHtml(view: PlayerView, active: NavPage): string {
+  const q = navQuery(view);
+  const gameActive = session.accountMenu ? null : active;
+  const isMoreActive =
+    session.accountMenu != null ||
+    PHONE_MORE_NAV_PAGES.includes(active);
+  const unread = inboxUnreadCount(view);
+  const messagesBadge =
+    unread > 0
+      ? `<span class="nav-badge bottom-nav-badge" data-testid="bottom-nav-messages-badge">${fmt(unread)}</span>`
+      : "";
+
+  return `
+    <nav class="bottom-nav" aria-label="Mobile navigation" data-testid="bottom-nav">
+      <div class="bottom-nav-bar">
+        ${PHONE_BOTTOM_NAV_PAGES.map((id) => {
+          const href = hrefForPage(id, q);
+          const badge = id === "messages" ? messagesBadge : "";
+          const activeCls = id === gameActive ? " active" : "";
+          return `<a href="${escapeAttr(href)}" class="bottom-nav-item${activeCls}" data-nav="${id}" data-testid="bottom-nav-${id}">
+            <span class="bottom-nav-label">${NAV_LABELS[id]}${badge}</span>
+          </a>`;
+        }).join("")}
+        <button type="button" class="bottom-nav-item bottom-nav-more-btn${isMoreActive ? " active" : ""}" data-bottom-nav-more data-testid="bottom-nav-more" aria-expanded="${session.bottomNavMoreOpen ? "true" : "false"}" aria-haspopup="dialog">
+          <span class="bottom-nav-label">More</span>
+        </button>
+      </div>
+      ${bottomNavMoreMenuHtml(view, active)}
+    </nav>`;
+}
+
+export function bottomNavMoreMenuHtml(view: PlayerView, active: NavPage): string {
+  if (!session.bottomNavMoreOpen) return "";
+  const q = navQuery(view);
+  const params = new URLSearchParams();
+  params.set("playerId", q.playerId);
+  params.set("planet", q.planetId);
+  const gameActive = session.accountMenu ? null : active;
+
+  return `
+    <div class="bottom-nav-more-backdrop" data-bottom-nav-backdrop>
+      <section class="bottom-nav-more-dialog panel" role="dialog" aria-modal="true" aria-label="More navigation" data-testid="bottom-nav-more-menu">
+        <div class="bottom-nav-more-header">
+          <h2 class="bottom-nav-more-title">Navigation</h2>
+          <button type="button" class="bottom-nav-more-close" data-bottom-nav-close aria-label="Close menu">&times;</button>
+        </div>
+        <ul class="bottom-nav-more-list">
+          ${PHONE_MORE_NAV_PAGES.map((id) => {
+            const href = hrefForPage(id, q);
+            const activeCls = id === gameActive ? " active" : "";
+            return `<li><a href="${escapeAttr(href)}" class="nav-link${activeCls}" data-nav="${id}" data-testid="more-nav-${id}">${NAV_LABELS[id]}</a></li>`;
+          }).join("")}
+          ${accountNavHtml(Boolean(session.account), session.accountMenu === "security", securityHref(`?${params.toString()}`))}
+          ${creditsNavHtml(session.accountMenu === "credits", creditsHref(`?${params.toString()}`))}
+        </ul>
+      </section>
+    </div>`;
+}
+
 function planetSwitcher(
   view: PlayerView,
   busy: boolean,
@@ -337,6 +402,7 @@ export function shellHtml(
         </main>
         ${planetSwitcher(view, state.busy)}
       </div>
+      ${bottomNavHtml(view, activePage)}
       ${whatsNewHtml(view, state.busy)}
     </div>`;
 }

@@ -148,6 +148,92 @@ describe("messages badge", () => {
     const html = shellHtml(view, { error: null, notice: null, busy: false }, "overview", "<div>Main</div>");
     assert.match(html, /data-testid="nav-messages-badge">1</);
     assert.doesNotMatch(html, /data-testid="nav-messages-badge">2</);
+    assert.match(html, /data-testid="bottom-nav-messages-badge">1</);
+  });
+});
+
+describe("phone bottom nav bar", () => {
+  it("renders bottom nav with Overview, Fleet, Galaxy, Messages, and More", () => {
+    const now = 100_000_000;
+    const universe = createUniverse("NavTest", 1);
+    const { player } = joinUniverse(universe, "NavCmdr", now);
+    const view = playerView(universe, player.id, now);
+    const html = shellHtml(view, { error: null, notice: null, busy: false }, "overview", "<div>Main</div>");
+
+    assert.match(html, /data-testid="bottom-nav"/);
+    assert.match(html, /data-testid="bottom-nav-overview"/);
+    assert.match(html, /data-testid="bottom-nav-fleet"/);
+    assert.match(html, /data-testid="bottom-nav-galaxy"/);
+    assert.match(html, /data-testid="bottom-nav-messages"/);
+    assert.match(html, /data-testid="bottom-nav-more"/);
+  });
+
+  it("renders more menu with remaining NAV_PAGES when bottomNavMoreOpen is true", async () => {
+    const { session } = await import("../session.js");
+    const now = 100_000_000;
+    const universe = createUniverse("MoreTest", 1);
+    const { player } = joinUniverse(universe, "MoreCmdr", now);
+    const view = playerView(universe, player.id, now);
+
+    session.bottomNavMoreOpen = false;
+    const closedHtml = shellHtml(view, { error: null, notice: null, busy: false }, "overview", "<div>Main</div>");
+    assert.doesNotMatch(closedHtml, /data-testid="bottom-nav-more-menu"/);
+
+    session.bottomNavMoreOpen = true;
+    const openHtml = shellHtml(view, { error: null, notice: null, busy: false }, "overview", "<div>Main</div>");
+    assert.match(openHtml, /data-testid="bottom-nav-more-menu"/);
+    assert.match(openHtml, /data-testid="more-nav-goals"/);
+    assert.match(openHtml, /data-testid="more-nav-buildings"/);
+    assert.match(openHtml, /data-testid="more-nav-defenses"/);
+    assert.match(openHtml, /data-testid="more-nav-shipyard"/);
+    assert.match(openHtml, /data-testid="more-nav-research"/);
+    assert.match(openHtml, /data-testid="more-nav-shop"/);
+    assert.match(openHtml, /data-testid="more-nav-highscore"/);
+    assert.match(openHtml, /data-testid="more-nav-alliances"/);
+    assert.match(openHtml, /data-testid="more-nav-seasons"/);
+
+    session.bottomNavMoreOpen = false;
+  });
+
+  it("patches bottom nav messages unread badge via patchMessagesBadge", async () => {
+    const { patchMessagesBadge } = await import("./patch-chrome.js");
+    const now = 100_000_000;
+    const universe = createUniverse("PatchTest", 1);
+    const { player } = joinUniverse(universe, "PatchCmdr", now);
+    const viewWithout = playerView(universe, player.id, now);
+
+    const container = fakeEl("game-shell");
+    const bottomNavMessages = fakeEl("bottom-nav-messages");
+    const label = fakeEl(null);
+    label.attrs["class"] = "bottom-nav-label";
+    label.parent = bottomNavMessages;
+    bottomNavMessages.children.push(label);
+    bottomNavMessages.parent = container;
+    container.children.push(bottomNavMessages);
+
+    assert.equal(container.querySelector('[data-testid="bottom-nav-messages-badge"]'), null);
+
+    player.eventLog = [
+      {
+        id: "evt_new",
+        kind: "fleetReturn",
+        createdAt: now + 1,
+        readAt: null,
+        title: "Fleet returned",
+        body: "home",
+      },
+    ];
+    const viewWith = playerView(universe, player.id, now + 2);
+
+    patchMessagesBadge(container as unknown as HTMLElement, viewWith);
+    const badge = container.querySelector('[data-testid="bottom-nav-messages-badge"]');
+    assert.ok(badge);
+    assert.equal(badge?.textContent, "1");
+
+    player.eventLog[0]!.readAt = now + 3;
+    const viewRead = playerView(universe, player.id, now + 4);
+    patchMessagesBadge(container as unknown as HTMLElement, viewRead);
+    assert.equal(container.querySelector('[data-testid="bottom-nav-messages-badge"]'), null);
   });
 });
 
@@ -213,15 +299,20 @@ describe("what's new popup", () => {
 function fakeEl(testid: string | null) {
   const node: {
     testid: string | null;
+    textContent: string;
+    dataset: Record<string, string>;
     attrs: Record<string, string>;
     children: ReturnType<typeof fakeEl>[];
     parent: ReturnType<typeof fakeEl> | null;
     getAttribute: (name: string) => string | null;
     querySelector: (sel: string) => ReturnType<typeof fakeEl> | null;
+    append: (child: ReturnType<typeof fakeEl>) => void;
     remove: () => void;
     insertAdjacentHTML: (where: string, html: string) => void;
   } = {
     testid,
+    textContent: "",
+    dataset: {},
     attrs: {},
     children: [],
     parent: null,
@@ -229,14 +320,29 @@ function fakeEl(testid: string | null) {
       return this.attrs[name] ?? null;
     },
     querySelector(sel: string) {
+      if (sel.includes(".bottom-nav-label")) {
+        const parts = sel.split(/\s+/);
+        const parentMatch = this.querySelector(parts[0]!);
+        if (parentMatch) {
+          for (const c of parentMatch.children) {
+            if (c.attrs["class"] === "bottom-nav-label") return c;
+          }
+        }
+        return null;
+      }
       const id = /data-testid="([^"]+)"/.exec(sel)?.[1];
-      if (!id) return null;
-      if (this.testid === id) return this;
-      for (const child of this.children) {
-        const found = child.querySelector(sel);
-        if (found) return found;
+      if (id) {
+        if (this.testid === id || this.dataset.testid === id) return this;
+        for (const child of this.children) {
+          const found = child.querySelector(sel);
+          if (found) return found;
+        }
       }
       return null;
+    },
+    append(child: ReturnType<typeof fakeEl>) {
+      child.parent = this;
+      this.children.push(child);
     },
     remove() {
       if (!this.parent) return;
