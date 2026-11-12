@@ -1,4 +1,5 @@
 import type { BuildingId, DefenseId, ResearchId, ShipId } from "./types.js";
+import { PIRATE_BASES_PER_GALAXY } from "./data/tuning.js";
 
 export { BUILDINGS } from "./catalog-buildings.js";
 export { SHIPS, DEFENSES } from "./catalog-units.js";
@@ -405,7 +406,7 @@ export {
   PIRATE_TIER_CAP,
   PIRATE_LEVEL_GROWTH_INTERVAL_MS,
   PIRATE_GROWTH_INTERVAL_MS,
-  PIRATE_TARGET_BASE_COUNT,
+  PIRATE_SAME_TARGET_COOLDOWN_MS,
   PIRATE_RAID_PERIOD_MS,
   PIRATE_FATIGUE_WINDOW_MS,
   PIRATE_FATIGUE_FIRST_HITS,
@@ -451,7 +452,6 @@ export {
   WORKERS_TICK_SEED_SYSTEMS,
   WORKERS_TICK_SEED_MINIS,
   WORKERS_TICK_SEED_PIRATES,
-  NPC_JOB_RAID_BUDGET,
   NPC_JOB_LEVELUP_BUDGET,
   NPC_JOB_FLEET_BUDGET,
   ALIEN_INITIAL_BASE_COUNT,
@@ -546,6 +546,20 @@ export const MINE_GROWTH = 1.1;
 
 /** Map bounds (universe contract v1): 10×399×15 + deep space. */
 export const MAP_GALAXIES = 10;
+/**
+ * Living pirate cap. One source of truth: `PIRATE_BASES_PER_GALAXY` times the
+ * live galaxy count. The flat 200 cap is retired. The seasonal boss may exceed
+ * this by one base until the post-spawn cull.
+ */
+export { PIRATE_BASES_PER_GALAXY };
+export const PIRATE_TARGET_BASE_COUNT = PIRATE_BASES_PER_GALAXY * MAP_GALAXIES;
+/**
+ * Raid-only slices of the Workers npc job (every other 10 minutes). One raid
+ * per 180 minutes is about 1/18 of the living cap, plus slack. A slice can
+ * leave a remainder; `aiRaidCatchUpCursor` resumes it. Page-load raid budget
+ * stays `WORKERS_TICK_RAID_BUDGET`.
+ */
+export const NPC_JOB_RAID_BUDGET = Math.ceil(PIRATE_TARGET_BASE_COUNT / 18) + 6;
 export const MAP_SYSTEMS = 399;
 export const MAP_SLOTS = 15;
 
