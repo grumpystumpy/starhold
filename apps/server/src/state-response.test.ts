@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import type { PlayerView } from "@starhold/game";
+import { advanceUniverse, launchFleet, playerView, type PlayerView, type UniverseState } from "@starhold/game";
+import { installDeterministicInputs } from "../../../packages/game/src/test-determinism.js";
 import { beforeEach, describe, it } from "node:test";
 import { createApp } from "./app.js";
 import { resetMemoryAccounts } from "./accounts.js";
@@ -10,6 +11,24 @@ import {
   setUniverseFaultForTests,
   withUniverse,
 } from "./store.js";
+
+function savedTickState(universe: UniverseState) {
+  return {
+    planets: universe.planets,
+    fleets: universe.fleets,
+    reports: universe.reports,
+    spyReports: universe.spyReports,
+    expeditionReports: universe.expeditionReports,
+    players: universe.players,
+    occupations: universe.occupations,
+    debris: universe.debris,
+    acsGroups: universe.acsGroups,
+    pirateBases: universe.pirateBases,
+    alienBases: universe.alienBases,
+    seasons: universe.seasons,
+    miniPlanetIds: universe.miniPlanetIds,
+  };
+}
 
 describe("player state payload", () => {
   beforeEach(() => {
@@ -137,6 +156,226 @@ describe("player state payload", () => {
     const bytes = new Uint8Array(await gzipped.arrayBuffer());
     assert.equal(bytes[0], 0x1f);
     assert.equal(bytes[1], 0x8b);
+  });
+
+  it("skips the universe tick for a quiet poll without structural writes", async () => {
+    const app = createApp();
+    const join = await app.request("/api/join", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "QuietPoll" }),
+    });
+    const joined = (await join.json()) as PlayerView;
+    const snapshot = () =>
+      withUniverse((universe: UniverseState) => {
+        const player = universe.players[joined.player.id]!;
+        const planet = universe.planets[joined.planet.id]!;
+        return JSON.stringify({
+          player: {
+            research: player.research,
+            researchQueue: player.researchQueue,
+            officers: player.officers,
+            highscoreStarshardsClaimed: player.highscoreStarshardsClaimed,
+          },
+          planet: {
+            buildings: planet.buildings,
+            ships: planet.ships,
+            defenses: planet.defenses,
+            buildQueue: planet.buildQueue,
+            shipQueue: planet.shipQueue,
+            defenseQueue: planet.defenseQueue,
+          },
+          fleets: universe.fleets,
+          reports: universe.reports,
+        });
+      });
+    const before = await snapshot();
+
+    const response = await app.request(
+      `/api/state?playerId=${encodeURIComponent(joined.player.id)}`,
+    );
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("X-Starhold-State-Tick"), "skipped");
+    assert.equal(await snapshot(), before);
+  });
+
+  it("advances a due build queue on the state poll", async () => {
+    const app = createApp();
+    const join = await app.request("/api/join", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "DuePoll" }),
+    });
+    const joined = (await join.json()) as PlayerView;
+    const upgrade = await app.request("/api/upgrade", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        playerId: joined.player.id,
+        buildingId: "metalMine",
+        planetId: joined.planet.id,
+      }),
+    });
+    assert.equal(upgrade.status, 200);
+    await withUniverse((universe) => {
+      const item = universe.planets[joined.planet.id]!.buildQueue[0]!;
+      item.completesAt = Date.now() - 1;
+    });
+
+    const response = await app.request(
+      `/api/state?playerId=${encodeURIComponent(joined.player.id)}`,
+    );
+    const view = (await response.json()) as PlayerView;
+
+    assert.equal(response.headers.get("X-Starhold-State-Tick"), "advanced");
+    assert.equal(view.planet.buildings.metalMine, 2);
+  });
+
+  it("keeps hostile inbound visible on a skipped state poll", async () => {
+    const app = createApp();
+    const join = async (name: string) => {
+      const response = await app.request("/api/join", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      return (await response.json()) as PlayerView;
+    };
+    const defender = await join("QuietDefender");
+    const attacker = await join("QuietAttacker");
+    let inboundId = "";
+    await withUniverse((universe) => {
+      universe.planets[attacker.planet.id]!.ships.scout = 1;
+      universe.players[defender.player.id]!.newbieForfeitedAt = Date.now();
+      const launch = launchFleet(
+        universe,
+        attacker.player.id,
+        defender.planet.id,
+        "raid",
+        { scout: 1 },
+        Date.now(),
+      );
+      assert.equal(launch.ok, true, launch.ok ? "" : launch.error);
+      if (!launch.ok) throw new Error(launch.error);
+      inboundId = launch.fleet.id;
+    });
+
+    const response = await app.request(
+      `/api/state?playerId=${encodeURIComponent(defender.player.id)}`,
+    );
+    const view = (await response.json()) as PlayerView;
+
+    assert.equal(response.headers.get("X-Starhold-State-Tick"), "skipped");
+    assert.ok(view.hostileInbound.some((fleet) => fleet.id === inboundId));
+  });
+
+  it("refreshes mine output on a skipped poll to match a full tick", async () => {
+    const now = 1_700_000_100_000;
+    const originalNow = Date.now;
+    Date.now = () => now;
+    try {
+      const app = createApp();
+      const join = await app.request("/api/join", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "ResourcePoll" }),
+      });
+      const joined = (await join.json()) as PlayerView;
+      await withUniverse((universe) => {
+        const planet = universe.planets[joined.planet.id]!;
+        planet.lastTickAt = now - 3_600_000;
+        planet.resources = { metal: 0, crystal: 0, deuterium: 0 };
+      });
+      let expectedMetal = 0;
+      await withUniverse((universe) => {
+        const clone = structuredClone(universe);
+        advanceUniverse(clone, now);
+        expectedMetal = clone.planets[joined.planet.id]!.resources.metal;
+      });
+
+      const response = await app.request(
+        `/api/state?playerId=${encodeURIComponent(joined.player.id)}`,
+      );
+      const view = (await response.json()) as PlayerView;
+
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("X-Starhold-State-Tick"), "skipped");
+      assert.ok(view.planet.resources.metal > 0);
+      assert.equal(view.planet.resources.metal, expectedMetal);
+      assert.equal(view.planet.buildings.metalMine, joined.planet.buildings.metalMine);
+    } finally {
+      Date.now = originalNow;
+    }
+  });
+
+  it("resolves a due attack on time and saves the same state as a full tick", async () => {
+    const now = 1_700_000_200_000;
+    const originalNow = Date.now;
+    const originalRandom = Math.random;
+    Date.now = () => now;
+    try {
+      const app = createApp();
+      const join = async (name: string) => {
+        const response = await app.request("/api/join", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        });
+        return (await response.json()) as PlayerView;
+      };
+      const defender = await join("DueDefender");
+      const attacker = await join("DueAttacker");
+      let fleetId = "";
+      let clone: UniverseState | undefined;
+      await withUniverse((universe) => {
+        universe.planets[attacker.planet.id]!.ships.scout = 1;
+        universe.planets[attacker.planet.id]!.resources.deuterium = 50_000;
+        universe.players[defender.player.id]!.newbieForfeitedAt = now;
+        const launch = launchFleet(
+          universe,
+          attacker.player.id,
+          defender.planet.id,
+          "raid",
+          { scout: 1 },
+          now,
+        );
+        assert.equal(launch.ok, true, launch.ok ? "" : launch.error);
+        if (!launch.ok) throw new Error(launch.error);
+        launch.fleet.arrivesAt = now;
+        fleetId = launch.fleet.id;
+        clone = structuredClone(universe);
+      });
+      if (!clone) throw new Error("missing clone");
+      const expected = clone;
+
+      const restoreExpected = installDeterministicInputs(4, now);
+      playerView(expected, defender.player.id, now);
+      restoreExpected();
+
+      const restoreLive = installDeterministicInputs(4, now);
+      const response = await app.request(
+        `/api/state?playerId=${encodeURIComponent(defender.player.id)}`,
+      );
+      const view = (await response.json()) as PlayerView;
+      restoreLive();
+
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("X-Starhold-State-Tick"), "advanced");
+      assert.equal(
+        view.hostileInbound.some((fleet) => fleet.id === fleetId),
+        false,
+      );
+      assert.ok(view.reports.some((report) => report.missionId === fleetId));
+      assert.ok(view.planet.resources.metal > 0);
+
+      await withUniverse((universe) => {
+        assert.deepEqual(savedTickState(universe), savedTickState(expected));
+      });
+    } finally {
+      Date.now = originalNow;
+      Math.random = originalRandom;
+    }
   });
 
   it("routes validated Shop trades in both directions", async () => {

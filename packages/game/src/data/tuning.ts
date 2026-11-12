@@ -1519,7 +1519,7 @@ export const ALLIANCE_CLASS_BONUSES: Readonly<
 
 /** ========== Pirates + Aliens (Micah redesign 2026-10-14) ==========
  * Constant names fixed by docs/design/round2-contract.md §5–5b.
- * Magnitudes are v1 placeholders except Micah overrides (200 / hourly / 0 aliens).
+ * Magnitudes are v1 placeholders except Micah overrides (75 per galaxy / hourly / 0 aliens).
  */
 
 export const PIRATE_MAX_LEVEL = 100;
@@ -1532,7 +1532,15 @@ export const PIRATE_LEVEL_GROWTH_INTERVAL_MS = 6 * 60 * 60 * 1000;
 /** @deprecated Prefer PIRATE_LEVEL_GROWTH_INTERVAL_MS. */
 export const PIRATE_GROWTH_INTERVAL_MS = PIRATE_LEVEL_GROWTH_INTERVAL_MS;
 
-export const PIRATE_TARGET_BASE_COUNT = 200;
+/** Living non-boss pirate bases allowed in one galaxy. */
+export const PIRATE_BASES_PER_GALAXY = 75;
+/**
+ * Universe living cap is this value times `MAP_GALAXIES`
+ * (`PIRATE_TARGET_BASE_COUNT` in catalog.ts). Not a flat 200.
+ */
+
+/** A base will not raid the same target again until this elapses. */
+export const PIRATE_SAME_TARGET_COOLDOWN_MS = 4 * 60 * 60 * 1000;
 
 /** Once per 180 minutes; each base rolls nextRaidAt = periodStart + offset. */
 export const PIRATE_RAID_PERIOD_MS = 180 * 60 * 1000;
@@ -1651,12 +1659,35 @@ export const EXPEDITION_STARSHARD_REWARD_MULT = 0.05;
 export const PIRATE_RAID_POWER_FACTOR = 1.4;
 export const PIRATE_RAID_POWER_FACTOR_PLAYER = 0.70;
 export const PIRATE_RAID_POWER_FLOOR = 40;
+/**
+ * Level term on the pirate raid power factor.
+ * effective = baseFactor * (1 + PIRATE_RAID_LEVEL_POWER_BONUS * (level / PIRATE_MAX_LEVEL)).
+ * Level 0 keeps baseFactor. Level PIRATE_MAX_LEVEL is 1.5× baseFactor.
+ * Aliens do not use this bonus.
+ */
+export const PIRATE_RAID_LEVEL_POWER_BONUS = 0.5;
+/**
+ * Ordinary pirate hangar templates and free-spawn ship counts.
+ * Raid detachments are drawn from that hangar, so they inherit this cut.
+ * Seasonal boss hangar (PIRATE_BOSS_TIER / PIRATE_BOSS_MOTHERSHIPS) is exempt.
+ * Does not change PIRATE_BOSS_TIERS payouts.
+ */
+export const PIRATE_STRENGTH_MULT = 0.5;
+/**
+ * Distance reference for pirate player-planet pick weight.
+ * distanceWeight = 1 / (1 + (coordDistance / PIRATE_RAID_DISTANCE_REF)^2).
+ * Multiplies relic, fairness, fatigue, deterrence, and cooldown weights.
+ * The term itself is never zero. Aliens do not use it.
+ */
+export const PIRATE_RAID_DISTANCE_REF = 400;
 export const PIRATE_TECH_OFFSET = 3;
 
 /** Max catch-up raid firings per base per tick (lazy Hobby path). */
 export const NPC_RAID_CATCHUP_MAX = 24;
-/** Max AI bases processed per lazy tick batch (bounded Hobby maxDuration). */
-export const NPC_AI_BATCH_SIZE = 200;
+/** Max AI bases visited by one budgeted grow or raid slice. */
+export const NPC_AI_BATCH_SIZE = 50;
+/** Wall-clock period used to alternate grow and raid-only NPC slices. */
+export const NPC_AI_SLICE_INTERVAL_MS = 10 * 60 * 1000;
 
 /**
  * Workers free plan allows 10ms of CPU per request. These caps spread a
@@ -1675,10 +1706,10 @@ export const WORKERS_TICK_SEED_MINIS = 1;
 export const WORKERS_TICK_SEED_PIRATES = 4;
 
 /**
- * 10-minute NPC job. 200 bases at one raid per 180 minutes is about 11 dues
- * per run. Any burst beyond this budget resumes on the next scheduled run.
+ * Npc-job level-ups, applied on grow slices. Raid count stays derived in
+ * catalog.ts from the living pirate cap (`NPC_JOB_RAID_BUDGET`) and is
+ * spent on raid slices only.
  */
-export const NPC_JOB_RAID_BUDGET = 12;
 export const NPC_JOB_LEVELUP_BUDGET = 80;
 export const NPC_JOB_FLEET_BUDGET = 8;
 

@@ -1,4 +1,11 @@
-import { FOUNDATION_ARK_BOOTSTRAP, SHIPS, SHIP_ORDER } from "./catalog.js";
+import {
+  ACS_MAX_FLEETS,
+  FOUNDATION_ARK_BOOTSTRAP,
+  MINI_DRIFT_INTERVAL_MS,
+  SHIPS,
+  SHIP_ORDER,
+  SPY_REPORT_TTL_MS,
+} from "./catalog.js";
 import { invalidateArtContext } from "./planet-art.js";
 import {
   classBonuses,
@@ -53,10 +60,11 @@ import { ownedPlanetCount } from "./world-moons.js";
 import { playerBoosts } from "./world-boosts.js";
 import {
   resolveAlienRaidArrival,
+  resolveNpcPiratePlayerFleet,
   resolvePirateRaidArrival,
   tickPirates,
 } from "./world-pirates.js";
-import { rollSeasons } from "./world-seasons.js";
+import { rollSeasons, seasonIdFromTime } from "./world-seasons.js";
 import { pruneSpyReports } from "./world-spy-prune.js";
 import {
   clearOccupationIfFleetGone,
@@ -66,6 +74,8 @@ import {
   startOccupation,
 } from "./world-occupation.js";
 import { formatEventCount, pushEventLog } from "./world-event-log.js";
+import { batchUnitsProduced } from "./formulas-build.js";
+import { PIRATE_BOSS_DURATION_MS } from "./data/tuning.js";
 import { resolveMiniPlanetChoice } from "./world-round2.js";
 import {
   addCargoToPlanet,
@@ -104,6 +114,12 @@ export function resolveFleetArrival(
   fleet: FleetMission,
   now: number,
 ): void {
+  // Pirate bases are not planets. Handle them before the missing-origin delete.
+  if (fleet.ownerPlayerId === "npc_pirates") {
+    if (fleet.targetPlanetId) advancePlanetNow(universe, fleet.targetPlanetId, now);
+    resolveNpcPiratePlayerFleet(universe, fleet, now);
+    return;
+  }
   advancePlanetNow(universe, fleet.originPlanetId, now);
   if (fleet.targetPlanetId) advancePlanetNow(universe, fleet.targetPlanetId, now);
   const origin = universe.planets[fleet.originPlanetId];
@@ -447,6 +463,147 @@ function planetQueueDue(planet: PlanetState, now: number): boolean {
   for (const queue of queues) {
     const front = queue?.[0];
     if (front && front.startedAt != null && front.completesAt <= now) return true;
+  }
+  return false;
+}
+
+function queueFrontDue(
+  queue: { startedAt?: number | null; completesAt: number }[] | undefined,
+  now: number,
+): boolean {
+  const front = queue?.[0];
+  if (!front) return false;
+  return front.startedAt == null || front.completesAt <= now;
+}
+
+function swarmProduceDue(fleet: FleetMission, now: number): boolean {
+  const job = fleet.swarmProduce;
+  if (!job || job.remaining <= 0) return false;
+  const unitSec = Math.max(1e-9, job.unitSeconds);
+  const elapsedSec = Math.max(0, (now - job.progressAt) / 1000);
+  if (elapsedSec <= 0) return false;
+  if (unitSec < 1) {
+    return batchUnitsProduced(elapsedSec, unitSec, job.remaining) > 0;
+  }
+  return elapsedSec >= unitSec;
+}
+
+function miniDriftDue(planet: PlanetState, now: number): boolean {
+  if (!isMiniPlanet(planet)) return false;
+  const last = planet.lastDriftAt ?? planet.lastTickAt ?? now;
+  return now - last >= MINI_DRIFT_INTERVAL_MS;
+}
+
+function pirateBossClockDue(universe: UniverseState, now: number): boolean {
+  const tracked = universe.pirateBossBaseId
+    ? universe.pirateBases?.[universe.pirateBossBaseId]
+    : undefined;
+  const active =
+    tracked?.seasonalBoss && tracked.destroyedAt == null ? tracked : undefined;
+  if (active) {
+    const until =
+      universe.pirateBossActiveUntil ??
+      active.lastGrewAt + PIRATE_BOSS_DURATION_MS;
+    return now >= until;
+  }
+  if (
+    universe.pirateBossActiveUntil != null &&
+    now >= universe.pirateBossActiveUntil
+  ) {
+    return true;
+  }
+  if (universe.skipPirateTopUp) return false;
+  if (universe.pirateBossBaseId) return false;
+  return now >= (universe.pirateBossNextSpawnAt ?? 0);
+}
+
+function npcRaidDue(universe: UniverseState, now: number): boolean {
+  if (universe.skipNpcRaids) return false;
+  for (const base of Object.values(universe.pirateBases ?? {})) {
+    if (base.destroyedAt != null || base.seasonalBoss) continue;
+    if (base.nextRaidAt <= now) return true;
+  }
+  for (const base of Object.values(universe.alienBases ?? {})) {
+    if (base.destroyedAt != null || now < base.buildupEndsAt) continue;
+    if (base.nextRaidAt <= now) return true;
+  }
+  return false;
+}
+
+/**
+ * True when this player's `/api/state` read must run `advanceUniverse`.
+ * A false result means the full tick would not change fleets, reports,
+ * queues, inbox rows, or attack warnings. Mine output still advances.
+ */
+export function playerStateTickDue(
+  universe: UniverseState,
+  playerId: string,
+  now: number,
+): boolean {
+  const player = universe.players[playerId];
+  if (!player) return true;
+  if (universe.seedCursor && !universe.seedCursor.done) return true;
+  if ((player.season?.seasonId ?? "") < seasonIdFromTime(now)) return true;
+  if (pirateBossClockDue(universe, now)) return true;
+  if (npcRaidDue(universe, now)) return true;
+
+  const planetIds = new Set([
+    ...(player.planetIds ?? []),
+    player.homePlanetId,
+    player.activePlanetId,
+  ]);
+  for (const id of planetIds) {
+    const planet = universe.planets[id];
+    if (!planet) continue;
+    if (
+      queueFrontDue(planet.buildQueue, now) ||
+      queueFrontDue(planet.shipQueue, now) ||
+      queueFrontDue(planet.defenseQueue, now)
+    ) {
+      return true;
+    }
+  }
+  for (const id of universe.miniPlanetIds ?? []) {
+    const planet = universe.planets[id];
+    if (planet && miniDriftDue(planet, now)) return true;
+  }
+
+  if (queueFrontDue(player.researchQueue, now)) return true;
+  if (player.officers?.some((officer) => officer.expiresAt <= now)) return true;
+
+  for (const [planetId, occupation] of Object.entries(universe.occupations ?? {})) {
+    const ownerId = universe.planets[planetId]?.ownerPlayerId;
+    if (
+      occupation.endsAt <= now ||
+      occupation.occupierPlayerId === playerId ||
+      ownerId === playerId
+    ) {
+      return true;
+    }
+  }
+
+  for (const group of Object.values(universe.acsGroups ?? {})) {
+    if (group.status !== "open") continue;
+    if (
+      now >= group.joinClosesAt ||
+      group.fleetIds.length >= ACS_MAX_FLEETS
+    ) {
+      return true;
+    }
+  }
+
+  for (const fleet of Object.values(universe.fleets)) {
+    const involved =
+      fleet.ownerPlayerId === playerId ||
+      fleet.targetPlayerId === playerId ||
+      (fleet.targetPlanetId != null && planetIds.has(fleet.targetPlanetId));
+    if (!involved) continue;
+    if (fleet.arrivesAt <= now || swarmProduceDue(fleet, now)) return true;
+  }
+
+  for (const report of Object.values(universe.spyReports ?? {})) {
+    if (report.spyPlayerId !== playerId) continue;
+    if (now - report.at > SPY_REPORT_TTL_MS) return true;
   }
   return false;
 }
