@@ -167,6 +167,38 @@ function subrequestD1(inner: D1Like, limit = 50): D1Like & { count(): number; re
   };
 }
 
+function bindLimitD1(inner: D1Like): D1Like & { maxBinds(): number } {
+  let max = 0;
+  return {
+    maxBinds: () => max,
+    prepare(sql: string): D1Stmt {
+      const stmt = inner.prepare(sql);
+      let bound: D1Stmt = stmt;
+      const api: D1Stmt = {
+        bind(...values: unknown[]) {
+          max = Math.max(max, values.length);
+          if (values.length > 100) throw new Error("D1_ERROR: too many SQL variables");
+          bound = stmt.bind(...values);
+          return api;
+        },
+        async first<T>() {
+          return bound.first<T>();
+        },
+        async all<T>() {
+          return bound.all<T>();
+        },
+        async run() {
+          return bound.run();
+        },
+      };
+      return api;
+    },
+    async batch(statements) {
+      return inner.batch(statements);
+    },
+  };
+}
+
 function progress(universe: UniverseState) {
   return Object.values(universe.players)
     .sort((a, b) => a.id.localeCompare(b.id))
@@ -268,7 +300,134 @@ function fixture(): UniverseState {
   return universe;
 }
 
+function largeBindFixture(): { universe: UniverseState; playerIds: string[]; planetIds: string[] } {
+  const now = Date.now();
+  const universe = createUniverse("Alpha Drift", 8, 8, { lazySeed: true });
+  if (universe.seedCursor) universe.seedCursor.done = true;
+  const players = Array.from({ length: 110 }, (_, index) =>
+    joinUniverse(universe, `BindPilot${index}`, now + index).player,
+  );
+  players[0]!.eventLog = [{
+    id: "bind-event",
+    kind: "raidAlert",
+    createdAt: now,
+    readAt: null,
+    title: "Contact",
+    body: "Chunk boundary",
+  }];
+  const planetIds = players.map((player) => player.homePlanetId);
+  for (let index = 0; index < players.length; index += 1) {
+    const owner = players[index]!;
+    const target = players[(index + 1) % players.length]!;
+    const originPlanet = universe.planets[owner.homePlanetId]!;
+    const targetPlanet = universe.planets[target.homePlanetId]!;
+    universe.fleets[`bind-fleet-${index}`] = {
+      id: `bind-fleet-${index}`,
+      ownerPlayerId: owner.id,
+      originPlanetId: originPlanet.id,
+      targetPlanetId: targetPlanet.id,
+      targetPlayerId: target.id,
+      targetCoords: targetPlanet.coords,
+      mission: "raid",
+      ships: emptyFleetShips(),
+      cargo: { metal: 0, crystal: 0, deuterium: 0 },
+      departedAt: now - 60_000,
+      arrivesAt: now - 1_000,
+      phase: "outbound",
+      reportId: null,
+    };
+    universe.reports[`bind-report-${index}`] = {
+      id: `bind-report-${index}`,
+      attackerPlayerId: owner.id,
+      defenderPlayerId: target.id,
+      at: now - 1_000,
+    } as CombatReport;
+  }
+  return { universe, playerIds: players.map((player) => player.id), planetIds };
+}
+
 describe("row save migration", () => {
+  it("chunks auth/me-style due-fleet reads without changing loaded rows", async () => {
+    resetMemoryUniverse();
+    const { universe, playerIds, planetIds } = largeBindFixture();
+    const plain = sqliteD1();
+    const limited = sqliteD1();
+    await migrateAll(plain.db, universe);
+    await migrateAll(limited.db, universe);
+    for (const raw of [plain.raw, limited.raw]) {
+      raw.prepare("UPDATE save_messages SET defender_id = ? WHERE id = ?")
+        .run(playerIds[playerIds.length - 1], `${playerIds[0]}:bind-event`);
+    }
+    const limitedDb = bindLimitD1(limited.db);
+    const snapshot = (db: D1Like) => {
+      const store = createD1Store(db);
+      return runWithScope(
+        { kv: store, db, mode: "d1", method: "GET", cpuMs: 0 },
+        () =>
+          withUniverseRead(
+            (loaded) =>
+              structuredClone({
+                players: loaded.players,
+                planets: loaded.planets,
+                fleets: loaded.fleets,
+                reports: loaded.reports,
+                spyReports: loaded.spyReports,
+                expeditionReports: loaded.expeditionReports,
+              }),
+            { playerIds },
+          ),
+      );
+    };
+    try {
+      const expected = await snapshot(plain.db);
+      resetMemoryUniverse();
+      const actual = await snapshot(limitedDb);
+      assert.deepEqual(actual, expected);
+      assert.equal(Object.keys(actual.players).length, 110);
+      assert.equal(Object.keys(actual.fleets).length, 110);
+      assert.equal(Object.keys(actual.planets).length >= planetIds.length, true);
+      assert.equal(Object.keys(actual.reports).length, 110);
+      assert.ok(limitedDb.maxBinds() <= 100);
+    } finally {
+      resetMemoryUniverse();
+    }
+  });
+
+  it("chunks /api/state working-set reads without changing loaded rows", async () => {
+    resetMemoryUniverse();
+    const { universe, playerIds, planetIds } = largeBindFixture();
+    const requestedPlanetIds = [...planetIds, "missing-bind-planet"];
+    const work = { playerIds, planetIds: requestedPlanetIds };
+    const plain = sqliteD1();
+    const limited = sqliteD1();
+    await migrateAll(plain.db, universe);
+    await migrateAll(limited.db, universe);
+    for (const raw of [plain.raw, limited.raw]) {
+      raw.prepare("UPDATE save_messages SET defender_id = ? WHERE id = ?")
+        .run(playerIds[playerIds.length - 1], `${playerIds[0]}:bind-event`);
+    }
+    const limitedDb = bindLimitD1(limited.db);
+    try {
+      const expected = await loadWorkingSet(plain.db, work);
+      const actual = await loadWorkingSet(limitedDb, work);
+      assert.deepEqual(actual.universe.players, expected.universe.players);
+      assert.deepEqual(actual.universe.planets, expected.universe.planets);
+      assert.deepEqual(actual.universe.fleets, expected.universe.fleets);
+      assert.deepEqual(actual.universe.reports, expected.universe.reports);
+      assert.deepEqual(actual.universe.spyReports, expected.universe.spyReports);
+      assert.deepEqual(actual.universe.expeditionReports, expected.universe.expeditionReports);
+      assert.deepEqual([...actual.fullPlanetIds].sort(), [...expected.fullPlanetIds].sort());
+      assert.deepEqual([...actual.absentPlanetIds].sort(), [...expected.absentPlanetIds].sort());
+      assert.ok(actual.absentPlanetIds.has("missing-bind-planet"));
+      assert.equal(Object.keys(actual.universe.players).length, 110);
+      assert.equal(Object.keys(actual.universe.fleets).length, 110);
+      assert.equal(Object.keys(actual.universe.reports).length, 110);
+      assert.ok(limitedDb.maxBinds() <= 100);
+    } finally {
+      resetMemoryUniverse();
+    }
+  });
+
   it("batches independent world, player, and owned-planet reads for scheduled loads", async () => {
     const { db: inner } = sqliteD1();
     const source = fixture();
