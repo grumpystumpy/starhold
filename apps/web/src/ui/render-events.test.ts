@@ -106,6 +106,24 @@ describe("events banner", () => {
       "event-returning",
     );
     assert.equal(eventPresentation(fleet(), true).className, "event-hostile");
+    assert.equal(eventPresentation(fleet(), true).label, "Hostile incoming");
+    const pirate = fleet({
+      id: "pirate-raid",
+      ownerPlayerId: "npc_pirates",
+      originPirateBaseId: "pir:1:2:3",
+      targetPlayerId: "p1",
+      phase: "outbound",
+      mission: "raid",
+    });
+    assert.equal(eventPresentation(pirate, true).label, "Hostile incoming");
+    const html = eventsBannerHtml(
+      view({
+        hostileInbound: [pirate],
+      }),
+      1_700_000_000_000,
+    );
+    assert.match(html, /Hostile incoming/);
+    assert.match(html, /event-hostile/);
   });
 
   it("renders own fleet route, arrival countdown, and a blank jump target", () => {
