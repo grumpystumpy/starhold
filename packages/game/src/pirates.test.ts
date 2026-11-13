@@ -27,6 +27,7 @@ import {
   PIRATE_LEVEL_GROWTH_INTERVAL_MS,
   PIRATE_MAX_LEVEL,
   PIRATE_RAID_PERIOD_MS,
+  NPC_RAID_CATCHUP_MAX,
   ALIEN_RAID_PERIOD_MS,
   PIRATE_RAID_POWER_FACTOR,
   PIRATE_RAID_POWER_FLOOR,
@@ -832,17 +833,18 @@ describe("pirate galaxy + raids", () => {
     assert.ok(at < periodStart + PIRATE_RAID_PERIOD_MS);
   });
 
-  it("raids pirates every 180 minutes and aliens every hour", () => {
-    assert.equal(PIRATE_RAID_PERIOD_MS, 180 * 60 * 1000);
+  it("raids pirates every 360 minutes and aliens every hour", () => {
+    assert.equal(PIRATE_RAID_PERIOD_MS, 360 * 60 * 1000);
     assert.equal(ALIEN_RAID_PERIOD_MS, 60 * 60 * 1000);
   });
 
-  it("halves raid frequency over a 24h window compared to the 90-min period", () => {
+  it("halves raid frequency over a 24h window compared to the 180-min period", () => {
+    assert.equal(PIRATE_RAID_PERIOD_MS, 360 * 60 * 1000);
     const start = 1_700_000_000_000;
     const windowMs = 24 * 60 * 60 * 1000;
     const baseId = "pir:1:1:1";
 
-    const oldPeriodMs = 90 * 60 * 1000;
+    const oldPeriodMs = 180 * 60 * 1000;
     let atOld = rollNextRaidAt(baseId, start, oldPeriodMs);
     let oldRaidCount = 0;
     while (atOld <= start + windowMs) {
@@ -857,16 +859,16 @@ describe("pirate galaxy + raids", () => {
       atNew = rollNextRaidAt(baseId, atNew, PIRATE_RAID_PERIOD_MS);
     }
 
-    // 24h has 16 90-min periods and 8 180-min periods (allowing +/-1 for offset boundaries)
-    assert.ok(Math.abs(oldRaidCount - 16) <= 1, `old raid count expected ~16, got ${oldRaidCount}`);
-    assert.ok(Math.abs(newRaidCount - 8) <= 1, `new raid count expected ~8, got ${newRaidCount}`);
+    // 24h has 8 180-min periods and 4 360-min periods (allowing +/-1 for offset boundaries)
+    assert.ok(Math.abs(oldRaidCount - 8) <= 1, `old raid count expected ~8, got ${oldRaidCount}`);
+    assert.ok(Math.abs(newRaidCount - 4) <= 1, `new raid count expected ~4, got ${newRaidCount}`);
     assert.ok(
       Math.abs(newRaidCount - Math.round(oldRaidCount / 2)) <= 1,
       `new raid count ${newRaidCount} should be half of old count ${oldRaidCount} within +/-1`,
     );
   });
 
-  it("preserves pre-change nextRaidAt, fires at that time, then reschedules within the 180-min period", () => {
+  it("preserves pre-change nextRaidAt, fires at that time, then reschedules within the 360-min period", () => {
     const universe = createUniverse("Pre-change nextRaidAt", 8);
     const base = activePirateBases(universe)[0]!;
     const start = 1_700_000_000_000;
@@ -888,6 +890,47 @@ describe("pirate galaxy + raids", () => {
     assert.ok(base.nextRaidAt <= preChangeNextRaidAt + PIRATE_RAID_PERIOD_MS);
     const rolledExpected = rollNextRaidAt(base.id, preChangeNextRaidAt, PIRATE_RAID_PERIOD_MS);
     assert.equal(base.nextRaidAt, rolledExpected);
+  });
+
+  it("caps catch-up at NPC_RAID_CATCHUP_MAX and does not burst when the period is 360 minutes", () => {
+    assert.equal(PIRATE_RAID_PERIOD_MS, 360 * 60 * 1000);
+    assert.equal(NPC_RAID_CATCHUP_MAX, 24);
+    const prev = process.env.STARHOLD_E2E;
+    process.env.STARHOLD_E2E = "1";
+    try {
+      const now = 1_700_000_000_000;
+      const universe = createUniverse("Catch-up cap", 8);
+      universe.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
+      const bases = activePirateBases(universe).filter((entry) => !entry.seasonalBoss);
+      const base = bases[0]!;
+      const quiet = bases[1]!;
+      const far = now + 48 * 60 * 60 * 1000;
+      for (const other of bases) {
+        other.nextRaidAt = far;
+        other.lastGrewAt = far;
+        other.lastFreeSpawnAt = far;
+      }
+      // Same backlog the cpu profile uses: a few extra periods past the cap,
+      // scaled by the period, so the cap ends the run rather than the clock.
+      const backlogStart = now - (NPC_RAID_CATCHUP_MAX + 2) * PIRATE_RAID_PERIOD_MS;
+      base.nextRaidAt = backlogStart;
+
+      tickPirates(universe, now);
+
+      let raids = 0;
+      let scheduledAt = backlogStart;
+      while (raids < NPC_RAID_CATCHUP_MAX + 5 && scheduledAt < base.nextRaidAt) {
+        scheduledAt = rollNextRaidAt(base.id, scheduledAt, PIRATE_RAID_PERIOD_MS);
+        raids += 1;
+      }
+      assert.equal(scheduledAt, base.nextRaidAt);
+      assert.equal(raids, NPC_RAID_CATCHUP_MAX);
+      assert.ok(base.nextRaidAt <= now);
+      assert.equal(quiet.nextRaidAt, far);
+    } finally {
+      if (prev == null) delete process.env.STARHOLD_E2E;
+      else process.env.STARHOLD_E2E = prev;
+    }
   });
 });
 
