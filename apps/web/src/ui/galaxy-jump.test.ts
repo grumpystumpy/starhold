@@ -2,7 +2,15 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import type { PlayerView } from "@starhold/game";
+import {
+  FIELD_BAND,
+  FIELD_CENTER_BY_SLOT,
+  FIELD_MIN,
+  productionMultForSlot,
+  temperatureKForSlot,
+  type PlayerClassId,
+  type PlayerView,
+} from "@starhold/game";
 import "../test-dom";
 import { galaxyPanel } from "./render-fleets-panels";
 
@@ -251,6 +259,89 @@ describe("galaxy jump controls", () => {
     assert.match(busyHtml, /data-galaxy-spy="3"[^>]*disabled/);
     assert.match(busyHtml, /data-galaxy-attack="3"[^>]*disabled/);
     assert.match(busyHtml, /data-galaxy-colonize="15"[^>]*disabled/);
+  });
+
+  it("shows empty-slot temperature, multipliers, and field band only for Expansionist", () => {
+    const slots = [1, 8, 4].map((slot) => ({
+      coords: { galaxy: 1, system: 2, slot },
+      planetId: slot === 4 ? "owned" : null,
+      playerId: slot === 4 ? "player" : null,
+      playerName: slot === 4 ? "Commander" : null,
+      allianceTag: null,
+      pointsHint: 0,
+      debris: null,
+      isOwn: slot === 4,
+      hasMoon: false,
+      moonId: null,
+      isMini: false,
+      activity: slot === 4 ? "planet" : "empty",
+      artId: "normal-1",
+      artUrl: "/art.webp",
+      artThumbUrl: "/thumb.webp",
+    }));
+    const climateFor = (slot: number): string => {
+      const mult = productionMultForSlot(slot);
+      const center = FIELD_CENTER_BY_SLOT[slot] ?? FIELD_CENTER_BY_SLOT[8]!;
+      const low = Math.max(FIELD_MIN, center - FIELD_BAND);
+      const high = Math.max(FIELD_MIN, center + FIELD_BAND);
+      return `Temp ${temperatureKForSlot(slot)} K · metal ×${mult.metal.toFixed(2)} · crystal ×${mult.crystal.toFixed(2)} · deuterium ×${mult.deuterium.toFixed(2)} · energy ×${mult.energy.toFixed(2)} · fields ${low}–${high}`;
+    };
+    assert.equal(
+      climateFor(1),
+      "Temp 220 K · metal ×1.00 · crystal ×1.30 · deuterium ×0.70 · energy ×1.30 · fields 250–280",
+    );
+    assert.equal(
+      climateFor(8),
+      "Temp 90 K · metal ×1.00 · crystal ×1.00 · deuterium ×1.00 · energy ×1.00 · fields 370–400",
+    );
+    assert.equal(Math.max(FIELD_MIN, 265 - FIELD_BAND), 250);
+
+    const panelFor = (classId: PlayerClassId | null | undefined) => {
+      const player =
+        classId === undefined
+          ? undefined
+          : {
+              playerClass:
+                classId === null
+                  ? { classId: null, chosenAt: null, changeCount: 0, lastChangeAt: null }
+                  : { classId, chosenAt: 1, changeCount: 0, lastChangeAt: null },
+            };
+      return galaxyPanel(
+        {
+          galaxy: { galaxy: 1, system: 2, slots, minis: [], asteroids: [] },
+          ...(player ? { player } : {}),
+        } as unknown as PlayerView,
+        false,
+      );
+    };
+
+    const expansionist = panelFor("expansionist");
+    const slotLi = (html: string, slot: number) => {
+      const match = html.match(
+        new RegExp(
+          `<li class="galaxy-slot[^"]*" data-testid="galaxy-slot-${slot}"[\\s\\S]*?</li>`,
+        ),
+      );
+      assert.ok(match, `slot ${slot} row`);
+      return match[0];
+    };
+    const emptyHot = slotLi(expansionist, 1);
+    const emptyMid = slotLi(expansionist, 8);
+    const occupied = slotLi(expansionist, 4);
+    assert.match(emptyHot, /data-testid="galaxy-slot-climate-1"/);
+    assert.match(emptyHot, new RegExp(climateFor(1).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(emptyMid, /data-testid="galaxy-slot-climate-8"/);
+    assert.match(emptyMid, /fields 370–400/);
+    assert.doesNotMatch(occupied, /galaxy-slot-climate/);
+    assert.match(occupied, /<span class="galaxy-slot-label">Commander \(you\)<\/span>/);
+
+    for (const classId of ["miner", "explorer", "fleeter", null, undefined] as const) {
+      const html = panelFor(classId);
+      assert.doesNotMatch(html, /galaxy-slot-climate/, `${String(classId)} sees no preview`);
+      assert.doesNotMatch(html, /Temp 220 K/, `${String(classId)} sees no temperature`);
+      assert.doesNotMatch(html, /fields 250–280/, `${String(classId)} sees no field band`);
+      assert.match(html, /<span class="galaxy-slot-label">Empty<\/span>/);
+    }
   });
 
   it("clears a stale galaxy selection when startup resumes a player", () => {
