@@ -1,5 +1,10 @@
 import {
   BUILDINGS,
+  CHRONO_LATHE_RIG_FOUNDRY_REQ,
+  CHRONO_LATHE_SHIPYARD_REQ,
+  MANTLE_LOOM_LAB_REQ,
+  MANTLE_LOOM_SOLAR_REQ,
+  RIG_FOUNDRY_SHIPYARD_REQ,
   buildingUpgradeSeconds,
   levelBonuses,
   previewBuildingUpgrade,
@@ -477,6 +482,36 @@ function isRequirementLock(error: string): boolean {
   );
 }
 
+/** Standing catalog gates. Shown even when the next upgrade is allowed. */
+function buildingGateLines(
+  id: BuildingId,
+  planet: PlayerView["planet"],
+): string[] {
+  const have = (buildingId: BuildingId): number =>
+    planet.buildings[buildingId] ?? 0;
+  const need = (buildingId: BuildingId, required: number): string =>
+    `${BUILDINGS[buildingId].name} L${fmt(required)}+ (current L${fmt(have(buildingId))})`;
+  if (id === "sensorArray" || id === "jumpGate") {
+    return [need("lunarBase", 1)];
+  }
+  if (id === "rigFoundry") {
+    return [need("shipyard", RIG_FOUNDRY_SHIPYARD_REQ)];
+  }
+  if (id === "mantleLoom") {
+    return [
+      need("solarPlant", MANTLE_LOOM_SOLAR_REQ),
+      need("researchLab", MANTLE_LOOM_LAB_REQ),
+    ];
+  }
+  if (id === "chronoLathe") {
+    return [
+      need("shipyard", CHRONO_LATHE_SHIPYARD_REQ),
+      need("rigFoundry", CHRONO_LATHE_RIG_FOUNDRY_REQ),
+    ];
+  }
+  return [];
+}
+
 function upgradeButtonLabel(error: string | null): string {
   if (!error) return "Upgrade";
   if (isRequirementLock(error)) return "Locked";
@@ -544,6 +579,7 @@ export function buildingRow(
     detail: [def.description, storageLine].filter(Boolean).join(" "),
     requires: [
       `Current L${fmt(level)}`,
+      ...buildingGateLines(id, planet),
       ...(def.energyUsePerLevel
         ? [
             `Energy use +${fmt(def.energyUsePerLevel)}/level`,
