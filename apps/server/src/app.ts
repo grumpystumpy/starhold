@@ -3,6 +3,7 @@ import type { Context, Next } from "hono";
 import { compress } from "hono/compress";
 import {
   type BuildingId,
+  type PlayerState,
   type Coordinates,
   type DefenseId,
   type FleetShips,
@@ -21,8 +22,10 @@ import {
   buyShopItem,
   deletePlayerMessages,
   isMessageCategory,
+  activityStampDue,
   advanceUniverse,
   playerStateTickDue,
+  stampPlayerActivity,
   batchScanSystem,
   cancelQueueItem,
   changePlayerClass,
@@ -156,6 +159,25 @@ async function simpleCors(c: Context, next: Next): Promise<Response | void> {
     c.res.headers.set("Access-Control-Allow-Credentials", "true");
     c.res.headers.set("Vary", "Origin");
   }
+}
+
+/**
+ * Records that this commander loaded state. Only their own session counts,
+ * and only when the previous stamp is missing or at least an hour old.
+ */
+async function stampAuthenticatedActivity(
+  c: Context,
+  player: PlayerState,
+  now: number,
+): Promise<void> {
+  if (!activityStampDue(player.lastActiveAt, now)) return;
+  const sessionId = readSessionId(c);
+  if (!sessionId) return;
+  const session = await getSession(sessionId);
+  if (!session) return;
+  const account = await getAccountById(session.accountId);
+  if (account?.playerId !== player.id) return;
+  stampPlayerActivity(player, now);
 }
 
 /** Shared Hono app — used by local Node server and Vercel serverless. */
@@ -350,8 +372,10 @@ export function createApp(): Hono {
       const galaxy = Number(c.req.query("galaxy") || 0) || undefined;
       const system = Number(c.req.query("system") || 0) || undefined;
       return await withUniverseRead(
-        (universe) => {
+        async (universe) => {
           const now = Date.now();
+          const player = universe.players[playerId];
+          if (player) await stampAuthenticatedActivity(c, player, now);
           const tickDue = playerStateTickDue(universe, playerId, now);
           c.header("X-Starhold-State-Tick", tickDue ? "advanced" : "skipped");
           return respondWithPlayerView(

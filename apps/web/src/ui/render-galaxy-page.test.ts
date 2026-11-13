@@ -314,4 +314,83 @@ describe("galaxy page rendering", () => {
     const cooling = pageHtml("galaxy", view, false, null);
     assert.doesNotMatch(cooling, /galaxy-boss-banner/);
   });
+
+  it("shows i and I beside inactive names, with a legend and tooltip", () => {
+    const slot = (n: number, extra: Record<string, unknown>) => ({
+      coords: { galaxy: 1, system: 4, slot: n },
+      planetId: null,
+      playerId: null,
+      playerName: null,
+      allianceTag: null,
+      isOwn: false,
+      hasMoon: false,
+      moonId: null,
+      debris: null,
+      artId: `art-${n}`,
+      artThumbUrl: "/thumb.webp",
+      ...extra,
+    });
+    const view = {
+      galaxy: {
+        galaxy: 1,
+        system: 4,
+        slots: [
+          slot(1, {
+            planetId: "quiet",
+            playerId: "quiet",
+            playerName: "Quiet",
+            allianceTag: "OLD",
+            inactivity: "i",
+          }),
+          slot(2, {
+            planetId: "gone",
+            playerId: "gone",
+            playerName: "Gone",
+            inactivity: "I",
+          }),
+          slot(3, {
+            planetId: "here",
+            playerId: "here",
+            playerName: "Here",
+            isOwn: true,
+          }),
+        ],
+        minis: [
+          {
+            planetId: "mini-quiet",
+            name: "Drift",
+            coords: { galaxy: 1, system: 4, slot: 20 },
+            artId: "mini",
+            artThumbUrl: "/mini.webp",
+            playerName: "Quiet",
+            isOwn: false,
+            inactivity: "I",
+            debris: null,
+          },
+        ],
+        asteroids: [],
+      },
+    } as unknown as PlayerView;
+
+    const html = pageHtml("galaxy", view, false, null);
+    assert.match(html, /data-testid="galaxy-inactive-legend"/);
+    assert.match(html, /inactive 7\+ days/);
+    assert.match(html, /inactive 28\+ days/);
+    assert.match(
+      html,
+      /data-testid="galaxy-inactive-1"[^>]*title="Inactive for 7 days or more"[^>]*>i<\/abbr>/,
+    );
+    assert.match(
+      html,
+      /data-testid="galaxy-inactive-2"[^>]*title="Inactive for 28 days or more"[^>]*>I<\/abbr>/,
+    );
+    assert.match(html, /<span class="galaxy-slot-label">Quiet<abbr class="galaxy-inactive"[^>]*>i<\/abbr> \[OLD\]/);
+    assert.match(html, /<span class="galaxy-slot-label">Gone<abbr class="galaxy-inactive"[^>]*>I<\/abbr>/);
+    assert.match(html, /<span class="galaxy-slot-label">Here \(you\)/);
+    assert.doesNotMatch(html, /data-testid="galaxy-inactive-3"/);
+    assert.match(
+      html,
+      /data-testid="galaxy-mini-inactive-mini-quiet"[^>]*title="Inactive for 28 days or more"/,
+    );
+  });
 });

@@ -745,6 +745,18 @@ a.message-title:hover {
   margin-right: 0.25rem;
 }
 
+.galaxy-inactive {
+  margin-left: 0.28rem;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: help;
+  color: var(--warn);
+}
+
+.galaxy-inactive-legend .galaxy-inactive {
+  margin-left: 0;
+}
+
 .galaxy-debris-badge {
   font-size: 0.75rem;
   font-weight: 600;

@@ -70,6 +70,7 @@ import { stampQueueView } from "./world-queue-manage.js";
 import { inSensorPhalanxRange, ownedPlanetCount } from "./world-moons.js";
 import { goalsView } from "./world-goals.js";
 import { onboardingViewFor } from "./world-onboarding.js";
+import { inactivityMark } from "./player-activity.js";
 import { whatsNewViewFor } from "./release-notes.js";
 import { pirateBossSummary } from "./world-pirate-boss.js";
 import { occupationForPlanet } from "./world-occupation.js";
@@ -217,12 +218,14 @@ export function galaxyViewFor(
     const art = planet
       ? artForBody(universe, planet, artCtx)
       : normalArtAt(coords);
+    const inactivity = inactivityMark(owner?.lastActiveAt, now);
     slots.push({
       coords,
       planetId: planet?.id ?? null,
       playerId: owner?.id ?? null,
       playerName: owner?.name ?? null,
       allianceTag: allianceTagForPlayer(universe, owner),
+      ...(inactivity ? { inactivity } : {}),
       pointsHint: planet ? Math.floor(planetPoints(planet)) : 0,
       ...(ownerPoints === undefined ? {} : { empirePoints: ownerPoints }),
       debris: debris
@@ -248,12 +251,14 @@ export function galaxyViewFor(
       : undefined;
     const debris = getDebris(universe, planet.coords);
     const art = artForBody(universe, planet, artCtx);
+    const inactivity = inactivityMark(owner?.lastActiveAt, now);
     minis.push({
       planetId: planet.id,
       name: planet.name,
       coords: planet.coords,
       isOwn: planet.ownerPlayerId === playerId,
       playerName: owner?.name ?? (planet.ownerPlayerId ? null : "Unclaimed"),
+      ...(inactivity ? { inactivity } : {}),
       debris: debris
         ? { metal: debris.metal, crystal: debris.crystal }
         : null,
