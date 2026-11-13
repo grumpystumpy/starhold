@@ -588,6 +588,7 @@ export function playerView(
         const p = universe.planets[id];
         if (!p) return null;
         const art = artForBody(universe, p, artCtx);
+        const sensorArrayLevel = p.buildings.sensorArray ?? 0;
         return {
           id: p.id,
           name: p.name,
@@ -614,6 +615,7 @@ export function playerView(
                 count: p.defenseQueue[0].count,
               }
             : null,
+          ...(sensorArrayLevel > 0 ? { sensorArrayLevel } : {}),
           ...art,
         };
       })

@@ -13,6 +13,7 @@ import {
   claimDaily,
   claimGoalReward,
   claimOnboarding,
+  dismissMidgameBriefing,
   dismissOnboarding,
   dismissWhatsNew,
   setVacationMode,
@@ -194,6 +195,28 @@ export async function doDismissOnboarding(dismissed: boolean): Promise<void> {
       failureFallback: "Tutorial update failed.",
       applied: (view) => Boolean(view.onboarding?.dismissed) === dismissed,
       successNotice: () => dismissed ? "Tutorial hidden." : "Tutorial restored.",
+    });
+  } finally {
+    session.busy = false;
+    releaseActionFocus();
+    schedulePaint();
+  }
+}
+
+export async function doDismissMidgameBriefing(dismissed: boolean): Promise<void> {
+  if (!session.view || session.busy) return;
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    session.view = await dismissMidgameBriefing(session.view.player.id, dismissed);
+    setFlash("notice", dismissed ? "Milestones hidden." : "Milestones restored.");
+  } catch (err) {
+    await settleMutation({
+      err,
+      failureFallback: "Milestone update failed.",
+      applied: (view) => Boolean(view.player.midgameBriefingDismissed) === dismissed,
+      successNotice: () => dismissed ? "Milestones hidden." : "Milestones restored.",
     });
   } finally {
     session.busy = false;

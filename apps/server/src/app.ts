@@ -87,6 +87,7 @@ import {
   setAllianceRole,
   dismissWhatsNew,
   setVacationMode,
+  setMidgameBriefingDismissed,
   setOnboardingDismissed,
   setSeasonSkin,
   setSeasonTitle,
@@ -932,6 +933,34 @@ export function createApp(): Hono {
     }
     return withUniverse((universe) => {
       const result = setOnboardingDismissed(
+        universe,
+        body.playerId!,
+        body.dismissed!,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    }, { playerIds: [body.playerId] });
+  });
+
+  app.post("/api/midgame/dismiss", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      dismissed?: boolean;
+    };
+    if (!body.playerId || typeof body.dismissed !== "boolean") {
+      return c.json({ error: "playerId and dismissed required." }, 400);
+    }
+    const sessionId = readSessionId(c);
+    if (!sessionId) return c.json({ error: "Sign in required." }, 401);
+    const session = await getSession(sessionId);
+    if (!session) return c.json({ error: "Sign in required." }, 401);
+    const account = await getAccountById(session.accountId);
+    if (!account?.playerId) return c.json({ error: "Sign in required." }, 401);
+    if (account.playerId !== body.playerId) {
+      return c.json({ error: "You do not own this player." }, 403);
+    }
+    return withUniverse((universe) => {
+      const result = setMidgameBriefingDismissed(
         universe,
         body.playerId!,
         body.dismissed!,

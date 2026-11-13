@@ -625,6 +625,11 @@ export interface PlayerState {
    */
   onboarding?: PlayerOnboardingState;
   /**
+   * Mid-game milestone guide hidden. Missing on older saves.
+   * A read does not create this field.
+   */
+  midgameBriefingDismissed?: boolean;
+  /**
    * Release id of the last "what's new" popup this commander dismissed.
    * Missing on older saves. A newer catalog id shows the popup again.
    */
@@ -1027,6 +1032,11 @@ export interface PlayerView {
       isMoon: boolean;
       isMini: boolean;
       jumpGateLevel: number;
+      /**
+       * System Scanner level. Omitted at 0 so a quiet poll stays the same size.
+       * Moon Bridge level is `jumpGateLevel` above.
+       */
+      sensorArrayLevel?: number;
       /** Research Lab level on this body (empire research uses the best). */
       researchLab: number;
       resources: Resources;

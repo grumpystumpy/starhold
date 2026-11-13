@@ -788,6 +788,18 @@ export async function dismissOnboarding(
   return parse<PlayerView>(res);
 }
 
+export async function dismissMidgameBriefing(
+  playerId: string,
+  dismissed: boolean,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/midgame/dismiss", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, dismissed }),
+  });
+  return parse<PlayerView>(res);
+}
+
 export async function dismissWhatsNew(playerId: string): Promise<PlayerView> {
   const res = await credFetch("/api/whats-new/dismiss", {
     method: "POST",

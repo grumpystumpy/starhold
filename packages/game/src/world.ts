@@ -307,6 +307,15 @@ export {
   setOnboardingDismissed,
   type OnboardingActionResult,
 } from "./world-onboarding.js";
+export {
+  midgameBriefingCards,
+  midgameBriefingFor,
+  midgameFactsFromView,
+  setMidgameBriefingDismissed,
+  type MidgameBriefingActionResult,
+  type MidgameBriefingCard,
+  type MidgameBriefingFacts,
+} from "./world-midgame.js";
 export { nextGoalSuggestionFor } from "./next-goal.js";
 export {
   CURRENT_RELEASE_ID,

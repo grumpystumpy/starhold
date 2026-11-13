@@ -55,6 +55,7 @@ export {
   doClaimDaily,
   doClaimGoal,
   doClaimOnboarding,
+  doDismissMidgameBriefing,
   doDismissOnboarding,
   doDismissWhatsNew,
   doSetVacationMode,
