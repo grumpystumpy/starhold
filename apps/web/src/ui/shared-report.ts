@@ -9,6 +9,7 @@ import {
 } from "@starhold/game";
 import { fmt, fmtCoords } from "./format";
 import { escapeHtml } from "./render-escape";
+import { battleReplayHtml } from "./render-fleets-panels";
 
 export function sharedReportCodeFromSearch(search: string): string | null {
   return new URLSearchParams(search).get("report")?.trim() || null;
@@ -74,6 +75,7 @@ export function sharedCombatReportPage(report: PublicCombatReport): string {
       <p><strong>Date:</strong> ${escapeHtml(new Date(report.at).toLocaleString())}</p>
       <p><strong>Loot:</strong> ${fmt(report.loot.metal)} metal, ${fmt(report.loot.crystal)} crystal, ${fmt(report.loot.deuterium)} deuterium</p>
       <p><strong>Debris:</strong> ${fmt(report.debrisCreated.metal)} metal, ${fmt(report.debrisCreated.crystal)} crystal</p>
+      ${battleReplayHtml({ id: report.shareCode, roundLog: report.roundLog })}
       ${shipTable("Attacker", report.attackerBefore, report.attackerAfter)}
       ${shipTable("Defender", report.defenderBefore, report.defenderAfter)}
       ${defenseTable(report)}

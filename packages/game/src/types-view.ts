@@ -130,6 +130,8 @@ export interface PublicCombatReport {
   debrisCreated: Resources;
   outcome: CombatOutcome;
   rounds: number;
+  /** Per-round losses, debris, and shields. Absent on legacy share links. */
+  roundLog?: CombatRoundLog[];
 }
 
 export interface HallOfFameEntry {

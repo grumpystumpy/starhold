@@ -103,6 +103,10 @@ import {
   setInboxFilter,
 } from "./ui/render-messages";
 import {
+  notifyBattleReplayPaint,
+  pauseBattleReplay,
+  playBattleReplay,
+  restartBattleReplay,
   setBattleReplayRound,
   toggleBattleReplay,
 } from "./ui/render-fleets-panels";
@@ -697,6 +701,36 @@ export function bindClickHandlers(): void {
         return;
       }
 
+      const replayPlay = closestActionEl(target, "[data-battle-replay-play]");
+      if (replayPlay) {
+        ev.preventDefault();
+        const id = replayPlay.getAttribute("data-battle-replay-play");
+        if (id) playBattleReplay(id);
+        notifyBattleReplayPaint();
+        return;
+      }
+
+      const replayPause = closestActionEl(target, "[data-battle-replay-pause]");
+      if (replayPause) {
+        ev.preventDefault();
+        const id = replayPause.getAttribute("data-battle-replay-pause");
+        if (id) pauseBattleReplay(id);
+        notifyBattleReplayPaint();
+        return;
+      }
+
+      const replayRestart = closestActionEl(
+        target,
+        "[data-battle-replay-restart]",
+      );
+      if (replayRestart) {
+        ev.preventDefault();
+        const id = replayRestart.getAttribute("data-battle-replay-restart");
+        if (id) restartBattleReplay(id);
+        notifyBattleReplayPaint();
+        return;
+      }
+
       const replaySummary = closestActionEl(
         target,
         "[data-battle-replay-summary]",
@@ -708,7 +742,7 @@ export function bindClickHandlers(): void {
           replaySummary.getAttribute("data-first-round") || "1",
         );
         if (id) toggleBattleReplay(id, Number.isFinite(first) ? first : 1);
-        schedulePaint();
+        notifyBattleReplayPaint();
         return;
       }
 
@@ -722,7 +756,7 @@ export function bindClickHandlers(): void {
           roundTab.closest("[data-battle-report]")?.getAttribute("data-battle-report");
         if (!reportId || !Number.isFinite(round)) return;
         setBattleReplayRound(reportId, round);
-        schedulePaint();
+        notifyBattleReplayPaint();
         return;
       }
 
