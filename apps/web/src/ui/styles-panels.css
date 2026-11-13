@@ -123,6 +123,19 @@ button.event-recall {
   background: color-mix(in srgb, var(--bg2) 75%, transparent);
 }
 
+.galaxy-system-bar.is-scanner-range {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.galaxy-scanner-range {
+  margin: 0;
+}
+
+.chip-scanner {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .system-summary-chips {
   display: flex;
   flex-wrap: wrap;

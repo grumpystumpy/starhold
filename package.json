@@ -23,6 +23,7 @@
     "perf:cpu-burst": "node scripts/cpu-burst.mjs",
     "e2e:layout": "node scripts/ui-layout-check.mjs",
     "e2e:gate": "node scripts/e2e-quality-gate.mjs",
+    "e2e:scanner": "node scripts/scanner-overlay-e2e.mjs",
     "e2e:gate:pirates": "node scripts/quality-gate-pirates-aliens.mjs",
     "e2e:gate:security": "node scripts/quality-gate-security.mjs",
     "tuning-diff": "node scripts/tuning-diff.mjs",

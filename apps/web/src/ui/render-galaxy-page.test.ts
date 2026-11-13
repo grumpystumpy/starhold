@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { PlayerView } from "@starhold/game";
 import { galaxyPanel } from "./render-fleets-panels";
+import { session } from "../session";
+import { syncScannerOverlayFromPlanet } from "../main-actions-session";
 import { pageHtml } from "./render-pages";
 
 describe("galaxy page rendering", () => {
@@ -552,5 +554,186 @@ describe("galaxy page rendering", () => {
     assert.doesNotMatch(badge(3), /moon chance 3[0-9]%/);
     assert.equal(badge(4), "");
     assert.doesNotMatch(html, /data-testid="galaxy-debris-4"/);
+  });
+});
+
+describe("system scanner range overlay", () => {
+  function galaxyView(opts: {
+    system: number;
+    scannerMoons?: PlayerView["scannerMoons"];
+  }): PlayerView {
+    return {
+      galaxy: {
+        galaxy: 1,
+        system: opts.system,
+        slots: [],
+        minis: [],
+        asteroids: [],
+      },
+      scannerMoons: opts.scannerMoons,
+    } as unknown as PlayerView;
+  }
+
+  it("hides the overlay when every scanner is level 0", () => {
+    const html = pageHtml(
+      "galaxy",
+      galaxyView({
+        system: 10,
+        scannerMoons: [
+          {
+            planetId: "m0",
+            coords: { galaxy: 1, system: 10, slot: 1 },
+            sensorArray: 0,
+            range: 0,
+          },
+        ],
+      }),
+      false,
+      null,
+    );
+    assert.doesNotMatch(html, /data-testid="galaxy-scanner-range"/);
+    assert.doesNotMatch(html, /data-testid="galaxy-scanner-mark"/);
+    assert.doesNotMatch(html, /is-scanner-range/);
+  });
+
+  it("grows the marked span when sensorArray is upgraded", () => {
+    const moon = {
+      planetId: "m1",
+      coords: { galaxy: 1, system: 10, slot: 1 },
+      sensorArray: 2,
+      range: 2,
+    };
+    const before = pageHtml(
+      "galaxy",
+      galaxyView({ system: 12, scannerMoons: [moon] }),
+      false,
+      null,
+    );
+    assert.match(before, /data-testid="galaxy-scanner-range">Scanner: systems 8–12</);
+    assert.match(before, /data-testid="galaxy-scanner-mark"/);
+    assert.match(before, /data-scanner-in-range="1"/);
+
+    const outside = pageHtml(
+      "galaxy",
+      galaxyView({ system: 13, scannerMoons: [moon] }),
+      false,
+      null,
+    );
+    assert.match(outside, /Scanner: systems 8–12/);
+    assert.doesNotMatch(outside, /data-testid="galaxy-scanner-mark"/);
+    assert.doesNotMatch(outside, /data-scanner-in-range/);
+
+    const upgraded = pageHtml(
+      "galaxy",
+      galaxyView({
+        system: 13,
+        scannerMoons: [{ ...moon, sensorArray: 4, range: 4 }],
+      }),
+      false,
+      null,
+    );
+    assert.match(upgraded, /Scanner: systems 6–14/);
+    assert.match(upgraded, /data-testid="galaxy-scanner-mark"/);
+  });
+
+  it("unions a second scanner moon and leaves the gap unmarked", () => {
+    const html = pageHtml(
+      "galaxy",
+      galaxyView({
+        system: 15,
+        scannerMoons: [
+          {
+            planetId: "m1",
+            coords: { galaxy: 1, system: 10, slot: 1 },
+            sensorArray: 1,
+            range: 1,
+          },
+          {
+            planetId: "m2",
+            coords: { galaxy: 1, system: 20, slot: 1 },
+            sensorArray: 1,
+            range: 1,
+          },
+          {
+            planetId: "other-galaxy",
+            coords: { galaxy: 2, system: 15, slot: 1 },
+            sensorArray: 5,
+            range: 5,
+          },
+        ],
+      }),
+      false,
+      null,
+    );
+    assert.match(html, /Scanner: systems 9–11, 19–21/);
+    assert.doesNotMatch(html, /data-testid="galaxy-scanner-mark"/);
+
+    const insideSecond = pageHtml(
+      "galaxy",
+      galaxyView({
+        system: 19,
+        scannerMoons: [
+          {
+            planetId: "m1",
+            coords: { galaxy: 1, system: 10, slot: 1 },
+            sensorArray: 1,
+            range: 1,
+          },
+          {
+            planetId: "m2",
+            coords: { galaxy: 1, system: 20, slot: 1 },
+            sensorArray: 1,
+            range: 1,
+          },
+        ],
+      }),
+      false,
+      null,
+    );
+    assert.match(insideSecond, /data-testid="galaxy-scanner-mark"/);
+  });
+
+  it("follows the active moon's upgraded level instead of the first built range", () => {
+    const previousPage = session.activePage;
+    const previousView = session.view;
+    const previousMoons = session.scannerMoons;
+    session.activePage = "galaxy";
+    session.scannerMoons = [
+      {
+        planetId: "m1",
+        coords: { galaxy: 1, system: 10, slot: 1 },
+        sensorArray: 1,
+        range: 1,
+      },
+      {
+        planetId: "m2",
+        coords: { galaxy: 1, system: 40, slot: 1 },
+        sensorArray: 2,
+        range: 2,
+      },
+    ];
+    session.view = {
+      planet: {
+        id: "m1",
+        kind: "moon",
+        coords: { galaxy: 1, system: 10, slot: 1 },
+        buildings: { sensorArray: 4 },
+      },
+      galaxy: { galaxy: 1, system: 14, slots: [], minis: [], asteroids: [] },
+    } as unknown as PlayerView;
+    try {
+      syncScannerOverlayFromPlanet();
+      const moons = session.view?.scannerMoons ?? [];
+      assert.equal(moons.find((moon) => moon.planetId === "m1")?.sensorArray, 4);
+      assert.equal(moons.find((moon) => moon.planetId === "m1")?.range, 4);
+      assert.equal(moons.find((moon) => moon.planetId === "m2")?.range, 2);
+      const html = pageHtml("galaxy", session.view!, false, null);
+      assert.match(html, /Scanner: systems 6–14, 38–42/);
+      assert.match(html, /data-testid="galaxy-scanner-mark"/);
+    } finally {
+      session.activePage = previousPage;
+      session.view = previousView;
+      session.scannerMoons = previousMoons;
+    }
   });
 });

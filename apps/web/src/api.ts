@@ -210,8 +210,9 @@ function stateCacheKey(
   playerId: string,
   galaxy?: number,
   system?: number,
+  scanners = false,
 ): string {
-  return `${playerId}:${galaxy ?? ""}:${system ?? ""}`;
+  return `${playerId}:${galaxy ?? ""}:${system ?? ""}:${scanners ? "scanners" : ""}`;
 }
 
 interface UnchangedStateBody {
@@ -516,13 +517,15 @@ export async function fetchState(
   playerId: string,
   galaxy?: number,
   system?: number,
-  opts?: { fresh?: boolean },
+  opts?: { fresh?: boolean; scanners?: boolean },
 ): Promise<PlayerView> {
   const params = new URLSearchParams();
   params.set("playerId", playerId);
   if (galaxy) params.set("galaxy", String(galaxy));
   if (system) params.set("system", String(system));
-  const key = stateCacheKey(playerId, galaxy, system);
+  const scanners = opts?.scanners === true;
+  if (scanners) params.set("scanners", "1");
+  const key = stateCacheKey(playerId, galaxy, system, scanners);
   const cached = stateCache.get(key);
   const fresh = opts?.fresh === true;
   const headers: Record<string, string> = {};

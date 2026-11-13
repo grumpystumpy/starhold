@@ -138,7 +138,9 @@ async function resumePlayer(
   session.busy = true;
   schedulePaint();
   try {
-    session.view = await fetchState(playerId);
+    session.view = await fetchState(playerId, undefined, undefined, {
+      scanners: session.activePage === "galaxy",
+    });
     session.galaxySystem = session.view.planet.coords.system;
     session.galaxyGalaxy = null;
     localStorage.setItem(SESSION_KEY, playerId);
