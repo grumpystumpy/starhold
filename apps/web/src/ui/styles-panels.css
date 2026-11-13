@@ -829,12 +829,29 @@ a.message-title:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: 0.35rem;
+  flex-wrap: wrap;
 }
 
-.queue-item .queue-cancel {
+.queue-item > span:first-child {
+  min-width: 0;
+  flex: 1 1 8rem;
+}
+
+.queue-item .queue-actions {
+  display: flex;
   flex-shrink: 0;
-  font-size: 0.8rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+.queue-item .queue-cancel,
+.queue-item .queue-reorder {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  padding: 0.12rem 0.4rem;
 }
 
 .highscores {

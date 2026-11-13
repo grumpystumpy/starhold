@@ -33,6 +33,7 @@ export {
   doBuildDefense,
   doResearch,
   doCancelQueue,
+  doReorderQueue,
 } from "./main-actions-build.js";
 export {
   doApplyFleetPreset,
