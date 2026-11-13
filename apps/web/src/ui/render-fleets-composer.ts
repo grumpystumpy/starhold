@@ -31,6 +31,7 @@ import {
   type FleetStep,
 } from "./render-fleets-draft.js";
 import { blockedActionNote, infoTooltip } from "./render-tooltips";
+import { napAttackWarning } from "./nap-attack";
 
 export function fleetComposer(
   view: PlayerView,
@@ -574,6 +575,11 @@ export function fleetComposer(
           p.coords.system === destination.system &&
           p.coords.slot === destination.slot,
       ));
+  const napWarning = napAttackWarning(view, {
+    mission,
+    planetId: selectedPlanetId,
+    coords: destination,
+  });
   const review = renderFleetSendReview(
     buildFleetSendReview({
       mission,
@@ -654,6 +660,11 @@ export function fleetComposer(
       ${
         showNewbieProtectionWarning
           ? `<p class="hint" data-testid="fleet-newbie-protection-warning">Launching this attack ends your newbie protection.</p>`
+          : ""
+      }
+      ${
+        napWarning
+          ? `<p class="hint" data-testid="fleet-nap-warning">${escapeHtml(napWarning)}</p>`
           : ""
       }
       ${acsBlock(view, mission, busy, draft)}

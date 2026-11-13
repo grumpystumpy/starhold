@@ -61,8 +61,12 @@ export {
   doChangeClass,
 } from "./main-actions-starshards.js";
 export {
+  doAcceptAllianceNap,
+  doCancelAllianceRelation,
   doCreateAlliance,
+  doDeclareAllianceWar,
   doDisbandAlliance,
+  doOfferAllianceNap,
   doInviteAlliance,
   doJoinAlliance,
   doRequestAllianceJoin,

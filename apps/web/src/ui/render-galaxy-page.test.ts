@@ -274,6 +274,73 @@ describe("galaxy page rendering", () => {
     assert.match(html, /<span class="galaxy-slot-label">Loner(?! \[)/);
   });
 
+  it("shows a small NAP or WAR tag beside allied commanders", () => {
+    const base = {
+      planetId: null as string | null,
+      playerId: null as string | null,
+      playerName: null as string | null,
+      allianceTag: null as string | null,
+      diplomacy: undefined as "nap" | "war" | undefined,
+      empirePoints: 0,
+      isOwn: false,
+      hasMoon: false,
+      moonId: null,
+      debris: null,
+      artThumbUrl: "/thumb.webp",
+      allianceMarker: null,
+    };
+    const slots = Array.from({ length: 15 }, (_, i) => ({
+      ...base,
+      coords: { galaxy: 3, system: 7, slot: i + 1 },
+      artId: `normal-${i + 1}`,
+    }));
+    slots[0] = {
+      ...slots[0],
+      planetId: "pl-a",
+      playerId: "pa",
+      playerName: "Pact",
+      allianceTag: "NAP",
+      diplomacy: "nap",
+      empirePoints: 100,
+    };
+    slots[1] = {
+      ...slots[1],
+      planetId: "pl-b",
+      playerId: "pb",
+      playerName: "Enemy",
+      allianceTag: "WAR",
+      diplomacy: "war",
+      empirePoints: 100,
+    };
+    const view = {
+      galaxy: {
+        galaxy: 3,
+        system: 7,
+        slots,
+        minis: [
+          {
+            planetId: "mini-1",
+            name: "Mini",
+            coords: { galaxy: 3, system: 7, slot: 40 },
+            isOwn: false,
+            playerName: "Pact Mini",
+            diplomacy: "nap",
+            debris: null,
+            artId: "mini",
+            artThumbUrl: "/thumb.webp",
+          },
+        ],
+        asteroids: [],
+      },
+    } as unknown as PlayerView;
+    const html = pageHtml("galaxy", view, false, null);
+    assert.match(html, /data-testid="galaxy-diplomacy-1"[^>]*>NAP</);
+    assert.match(html, /data-diplomacy="nap"/);
+    assert.match(html, /data-testid="galaxy-diplomacy-2"[^>]*>WAR</);
+    assert.match(html, /data-testid="galaxy-diplomacy-mini-mini-1"[^>]*>NAP</);
+    assert.doesNotMatch(html, /data-testid="galaxy-diplomacy-3"/);
+  });
+
   it("banners an active seasonal boss with a one-click raid prefill", () => {
     const view = {
       galaxy: { galaxy: 1, system: 1, slots: [], minis: [], asteroids: [] },

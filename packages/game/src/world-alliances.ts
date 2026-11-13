@@ -32,6 +32,10 @@ import type {
 } from "./types.js";
 import { advanceUniverse } from "./world-arrival.js";
 import { allianceSharedView } from "./world-alliance-intel.js";
+import {
+  allianceRelationViews,
+  clearAllianceDiplomacy,
+} from "./world-alliance-diplomacy.js";
 import { releasePlayerAcsFleets } from "./world-acs.js";
 import { ensureUniverseShape } from "./world-bootstrap.js";
 
@@ -329,6 +333,7 @@ export function allianceViewFor(
     intel: shared.intel,
     markers: shared.markers,
     allianceClass: alliance.allianceClass ?? null,
+    relations: allianceRelationViews(universe, alliance, myRole),
   };
 }
 
@@ -468,6 +473,7 @@ export function leaveAlliance(
     if (!nextId) {
       releasePlayerAcsFleets(universe, playerId, now);
       clearAllianceRequesters(universe, alliance);
+      clearAllianceDiplomacy(universe, alliance.id);
       delete alliancesMap(universe)[alliance.id];
       detachPlayer(universe, playerId);
       return { ok: true };
@@ -696,6 +702,7 @@ export function disbandAlliance(
   }
   const memberIds = Object.keys(alliance.members);
   clearAllianceRequesters(universe, alliance);
+  clearAllianceDiplomacy(universe, alliance.id);
   delete alliancesMap(universe)[alliance.id];
   for (const id of memberIds) {
     releasePlayerAcsFleets(universe, id, now);

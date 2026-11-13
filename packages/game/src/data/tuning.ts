@@ -1815,6 +1815,8 @@ export const ALLIANCE_MAX_OFFICERS = 3;
 export const ALLIANCE_CREATE_MIN_POINTS = 0;
 /** Pending join requests stored on one alliance. */
 export const ALLIANCE_PENDING_REQUEST_CAP = 20;
+/** NAP and war rows stored on one alliance. */
+export const ALLIANCE_RELATION_CAP = 20;
 /** Alliance rank rows kept on the cached board. */
 export const ALLIANCE_RANK_CAP = 100;
 /** Default join mode when creating an alliance. */
