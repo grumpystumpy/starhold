@@ -1119,6 +1119,19 @@ code {
   display: none;
 }
 
+.overview-missions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.25rem;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.overview-missions .hint {
+  margin-top: 0.35rem;
+  min-width: 0;
+}
+
 .officer-list,
 .skill-list,
 .class-list,

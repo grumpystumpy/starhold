@@ -600,8 +600,11 @@ export interface PlayerState {
 export interface PlayerGoalState {
   /** UTC day key `YYYY-MM-DD`. */
   dailyKey: string;
-  /** ISO week key `YYYY-Www` (UTC, Monday start). */
-  weeklyKey: string;
+  /**
+   * ISO week key `YYYY-Www` (UTC, Monday start).
+   * Older saves omit it. The next read stamps the open week.
+   */
+  weeklyKey?: string;
   progress: Record<string, number>;
   claimed: string[];
 }
