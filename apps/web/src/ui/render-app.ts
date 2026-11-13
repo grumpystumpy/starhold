@@ -55,6 +55,7 @@ export function renderApp(
     claimablePlayerId?: string | null;
     emailReset?: boolean;
     passwordResetToken?: string | null;
+    inviteCode?: string | null;
     activePage: NavPage;
     onEventsRefresh: () => void;
   },

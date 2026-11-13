@@ -79,6 +79,10 @@ export const session = {
   suppressClickUntil: 0,
   /** `?reset=` token for the email password-reset landing. Null hides the form. */
   passwordResetToken: null as string | null,
+  /** `?invite=` code for a new home near a friend. Cleared after join. */
+  inviteCode: null as string | null,
+  /** Last invite URL, shown if the clipboard is unavailable. */
+  inviteShareUrl: null as string | null,
   /** A 5xx or network failure must not offer a new commander. */
   holdJoin: false,
 };
@@ -191,9 +195,16 @@ export function readDefenseCount(defenseId: DefenseId): number {
  * Deep-link `playerId` / `planet` are kept by `syncSessionUrl` after resume.
  */
 export function stripJoinParams(): void {
+  session.inviteCode = null;
   const url = new URL(window.location.href);
-  if (!url.searchParams.has("commander")) return;
-  url.searchParams.delete("commander");
+  let changed = false;
+  for (const key of ["commander", "invite"]) {
+    if (url.searchParams.has(key)) {
+      url.searchParams.delete(key);
+      changed = true;
+    }
+  }
+  if (!changed) return;
   const next = `${url.pathname}${url.search}${url.hash}`;
   window.history.replaceState({}, "", next || "/");
 }

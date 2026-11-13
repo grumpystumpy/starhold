@@ -82,6 +82,7 @@ function paint(): void {
       claimablePlayerId: session.claimablePlayerId,
       emailReset: peekEmailReset(),
       passwordResetToken: session.passwordResetToken,
+      inviteCode: session.inviteCode,
       activePage: session.activePage,
       onEventsRefresh: () => {
         if (session.view) void silentRefresh(session.view.player.id);
@@ -193,6 +194,8 @@ async function boot(): Promise<void> {
   session.activePage = pageFromLocation();
   session.accountMenu = accountMenuFromPath(window.location.pathname);
   const bootParams = new URLSearchParams(window.location.search);
+  const inviteParam = bootParams.get("invite")?.trim() ?? "";
+  if (inviteParam) session.inviteCode = inviteParam.slice(0, 32);
   const resetParam = bootParams.get("reset")?.trim() ?? "";
   if (resetParam) session.passwordResetToken = resetParam;
   const reportCode = sharedReportCodeFromSearch(window.location.search);

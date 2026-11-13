@@ -71,6 +71,7 @@ import {
   doGalaxyJump,
   doGalaxyGalaxyNav,
   doClaimAnonymous,
+  doCopyInvite,
   doInviteAlliance,
   doJoin,
   doJoinAlliance,
@@ -196,6 +197,13 @@ export function bindClickHandlers(): void {
         return;
       }
       if (readSoundEnabled()) noteSoundGesture();
+
+      const copyInvite = closestActionEl(target, "[data-copy-invite]");
+      if (copyInvite) {
+        ev.preventDefault();
+        void doCopyInvite();
+        return;
+      }
 
       const shopTab = closestActionEl(target, "[data-shop-tab]");
       if (shopTab) {

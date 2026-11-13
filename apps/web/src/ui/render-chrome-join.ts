@@ -34,6 +34,8 @@ export type JoinScreenState = {
   emailReset?: boolean;
   /** `?reset=` token. Renders the one-time password form. */
   passwordResetToken?: string | null;
+  /** `?invite=` code. Hint only — a bad code still joins as usual. */
+  inviteCode?: string | null;
 };
 
 /** Join / sign-in markup. Auth fields stay off once an account exists. */
@@ -280,6 +282,9 @@ export function joinScreenHtml(state: JoinScreenState): string {
   const resetBlock = state.passwordResetToken
     ? passwordResetFormHtml(state.passwordResetToken)
     : "";
+  const inviteHint = state.inviteCode
+    ? `<p class="hint" data-testid="invite-join-hint">A friend invited you. If that code is still good, your new home starts near theirs. Otherwise you join as usual.</p>`
+    : "";
   const authBlock = signedIn
     ? ""
     : `<hr style="margin:1.25rem 0;border:none;border-top:1px solid rgba(255,255,255,0.12)" />
@@ -312,6 +317,7 @@ export function joinScreenHtml(state: JoinScreenState): string {
     <div data-flash-slot>${flashHtml(state.error, state.notice)}</div>
     <section class="join-panel">
       ${accountLine}
+      ${inviteHint}
       ${resetBlock}
       <form id="join-form" data-testid="join-form">
         <label for="commander">${joinLabel}</label>
@@ -362,13 +368,18 @@ export function renderJoin(root: HTMLElement, state: JoinScreenState): void {
   const wantAuth = !state.accountEmail;
   const hasReset = Boolean(root.querySelector("#password-reset-form"));
   const wantReset = Boolean(state.passwordResetToken);
+  const hasInviteHint = Boolean(
+    root.querySelector("[data-testid='invite-join-hint']"),
+  );
+  const wantInviteHint = Boolean(state.inviteCode);
   const structureOk =
     existingForm &&
     existingInput &&
     hasAuthForm === wantAuth &&
     Boolean(state.accountEmail) === hasAccountLine &&
     wantClaim === hasClaimBtn &&
-    hasReset === wantReset;
+    hasReset === wantReset &&
+    hasInviteHint === wantInviteHint;
 
   if (structureOk) {
     patchFlash(root, state.error, state.notice);

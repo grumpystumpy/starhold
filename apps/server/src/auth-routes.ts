@@ -1,10 +1,12 @@
 import { type Context, type Hono } from "hono";
 import {
   claimPlayerToAccount,
+  createInvite,
   ensureUniverseShape,
   joinUniverse,
   playerForAccount,
   playerView,
+  resolveInviteCoords,
 } from "@starhold/game";
 import {
   authenticateEmailPassword,
@@ -360,7 +362,10 @@ export function mountAuthRoutes(app: Hono): void {
     if (!ctx) {
       return c.json({ error: "Sign in required." }, 401);
     }
-    const body = (await c.req.json().catch(() => ({}))) as { name?: string };
+    const body = (await c.req.json().catch(() => ({}))) as {
+      name?: string;
+      invite?: string;
+    };
     try {
       return await withUniverse(async (universe) => {
         ensureUniverseShape(universe);
@@ -391,7 +396,13 @@ export function mountAuthRoutes(app: Hono): void {
             409,
           );
         }
-        const { player } = joinUniverse(universe, trimmed);
+        const now = Date.now();
+        const coords = resolveInviteCoords(
+          universe,
+          typeof body.invite === "string" ? body.invite : "",
+          now,
+        );
+        const { player } = joinUniverse(universe, trimmed, now, coords);
         player.accountId = ctx.account.id;
         await setAccountPlayerId(ctx.account.id, player.id);
         return c.json(playerView(universe, player.id));
@@ -399,6 +410,35 @@ export function mountAuthRoutes(app: Hono): void {
     } catch (err) {
       return c.json(
         { error: err instanceof Error ? err.message : "Join failed." },
+        400,
+      );
+    }
+  });
+
+  /**
+   * Mint or reuse a short invite code for the signed-in commander.
+   * The link is `/?invite=<code>` — no player id and no email.
+   */
+  app.post("/api/invite", async (c) => {
+    const ctx = await sessionAccount(c);
+    if (!ctx) return c.json({ error: "Sign in required." }, 401);
+    const playerId = ctx.account.playerId;
+    if (!playerId) {
+      return c.json({ error: "Pick a commander before inviting a friend." }, 400);
+    }
+    try {
+      return await withUniverse((universe) => {
+        const minted = createInvite(universe, playerId, Date.now());
+        if (!minted.ok) return c.json({ error: minted.error }, minted.status);
+        return c.json({
+          code: minted.code,
+          path: `/?invite=${minted.code}`,
+          expiresAt: minted.expiresAt,
+        });
+      });
+    } catch (err) {
+      return c.json(
+        { error: err instanceof Error ? err.message : "Invite failed." },
         400,
       );
     }

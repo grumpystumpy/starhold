@@ -27,6 +27,7 @@ const postRecoveryExemptActions = new Set([
   "doRecover",
   "doRequestEmailReset",
   "doConfirmEmailReset",
+  "doCopyInvite",
 ]);
 
 function exportedDoNames(source: string): string[] {
@@ -209,6 +210,11 @@ describe("settleMutation coverage for exported POST actions", () => {
       doRecover: () => actions.doRecover("a@example.com", "ABCD-EFGH", "password1"),
       doRequestEmailReset: () => actions.doRequestEmailReset("a@example.com"),
       doConfirmEmailReset: () => actions.doConfirmEmailReset("test-token", "password1"),
+      doCopyInvite: () => {
+        session.account = { id: "account-1", email: "a@example.com", playerId: "p1" };
+        session.view = playerView();
+        return actions.doCopyInvite();
+      },
     };
     assert.deepEqual(
       Object.keys(calls).sort(),
