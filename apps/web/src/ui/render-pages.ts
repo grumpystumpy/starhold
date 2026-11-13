@@ -1,4 +1,5 @@
 import {
+  BUILDINGS,
   DEFENSE_ORDER,
   DEFENSES,
   MAP_GALAXIES,
@@ -145,6 +146,7 @@ function overviewPage(view: PlayerView, busy: boolean): string {
           <p class="hint" data-testid="planet-temperature">Temp ${fmt(tempK)} K · solar ×${solarTemp.toFixed(2)}${helio > 0 ? ` · Solar Relay Satellite +${fmt(helio)}` : ""}</p>
         </div>
       </div>
+      ${empireOverviewHtml(view, busy)}
       <form class="planet-rename" id="planet-rename-form" data-testid="planet-rename-form">
         <label for="planet-rename-input">Rename colony</label>
         <div class="planet-rename-row">
@@ -170,6 +172,52 @@ function overviewPage(view: PlayerView, busy: boolean): string {
       <p class="hint" data-testid="recommended-next">${escapeHtml(recommendedNext(view))}</p>
     </section>
     ${classPanelHtml(view, busy)}`;
+}
+
+function empireOverviewHtml(view: PlayerView, busy: boolean): string {
+  const bodies = view.ownedPlanets ?? [];
+  if (bodies.length < 2) return "";
+  const totals = bodies.reduce(
+    (sum, body) => ({
+      metal: sum.metal + body.resources.metal,
+      crystal: sum.crystal + body.resources.crystal,
+      deuterium: sum.deuterium + body.resources.deuterium,
+    }),
+    { metal: 0, crystal: 0, deuterium: 0 },
+  );
+  const rows = bodies
+    .map((body) => {
+      const queues = [
+        body.buildQueueHead
+          ? `Building ${BUILDINGS[body.buildQueueHead.buildingId]?.name ?? body.buildQueueHead.buildingId} → L${fmt(body.buildQueueHead.targetLevel)}`
+          : "",
+        body.shipQueueHead
+          ? `Ships ${fmt(body.shipQueueHead.count)}× ${SHIPS[body.shipQueueHead.shipId]?.name ?? body.shipQueueHead.shipId}`
+          : "",
+        body.defenseQueueHead
+          ? `Defense ${fmt(body.defenseQueueHead.count)}× ${DEFENSES[body.defenseQueueHead.defenseId]?.name ?? body.defenseQueueHead.defenseId}`
+          : "",
+      ].filter(Boolean);
+      return `<li>
+        <button type="button" class="empire-overview-row" data-select-planet="${escapeAttr(body.id)}" data-testid="empire-planet-row-${escapeAttr(body.id)}" aria-label="Select ${escapeAttr(body.name)} at ${fmtCoords(body.coords)}"${busy ? " disabled" : ""}>
+          <span class="empire-overview-planet"><strong>${escapeHtml(body.name)}${body.isMini ? " · Mini" : body.isMoon ? " · Moon" : ""}</strong><small>${fmtCoords(body.coords)}</small></span>
+          <span class="empire-overview-stock"><small>Metal</small><strong>${fmt(body.resources.metal)}</strong></span>
+          <span class="empire-overview-stock"><small>Crystal</small><strong>${fmt(body.resources.crystal)}</strong></span>
+          <span class="empire-overview-stock" title="Deuterium"><small>Deut</small><strong>${fmt(body.resources.deuterium)}</strong></span>
+          ${queues.length ? `<span class="empire-overview-queues">${queues.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</span>` : ""}
+        </button>
+      </li>`;
+    })
+    .join("");
+  return `<section class="empire-overview" data-testid="empire-overview-strip" aria-label="Empire overview">
+    <h3>Empire resources</h3>
+    <div class="empire-overview-totals" aria-label="Empire resource totals">
+      <span><small>Metal</small><strong data-testid="empire-metal-total">${fmt(totals.metal)}</strong></span>
+      <span><small>Crystal</small><strong data-testid="empire-crystal-total">${fmt(totals.crystal)}</strong></span>
+      <span><small>Deuterium</small><strong data-testid="empire-deuterium-total">${fmt(totals.deuterium)}</strong></span>
+    </div>
+    <ul class="empire-overview-planets">${rows}</ul>
+  </section>`;
 }
 
 function buildingsPage(view: PlayerView, busy: boolean): string {

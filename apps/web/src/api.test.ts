@@ -146,6 +146,50 @@ describe("safe JSON parse", () => {
 });
 
 describe("credFetch timeout", () => {
+  it("refreshes all owned-body stocks from an unchanged state response", async () => {
+    const original = globalThis.fetch;
+    let request = 0;
+    globalThis.fetch = async () => {
+      request += 1;
+      if (request === 1) {
+        return new Response(
+          JSON.stringify({
+            now: 10,
+            player: { id: "p_empire" },
+            planet: { id: "home", resources: { metal: 10, crystal: 20, deuterium: 30 } },
+            ownedPlanets: [
+              { id: "home", resources: { metal: 10, crystal: 20, deuterium: 30 } },
+              { id: "colony", resources: { metal: 40, crystal: 50, deuterium: 60 } },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json", ETag: '"empire-rev"' } },
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          unchanged: true,
+          now: 20,
+          resources: { metal: 11, crystal: 21, deuterium: 31 },
+          ownedPlanetResources: [
+            { id: "home", resources: { metal: 11, crystal: 21, deuterium: 31 } },
+            { id: "colony", resources: { metal: 41, crystal: 51, deuterium: 61 } },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json", ETag: '"empire-rev"' } },
+      );
+    };
+    try {
+      await fetchState("p_empire", undefined, undefined, { fresh: true });
+      const updated = await fetchState("p_empire");
+      assert.deepEqual(updated.ownedPlanets.map(({ resources }) => resources), [
+        { metal: 11, crystal: 21, deuterium: 31 },
+        { metal: 41, crystal: 51, deuterium: 61 },
+      ]);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
   it("a GET that never answers rejects with kind timeout at 15 s fake time", async () => {
     mock.timers.enable({ apis: ["setTimeout"] });
     const seen: Array<{ status: number; message: string; ctx?: ApiFailureContext }> = [];

@@ -102,12 +102,16 @@ describe("player state payload", () => {
     const tiny = (await again.json()) as {
       unchanged?: boolean;
       resources?: { metal: number };
+      ownedPlanetResources?: Array<{ id: string; resources: unknown }>;
       player?: unknown;
     };
     assert.equal(again.status, 200);
     assert.equal(tiny.unchanged, true);
     assert.equal(tiny.player, undefined);
     assert.equal(typeof tiny.resources?.metal, "number");
+    assert.equal(tiny.ownedPlanetResources?.length, 1);
+    assert.equal(tiny.ownedPlanetResources?.[0]?.id, joined.planet.id);
+    assert.equal(typeof tiny.ownedPlanetResources?.[0]?.resources.metal, "number");
     assert.ok(JSON.stringify(tiny).length * 8 < JSON.stringify(full).length);
 
     const stripped = await app.request(

@@ -2,6 +2,10 @@
 
 This file covers the alliance and highscore surfaces touched by B7-31. The rest of the game map lives in `AGENTS.md` and `docs/`. A full-game feature map was not in the repo; this section was added rather than invented.
 
+## Overview
+
+The Overview page shows a read-only empire resources strip for commanders with multiple owned bodies. It totals metal, crystal, and deuterium from the current `ownedPlanets` view, lists each body's stocks and the head item of its build, ship, and defense queues, and reuses the existing planet selector navigation. Single-body empires omit the strip; empty queues have no placeholder row. `PlayerView.ownedPlanets` carries these derived read-only values; no save fields, endpoints, or production formulas change.
+
 ## Alliances
 
 Records live on the universe document (`alliances`). Membership is `player.allianceId`. Role id stays `founder`; the UI label is Leader. Join modes: `open` (anyone joins), `invite` (invited only), `request` (one pending ask, Leader or Officer approves). New alliances still default to `open`.
