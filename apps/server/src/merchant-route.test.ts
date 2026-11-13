@@ -110,7 +110,10 @@ describe("resource merchant route", () => {
       const after = (await traded.json()) as PlayerView;
       assert.equal(after.planet.id, colonyId);
       assert.notEqual(after.planet.id, homeId);
-      assert.equal(after.starshards, 77 + STARSHARDS_HIGHSCORE_TOP3);
+      const achievementShards = (after.achievements ?? [])
+        .filter((row) => row.unlocked)
+        .reduce((sum, row) => sum + row.starshards, 0);
+      assert.equal(after.starshards, 77 + STARSHARDS_HIGHSCORE_TOP3 + achievementShards);
       const shardsAfterTrade = after.starshards ?? 0;
       assert.deepEqual(after.planet.resources, {
         metal: 6000,
