@@ -11,6 +11,14 @@ import {
   type ShipId,
 } from "@starhold/game";
 import { fmt } from "./ui/format";
+import {
+  applyCombatSimField,
+  applyCombatSimPaste,
+  loadCombatSimSpy,
+  resetCombatSimOrbit,
+  runCombatSim,
+  setCombatSimSeed,
+} from "./ui/render-combat-sim";
 import { syncBuildCountReason } from "./ui/render-chrome-rows";
 import {
   clearFlash,
@@ -858,6 +866,33 @@ export function bindClickHandlers(): void {
         return;
       }
 
+      const simRun = closestActionEl(target, "[data-sim-run]");
+      if (simRun) {
+        ev.preventDefault();
+        const seedEl = root.querySelector<HTMLInputElement>("[data-testid='combat-sim-seed']");
+        if (seedEl) setCombatSimSeed(seedEl.value);
+        if (session.view) runCombatSim(session.view);
+        schedulePaint();
+        return;
+      }
+
+      const simReset = closestActionEl(target, "[data-sim-reset]");
+      if (simReset) {
+        ev.preventDefault();
+        if (session.view) resetCombatSimOrbit(session.view.planet);
+        schedulePaint();
+        return;
+      }
+
+      const simPaste = closestActionEl(target, "[data-sim-apply-paste]");
+      if (simPaste) {
+        ev.preventDefault();
+        const area = root.querySelector<HTMLTextAreaElement>("[data-testid='combat-sim-paste']");
+        applyCombatSimPaste(area?.value ?? "");
+        schedulePaint();
+        return;
+      }
+
       const highscoreTab = closestActionEl(target, "[data-highscore-tab]");
       if (highscoreTab) {
         ev.preventDefault();
@@ -983,6 +1018,21 @@ export function bindClickHandlers(): void {
 
   root.addEventListener("change", (ev) => {
     const el = ev.target;
+    if (el instanceof HTMLSelectElement && el.matches("[data-sim-spy]")) {
+      const report = session.view?.spyReports?.find((row) => row.id === el.value);
+      if (report) {
+        loadCombatSimSpy(report);
+        schedulePaint();
+      }
+      return;
+    }
+    if (
+      (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) &&
+      el.matches("[data-sim-attacker], [data-sim-defender-ship], [data-sim-defender-defense], [data-sim-seed], [data-sim-paste]")
+    ) {
+      applyCombatSimField(el);
+      return;
+    }
     if (el instanceof HTMLSelectElement && el.matches("[data-shop-item-tier]")) {
       const option = el.selectedOptions[0];
       const card = el.closest<HTMLElement>(".shop-item-card");
@@ -1063,6 +1113,13 @@ export function bindClickHandlers(): void {
 
   root.addEventListener("input", (ev) => {
     const el = ev.target;
+    if (
+      (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) &&
+      el.matches("[data-sim-attacker], [data-sim-defender-ship], [data-sim-defender-defense], [data-sim-seed], [data-sim-paste]")
+    ) {
+      applyCombatSimField(el);
+      return;
+    }
     if (!(el instanceof HTMLInputElement)) return;
     if (el.matches("[data-ship-count], [data-defense-count]")) {
       syncBuildCountReason(el);

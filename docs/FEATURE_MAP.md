@@ -234,4 +234,12 @@ Plates are mapped in `apps/web/src/ui/assets.ts` (`BUILDING_ART`, `SHIP_ART`, `D
 
 Every referenced file is listed in `docs/ART_CREDITS.md`. game-icons.net lines on the Credits page use the required CC BY 3.0 credit. Capital hulls, shield-style defenses, Jump Gate, Chrono Lathe, Mantle Loom, the deuterium chip, and officer portraits stay on the original plates. No save fields were added.
 
+## Combat simulator
+
+The Simulator page is a game-nav route, `/simulator` (`data-testid="nav-simulator"`, `data-testid="page-simulator"`, panel `data-testid="combat-sim"`). It is rendered by `combatSimHtml` in `apps/web/src/ui/render-combat-sim.ts` and switched from `pageHtml` in `apps/web/src/ui/render-pages.ts`.
+
+Attacker counts start from the open colony (`data-testid="combat-sim-attacker-<shipId>"`). Defender ships (`combat-sim-defender-<shipId>`) and defenses (`combat-sim-defense-<defenseId>`) are editable. A spy report chosen in `data-testid="combat-sim-spy"` fills the defender from that report's ships, defenses, and research. Pasting spy-report lines into `data-testid="combat-sim-paste"` and pressing `data-testid="combat-sim-apply-paste"` does the same. `Use orbit counts` is `data-testid="combat-sim-reset-orbit"`. The seed field is `data-testid="combat-sim-seed"` (default `starhold-sim`). `data-testid="combat-sim-run"` calls `runCombatSandbox` in `packages/game/src/combat-sim.ts`, which calls `resolveCombat` with the attacker's level research and class attack. The readout reuses the combat report tables (`data-testid="combat-sim-result"`).
+
+There is no API route, no save field, and no D1 table. The run reads the open view and writes nothing back: fleets stay in flight, resources stay put, and the planet stock stays put. Pirate and planet fights keep the same combat engine; this page does not launch either one.
+
 

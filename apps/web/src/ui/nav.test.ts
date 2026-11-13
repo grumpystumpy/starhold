@@ -21,6 +21,7 @@ describe("nav routes", () => {
     assert.equal(pageFromPath("/shipyard"), "shipyard");
     assert.equal(pageFromPath("/research"), "research");
     assert.equal(pageFromPath("/fleet"), "fleet");
+    assert.equal(pageFromPath("/simulator"), "simulator");
     assert.equal(pageFromPath("/galaxy"), "galaxy");
     assert.equal(pageFromPath("/shop"), "shop");
     assert.equal(pageFromPath("/officers"), "shop");
