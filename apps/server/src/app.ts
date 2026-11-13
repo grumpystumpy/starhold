@@ -589,6 +589,15 @@ export function createApp(): Hono {
         400,
       );
     }
+    const sessionId = readSessionId(c);
+    if (!sessionId) return c.json({ error: "Sign in required." }, 401);
+    const session = await getSession(sessionId);
+    if (!session) return c.json({ error: "Sign in required." }, 401);
+    const account = await getAccountById(session.accountId);
+    if (!account?.playerId) return c.json({ error: "Sign in required." }, 401);
+    if (account.playerId !== body.playerId) {
+      return c.json({ error: "You do not own this player." }, 403);
+    }
     return withUniverse((universe) => {
       const result = reorderQueue(universe, body.playerId!, {
         kind: body.kind!,
