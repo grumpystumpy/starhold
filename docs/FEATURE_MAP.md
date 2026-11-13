@@ -122,6 +122,10 @@ Dismissing the briefing hides the suggestion. Restore shows it again. When every
 
 Fleet composer hides built-in `moonDestruction` and `miniPlanetDestruction` until the player owns that hull or meets its research and shipyard level. `expedition`, `raid`, `miniPlanetCapture`, and custom presets stay visible. The presets remain on the save, and the galaxy preset buttons are unchanged.
 
+## Newbie protection
+
+`NEWBIE_PROTECTION_POINTS` in `packages/game/src/data/tuning.ts` is 2,500 empire points. `isNewbieProtected` blocks player raid and occupation launches against a protected player's planet or mini planet; this also applies to an occupation target owned by a player. A successful raid or occupation launch against a real player permanently sets optional `player.newbieForfeitedAt`, including ACS raids. Spying and pirate/alien attacks do not forfeit protection. Pirate raid target weights are zero below 2,500 points via `pirateRaidPickWeight`; the separate 48-hour newcomer rule and pirate fairness weighting remain. Saves without `newbieForfeitedAt` still load without reset. Regression coverage is in `packages/game/src/protection.test.ts`.
+
 ## OAuth sign-in
 
 Email + password signup, login, claim, logout, and `/api/auth/me` are unchanged. Google and Discord are optional and env-gated. If a provider's client id and secret are unset, its button is omitted and its routes return `404 { error: "provider not configured" }`. `GET /api/auth/providers` always includes `passwordAuth: true`.
