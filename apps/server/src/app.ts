@@ -53,6 +53,7 @@ import {
   kickFromAlliance,
   launchFleet,
   launchMaxExpeditions,
+  recallFleet,
   leaveAlliance,
   markEventsRead,
   OCCUPATION_DURATION_MS,
@@ -685,6 +686,35 @@ export function createApp(): Hono {
       system: body.targetCoords?.system,
       slot: body.targetCoords?.slot,
     });
+  });
+
+  app.post("/api/fleet/recall", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      fleetId?: string;
+    };
+    if (!body.playerId || !body.fleetId) {
+      return c.json({ error: "playerId and fleetId required." }, 400);
+    }
+    const sessionId = readSessionId(c);
+    if (!sessionId) return c.json({ error: "Sign in required." }, 401);
+    const session = await getSession(sessionId);
+    if (!session) return c.json({ error: "Sign in required." }, 401);
+    const account = await getAccountById(session.accountId);
+    if (!account?.playerId) return c.json({ error: "Sign in required." }, 401);
+    if (account.playerId !== body.playerId) {
+      return c.json({ error: "You do not own this player." }, 403);
+    }
+    return withUniverse((universe) => {
+      const result = recallFleet(
+        universe,
+        body.playerId!,
+        body.fleetId!,
+        Date.now(),
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    }, { playerIds: [body.playerId] });
   });
 
   app.post("/api/fleet-preset", async (c) => {
