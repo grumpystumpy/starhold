@@ -440,6 +440,67 @@ a.message-title:hover {
   padding: 0;
 }
 
+.market-form,
+.market-offers {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.market-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.85rem;
+}
+
+.market-form input,
+.market-form select,
+.market-form button,
+.market-offer button {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.market-offer {
+  border: 1px solid var(--line);
+  padding: 0.55rem 0.65rem;
+}
+
+.market-offer-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
+}
+
+.market-offer-actions button {
+  width: 100%;
+}
+
+@media (min-width: 720px) {
+  .market-offer-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .market-offer-actions button {
+    width: auto;
+  }
+}
+
+.market-reason,
+.market-fee-preview {
+  color: var(--warn);
+  font-size: 0.85rem;
+}
+
+.market-fee-preview {
+  color: var(--fg);
+}
+
 .alliance-form {
   display: flex;
   flex-wrap: wrap;

@@ -11,6 +11,13 @@ import {
   type ShipId,
 } from "@starhold/game";
 import { fmt } from "./ui/format";
+import { describeMarketPost } from "./ui/render-shop";
+import {
+  asMarketResource,
+  marketBook,
+  marketDraft,
+  setMarketDraft,
+} from "./ui/market-panel";
 import { syncBuildCountReason } from "./ui/render-chrome-rows";
 import {
   clearFlash,
@@ -43,6 +50,10 @@ import {
   doConfirmEmailReset,
   doRevokeOtherSessions,
   doTradeResources,
+  doAcceptMarket,
+  doCancelMarket,
+  doPostMarket,
+  refreshMarketIfOpen,
   doCreateAlliance,
   doDeleteAllianceIntel,
   doDeleteAllianceMarker,
@@ -145,6 +156,42 @@ export async function submitGalaxyJump(raw: string): Promise<void> {
 }
 
 export function bindClickHandlers(): void {
+  const onMarketField = (ev: Event) => {
+    const target = ev.target;
+    if (!(target instanceof Element) || !target.closest("[data-market-field]")) return;
+    const form = target.closest("form");
+    const view = session.view;
+    if (!form || !view) return;
+    const read = (name: string) =>
+      form.querySelector<HTMLInputElement | HTMLSelectElement>(
+        `[data-market-field="${name}"]`,
+      )?.value ?? "";
+    setMarketDraft({
+      offerResource: asMarketResource(read("offerResource")),
+      requestResource: asMarketResource(read("requestResource")),
+      offerAmount: Number(read("offerAmount")),
+      requestAmount: Number(read("requestAmount")),
+    });
+    const described = describeMarketPost(view, marketBook(), marketDraft(), session.busy);
+    const preview = form.querySelector("[data-testid='market-post-preview']");
+    if (preview) preview.textContent = described.preview;
+    const button = form.querySelector<HTMLButtonElement>("[data-testid='market-post']");
+    if (button) button.disabled = described.reason != null;
+    let reason = form.querySelector("[data-testid='market-post-reason']");
+    if (described.reason) {
+      if (!reason) {
+        reason = document.createElement("span");
+        reason.className = "market-reason";
+        reason.setAttribute("data-testid", "market-post-reason");
+        button?.insertAdjacentElement("afterend", reason);
+      }
+      reason.textContent = described.reason;
+    } else {
+      reason?.remove();
+    }
+  };
+  root.addEventListener("input", onMarketField);
+  root.addEventListener("change", onMarketField);
   root.addEventListener(
     "click",
     (ev) => {
@@ -161,8 +208,9 @@ export function bindClickHandlers(): void {
       if (shopTab) {
         ev.preventDefault();
         const tab = shopTab.getAttribute("data-shop-tab");
-        if (tab === "resources" || tab === "officers" || tab === "skills") {
+        if (tab === "resources" || tab === "officers" || tab === "skills" || tab === "market") {
           navigateShopTab(tab);
+          if (tab === "market") void refreshMarketIfOpen();
         }
         return;
       }
@@ -188,6 +236,39 @@ export function bindClickHandlers(): void {
         if (direction === "buy" || direction === "sell") {
           void doTradeResources(direction);
         }
+        return;
+      }
+
+      const marketPost = closestActionEl(target, "[data-market-post]");
+      if (marketPost) {
+        ev.preventDefault();
+        const form = marketPost.closest("form");
+        const read = (name: string) =>
+          form?.querySelector<HTMLInputElement | HTMLSelectElement>(
+            `[data-market-field="${name}"]`,
+          )?.value ?? "";
+        void doPostMarket({
+          offerResource: read("offerResource"),
+          offerAmount: Number(read("offerAmount")),
+          requestResource: read("requestResource"),
+          requestAmount: Number(read("requestAmount")),
+        });
+        return;
+      }
+
+      const marketAccept = closestActionEl(target, "[data-market-accept]");
+      if (marketAccept) {
+        ev.preventDefault();
+        const offerId = marketAccept.getAttribute("data-market-accept");
+        if (offerId) void doAcceptMarket(offerId);
+        return;
+      }
+
+      const marketCancel = closestActionEl(target, "[data-market-cancel]");
+      if (marketCancel) {
+        ev.preventDefault();
+        const offerId = marketCancel.getAttribute("data-market-cancel");
+        if (offerId) void doCancelMarket(offerId);
         return;
       }
 

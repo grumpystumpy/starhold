@@ -1828,6 +1828,23 @@ export const ALLIANCE_JOIN_MODE_DEFAULT: "open" | "invite" | "request" = "open";
 export const NEWBIE_PROTECTION_POINTS = 2500;
 
 /**
+ * Player trade market (resource for resource, not Starshards).
+ * 3 metal = 2 crystal = 1 deuterium, same weights the merchant notes use.
+ */
+export const PLAYER_TRADE_MIN_AMOUNT = 1000;
+export const PLAYER_TRADE_FEE_PERCENT = 10;
+export const PLAYER_TRADE_EXPIRE_MS = 48 * 60 * 60 * 1000;
+export const PLAYER_TRADE_MAX_OPEN_PER_PLAYER = 3;
+export const PLAYER_TRADE_MAX_OPEN_TOTAL = 100;
+/** Metal-equivalent a commander may receive from accepts per UTC day. */
+export const PLAYER_TRADE_DAILY_ACCEPT_VALUE_CAP = 1_000_000;
+export const PLAYER_TRADE_METAL_WEIGHT = 1;
+export const PLAYER_TRADE_CRYSTAL_WEIGHT = 1.5;
+export const PLAYER_TRADE_DEUTERIUM_WEIGHT = 3;
+/** Expired offers refunded per advanceUniverse call. The book is at most 100. */
+export const PLAYER_TRADE_EXPIRE_PER_TICK = 20;
+
+/**
  * Pirate raid fairness (Micah CHANGE #18): players under this empire
  * points total get a reduced pick weight after each successful pirate
  * raid that UTC day. Does not apply to aliens.
