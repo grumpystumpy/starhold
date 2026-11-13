@@ -567,6 +567,10 @@ button.ghost {
   overflow-wrap: anywhere;
 }
 
+.fleet-review [data-testid="fleet-transfer-cargo"] {
+  margin: 0.55rem 0 0;
+}
+
 @media (max-width: 640px) {
   .fleet-review dl {
     grid-template-columns: minmax(0, 1fr);

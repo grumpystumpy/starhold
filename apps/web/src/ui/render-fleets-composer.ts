@@ -587,6 +587,7 @@ export function fleetComposer(
       cruiseSeconds: cruise.eta,
       cruiseFuel: cruise.fuel,
       cargo: cruise.cap,
+      cargoLoaded: mission === "transport" ? transportCargoLoaded(held.cargo) : undefined,
       speedPercent,
       previewSeconds: preview.eta,
       previewFuel: preview.fuel,
@@ -669,6 +670,11 @@ export function fleetComposer(
       }
     </form>
   `;
+}
+
+function transportCargoLoaded(cargo: FleetDraft["cargo"] | undefined): number {
+  const part = (n: number | undefined): number => Math.max(0, Math.floor(n ?? 0));
+  return part(cargo?.metal) + part(cargo?.crystal) + part(cargo?.deuterium);
 }
 
 function coordsFromTarget(view: PlayerView, selected: string): Coordinates | null {
