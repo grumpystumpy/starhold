@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
-import { advanceUniverse, launchFleet, playerView, type PlayerView, type UniverseState } from "@starhold/game";
+import { advanceUniverse, FULL_STATE_POLL_INCLUDE, launchFleet, playerPollRevision, playerView, type PlayerView, type UniverseState } from "@starhold/game";
 import { installDeterministicInputs } from "../../../packages/game/src/test-determinism.js";
 import { beforeEach, describe, it } from "node:test";
 import { createApp } from "./app.js";
 import { resetMemoryAccounts } from "./accounts.js";
-import { stateRevision } from "./state-response.js";
 import {
   memoryUniverseLoaded,
   resetMemoryUniverse,
@@ -93,7 +92,17 @@ describe("player state payload", () => {
     const full = (await state.json()) as PlayerView;
     const etag = state.headers.get("etag");
     assert.ok(etag);
-    assert.equal(stateRevision(full), etag.replaceAll('"', ""));
+    assert.equal(state.headers.get("X-Starhold-Player-View"), "built");
+    let revision = "";
+    await withUniverse((universe) => {
+      revision = playerPollRevision(
+        universe,
+        joined.player.id,
+        Date.now(),
+        FULL_STATE_POLL_INCLUDE,
+      );
+    });
+    assert.equal(revision, etag.replaceAll('"', ""));
 
     const again = await app.request(
       `/api/state?playerId=${encodeURIComponent(joined.player.id)}`,
@@ -105,6 +114,7 @@ describe("player state payload", () => {
       player?: unknown;
     };
     assert.equal(again.status, 200);
+    assert.equal(again.headers.get("X-Starhold-Player-View"), "skipped");
     assert.equal(tiny.unchanged, true);
     assert.equal(tiny.player, undefined);
     assert.equal(typeof tiny.resources?.metal, "number");
@@ -152,6 +162,197 @@ describe("player state payload", () => {
     const bytes = new Uint8Array(await gzipped.arrayBuffer());
     assert.equal(bytes[0], 0x1f);
     assert.equal(bytes[1], 0x8b);
+  });
+
+  it("still advances a due tick when the client sends If-None-Match", async () => {
+    const app = createApp();
+    const join = await app.request("/api/join", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "DueEtag" }),
+    });
+    const joined = (await join.json()) as PlayerView;
+    const first = await app.request(
+      `/api/state?playerId=${encodeURIComponent(joined.player.id)}`,
+    );
+    const etag = first.headers.get("etag");
+    assert.ok(etag);
+    const upgrade = await app.request("/api/upgrade", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        playerId: joined.player.id,
+        buildingId: "metalMine",
+        planetId: joined.planet.id,
+      }),
+    });
+    assert.equal(upgrade.status, 200);
+    await withUniverse((universe) => {
+      const item = universe.planets[joined.planet.id]!.buildQueue[0]!;
+      item.completesAt = Date.now() - 1;
+    });
+
+    const response = await app.request(
+      `/api/state?playerId=${encodeURIComponent(joined.player.id)}`,
+      { headers: { "If-None-Match": etag } },
+    );
+    const view = (await response.json()) as PlayerView;
+
+    assert.equal(response.headers.get("X-Starhold-State-Tick"), "advanced");
+    assert.equal(response.headers.get("X-Starhold-Player-View"), "built");
+    assert.equal(view.planet.buildings.metalMine, 2);
+    assert.equal((view as { unchanged?: boolean }).unchanged, undefined);
+  });
+
+  it("omits heavy slices until the page asks for them", async () => {
+    const app = createApp();
+    const join = await app.request("/api/join", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Scoped" }),
+    });
+    const joined = (await join.json()) as PlayerView;
+    await withUniverse((universe) => {
+      const player = universe.players[joined.player.id]!;
+      player.eventLog = [
+        {
+          id: "evt-scope",
+          kind: "buildComplete",
+          createdAt: Date.now(),
+          readAt: null,
+          title: "Ore Mine",
+          body: "Finished",
+        },
+      ];
+    });
+
+    const overview = await app.request(
+      `/api/state?playerId=${encodeURIComponent(joined.player.id)}&page=overview`,
+    );
+    const slim = (await overview.json()) as PlayerView;
+    assert.equal(overview.status, 200);
+    assert.equal(overview.headers.get("X-Starhold-Player-View"), "built");
+    assert.ok(slim.omitted?.includes("messages"));
+    assert.ok(slim.omitted?.includes("galaxy"));
+    assert.ok(slim.omitted?.includes("shop"));
+    assert.equal(slim.reports.length, 0);
+    assert.equal(slim.player.eventLog?.length ?? 0, 0);
+    assert.equal(slim.galaxy.slots.length, 0);
+    assert.equal(Object.keys(slim.shopCatalog).length, 0);
+    assert.equal(slim.messagesOmitted, true);
+    assert.equal(slim.inboxUnread, 1);
+    assert.ok(Array.isArray(slim.fleets));
+    assert.equal(slim.planet.id, joined.planet.id);
+
+    const messages = await app.request(
+      `/api/state?playerId=${encodeURIComponent(joined.player.id)}&page=messages`,
+    );
+    const inbox = (await messages.json()) as PlayerView;
+    assert.equal(inbox.messagesOmitted, false);
+    assert.equal(inbox.player.eventLog?.length, 1);
+    assert.equal(inbox.player.eventLog?.[0]?.title, "Ore Mine");
+    assert.ok(inbox.omitted?.includes("galaxy"));
+
+    const galaxy = await app.request(
+      `/api/state?playerId=${encodeURIComponent(joined.player.id)}&page=galaxy`,
+    );
+    const map = (await galaxy.json()) as PlayerView;
+    assert.ok(map.galaxy.slots.length > 0);
+    assert.equal(
+      map.galaxy.slots.some((slot) => slot.planetId === joined.planet.id),
+      true,
+    );
+  });
+
+  it("keeps the combat report when a fleet-page poll resolves the arrival", async () => {
+    const now = 1_700_000_300_000;
+    const originalNow = Date.now;
+    Date.now = () => now;
+    try {
+      const app = createApp();
+      const join = async (name: string) => {
+        const response = await app.request("/api/join", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        });
+        return (await response.json()) as PlayerView;
+      };
+      const defender = await join("FleetPageDefender");
+      const attacker = await join("FleetPageAttacker");
+      await withUniverse((universe) => {
+        universe.planets[attacker.planet.id]!.ships.scout = 1;
+        universe.planets[attacker.planet.id]!.resources.deuterium = 50_000;
+        universe.players[defender.player.id]!.newbieForfeitedAt = now;
+        const launch = launchFleet(
+          universe,
+          attacker.player.id,
+          defender.planet.id,
+          "raid",
+          { scout: 1 },
+          now,
+        );
+        assert.equal(launch.ok, true, launch.ok ? "" : launch.error);
+        if (!launch.ok) throw new Error(launch.error);
+        launch.fleet.arrivesAt = now;
+      });
+
+      const response = await app.request(
+        `/api/state?playerId=${encodeURIComponent(attacker.player.id)}&page=fleet`,
+      );
+      const view = (await response.json()) as PlayerView;
+
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("X-Starhold-State-Tick"), "advanced");
+      assert.equal(view.messagesOmitted, false);
+      assert.ok(view.reports.length >= 1);
+    } finally {
+      Date.now = originalNow;
+    }
+  });
+
+  it("deletes messages without building a player view", async () => {
+    const app = createApp();
+    const join = await app.request("/api/join", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "DeleteSlim" }),
+    });
+    const joined = (await join.json()) as PlayerView;
+    await withUniverse((universe) => {
+      universe.players[joined.player.id]!.eventLog = [
+        {
+          id: "evt-del",
+          kind: "fleetReturn",
+          createdAt: Date.now(),
+          readAt: null,
+          title: "Home",
+          body: "Returned",
+        },
+      ];
+    });
+
+    const deleted = await app.request("/api/delete-messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId: joined.player.id, category: "alerts" }),
+    });
+    const body = (await deleted.json()) as {
+      ok?: boolean;
+      removed?: number;
+      player?: unknown;
+    };
+    assert.equal(deleted.status, 200);
+    assert.equal(body.ok, true);
+    assert.equal(body.removed, 1);
+    assert.equal(body.player, undefined);
+    assert.ok(JSON.stringify(body).length < 80);
+
+    const after = await app.request(
+      `/api/state?playerId=${encodeURIComponent(joined.player.id)}&page=messages`,
+    );
+    const view = (await after.json()) as PlayerView;
+    assert.equal(view.player.eventLog?.length ?? 0, 0);
   });
 
   it("skips the universe tick for a quiet poll without structural writes", async () => {

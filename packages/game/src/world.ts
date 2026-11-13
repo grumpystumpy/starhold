@@ -14,6 +14,14 @@ export {
   advanceUniverse,
   playerStateTickDue,
 } from "./world-arrival.js";
+export {
+  FULL_STATE_POLL_INCLUDE,
+  omittedStateSections,
+  playerPollRevision,
+  refreshOwnedPlanetResources,
+  statePollIncludeForPage,
+} from "./world-poll.js";
+export type { StatePollInclude } from "./world-poll.js";
 export { bindTickBudget, npcJobBudget, workersTickBudget } from "./tick-budget.js";
 export type { TickBudget } from "./tick-budget.js";
 export type { ActionResult, FleetActionResult } from "./world-queues.js";

@@ -1002,7 +1002,28 @@ export interface PlayerView {
       description: string;
     }
   >;
+  /**
+   * Heavy slices left off a page-scoped poll. The client keeps its last
+   * copy of each named section. Absent on a full view.
+   */
+  omitted?: StatePollSection[];
+  /**
+   * True when combat, spy, expedition, and alert rows were left off.
+   * The nav badge then uses `inboxUnread`.
+   */
+  messagesOmitted?: boolean;
+  /** Unread alerts when message lists were omitted. */
+  inboxUnread?: number;
 }
+
+/** Sections a page-scoped `/api/state` poll can leave out. */
+export type StatePollSection =
+  | "galaxy"
+  | "messages"
+  | "highscores"
+  | "roster"
+  | "shop"
+  | "alliances";
 
 export interface PublicPlayer extends PlanetArtFields {
   id: string;

@@ -595,6 +595,9 @@ export function collectInbox(view: PlayerView): InboxItem[] {
 
 /** Unread rows the inbox actually shows, after duplicate combat alerts are hidden. */
 export function inboxUnreadCount(view: PlayerView): number {
+  if (view.messagesOmitted && typeof view.inboxUnread === "number") {
+    return view.inboxUnread;
+  }
   let unread = 0;
   for (const item of collectInbox(view)) {
     if (item.unread) unread += 1;

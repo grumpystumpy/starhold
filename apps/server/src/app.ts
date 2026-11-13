@@ -23,6 +23,10 @@ import {
   isMessageCategory,
   advanceUniverse,
   playerStateTickDue,
+  FULL_STATE_POLL_INCLUDE,
+  playerPollRevision,
+  refreshOwnedPlanetResources,
+  statePollIncludeForPage,
   batchScanSystem,
   cancelQueueItem,
   changePlayerClass,
@@ -99,7 +103,7 @@ import { mountAuthRoutes } from "./auth-routes.js";
 import { mountOAuthRoutes } from "./oauth-routes.js";
 import { mountCpuRoutes } from "./cpu-routes.js";
 import { readCpuMs, reportServerError, currentScope } from "./request-context.js";
-import { respondWithPlayerView } from "./state-response.js";
+import { ifNoneMatchHits, respondWithPlayerView } from "./state-response.js";
 import { staticCacheControl } from "./static-cache.js";
 import { storageMode, isUniverseBusy, withUniverse, withUniverseRead } from "./store.js";
 import {
@@ -326,17 +330,52 @@ export function createApp(): Hono {
     try {
       const galaxy = Number(c.req.query("galaxy") || 0) || undefined;
       const system = Number(c.req.query("system") || 0) || undefined;
+      const page = c.req.query("page")?.trim();
+      const include = page ? statePollIncludeForPage(page) : FULL_STATE_POLL_INCLUDE;
       return await withUniverseRead(
         (universe) => {
           const now = Date.now();
           const tickDue = playerStateTickDue(universe, playerId, now);
+          if (!tickDue) {
+            const resources = refreshOwnedPlanetResources(universe, playerId, now);
+            const revision = playerPollRevision(
+              universe,
+              playerId,
+              now,
+              include,
+              galaxy,
+              system,
+            );
+            if (ifNoneMatchHits(c.req.header("If-None-Match"), revision)) {
+              c.header("ETag", `"${revision}"`);
+              c.header("X-Starhold-State-Tick", "skipped");
+              c.header("X-Starhold-Player-View", "skipped");
+              return c.json({
+                unchanged: true,
+                now,
+                resources: resources ?? { metal: 0, crystal: 0, deuterium: 0 },
+              });
+            }
+          }
           c.header("X-Starhold-State-Tick", tickDue ? "advanced" : "skipped");
-          return respondWithPlayerView(
-            c,
-            playerView(universe, playerId, now, galaxy, system, {
-              skipUniverseTick: !tickDue,
-            }),
+          c.header("X-Starhold-Player-View", "built");
+          // A due tick can write a combat report. Keep that list even when
+          // the open page is not Messages, or the client would hold an empty inbox.
+          const viewInclude =
+            tickDue && page ? { ...include, messages: true } : include;
+          const view = playerView(universe, playerId, now, galaxy, system, {
+            skipUniverseTick: !tickDue,
+            ...(page ? { include: viewInclude } : {}),
+          });
+          const revision = playerPollRevision(
+            universe,
+            playerId,
+            now,
+            include,
+            galaxy,
+            system,
           );
+          return respondWithPlayerView(c, view, revision);
         },
         { playerIds: [playerId], galaxy, system },
       );
@@ -950,7 +989,7 @@ export function createApp(): Hono {
         body.category as "all" | "combat" | "spy" | "alerts",
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
-      return c.json(playerView(universe, body.playerId!));
+      return c.json({ ok: true as const, removed: result.removed });
     }, { playerIds: [body.playerId] });
   });
 
