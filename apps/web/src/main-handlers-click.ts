@@ -34,6 +34,7 @@ import {
   doClaimDaily,
   doClaimGoal,
   doClaimOnboarding,
+  doDismissMidgameBriefing,
   doDismissOnboarding,
   doDismissWhatsNew,
   doGenerateRecoveryCodes,
@@ -723,6 +724,15 @@ export function bindClickHandlers(): void {
         ev.preventDefault();
         void doDismissOnboarding(
           onboardingDismiss.getAttribute("data-onboarding-dismiss") !== "false",
+        );
+        return;
+      }
+
+      const midgameDismiss = closestActionEl(target, "[data-midgame-dismiss]");
+      if (midgameDismiss) {
+        ev.preventDefault();
+        void doDismissMidgameBriefing(
+          midgameDismiss.getAttribute("data-midgame-dismiss") !== "false",
         );
         return;
       }

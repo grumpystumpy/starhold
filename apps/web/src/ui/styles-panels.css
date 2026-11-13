@@ -1081,6 +1081,21 @@ code {
   align-items: center;
 }
 
+.midgame-briefing {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.midgame-briefing .onboarding-step-copy,
+.midgame-briefing .onboarding-step-actions,
+.midgame-briefing a,
+.midgame-briefing .hint,
+.midgame-briefing strong {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
 .next-goal {
   display: flex;
   flex-direction: column;
