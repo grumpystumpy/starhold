@@ -16,6 +16,25 @@ import { escapeAttr, escapeHtml } from "./render-escape";
 import { formatBossCountdown } from "./render-seasons";
 import { infoTooltip } from "./render-tooltips";
 
+function inactivityTitle(mark: "i" | "I"): string {
+  switch (mark) {
+    case "i":
+      return "Inactive for 7 days or more";
+    case "I":
+      return "Inactive for 28 days or more";
+    default: {
+      const unexpected: never = mark;
+      return unexpected;
+    }
+  }
+}
+
+function galaxyInactivityBadge(mark: "i" | "I" | undefined, testId: string): string {
+  if (mark !== "i" && mark !== "I") return "";
+  const title = inactivityTitle(mark);
+  return `<abbr class="galaxy-inactive" data-testid="${escapeAttr(testId)}" title="${escapeAttr(title)}" aria-label="${escapeAttr(title)}">${mark}</abbr>`;
+}
+
 function unitLossLine(
   ships: Partial<FleetShips> | undefined,
   defenses?: Partial<DefenseStock>,
@@ -201,8 +220,9 @@ export function galaxyPanel(
         s.playerId && typeof s.empirePoints === "number"
           ? ` · ${fmtCompact(s.empirePoints)} pts`
           : "";
+      const inactive = galaxyInactivityBadge(s.inactivity, `galaxy-inactive-${s.coords.slot}`);
       const who = s.playerName
-        ? `${escapeHtml(s.playerName)}${tag}${s.isOwn ? " (you)" : ""}${s.isMini ? " · Mini" : ""}${points}${moon}`
+        ? `${escapeHtml(s.playerName)}${inactive}${tag}${s.isOwn ? " (you)" : ""}${s.isMini ? " · Mini" : ""}${points}${moon}`
         : "Empty";
       const marker = s.allianceMarker;
       const tip = marker
@@ -357,6 +377,7 @@ export function galaxyPanel(
       </div>
       <p class="hint">Send max uses the Expedition preset and fills free expedition slots from ships in orbit on the selected colony. Scan probes every foreign-owned planet and mini planet in this system.</p>
       ${markerTools}
+      <p class="hint galaxy-inactive-legend" data-testid="galaxy-inactive-legend">${galaxyInactivityBadge("i", "galaxy-inactive-legend-i")} inactive 7+ days · ${galaxyInactivityBadge("I", "galaxy-inactive-legend-I")} inactive 28+ days</p>
       <ul class="roster galaxy-slots" data-testid="galaxy-slots">${rows}</ul>
       ${
         galaxy.minis.length > 0
@@ -369,8 +390,12 @@ export function galaxyPanel(
           const debris = hasDebris
             ? ` · debris ${fmt(mini.debris!.metal)}/${fmt(mini.debris!.crystal)}`
             : "";
+          const inactive = galaxyInactivityBadge(
+            mini.inactivity,
+            `galaxy-mini-inactive-${mini.planetId}`,
+          );
           const who = mini.playerName
-            ? `${escapeHtml(mini.playerName)}${mini.isOwn ? " (you)" : ""}`
+            ? `${escapeHtml(mini.playerName)}${inactive}${mini.isOwn ? " (you)" : ""}`
             : escapeHtml(mini.name);
           const slotNum = `<span class="galaxy-slot-num" data-testid="galaxy-mini-slot-num-${mini.coords.slot}">${fmt(mini.coords.slot)}</span>`;
           let miniActions = "";

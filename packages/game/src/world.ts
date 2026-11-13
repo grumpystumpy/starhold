@@ -132,6 +132,12 @@ export {
   bindHighscoreSource,
   bindAllianceRankSource,
 } from "./world-view.js";
+export {
+  activityStampDue,
+  inactivityMark,
+  stampPlayerActivity,
+} from "./player-activity.js";
+export type { InactivityMark } from "./player-activity.js";
 export { ensureSystemVisited } from "./world-seed.js";
 export {
   NEWBIE_BONUS_DURATION_MS,
