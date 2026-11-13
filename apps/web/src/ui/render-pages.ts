@@ -61,6 +61,7 @@ import {
 import { hrefForPage } from "./router";
 import { infoTooltip } from "./render-tooltips";
 import { seasonsPage } from "./render-seasons";
+import { researchTreeMapHtml } from "./render-research-tree";
 
 const RESOURCE_BUILDINGS: BuildingId[] = [
   "metalMine",
@@ -248,6 +249,8 @@ function researchPage(view: PlayerView, busy: boolean): string {
   return `
     <section class="panel" data-testid="research-panel">
       <h2>Research</h2>
+      ${researchTreeMapHtml(view, busy)}
+      <h3 class="subhead">All Research Projects</h3>
       ${RESEARCH_ORDER.map((id) => researchRow(id, view, busy)).join("")}
       ${
         researchQueueHtml(player, now) ||
