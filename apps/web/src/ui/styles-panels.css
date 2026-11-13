@@ -211,8 +211,21 @@ button.event-recall {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  min-width: 0;
   font-size: 0.8rem;
   color: var(--muted);
+}
+
+.cargo-load input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+@media (max-width: 640px) {
+  .cargo-load {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .planet-switch {

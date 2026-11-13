@@ -1158,7 +1158,11 @@ export function bindClickHandlers(): void {
       syncBuildCountReason(el);
       return;
     }
-    if (!el.matches("[data-fleet-count]")) {
+    if (
+      !el.matches(
+        "[data-fleet-count], [data-cargo-metal], [data-cargo-crystal], [data-cargo-deuterium]",
+      )
+    ) {
       return;
     }
     const form = el.closest("form");
