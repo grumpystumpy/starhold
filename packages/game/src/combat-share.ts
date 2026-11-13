@@ -210,6 +210,40 @@ export function publicCombatReport(report: CombatReport): PublicCombatReport | n
     debrisCreated: { ...report.debrisCreated },
     outcome: report.outcome,
     rounds: report.rounds,
+    ...publicRoundLog(report.roundLog),
+  };
+}
+
+/** Copy only the replay fields. Empty and legacy logs stay off the public DTO. */
+function publicRoundLog(
+  log: CombatRoundLog[] | undefined,
+): { roundLog: CombatRoundLog[] } | Record<string, never> {
+  if (!log?.length) return {};
+  return {
+    roundLog: log.map((round) => ({
+      round: round.round,
+      attackerLosses: {
+        ships: { ...round.attackerLosses.ships },
+        ...(round.attackerLosses.defenses
+          ? { defenses: { ...round.attackerLosses.defenses } }
+          : {}),
+      },
+      defenderLosses: {
+        ships: { ...round.defenderLosses.ships },
+        ...(round.defenderLosses.defenses
+          ? { defenses: { ...round.defenderLosses.defenses } }
+          : {}),
+      },
+      debrisThisRound: { ...round.debrisThisRound },
+      ...(round.shieldsAbsorbed
+        ? {
+            shieldsAbsorbed: {
+              attacker: round.shieldsAbsorbed.attacker,
+              defender: round.shieldsAbsorbed.defender,
+            },
+          }
+        : {}),
+    })),
   };
 }
 

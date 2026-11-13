@@ -5,6 +5,7 @@ import type {
   FleetShips,
   MissionType,
   PlayerView,
+  PublicCombatReport,
   ResearchId,
   ShipId,
 } from "@starhold/game";
@@ -62,6 +63,7 @@ import {
   syncSessionUrl,
 } from "./ui/router";
 import { peekEmailReset } from "./ui/render-chrome-join";
+import { bindBattleReplayPaint } from "./ui/render-fleets-panels";
 
 function paint(): void {
   renderApp(
@@ -112,6 +114,18 @@ function paint(): void {
 }
 
 setPaintImpl(paint);
+
+let sharedReportView: PublicCombatReport | null = null;
+
+function paintBattleReplay(): void {
+  if (sharedReportView && sharedReportCodeFromSearch(window.location.search)) {
+    root.innerHTML = sharedCombatReportPage(sharedReportView);
+    return;
+  }
+  schedulePaint();
+}
+
+bindBattleReplayPaint(paintBattleReplay);
 
 async function resumePlayer(
   playerId: string,
@@ -171,9 +185,8 @@ async function boot(): Promise<void> {
   if (reportCode) {
     root.innerHTML = `<main class="panel" data-testid="shared-combat-report-loading">Loading battle report…</main>`;
     try {
-      root.innerHTML = sharedCombatReportPage(
-        await fetchPublicCombatReport(reportCode),
-      );
+      sharedReportView = await fetchPublicCombatReport(reportCode);
+      root.innerHTML = sharedCombatReportPage(sharedReportView);
     } catch (err) {
       root.innerHTML = sharedCombatReportError(
         err instanceof Error ? err.message : "Could not load this battle report.",

@@ -34,30 +34,162 @@ function unitLossLine(
   return parts.length ? parts.join(", ") : "none";
 }
 
-/** Report id → visible round. Survives a background poll remount. */
-const openReplayRound = new Map<string, number>();
+/** One playback step. Named so the inbox and the public page stay in sync. */
+export const BATTLE_REPLAY_STEP_MS = 800;
+
+type ReplayState = { round: number; playing: boolean };
+
+/** Report id → open round and play/pause. Survives a background poll remount. */
+const openReplay = new Map<string, ReplayState>();
+const replayRounds = new Map<string, number[]>();
+let reducedMotionOverride: boolean | null = null;
+let replayPaint: () => void = () => {};
+let replayClock: ReturnType<typeof setInterval> | null = null;
+
+export function bindBattleReplayPaint(fn: () => void): void {
+  replayPaint = fn;
+}
+
+export function notifyBattleReplayPaint(): void {
+  replayPaint();
+}
+
+export function setBattleReplayReducedMotionForTests(next: boolean | null): void {
+  reducedMotionOverride = next;
+}
+
+export function battleReplayReducedMotion(): boolean {
+  if (reducedMotionOverride != null) return reducedMotionOverride;
+  if (typeof matchMedia !== "function") return false;
+  return matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function rememberRounds(reportId: string, rounds: number[]): void {
+  replayRounds.set(reportId, rounds);
+}
+
+function stopClockIfIdle(): void {
+  if ([...openReplay.values()].some((state) => state.playing)) return;
+  if (replayClock != null) {
+    clearInterval(replayClock);
+    replayClock = null;
+  }
+}
+
+function ensureClock(): void {
+  if (replayClock != null || typeof window === "undefined") return;
+  replayClock = setInterval(() => {
+    if (!advancePlayingReplays()) {
+      stopClockIfIdle();
+      return;
+    }
+    notifyBattleReplayPaint();
+  }, BATTLE_REPLAY_STEP_MS);
+}
 
 export function battleReplayRound(reportId: string): number | null {
-  return openReplayRound.has(reportId) ? openReplayRound.get(reportId)! : null;
+  const state = openReplay.get(reportId);
+  return state ? state.round : null;
+}
+
+export function battleReplayPlaying(reportId: string): boolean {
+  return openReplay.get(reportId)?.playing ?? false;
 }
 
 export function toggleBattleReplay(reportId: string, firstRound: number): void {
-  if (openReplayRound.has(reportId)) openReplayRound.delete(reportId);
-  else openReplayRound.set(reportId, firstRound);
+  if (openReplay.has(reportId)) openReplay.delete(reportId);
+  else openReplay.set(reportId, { round: firstRound, playing: false });
+  stopClockIfIdle();
 }
 
+/** Manual round pick. Pauses so a tab click does not keep autoplay running. */
 export function setBattleReplayRound(reportId: string, round: number): void {
-  openReplayRound.set(reportId, round);
+  openReplay.set(reportId, { round, playing: false });
+  stopClockIfIdle();
+}
+
+export function playBattleReplay(reportId: string): void {
+  const rounds = replayRounds.get(reportId) ?? [];
+  const current = openReplay.get(reportId);
+  const round = current?.round ?? rounds[0] ?? 1;
+  if (battleReplayReducedMotion()) {
+    openReplay.set(reportId, { round, playing: false });
+    stopClockIfIdle();
+    return;
+  }
+  const playing = rounds.length > 1;
+  openReplay.set(reportId, { round, playing });
+  if (playing) ensureClock();
+  else stopClockIfIdle();
+}
+
+export function pauseBattleReplay(reportId: string): void {
+  const current = openReplay.get(reportId);
+  if (!current) return;
+  openReplay.set(reportId, { round: current.round, playing: false });
+  stopClockIfIdle();
+}
+
+export function restartBattleReplay(reportId: string): void {
+  const current = openReplay.get(reportId);
+  const first = replayRounds.get(reportId)?.[0] ?? current?.round ?? 1;
+  openReplay.set(reportId, {
+    round: first,
+    playing: current?.playing ?? false,
+  });
+}
+
+/** Advance every playing report by one stored round. Returns whether any moved. */
+export function advancePlayingReplays(): boolean {
+  let changed = false;
+  for (const [id, state] of openReplay) {
+    if (!state.playing) continue;
+    const rounds = replayRounds.get(id);
+    if (!rounds || rounds.length < 2) continue;
+    const index = rounds.indexOf(state.round);
+    const next = rounds[(index < 0 ? 0 : index + 1) % rounds.length]!;
+    if (next === state.round) continue;
+    openReplay.set(id, { round: next, playing: true });
+    changed = true;
+  }
+  return changed;
+}
+
+export function resetBattleReplayForTests(): void {
+  openReplay.clear();
+  replayRounds.clear();
+  reducedMotionOverride = null;
+  if (replayClock != null) {
+    clearInterval(replayClock);
+    replayClock = null;
+  }
+}
+
+function shieldValue(
+  round: CombatRoundLog,
+  side: "attacker" | "defender",
+): number {
+  const value = round.shieldsAbsorbed?.[side];
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
 function roundPaneHtml(round: CombatRoundLog, active: boolean): string {
   const debris =
     (round.debrisThisRound?.metal ?? 0) + (round.debrisThisRound?.crystal ?? 0);
+  const attackerShield = shieldValue(round, "attacker");
+  const defenderShield = shieldValue(round, "defender");
+  const absorbed = attackerShield + defenderShield > 0;
   return `
-    <div class="battle-round" data-battle-round="${round.round}" ${active ? "" : "hidden"} data-testid="battle-round-${round.round}">
+    <div class="battle-round${active ? " is-active" : ""}" data-battle-round="${round.round}" ${active ? "" : "hidden"} data-testid="battle-round-${round.round}">
       <p class="meta"><strong>Round ${fmt(round.round)}</strong></p>
-      <p class="meta">Attacker losses: ${unitLossLine(round.attackerLosses.ships)}</p>
-      <p class="meta">Defender losses: ${unitLossLine(round.defenderLosses.ships, round.defenderLosses.defenses)}</p>
+      <div class="battle-stage" data-testid="battle-fire-${round.round}" aria-hidden="true">
+        <span class="battle-wing">Attack</span>
+        <span class="battle-bolt"></span>
+        <span class="battle-wing">Defense</span>
+      </div>
+      <p class="meta battle-shield${absorbed ? " has-absorb" : ""}" data-testid="battle-shields-${round.round}">Shields absorbed: attacker ${fmt(attackerShield)}, defender ${fmt(defenderShield)}</p>
+      <p class="meta battle-loss">Attacker losses: ${unitLossLine(round.attackerLosses.ships)}</p>
+      <p class="meta battle-loss">Defender losses: ${unitLossLine(round.defenderLosses.ships, round.defenderLosses.defenses)}</p>
       ${
         debris > 0
           ? `<p class="meta">Round debris: ${fmt(round.debrisThisRound.metal)}/${fmt(round.debrisThisRound.crystal)}</p>`
@@ -67,12 +199,20 @@ function roundPaneHtml(round: CombatRoundLog, active: boolean): string {
   `;
 }
 
-function battleReplayHtml(report: CombatReport): string {
+export function battleReplayHtml(report: {
+  id: string;
+  roundLog?: CombatRoundLog[];
+}): string {
   const log = report.roundLog ?? [];
   if (!log.length) {
     return `<p class="hint" data-testid="battle-replay-legacy">Summary only — older reports have no round replay.</p>`;
   }
-  const selected = openReplayRound.get(report.id) ?? log[0]!.round;
+  const rounds = log.map((round) => round.round);
+  rememberRounds(report.id, rounds);
+  const stored = openReplay.get(report.id)?.round;
+  const selected = stored != null && rounds.includes(stored) ? stored : rounds[0]!;
+  const playing = openReplay.get(report.id)?.playing ?? false;
+  const reduced = battleReplayReducedMotion();
   const tabs = log
     .map(
       (round) =>
@@ -83,7 +223,13 @@ function battleReplayHtml(report: CombatReport): string {
     .map((round) => roundPaneHtml(round, round.round === selected))
     .join("");
   return `
-    <div class="battle-replay" data-testid="battle-replay">
+    <div class="battle-replay" data-testid="battle-replay" data-battle-report="${escapeAttr(report.id)}" data-playing="${playing ? "1" : "0"}"${reduced ? ` data-reduced-motion="1"` : ""}>
+      <div class="battle-replay-controls">
+        <button type="button" data-battle-replay-play="${escapeAttr(report.id)}" data-testid="battle-replay-play" aria-pressed="${playing ? "true" : "false"}">Play</button>
+        <button type="button" data-battle-replay-pause="${escapeAttr(report.id)}" data-testid="battle-replay-pause">Pause</button>
+        <button type="button" data-battle-replay-restart="${escapeAttr(report.id)}" data-testid="battle-replay-restart">Restart</button>
+      </div>
+      ${reduced ? `<p class="hint" data-testid="battle-replay-reduced">Motion reduced. Use the round tabs.</p>` : ""}
       <div class="battle-round-tabs" role="tablist">${tabs}</div>
       ${panes}
     </div>
@@ -93,7 +239,7 @@ function battleReplayHtml(report: CombatReport): string {
 /** Share + round replay controls (Fleet list and Messages inbox). */
 export function combatBattleExtrasHtml(report: CombatReport): string {
   const firstRound = report.roundLog?.[0]?.round ?? 1;
-  const open = openReplayRound.has(report.id);
+  const open = openReplay.has(report.id);
   return `
     <div class="battle-report-actions">
       ${report.shareCode ? `<button type="button" class="ghost" data-copy-battle-share="${escapeAttr(report.id)}" data-testid="copy-battle-share-${escapeAttr(report.id)}">Copy share</button>` : ""}
