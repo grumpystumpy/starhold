@@ -78,6 +78,18 @@ A blocked build or fleet send shows the existing rejection next to that button (
 
 Step 2 of the fleet composer ends with one review (`data-testid="fleet-send-review"`) before Send. It restates the mission, destination coordinates, target type, and target name, then separates flight duration from a clock time labeled with the timezone. Launch fuel is the full-cruise one-way cost. The speed control stays a preview and is not sent. Returning harvest, deploy-to-foreign, and spy missions show an estimated return. Station, transport, Moon Bridge, colonize, expedition, occupy, and combat missions do not promise a guaranteed return. Expedition has no separate hold; Joint Strike explains the 15-minute join window and 30-minute hold cap; occupation explains the two-day cap. Officers, class, and route bonuses are named as missing from the estimate. Changing ships, target, mission, speed, or the Joint Strike controls repaints the review. Ship counts, presets, and send-max are unchanged.
 
+## Resource merchant
+
+Players swap metal, crystal, and deuterium on the planet they have open. The Shop resources tab shows the merchant (`data-testid="resource-merchant"`) beside the Starshard bundle trade. The rate is `RESOURCE_MERCHANT_VALUE` in `packages/game/src/data/tuning.ts`: 3 metal = 2 crystal = 1 deuterium. `RESOURCE_MERCHANT_FEE_PERCENT` is 10. The fee is that percent of the converted output, floored, and the player receives the rest. There is no Starshard cost. No save fields were added.
+
+The player picks the resource to give, the resource to receive, and a whole amount. `data-testid="resource-merchant-preview"` shows the exact amount they will receive before Trade. A short stockpile (`Not enough metal.`) or a full vault (`deuterium storage is too full for this trade.`) is a `blocked-reason` in `data-testid="resource-merchant-error"`, next to the Trade button. The same checks run again on the server.
+
+| Action | Route | Who |
+| --- | --- | --- |
+| Trade | `POST /api/shop/merchant` `{ playerId, planetId, give, get, amount }` | owning session (401 without a cookie, 403 for another commander) |
+
+`planetId` is required. The trade changes that planet only and does not fall back to the home planet. Quotes live in `quoteResourceMerchant` and `assessResourceMerchant` (`packages/game/src/world-merchant.ts`). `tradeWithResourceMerchant` applies the swap. The page is `apps/web/src/ui/render-shop.ts`. Tests: `packages/game/src/merchant.test.ts`, `apps/server/src/merchant-route.test.ts`, and `apps/web/src/ui/render-shop.test.ts`.
+
 ## Onboarding & Fleet Presets
 
 `player.onboarding` is optional (`claimed`, `dismissed`, `recon`). Older saves omit it and still load. `onboardingViewFor` does not write the field. Claiming or dismissing creates it.

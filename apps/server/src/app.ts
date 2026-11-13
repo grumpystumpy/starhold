@@ -84,6 +84,7 @@ import {
   startOccupation,
   swarmProduce,
   tradeStarshardsForResources,
+  tradeWithResourceMerchant,
   unlockSkill,
   type AllianceJoinMode,
   type AllianceRole,
@@ -997,6 +998,57 @@ export function createApp(): Hono {
         body.playerId!,
         body.planetId,
         direction,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    }, { playerIds: [body.playerId] });
+  });
+
+  app.post("/api/shop/merchant", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      planetId?: string;
+      give?: string;
+      get?: string;
+      amount?: unknown;
+    };
+    if (
+      !body.playerId ||
+      !body.planetId ||
+      !body.give ||
+      !body.get ||
+      body.amount === undefined ||
+      body.amount === null ||
+      body.amount === ""
+    ) {
+      return c.json(
+        { error: "playerId, planetId, give, get, and amount required." },
+        400,
+      );
+    }
+    const sessionId = readSessionId(c);
+    if (!sessionId) return c.json({ error: "Sign in required." }, 401);
+    const session = await getSession(sessionId);
+    if (!session) return c.json({ error: "Sign in required." }, 401);
+    const account = await getAccountById(session.accountId);
+    if (!account?.playerId) return c.json({ error: "Sign in required." }, 401);
+    if (account.playerId !== body.playerId) {
+      return c.json({ error: "You do not own this player." }, 403);
+    }
+    const amount =
+      typeof body.amount === "number"
+        ? body.amount
+        : typeof body.amount === "string" && /^[0-9]+$/.test(body.amount)
+          ? Number(body.amount)
+          : Number.NaN;
+    return withUniverse((universe) => {
+      const result = tradeWithResourceMerchant(
+        universe,
+        body.playerId!,
+        body.planetId!,
+        body.give!,
+        body.get!,
+        amount,
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));

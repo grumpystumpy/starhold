@@ -53,6 +53,7 @@ export {
   doDismissOnboarding,
   doDismissWhatsNew,
   doTradeResources,
+  doMerchantTrade,
   doBuyShopItem,
   doActivateOfficer,
   doRaiseOfficer,

@@ -12,6 +12,7 @@ import {
 } from "@starhold/game";
 import { fmt } from "./ui/format";
 import { syncBuildCountReason } from "./ui/render-chrome-rows";
+import { syncResourceMerchant } from "./ui/render-shop";
 import {
   clearFlash,
   closestActionEl,
@@ -43,6 +44,7 @@ import {
   doConfirmEmailReset,
   doRevokeOtherSessions,
   doTradeResources,
+  doMerchantTrade,
   doCreateAlliance,
   doDeleteAllianceIntel,
   doDeleteAllianceMarker,
@@ -187,6 +189,31 @@ export function bindClickHandlers(): void {
         const direction = resourceTrade.getAttribute("data-trade-resources");
         if (direction === "buy" || direction === "sell") {
           void doTradeResources(direction);
+        }
+        return;
+      }
+
+      const merchantTrade = closestActionEl(target, "[data-merchant-trade]");
+      if (merchantTrade) {
+        ev.preventDefault();
+        syncResourceMerchant(root);
+        if (
+          merchantTrade instanceof HTMLButtonElement &&
+          merchantTrade.disabled
+        ) {
+          return;
+        }
+        const section = merchantTrade.closest("[data-testid='resource-merchant']");
+        const give = section?.querySelector<HTMLSelectElement>("[data-merchant-give]")?.value;
+        const get = section?.querySelector<HTMLSelectElement>("[data-merchant-get]")?.value;
+        const raw = section?.querySelector<HTMLInputElement>("[data-merchant-amount]")?.value ?? "";
+        const amount = /^[0-9]+$/.test(raw.trim()) ? Number(raw.trim()) : Number.NaN;
+        if (
+          (give === "metal" || give === "crystal" || give === "deuterium") &&
+          (get === "metal" || get === "crystal" || get === "deuterium") &&
+          Number.isSafeInteger(amount)
+        ) {
+          void doMerchantTrade(give, get, amount);
         }
         return;
       }
@@ -983,6 +1010,10 @@ export function bindClickHandlers(): void {
 
   root.addEventListener("change", (ev) => {
     const el = ev.target;
+    if (el instanceof HTMLElement && el.closest("[data-testid='resource-merchant']")) {
+      syncResourceMerchant(root);
+      return;
+    }
     if (el instanceof HTMLSelectElement && el.matches("[data-shop-item-tier]")) {
       const option = el.selectedOptions[0];
       const card = el.closest<HTMLElement>(".shop-item-card");
@@ -1066,6 +1097,10 @@ export function bindClickHandlers(): void {
     if (!(el instanceof HTMLInputElement)) return;
     if (el.matches("[data-ship-count], [data-defense-count]")) {
       syncBuildCountReason(el);
+      return;
+    }
+    if (el.closest("[data-testid='resource-merchant']")) {
+      syncResourceMerchant(root);
       return;
     }
     if (!el.matches("[data-fleet-count]")) {

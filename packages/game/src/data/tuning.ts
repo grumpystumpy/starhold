@@ -21,6 +21,19 @@ export const BASE_INCOME_PER_HOUR = {
 } as const;
 
 /**
+ * Resource merchant. These weights are equal value:
+ * 3 metal = 2 crystal = 1 deuterium.
+ * The fee is a percent of the converted output, taken before delivery.
+ */
+export const RESOURCE_MERCHANT_VALUE = {
+  metal: 3,
+  crystal: 2,
+  deuterium: 1,
+} as const;
+
+export const RESOURCE_MERCHANT_FEE_PERCENT = 10;
+
+/**
  * Lane-c balance / content tuning — single source for ship, defense,
  * building, and research numbers (plus Round 2 combat/economy constants).
  *
