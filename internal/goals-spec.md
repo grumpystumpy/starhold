@@ -18,6 +18,9 @@ Examples shipped:
 | Daily | Expedition runs | 5 | 2,000 metal, 1,000 crystal, 500 deuterium |
 | Weekly | Weekly pirate victories | 12 | 100 Starshards |
 | Weekly | Weekly expedition runs | 20 | 12,000 metal, 6,000 crystal, 3,000 deuterium |
+| Weekly | Weekly building upgrades | 12 | 9,000 metal, 4,500 crystal, 1,500 deuterium |
+| Weekly | Weekly research projects | 4 | 60 Starshards |
+| Weekly | Weekly fleet construction | 40 | 15,000 metal, 7,500 crystal, 3,000 deuterium |
 
 All of those numbers live in `packages/game/src/data/tuning.ts`.
 

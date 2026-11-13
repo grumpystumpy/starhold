@@ -107,6 +107,9 @@ function overviewPage(view: PlayerView, busy: boolean): string {
   const readyDailyMissions = (view.goals ?? []).filter(
     (g) => g.cadence === "daily" && !g.claimed && g.progress >= g.target,
   ).length;
+  const readyWeeklyMissions = (view.goals ?? []).filter(
+    (g) => g.cadence === "weekly" && !g.claimed && g.progress >= g.target,
+  ).length;
   const goalsHref = hrefForPage("goals", {
     playerId: view.player.id,
     planetId: view.planet.id,
@@ -115,9 +118,14 @@ function overviewPage(view: PlayerView, busy: boolean): string {
     <section class="panel" data-testid="overview-panel">
       <h2>Overview</h2>
       ${onboardingPanelHtml(view, busy)}
+      <div class="overview-missions">
       <p class="hint" data-testid="overview-daily-missions-ready">
         Daily missions ready to claim: <a href="${escapeAttr(goalsHref)}" data-nav="goals" data-testid="overview-goals-link"><strong>${fmt(readyDailyMissions)}</strong></a>
       </p>
+      <p class="hint" data-testid="overview-weekly-missions-ready">
+        Weekly missions ready to claim: <a href="${escapeAttr(goalsHref)}" data-nav="goals" data-testid="overview-weekly-goals-link"><strong>${fmt(readyWeeklyMissions)}</strong></a>
+      </p>
+      </div>
       <div class="overview-hero">
         <div class="planet-frame" data-testid="planet-skin-frame" data-planet-skin="${escapeAttr(skin)}">
           ${planetDiscHtml({

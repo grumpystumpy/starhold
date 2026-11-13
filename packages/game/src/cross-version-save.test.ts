@@ -6,6 +6,7 @@ import { MINI_DRIFT_INTERVAL_MS, SPY_REPORT_TTL_MS, UNIVERSE_SCHEMA_VERSION } fr
 import { advanceUniverse, playerStateTickDue } from "./world-arrival.js";
 import { createUniverse, joinUniverse, launchFleet, playerView } from "./world.js";
 import { migrateOrResetUniverse } from "./world-migrate.js";
+import { goalsView, utcWeekKey } from "./world-goals.js";
 import { graduateNewbieProtection } from "./world-protection.js";
 import { seasonIdFromTime } from "./world-seasons.js";
 import { whatsNewViewFor } from "./release-notes.js";
@@ -369,5 +370,66 @@ describe("quiet state tick", () => {
     quietSpy.spyReports[spy.id] = spy;
     assert.equal(playerStateTickDue(quietSpy, defender.player.id, quietAt), true);
     assert.equal(quietSpy.players[defender.player.id]!.season?.seasonId, seasonIdFromTime(quietAt));
+  });
+
+  it("loads a main save with no weekly goal fields and keeps the in-flight fleet", () => {
+    const path = fileURLToPath(
+      new URL("./fixtures/pre-weekly-goals-inflight.json", import.meta.url),
+    );
+    const raw = JSON.parse(readFileSync(path, "utf8")) as UniverseState;
+    const fleetId = Object.keys(raw.fleets)[0];
+    assert.ok(fleetId);
+    const savedFleet = raw.fleets[fleetId]!;
+    const ownerId = savedFleet.ownerPlayerId;
+    const ownerBefore = raw.players[ownerId]!;
+    assert.equal(ownerBefore.goals?.weeklyKey, undefined);
+    assert.equal(ownerBefore.goals?.progress.weeklyPirateWins, undefined);
+    assert.equal(ownerBefore.goals?.progress.weeklyBuildingUpgrades, undefined);
+    assert.equal(ownerBefore.goals?.progress.weeklyResearch, undefined);
+    assert.equal(ownerBefore.goals?.progress.weeklyShips, undefined);
+    assert.equal(ownerBefore.goals?.progress.dailyPirateWins, 2);
+    assert.equal(savedFleet.mission, "deploy");
+    assert.equal(savedFleet.phase, "outbound");
+    assert.equal(savedFleet.ships.scout, 1);
+    const homeId = ownerBefore.homePlanetId;
+    const metalBefore = raw.planets[homeId]!.resources.metal;
+    const mineBefore = raw.planets[homeId]!.buildings.metalMine;
+
+    const loaded = migrateOrResetUniverse(structuredClone(raw));
+    assert.equal(loaded.didReset, false);
+    assert.equal(loaded.universe.schemaVersion, UNIVERSE_SCHEMA_VERSION);
+    const fleet = loaded.universe.fleets[fleetId];
+    assert.ok(fleet);
+    assert.equal(fleet.mission, "deploy");
+    assert.equal(fleet.phase, "outbound");
+    assert.equal(fleet.ships.scout, 1);
+    assert.equal(fleet.arrivesAt, savedFleet.arrivesAt);
+    assert.equal(fleet.ownerPlayerId, ownerId);
+    const owner = loaded.universe.players[ownerId]!;
+    assert.equal(owner.name, "Hold");
+    assert.equal(owner.goals?.weeklyKey, undefined);
+    const home = loaded.universe.planets[homeId]!;
+    assert.equal(home.resources.metal, metalBefore);
+    assert.equal(home.buildings.metalMine, mineBefore);
+
+    const now = savedFleet.departedAt;
+    const goals = goalsView(owner, now);
+    assert.equal(owner.goals?.weeklyKey, utcWeekKey(now));
+    assert.equal(owner.goals?.progress.dailyPirateWins, 2);
+    assert.equal(owner.goals?.progress.dailyBuildingUpgrades, 1);
+    for (const goal of goals) {
+      if (goal.cadence !== "weekly") continue;
+      assert.equal(goal.progress, 0, goal.id);
+      assert.equal(goal.claimed, false, goal.id);
+    }
+    assert.equal(owner.goals?.progress.weeklyBuildingUpgrades, undefined);
+    assert.equal(loaded.universe.fleets[fleetId]!.ships.scout, 1);
+
+    tick(loaded.universe, home.lastTickAt + 1000);
+    assert.equal(loaded.universe.fleets[fleetId]!.mission, "deploy");
+    assert.equal(loaded.universe.fleets[fleetId]!.phase, "outbound");
+    assert.equal(loaded.universe.fleets[fleetId]!.ships.scout, 1);
+    assert.ok(loaded.universe.planets[homeId]!.resources.metal >= metalBefore);
+    assert.equal(loaded.universe.planets[homeId]!.buildings.metalMine, mineBefore);
   });
 });

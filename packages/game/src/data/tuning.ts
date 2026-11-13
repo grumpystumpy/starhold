@@ -1909,6 +1909,19 @@ export const GOAL_WEEKLY_EXPEDITION_METAL = 12_000;
 export const GOAL_WEEKLY_EXPEDITION_CRYSTAL = 6_000;
 export const GOAL_WEEKLY_EXPEDITION_DEUTERIUM = 3_000;
 
+export const GOAL_WEEKLY_BUILDINGS = 12;
+export const GOAL_WEEKLY_BUILDING_METAL = 9_000;
+export const GOAL_WEEKLY_BUILDING_CRYSTAL = 4_500;
+export const GOAL_WEEKLY_BUILDING_DEUTERIUM = 1_500;
+
+export const GOAL_WEEKLY_RESEARCH = 4;
+export const GOAL_WEEKLY_RESEARCH_STARSHARDS = 60;
+
+export const GOAL_WEEKLY_SHIPS = 40;
+export const GOAL_WEEKLY_SHIP_METAL = 15_000;
+export const GOAL_WEEKLY_SHIP_CRYSTAL = 7_500;
+export const GOAL_WEEKLY_SHIP_DEUTERIUM = 3_000;
+
 export const GOALS: readonly GoalTuning[] = [
   {
     id: "dailyPirateWins",
@@ -1993,6 +2006,42 @@ export const GOALS: readonly GoalTuning[] = [
     metal: GOAL_WEEKLY_EXPEDITION_METAL,
     crystal: GOAL_WEEKLY_EXPEDITION_CRYSTAL,
     deuterium: GOAL_WEEKLY_EXPEDITION_DEUTERIUM,
+  },
+  {
+    id: "weeklyBuildingUpgrades",
+    cadence: "weekly",
+    metric: "buildingUpgrade",
+    title: "Weekly building upgrades",
+    detail: "Finish building upgrades this week across your empire.",
+    target: GOAL_WEEKLY_BUILDINGS,
+    starshards: 0,
+    metal: GOAL_WEEKLY_BUILDING_METAL,
+    crystal: GOAL_WEEKLY_BUILDING_CRYSTAL,
+    deuterium: GOAL_WEEKLY_BUILDING_DEUTERIUM,
+  },
+  {
+    id: "weeklyResearch",
+    cadence: "weekly",
+    metric: "researchComplete",
+    title: "Weekly research projects",
+    detail: "Finish research projects this week across your empire.",
+    target: GOAL_WEEKLY_RESEARCH,
+    starshards: GOAL_WEEKLY_RESEARCH_STARSHARDS,
+    metal: 0,
+    crystal: 0,
+    deuterium: 0,
+  },
+  {
+    id: "weeklyShips",
+    cadence: "weekly",
+    metric: "shipBuild",
+    title: "Weekly fleet construction",
+    detail: "Build ships of any type this week across your shipyards.",
+    target: GOAL_WEEKLY_SHIPS,
+    starshards: 0,
+    metal: GOAL_WEEKLY_SHIP_METAL,
+    crystal: GOAL_WEEKLY_SHIP_CRYSTAL,
+    deuterium: GOAL_WEEKLY_SHIP_DEUTERIUM,
   },
 ];
 
