@@ -6,6 +6,7 @@ import {
   claimAnonymousPlayer,
   fetchAuthMe,
   fetchAllianceChat,
+  fetchCommanderMail,
   fetchSecurity,
   fetchState,
   changeAccountPassword,
@@ -39,6 +40,12 @@ import {
 import { syncSessionUrl } from "./ui/router";
 import { captureGameEvent, identifyCommander } from "./telemetry";
 import { settleMutation } from "./recover-action";
+import {
+  clearCommanderMailClient,
+  commanderMailLines,
+  mergeCommanderMail,
+  replaceCommanderMail,
+} from "./ui/render-messages";
 
 /** Background refresh cadence. Actions apply their own response immediately. */
 export const POLL_INTERVAL_MS = 30_000;
@@ -229,12 +236,36 @@ function pollNow(): Promise<void> {
       if (!playerId || pollPlayerId !== playerId || !pollsAllowed()) return;
       await silentRefresh(playerId);
       await refreshAllianceChatIfOpen();
+      await refreshCommanderMailIfOpen();
     } finally {
       pollChain = null;
       if (pollPlayerId === playerId) schedulePoll(POLL_INTERVAL_MS);
     }
   })();
   return pollChain;
+}
+
+/** Incremental private mail. Only while the Messages page is open. */
+export async function refreshCommanderMailIfOpen(): Promise<void> {
+  if (session.activePage !== "messages") return;
+  if (!session.view) return;
+  const lines = commanderMailLines();
+  const since = lines.reduce((max, line) => Math.max(max, line.createdAt), 0);
+  const full = since <= 0;
+  try {
+    const payload = await fetchCommanderMail(full ? undefined : since);
+    const incoming = Array.isArray(payload.messages) ? payload.messages : [];
+    if (full) {
+      const prev = commanderMailLines().map((line) => line.id).join("\n");
+      replaceCommanderMail(incoming);
+      const next = commanderMailLines().map((line) => line.id).join("\n");
+      if (prev !== next) schedulePaint();
+      return;
+    }
+    if (mergeCommanderMail(incoming)) schedulePaint();
+  } catch {
+    /* a mail poll must not fail the state refresh */
+  }
 }
 
 /** Incremental alliance chat. Only while the Alliances page is open. */
@@ -351,6 +382,7 @@ function ensureVisibilityListener(): void {
 export function startPolling(playerId: string): void {
   if (pollPlayerId !== playerId) {
     completedQueueTimes.clear();
+    clearCommanderMailClient();
   }
   pollPlayerId = playerId;
   lastActivityAt = Date.now();
@@ -360,6 +392,7 @@ export function startPolling(playerId: string): void {
   ensureActivityListeners();
   scheduleIdleCheck();
   schedulePoll(POLL_INTERVAL_MS);
+  if (session.activePage === "messages") void refreshCommanderMailIfOpen();
 }
 
 export function stopPolling(): void {

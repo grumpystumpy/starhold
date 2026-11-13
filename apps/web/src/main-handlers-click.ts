@@ -76,6 +76,8 @@ import {
   doClaimSeason,
   doSelectPlanet,
   doDeleteMessages,
+  doDeleteCommanderMail,
+  doSendCommanderMail,
   doMarkEventsRead,
   doGalaxyFleetAction,
   doGalaxyFleetPreset,
@@ -90,6 +92,7 @@ import {
   fleetStrikeTarget,
   doUnlockSkill,
   doUpgrade,
+  refreshCommanderMailIfOpen,
 } from "./main-actions";
 import { parseGalaxyCoords } from "./galaxy-coords";
 import { setHighscoreTab } from "./ui/render-pages";
@@ -99,6 +102,9 @@ import {
   openReportWindow,
   setConfirmDelete,
   setInboxFilter,
+  setMailComposeDraft,
+  setMailReplyTarget,
+  setMessagesMailTab,
 } from "./ui/render-messages";
 import {
   setBattleReplayRound,
@@ -208,9 +214,40 @@ export function bindClickHandlers(): void {
         ev.preventDefault();
         const raw = filterBtn.getAttribute("data-inbox-filter");
         if (isInboxFilter(raw)) {
+          setMessagesMailTab(false);
           setInboxFilter(raw);
           schedulePaint();
         }
+        return;
+      }
+
+      const mailTab = closestActionEl(target, "button[data-messages-tab]");
+      if (mailTab) {
+        ev.preventDefault();
+        if (mailTab.getAttribute("data-messages-tab") === "mail") {
+          setMessagesMailTab(true);
+          schedulePaint();
+          void refreshCommanderMailIfOpen();
+        }
+        return;
+      }
+
+      const mailReply = closestActionEl(target, "[data-mail-reply]");
+      if (mailReply) {
+        ev.preventDefault();
+        setMailReplyTarget(mailReply.getAttribute("data-mail-reply") ?? "");
+        const bodyInput = root.querySelector<HTMLInputElement>(
+          '[data-testid="commander-mail-body"]',
+        );
+        bodyInput?.focus();
+        schedulePaint();
+        return;
+      }
+
+      const mailDelete = closestActionEl(target, "[data-mail-delete]");
+      if (mailDelete) {
+        ev.preventDefault();
+        void doDeleteCommanderMail(mailDelete.getAttribute("data-mail-delete") ?? "");
         return;
       }
 
@@ -1258,6 +1295,15 @@ export function bindClickHandlers(): void {
       void doPostAllianceChat(input?.value ?? "");
       return;
     }
+
+    if (form.id === "commander-mail-form") {
+      ev.preventDefault();
+      const to = form.querySelector<HTMLInputElement>('[name="commander-mail-to"]');
+      const body = form.querySelector<HTMLInputElement>('[name="commander-mail-body"]');
+      setMailComposeDraft(to?.value ?? "", body?.value ?? "");
+      void doSendCommanderMail(to?.value ?? "", body?.value ?? "");
+      return;
+    }
   });
 
   root.addEventListener("change", (ev) => {
@@ -1289,6 +1335,12 @@ export function bindClickHandlers(): void {
     }
     if (el instanceof HTMLInputElement && el.id === "auth-password") {
       session.passwordDraft = el.value;
+    }
+    if (el instanceof HTMLInputElement && el.name === "commander-mail-to") {
+      setMailComposeDraft(el.value);
+    }
+    if (el instanceof HTMLInputElement && el.name === "commander-mail-body") {
+      setMailComposeDraft(undefined, el.value);
     }
     if (
       el instanceof HTMLInputElement &&

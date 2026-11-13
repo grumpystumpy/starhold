@@ -123,6 +123,7 @@ export function navigateTo(
   session.activePage = page;
   syncSessionUrl({ replace: opts.replace, page });
   schedulePaint();
+  notifyPage(page);
 }
 
 export function openAccountMenu(page: AccountMenuPage): void {
@@ -175,6 +176,16 @@ export function navigateShopTab(tab: ShopTab): void {
 }
 
 let popBound = false;
+let pageEnter: ((page: NavPage) => void) | null = null;
+
+/** Fired when the player lands on a page. Mail fetch uses the Messages case. */
+export function setPageEnterHook(fn: ((page: NavPage) => void) | null): void {
+  pageEnter = fn;
+}
+
+function notifyPage(page: NavPage): void {
+  if (page === "messages") pageEnter?.(page);
+}
 
 /** Bind once: back/forward restores the routed page. */
 export function ensurePopstateHandler(): void {
@@ -190,6 +201,7 @@ export function ensurePopstateHandler(): void {
     }
     session.activePage = pageFromLocation();
     schedulePaint();
+    notifyPage(session.activePage);
   });
 }
 

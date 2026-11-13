@@ -85,6 +85,15 @@ export {
   releasePlayerAcsFleets,
 } from "./world-acs.js";
 export type { AllianceIntelResult, StrikeMission } from "./world-alliance-intel.js";
+export type { CommanderMailMessage } from "./commander-mail.js";
+export {
+  commanderMailDropIds,
+  commanderMailRateError,
+  commanderMailSendAllowed,
+  normalizeCommanderMailBody,
+  resetCommanderMailRateLimit,
+  visibleCommanderMail,
+} from "./commander-mail.js";
 export {
   deleteAllianceIntel,
   deleteAllianceMarker,

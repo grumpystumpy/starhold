@@ -2112,3 +2112,9 @@ export const ALLIANCE_MARKERS_MAX = 30;
 export const ALLIANCE_MARKER_TTL_MS = 72 * 60 * 60 * 1000;
 /** Marker / strike note cap. */
 export const ALLIANCE_MARKER_NOTE_MAX = 80;
+/** Private commander mail. Not stored on the universe document. */
+export const COMMANDER_MAIL_MAX_CHARS = 500;
+/** Oldest inbox rows are dropped once a recipient passes this. */
+export const COMMANDER_MAIL_MAX_PER_RECIPIENT = 100;
+/** Sends allowed per commander per 60 seconds. */
+export const COMMANDER_MAIL_RATE_PER_MIN = 10;
