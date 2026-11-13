@@ -172,7 +172,9 @@ export {
   moonChancePercent,
   moonRoll,
   ownedPlanetCount,
+  scannerSystemSpans,
   sensorPhalanxRange,
+  systemCoveredByScanner,
   tryFormMoon,
 } from "./world-moons.js";
 export { moonAtCoords } from "./world-bootstrap.js";

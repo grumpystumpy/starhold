@@ -919,6 +919,18 @@ export interface PlayerView {
   hallOfFame?: HallOfFameEntry[];
   hallOfShame?: HallOfShameEntry[];
   galaxy: GalaxyView;
+  /**
+   * This commander's scanner moons. Set only on a Galaxy page state read.
+   * The 30s poll omits it. Older responses omit it too.
+   */
+  scannerMoons?: Array<{
+    planetId: string;
+    coords: Coordinates;
+    /** Current System Scanner level. 0 is omitted by the server. */
+    sensorArray: number;
+    /** `sensorPhalanxRange(sensorArray)`. */
+    range: number;
+  }>;
   fleets: FleetMission[];
   /** Server-derived slot limits, including active bonuses and owned beacons. */
   fleetSlotCap: number;

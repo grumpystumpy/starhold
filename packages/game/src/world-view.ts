@@ -67,7 +67,11 @@ import {
   planetAtCoords,
 } from "./world-bootstrap.js";
 import { stampQueueView } from "./world-queue-manage.js";
-import { inSensorPhalanxRange, ownedPlanetCount } from "./world-moons.js";
+import {
+  inSensorPhalanxRange,
+  ownedPlanetCount,
+  sensorPhalanxRange,
+} from "./world-moons.js";
 import { goalsView } from "./world-goals.js";
 import { onboardingViewFor } from "./world-onboarding.js";
 import { whatsNewViewFor } from "./release-notes.js";
@@ -331,6 +335,27 @@ export function galaxyViewFor(
   };
 }
 
+/** Owned moons only. Level 0 is left out. No other commanders, no extra systems. */
+function ownScannerMoons(
+  universe: UniverseState,
+  player: { planetIds?: string[] },
+): NonNullable<PlayerView["scannerMoons"]> {
+  const moons: NonNullable<PlayerView["scannerMoons"]> = [];
+  for (const id of player.planetIds ?? []) {
+    const body = universe.planets[id];
+    if (!body || body.kind !== "moon") continue;
+    const sensorArray = body.buildings.sensorArray ?? 0;
+    if (sensorArray < 1) continue;
+    moons.push({
+      planetId: body.id,
+      coords: body.coords,
+      sensorArray,
+      range: sensorPhalanxRange(sensorArray),
+    });
+  }
+  return moons;
+}
+
 /** Once-only +50 Starshards the first time a player reaches top 3 (needs rivals). */
 function maybeGrantHighscoreStarshards(
   universe: UniverseState,
@@ -353,7 +378,7 @@ export function playerView(
   now = Date.now(),
   galaxy?: number,
   system?: number,
-  options?: { skipUniverseTick?: boolean },
+  options?: { skipUniverseTick?: boolean; includeScannerMoons?: boolean },
 ): PlayerView {
   if (options?.skipUniverseTick) {
     const player = universe.players[playerId];
@@ -566,6 +591,9 @@ export function playerView(
     hallOfFame: provided?.hallOfFame ?? combatHallOfFame(universe),
     hallOfShame: provided?.hallOfShame ?? combatHallOfShame(universe),
     galaxy: galaxyViewFor(universe, playerId, g, s, now),
+    ...(options?.includeScannerMoons
+      ? { scannerMoons: ownScannerMoons(universe, player) }
+      : {}),
     fleets,
     fleetSlotCap,
     expeditionSlotCap,
