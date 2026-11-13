@@ -105,6 +105,7 @@ import { staticCacheControl } from "./static-cache.js";
 import { storageMode, isUniverseBusy, withUniverse, withUniverseRead } from "./store.js";
 import {
   readCombatReportByShareCode,
+  readPublicLobby,
   rollbackRowsToLegacy,
 } from "./row-store.js";
 
@@ -187,7 +188,14 @@ export function createApp(): Hono {
   app.use("*", async (c, next) => {
     await next();
     if (!c.req.path.startsWith("/api")) return;
-    c.header("Cache-Control", staticCacheControl(c.req.path) ?? "private, no-store");
+    const lobbyCache =
+      c.req.path === "/api/lobby" && c.res.status === 200
+        ? "public, max-age=60"
+        : null;
+    c.header(
+      "Cache-Control",
+      lobbyCache ?? staticCacheControl(c.req.path) ?? "private, no-store",
+    );
     if (
       process.env.STARHOLD_RUNTIME === "workers" ||
       process.env.STARHOLD_CPU_PROFILE === "1"
@@ -231,6 +239,19 @@ export function createApp(): Hono {
         passwordAuth: true,
       },
     });
+  });
+
+  // Public join-page teaser. One cached board row. No rescore, no player scan.
+  app.get("/api/lobby", async (c) => {
+    const db = currentScope()?.db;
+    if (!db) return c.json({ commanders: 0, top: [] });
+    try {
+      return c.json(await readPublicLobby(db));
+    } catch (err) {
+      console.error("[starhold-api]", err);
+      reportServerError(err);
+      return c.json({ error: "unavailable" }, 500);
+    }
   });
 
   app.get("/api/reports/:shareCode", async (c) => {

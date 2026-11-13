@@ -2699,4 +2699,60 @@ export async function readHighscoreMeta(
   return { builtAt: board.builtAt, rows: board.cache.rows.length };
 }
 
+/** Names shown on the join page. The cached board is already ranked. */
+const LOBBY_TOP = 5;
+
+export interface PublicLobbyTeaser {
+  commanders: number;
+  top: Array<{ rank: number; name: string; points: number }>;
+}
+
+/**
+ * Join-page teaser. One SELECT of the cached `board` row.
+ * Does not rescore, read players, or load the world document.
+ * Mothership status is not on this row.
+ */
+export async function readPublicLobby(db: D1Like): Promise<PublicLobbyTeaser> {
+  const row = await first<{ doc: string }>(
+    db,
+    "SELECT doc FROM save_highscores WHERE id = 'board'",
+  );
+  if (!row) return { commanders: 0, top: [] };
+  const list = lobbyBoardRows(timedParse(row.doc));
+  const top: PublicLobbyTeaser["top"] = [];
+  for (const item of list) {
+    if (top.length >= LOBBY_TOP) break;
+    const entry = lobbyEntry(item, top.length + 1);
+    if (entry) top.push(entry);
+  }
+  return { commanders: list.length, top };
+}
+
+function lobbyBoardRows(parsed: unknown): unknown[] {
+  if (Array.isArray(parsed)) return parsed;
+  if (
+    parsed &&
+    typeof parsed === "object" &&
+    Array.isArray((parsed as HighscoreCache).rows)
+  ) {
+    return (parsed as HighscoreCache).rows;
+  }
+  return [];
+}
+
+function lobbyEntry(
+  item: unknown,
+  fallbackRank: number,
+): PublicLobbyTeaser["top"][number] | null {
+  if (!item || typeof item !== "object") return null;
+  const row = item as Partial<HighscoreEntry>;
+  if (typeof row.name !== "string") return null;
+  if (typeof row.points !== "number" || !Number.isFinite(row.points)) return null;
+  const rank =
+    typeof row.rank === "number" && Number.isFinite(row.rank)
+      ? row.rank
+      : fallbackRank;
+  return { rank, name: row.name, points: row.points };
+}
+
 export { STAGES };
