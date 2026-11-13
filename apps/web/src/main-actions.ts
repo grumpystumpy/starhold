@@ -58,6 +58,7 @@ export {
   doDismissWhatsNew,
   doSetVacationMode,
   doTradeResources,
+  doMerchantTrade,
   doBuyShopItem,
   doActivateOfficer,
   doRaiseOfficer,

@@ -1,6 +1,7 @@
 import {
   CURRENT_RELEASE_ID,
   isVacationMode,
+  quoteResourceMerchant,
   type OfficerId,
   type PlayerClassId,
 } from "@starhold/game";
@@ -17,6 +18,7 @@ import {
   setVacationMode,
   raiseOfficerLevel,
   tradeResources,
+  tradeWithMerchant,
   unlockSkillNode,
 } from "./api";
 import { clearFlash, schedulePaint, session, setFlash } from "./session";
@@ -328,6 +330,48 @@ export async function doTradeResources(
     });
   } finally {
     session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doMerchantTrade(
+  give: "metal" | "crystal" | "deuterium",
+  get: "metal" | "crystal" | "deuterium",
+  amount: number,
+): Promise<void> {
+  if (!session.view || session.busy) return;
+  const planetId = session.view.planet.id;
+  const before = { ...session.view.planet.resources };
+  const beforeShards = session.view.starshards ?? 0;
+  const quote = quoteResourceMerchant(give, get, amount);
+  const delivered = quote.ok ? quote.output : 0;
+  releaseActionFocus();
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    session.view = await tradeWithMerchant(
+      session.view.player.id,
+      planetId,
+      give,
+      get,
+      amount,
+    );
+    setFlash("notice", `Merchant delivered ${delivered} ${get}.`);
+  } catch (err) {
+    await settleMutation({
+      err,
+      failureFallback: "Resource trade failed.",
+      applied: (view) =>
+        view.planet.id === planetId &&
+        quote.ok &&
+        view.planet.resources[get] >= before[get] + delivered &&
+        (view.starshards ?? 0) >= beforeShards,
+      successNotice: () => `Merchant delivered ${delivered} ${get}.`,
+    });
+  } finally {
+    session.busy = false;
+    releaseActionFocus();
     schedulePaint();
   }
 }

@@ -635,6 +635,25 @@ a.message-title:hover {
   padding: 0;
 }
 
+.shop-merchant-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.75rem;
+  align-items: end;
+  margin: 0.5rem 0;
+}
+
+.shop-merchant-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.85rem;
+}
+
+.shop-trade-actions .blocked-reason {
+  flex: 1 0 100%;
+}
+
 .alliance-form {
   display: flex;
   flex-wrap: wrap;

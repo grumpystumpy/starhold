@@ -262,6 +262,16 @@ export {
   type StarshardActionResult,
 } from "./world-starshards.js";
 export {
+  assessResourceMerchant,
+  quoteResourceMerchant,
+  tradeWithResourceMerchant,
+  RESOURCE_MERCHANT_FEE_PERCENT,
+  RESOURCE_MERCHANT_VALUE,
+  type MerchantResource,
+  type ResourceMerchantQuote,
+  type ResourceMerchantTradeResult,
+} from "./world-merchant.js";
+export {
   buyShopItem,
   computeShopItemCost,
   computeShopItemPerUnitCost,

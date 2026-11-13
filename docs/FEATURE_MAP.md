@@ -109,6 +109,18 @@ On building upgrade rows, buildings that declare `energyUsePerLevel` (Ore Mine `
 
 A hostile raid from another commander or a pirate base shows **Send fleet away** on that row of the fleet-events strip (`data-testid="fleet-save-<fleetId>"` in `apps/web/src/ui/render-events.ts`) when the targeted world has a mobile ship docked and arrival is more than `FLEET_SAVE_MIN_LEAD_MS` (one minute) away. Spy flights do not. Dismiss hides that one attack in the browser (`starhold-fleet-save-dismissed`). The button opens the fleet page with every docked non-stationary ship filled in and the review step showing. The mission is deploy to the nearest other planet or moon (`coordDistance`, then planet id). A mini planet is not a haven. With no other planet or moon, the mission is an expedition to that world's deep-space slot, and the row says expeditions can meet ambushes. The button is hidden when that expedition would be rejected, including when the expedition slot is already full and Stellar Cartography has not opened another. Nothing launches until Send. `fleetSaveSuggestions` in `packages/game/src/fleet-save.ts` fills optional `fleetSave` on the player view. It is not stored on the save. Stationary hulls stay behind. This entry is in `docs/FEATURE_MAP.md`.
 
+## Resource merchant
+
+Players swap metal, crystal, and deuterium on the planet they have open. The Shop resources tab shows the merchant (`data-testid="resource-merchant"`) beside the Starshard bundle trade. The rate is `RESOURCE_MERCHANT_VALUE` in `packages/game/src/data/tuning.ts`: 3 metal = 2 crystal = 1 deuterium. `RESOURCE_MERCHANT_FEE_PERCENT` is 10. The fee is that percent of the converted output, floored, and the player receives the rest. There is no Starshard cost. No save fields were added.
+
+The player picks the resource to give, the resource to receive, and a whole amount. `data-testid="resource-merchant-preview"` shows the exact amount they will receive before Trade. A short stockpile (`Not enough metal.`) or a full vault (`deuterium storage is too full for this trade.`) is a `blocked-reason` in `data-testid="resource-merchant-error"`, next to the Trade button. The same checks run again on the server.
+
+| Action | Route | Who |
+| --- | --- | --- |
+| Trade | `POST /api/shop/merchant` `{ playerId, planetId, give, get, amount }` | owning session (401 without a cookie, 403 for another commander) |
+
+`planetId` is required. The trade changes that planet only and does not fall back to the home planet. Quotes live in `quoteResourceMerchant` and `assessResourceMerchant` (`packages/game/src/world-merchant.ts`). `tradeWithResourceMerchant` applies the swap. The page is `apps/web/src/ui/render-shop.ts`. Tests: `packages/game/src/merchant.test.ts`, `apps/server/src/merchant-route.test.ts`, and `apps/web/src/ui/render-shop.test.ts`.
+
 ## Onboarding & Fleet Presets
 
 `player.onboarding` is optional (`claimed`, `dismissed`, `recon`). Older saves omit it and still load. `onboardingViewFor` does not write the field. Claiming or dismissing creates it.

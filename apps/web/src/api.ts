@@ -831,6 +831,21 @@ export async function tradeResources(
   return parse<PlayerView>(res);
 }
 
+export async function tradeWithMerchant(
+  playerId: string,
+  planetId: string,
+  give: "metal" | "crystal" | "deuterium",
+  get: "metal" | "crystal" | "deuterium",
+  amount: number,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/shop/merchant", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, planetId, give, get, amount }),
+  });
+  return parse<PlayerView>(res);
+}
+
 export async function activateOfficerHire(
   playerId: string,
   officerId: OfficerId,
