@@ -297,4 +297,12 @@ A fleet arriving home and a new combat report can each play one short tone. Soun
 
 `apps/web/src/ui/sound-settings.ts` paints the switch. `apps/web/src/ui/render-shell.ts` places it in the side nav. `apps/web/src/ui/styles-shell.css` gives the on state the accent color and puts the row on its own line on a narrow screen. `apps/web/src/ui/render-app.ts` runs the comparison on each signed-in paint and clears the baseline on the join screen. `apps/web/src/main-handlers-click.ts` toggles the switch. `apps/web/src/main.ts` arms playback on a later click or key once the switch is on. `apps/web/package.json` runs `apps/web/src/settings.test.ts`. This entry is in `docs/FEATURE_MAP.md`.
 
+## Combat simulator
+
+The Simulator page is a game-nav route, `/simulator` (`data-testid="nav-simulator"`, `data-testid="page-simulator"`, panel `data-testid="combat-sim"`). It is rendered by `combatSimHtml` in `apps/web/src/ui/render-combat-sim.ts` and switched from `pageHtml` in `apps/web/src/ui/render-pages.ts`.
+
+Attacker counts start from the open colony (`data-testid="combat-sim-attacker-<shipId>"`). Defender ships (`combat-sim-defender-<shipId>`) and defenses (`combat-sim-defense-<defenseId>`) are editable. A spy report chosen in `data-testid="combat-sim-spy"` fills the defender from that report's ships, defenses, and research. Pasting spy-report lines into `data-testid="combat-sim-paste"` and pressing `data-testid="combat-sim-apply-paste"` does the same. `Use orbit counts` is `data-testid="combat-sim-reset-orbit"`. The seed field is `data-testid="combat-sim-seed"` (default `starhold-sim`). `data-testid="combat-sim-run"` calls `runCombatSandbox` in `packages/game/src/combat-sim.ts`, which calls `resolveCombat` with the attacker's level research and class attack. The readout reuses the combat report tables (`data-testid="combat-sim-result"`).
+
+There is no API route, no save field, and no D1 table. The run reads the open view and writes nothing back: fleets stay in flight, resources stay put, and the planet stock stays put. Pirate and planet fights keep the same combat engine; this page does not launch either one.
+
 

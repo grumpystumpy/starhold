@@ -63,6 +63,7 @@ import { hrefForPage } from "./router";
 import { infoTooltip } from "./render-tooltips";
 import { seasonsPage } from "./render-seasons";
 import { researchTreeMapHtml } from "./render-research-tree";
+import { combatSimHtml } from "./render-combat-sim";
 
 const RESOURCE_BUILDINGS: BuildingId[] = [
   "metalMine",
@@ -521,6 +522,8 @@ export function pageHtml(
       return defensesPage(view, busy);
     case "fleet":
       return fleetPage(view, busy, fleetDraft);
+    case "simulator":
+      return combatSimHtml(view);
     case "galaxy":
       return galaxyPanel(view, busy);
     case "shop":
