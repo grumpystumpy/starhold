@@ -234,4 +234,8 @@ Plates are mapped in `apps/web/src/ui/assets.ts` (`BUILDING_ART`, `SHIP_ART`, `D
 
 Every referenced file is listed in `docs/ART_CREDITS.md`. game-icons.net lines on the Credits page use the required CC BY 3.0 credit. Capital hulls, shield-style defenses, Jump Gate, Chrono Lathe, Mantle Loom, the deuterium chip, and officer portraits stay on the original plates. No save fields were added.
 
+## Catalog tooltips
+
+Buildings, Research, Shipyard, and Defense rows each carry one `costTooltip` (`data-testid="cost-tip"`) from `apps/web/src/ui/render-chrome-join.ts` and `apps/web/src/ui/render-chrome-rows.ts`. The bubble names the catalog effect (`description`), the next cost, the build or research time, and the requirements: current level, energy use, building gates (Lunar Habitat, Shipyard, Solar Array, Research Lab, Manufacture Line), shipyard level, class, and research levels with the commander's current level. Hover, keyboard focus, and a tap (`aria-expanded` through `toggleTip` in `apps/web/src/main-handlers-pointer.ts`) open and close it. The ? control sits outside the Upgrade, Build, and Research button, and a pointer down on it does not arm that action. Resource, fleet, officer, and hangar tips are unchanged. No save fields were added.
+
 
