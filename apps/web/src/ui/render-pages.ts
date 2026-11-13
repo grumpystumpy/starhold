@@ -363,14 +363,56 @@ function fleetPage(
     </section>`;
 }
 
-let highscoreTab: "players" | "alliances" = "players";
+type HighscoreTab =
+  | "players"
+  | "alliances"
+  | "buildings"
+  | "fleet"
+  | "research"
+  | "defense";
 
-export function setHighscoreTab(tab: "players" | "alliances"): void {
+const CATEGORY_TABS: Array<Exclude<HighscoreTab, "players" | "alliances">> = [
+  "buildings",
+  "fleet",
+  "research",
+  "defense",
+];
+
+const CATEGORY_LABELS: Record<(typeof CATEGORY_TABS)[number], string> = {
+  buildings: "Buildings",
+  fleet: "Fleet",
+  research: "Research",
+  defense: "Defense",
+};
+
+let highscoreTab: HighscoreTab = "players";
+
+export function setHighscoreTab(tab: HighscoreTab): void {
   highscoreTab = tab;
 }
 
+function highscoreTabButton(id: HighscoreTab, label: string): string {
+  const pressed = highscoreTab === id;
+  return `<button type="button" data-highscore-tab="${id}" data-testid="highscore-tab-${id}" aria-pressed="${pressed ? "true" : "false"}">${label}</button>`;
+}
+
+function categoryHighscoreHtml(view: PlayerView, tab: (typeof CATEGORY_TABS)[number]): string {
+  const rows = view.categoryHighscores?.[tab] ?? [];
+  const body = rows.length
+    ? rows
+        .map(
+          (row) =>
+            `<li data-testid="category-highscore-${tab}-${row.rank}"><span class="hs-rank">#${fmt(row.rank)}</span> ${row.allianceTag ? `[${escapeHtml(row.allianceTag)}] ` : ""}${escapeHtml(row.name)}${row.playerId === view.player.id ? " (you)" : ""}<span>${fmtCompact(row.points)} pts</span></li>`,
+        )
+        .join("")
+    : `<li data-testid="category-highscores-empty">No commanders ranked yet.</li>`;
+  return `<p class="hint">Cached with the highscore rebuild, not counted again on this page.</p>
+      <ol class="highscores" data-testid="category-highscores-${tab}">
+        ${body}
+      </ol>`;
+}
+
 function highscorePage(view: PlayerView): string {
-  const playersActive = highscoreTab !== "alliances";
   const playerRows = (view.highscores ?? [])
     .map(
       (h) =>
@@ -383,24 +425,30 @@ function highscorePage(view: PlayerView): string {
         `<li data-testid="alliance-highscore-${row.rank}"><span class="hs-rank">#${fmt(row.rank)}</span> [${escapeHtml(row.tag)}] ${escapeHtml(row.name)} · ${fmt(row.memberCount)} members · ${fmtCompact(row.points)} pts · avg ${fmtCompact(row.averagePoints)}</li>`,
     )
     .join("");
+  const tabs = [
+    highscoreTabButton("players", "Commanders"),
+    highscoreTabButton("alliances", "Alliances"),
+    ...CATEGORY_TABS.map((id) => highscoreTabButton(id, CATEGORY_LABELS[id])),
+  ].join("");
+  const body =
+    highscoreTab === "alliances"
+      ? `<p class="hint">Ranked by total member points. Rebuilt with the highscore cache, not on each page load.</p>
+      <ol class="highscores" data-testid="alliance-highscores">
+        ${allianceRows || `<li data-testid="alliance-highscores-empty">No alliances ranked yet.</li>`}
+      </ol>`
+      : highscoreTab === "players"
+        ? `<p class="hint">One row per commander — their home planet only. Points still count the whole empire.</p>
+      <ol class="highscores" data-testid="highscores-list">
+        ${playerRows}
+      </ol>`
+        : categoryHighscoreHtml(view, highscoreTab);
   return `
     <section class="panel" data-testid="highscores">
       <h2>Highscores</h2>
       <div class="alliance-member-actions" data-testid="highscore-tabs">
-        <button type="button" data-highscore-tab="players" data-testid="highscore-tab-players" aria-pressed="${playersActive ? "true" : "false"}">Commanders</button>
-        <button type="button" data-highscore-tab="alliances" data-testid="highscore-tab-alliances" aria-pressed="${playersActive ? "false" : "true"}">Alliances</button>
+        ${tabs}
       </div>
-      ${
-        playersActive
-          ? `<p class="hint">One row per commander — their home planet only. Points still count the whole empire.</p>
-      <ol class="highscores" data-testid="highscores-list">
-        ${playerRows}
-      </ol>`
-          : `<p class="hint">Ranked by total member points. Rebuilt with the highscore cache, not on each page load.</p>
-      <ol class="highscores" data-testid="alliance-highscores">
-        ${allianceRows || `<li data-testid="alliance-highscores-empty">No alliances ranked yet.</li>`}
-      </ol>`
-      }
+      ${body}
     </section>
     <section class="panel" data-testid="hall-of-fame">
       <h2>Hall of Fame</h2>

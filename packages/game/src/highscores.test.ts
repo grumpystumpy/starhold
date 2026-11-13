@@ -1,16 +1,20 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { researchUpgradeCost } from "./formulas-build.js";
+import { researchUpgradeCost, buildingUpgradeCost } from "./formulas-build.js";
 import {
   emptyDefenses,
   emptyFleetShips,
+  emptyResearch,
   planetPoints,
   researchPoints,
   roughPoints,
+  shipStockPoints,
 } from "./formulas.js";
 import {
   allianceRankBoard,
   bindAllianceRankSource,
+  bindCategoryRankSource,
+  categoryHighscoreBoards,
   createAlliance,
   createUniverse,
   empirePoints,
@@ -25,6 +29,8 @@ import { emptyBuildings } from "./world-bootstrap.js";
 import { graduateNewbieProtection } from "./test-graduate.js";
 import { recordCombatReport } from "./combat-share.js";
 import { bindHighscoreSource } from "./world-view.js";
+import type { BuildingId, DefenseId } from "./types.js";
+import { DEFENSES } from "./catalog.js";
 
 describe("P2 highscores", () => {
   it("shows an owner's empire total and debris in the galaxy row", () => {
@@ -341,5 +347,149 @@ describe("P2 highscores", () => {
     assert.ok((view.hallOfFame[0]?.destroyedValue ?? 0) > 0);
     assert.equal(view.hallOfShame[0]?.playerId, defender.id);
     assert.ok((view.hallOfShame[0]?.lostValue ?? 0) > (view.hallOfShame[1]?.lostValue ?? 0));
+  });
+
+  it("ranks buildings, fleet, research, and defense without fields on the commander board", () => {
+    const universe = createUniverse("Category Boards", 8);
+    const miner = joinUniverse(universe, "Miner", 170_000_000);
+    const flyer = joinUniverse(universe, "Flyer", 170_000_001);
+    graduateNewbieProtection(universe, universe.players[miner.player.id]!);
+    const minerPlanet = universe.planets[miner.planet.id]!;
+    const flyerPlanet = universe.planets[flyer.planet.id]!;
+    minerPlanet.buildings.metalMine = 4;
+    flyerPlanet.buildings.metalMine = 0;
+    minerPlanet.ships = emptyFleetShips();
+    flyerPlanet.ships = emptyFleetShips();
+    flyerPlanet.ships.scout = 4;
+    minerPlanet.defenses = emptyDefenses();
+    flyerPlanet.defenses = emptyDefenses();
+    flyerPlanet.defenses.laserBattery = 10;
+    flyerPlanet.resources.deuterium = 20_000;
+    universe.players[miner.player.id]!.research = emptyResearch();
+    universe.players[miner.player.id]!.research.energyTech = 2;
+    universe.players[flyer.player.id]!.research = emptyResearch();
+
+    let expectedBuildings = 0;
+    for (const [id, level] of Object.entries(minerPlanet.buildings)) {
+      for (let step = 0; step < level; step++) {
+        const cost = buildingUpgradeCost(id as BuildingId, step);
+        expectedBuildings += (cost.metal + cost.crystal + cost.deuterium) / 1000;
+      }
+    }
+    const boards = categoryHighscoreBoards(universe);
+    const minerBuildings = boards.buildings.find((row) => row.playerId === miner.player.id);
+    const flyerBuildings = boards.buildings.find((row) => row.playerId === flyer.player.id);
+    assert.ok(minerBuildings && flyerBuildings);
+    assert.equal(minerBuildings.points, Math.floor(expectedBuildings));
+    assert.ok(minerBuildings.points > flyerBuildings.points);
+    assert.ok(minerBuildings.rank < flyerBuildings.rank);
+    assert.equal(
+      boards.research.find((row) => row.playerId === miner.player.id)?.points,
+      Math.floor(researchPoints(universe.players[miner.player.id]!.research)),
+    );
+    assert.equal(boards.research.find((row) => row.playerId === flyer.player.id)?.points, 0);
+    let expectedDefense = 0;
+    for (const [id, count] of Object.entries(flyerPlanet.defenses)) {
+      const cost = DEFENSES[id as DefenseId].cost;
+      expectedDefense += ((cost.metal + cost.crystal + cost.deuterium) * count) / 1000;
+    }
+    assert.equal(
+      boards.defense.find((row) => row.playerId === flyer.player.id)?.points,
+      Math.floor(expectedDefense),
+    );
+    assert.ok(expectedDefense > 0);
+    assert.equal(boards.defense.find((row) => row.playerId === miner.player.id)?.points, 0);
+
+    const docked = shipStockPoints(flyerPlanet.ships);
+    assert.equal(
+      boards.fleet.find((row) => row.playerId === flyer.player.id)?.points,
+      Math.floor(docked),
+    );
+    assert.equal(boards.fleet.find((row) => row.playerId === miner.player.id)?.points, 0);
+    const launch = launchFleet(universe, {
+      playerId: flyer.player.id,
+      mission: "raid",
+      targetPlanetId: miner.planet.id,
+      ships: { scout: 1 },
+      now: 170_000_500,
+    });
+    assert.equal(launch.ok, true);
+    const livePlanet = universe.planets[flyer.planet.id]!;
+    const flying = Object.values(universe.fleets)
+      .filter((mission) => mission.ownerPlayerId === flyer.player.id)
+      .reduce((sum, mission) => sum + shipStockPoints(mission.ships), 0);
+    assert.ok(flying > 0);
+    assert.ok(shipStockPoints(livePlanet.ships) < docked);
+    const after = categoryHighscoreBoards(universe);
+    assert.equal(
+      after.fleet.find((row) => row.playerId === flyer.player.id)?.points,
+      Math.floor(shipStockPoints(livePlanet.ships) + flying),
+    );
+    assert.equal(
+      after.research.find((row) => row.playerId === miner.player.id)?.points,
+      boards.research.find((row) => row.playerId === miner.player.id)?.points,
+    );
+
+    const colonyId = "colony-category-1";
+    universe.planets[colonyId] = {
+      ...minerPlanet,
+      id: colonyId,
+      name: "Mine Two",
+      coords: {
+        galaxy: minerPlanet.coords.galaxy,
+        system: minerPlanet.coords.system,
+        slot: minerPlanet.coords.slot === 1 ? 2 : 1,
+      },
+      buildings: { ...minerPlanet.buildings, metalMine: 2 },
+      ships: emptyFleetShips(),
+      defenses: emptyDefenses(),
+    };
+    universe.players[miner.player.id]!.planetIds.push(colonyId);
+    const withColony = categoryHighscoreBoards(universe);
+    assert.ok(
+      (withColony.buildings.find((row) => row.playerId === miner.player.id)?.points ?? 0) >
+        minerBuildings.points,
+    );
+    assert.equal(
+      withColony.research.find((row) => row.playerId === miner.player.id)?.points,
+      Math.floor(researchPoints(universe.players[miner.player.id]!.research)),
+    );
+
+    const commander = highscoresBoard(universe)[0]!;
+    assert.equal(Object.hasOwn(commander, "buildings"), false);
+    assert.equal(Object.hasOwn(commander, "fleet"), false);
+    assert.equal(Object.hasOwn(commander, "research"), false);
+    assert.equal(Object.hasOwn(commander, "defense"), false);
+
+    bindCategoryRankSource(() => ({
+      buildings: [],
+      fleet: [],
+      research: [],
+      defense: [],
+    }));
+    try {
+      assert.deepEqual(playerView(universe, flyer.player.id, 170_001_000).categoryHighscores, {
+        buildings: [],
+        fleet: [],
+        research: [],
+        defense: [],
+      });
+    } finally {
+      bindCategoryRankSource(undefined);
+    }
+
+    const template = universe.players[flyer.player.id]!;
+    for (let i = 0; i < 105; i++) {
+      const id = `extra${String(i).padStart(3, "0")}`;
+      universe.players[id] = {
+        ...template,
+        id,
+        name: id,
+        planetIds: [],
+        homePlanetId: "missing",
+        research: emptyResearch(),
+      };
+    }
+    assert.equal(categoryHighscoreBoards(universe).fleet.length, 100);
   });
 });
