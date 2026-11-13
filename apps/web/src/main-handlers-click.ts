@@ -10,7 +10,9 @@ import {
   type ResearchId,
   type ShipId,
 } from "@starhold/game";
+import { noteSoundGesture, readSoundEnabled, writeSoundEnabled } from "./settings";
 import { fmt } from "./ui/format";
+import { paintSoundToggle } from "./ui/sound-settings";
 import { syncBuildCountReason } from "./ui/render-chrome-rows";
 import {
   clearFlash,
@@ -156,6 +158,16 @@ export function bindClickHandlers(): void {
 
       const target = ev.target;
       if (!(target instanceof Element)) return;
+
+      const soundToggle = closestActionEl(target, "[data-sound-toggle]");
+      if (soundToggle) {
+        ev.preventDefault();
+        writeSoundEnabled(!readSoundEnabled());
+        noteSoundGesture();
+        paintSoundToggle(soundToggle, readSoundEnabled());
+        return;
+      }
+      if (readSoundEnabled()) noteSoundGesture();
 
       const shopTab = closestActionEl(target, "[data-shop-tab]");
       if (shopTab) {
