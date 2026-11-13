@@ -36,7 +36,7 @@ import {
 } from "./world-acs.js";
 import { resolveRaidArrival } from "./world-arrival-raid.js";
 import { PLAYER_TRADE_EXPIRE_PER_TICK } from "./data/tuning.js";
-import { expirePlayerTradeOffers } from "./world-player-trade.js";
+import { bindPlayerTradePlanetTick, expirePlayerTradeOffers } from "./world-player-trade.js";
 import { isNewbieBonusActive, NEWBIE_PRODUCTION_MULT } from "./world-protection.js";
 import { harvestAsteroidField } from "./world-asteroids.js";
 import {
@@ -714,3 +714,5 @@ export function advanceUniverse(universe: UniverseState, now = Date.now()): void
   pruneSpyReports(universe, now);
   expirePlayerTradeOffers(universe, now, PLAYER_TRADE_EXPIRE_PER_TICK);
 }
+
+bindPlayerTradePlanetTick(advancePlanetNow);

@@ -18,6 +18,7 @@ import {
   cancelPlayerTradeOffer,
   expirePlayerTradeOffers,
   listPlayerTradeOffers,
+  playerTradeMetalValue,
   playerTradeNetAmount,
   postPlayerTradeOffer,
 } from "./world-player-trade.js";
@@ -418,5 +419,217 @@ describe("player trade market", () => {
     assert.equal(view.planet.id, joined.planetId);
     assert.equal((view as { playerTradeOffers?: unknown }).playerTradeOffers, undefined);
     assert.equal(raw.playerTradeOffers, undefined);
+  });
+
+  it("rejects the same resource, a missing accept planet, and a poster under 2500", () => {
+    const created = universe();
+    const poster = veteran(created, "Picker");
+    const buyer = veteran(created, "PickerBuyer");
+    const same = postPlayerTradeOffer(
+      created,
+      poster.playerId,
+      poster.planetId,
+      "crystal",
+      1_000,
+      "crystal",
+      1_000,
+      NOW,
+    );
+    assert.equal(same.ok, false);
+    if (same.ok) return;
+    assert.match(same.error, /different resources/);
+    assert.equal(created.planets[poster.planetId]!.resources.crystal, 20_000);
+
+    const posted = postPlayerTradeOffer(
+      created,
+      poster.playerId,
+      poster.planetId,
+      "metal",
+      1_000,
+      "crystal",
+      1_000,
+      NOW,
+    );
+    assert.equal(posted.ok, true);
+    if (!posted.ok) return;
+    const missingPlanet = acceptPlayerTradeOffer(
+      created,
+      buyer.playerId,
+      posted.offerId,
+      undefined,
+      NOW,
+    );
+    assert.equal(missingPlanet.ok, false);
+    if (missingPlanet.ok) return;
+    assert.match(missingPlanet.error, /planetId required/);
+    assert.ok(created.playerTradeOffers?.[posted.offerId!]);
+
+    const fresh = joinUniverse(created, "Under2500", NOW);
+    assert.ok(empirePoints(created, fresh.player) < NEWBIE_PROTECTION_POINTS);
+    const newbiePost = postPlayerTradeOffer(
+      created,
+      fresh.player.id,
+      fresh.planet.id,
+      "metal",
+      1_000,
+      "deuterium",
+      1_000,
+      NOW,
+    );
+    assert.equal(newbiePost.ok, false);
+    if (newbiePost.ok) return;
+    assert.match(newbiePost.error, /Newbie/);
+  });
+
+  it("weights crystal and deuterium against the daily accept cap", () => {
+    assert.equal(playerTradeMetalValue("metal", 900), 900);
+    assert.equal(playerTradeMetalValue("crystal", 900), 1_350);
+    assert.equal(playerTradeMetalValue("deuterium", 900), 2_700);
+    const created = universe();
+    const poster = veteran(created, "WeightSeller");
+    const buyer = veteran(created, "WeightBuyer");
+    const posted = postPlayerTradeOffer(
+      created,
+      poster.playerId,
+      poster.planetId,
+      "deuterium",
+      1_000,
+      "metal",
+      1_000,
+      NOW,
+    );
+    assert.equal(posted.ok, true);
+    if (!posted.ok) return;
+    const buyerPlayer = created.players[buyer.playerId]!;
+    buyerPlayer.tradeAcceptDay = utcDayKey(NOW);
+    buyerPlayer.tradeAcceptValue = PLAYER_TRADE_DAILY_ACCEPT_VALUE_CAP - 2_699;
+    const blocked = acceptPlayerTradeOffer(
+      created,
+      buyer.playerId,
+      posted.offerId,
+      buyer.planetId,
+      NOW,
+    );
+    assert.equal(blocked.ok, false);
+    if (blocked.ok) return;
+    assert.match(blocked.error, /cap/);
+    buyerPlayer.tradeAcceptValue = PLAYER_TRADE_DAILY_ACCEPT_VALUE_CAP - 2_700;
+    const accepted = acceptPlayerTradeOffer(
+      created,
+      buyer.playerId,
+      posted.offerId,
+      buyer.planetId,
+      NOW,
+    );
+    assert.equal(accepted.ok, true);
+    assert.equal(buyerPlayer.tradeAcceptValue, PLAYER_TRADE_DAILY_ACCEPT_VALUE_CAP);
+    assert.equal(created.planets[buyer.planetId]!.resources.deuterium, 5_900);
+  });
+
+  it("ticks production before stock and storage checks", () => {
+    const created = universe();
+    const poster = veteran(created, "Producer");
+    const buyer = veteran(created, "Receiver");
+    const sellerPlanet = created.planets[poster.planetId]!;
+    sellerPlanet.resources.metal = 100;
+    sellerPlanet.lastTickAt = NOW - 10 * 60 * 60 * 1000;
+    const posted = postPlayerTradeOffer(
+      created,
+      poster.playerId,
+      poster.planetId,
+      "metal",
+      1_000,
+      "crystal",
+      1_000,
+      NOW,
+    );
+    assert.equal(posted.ok, true);
+    if (!posted.ok) return;
+    assert.ok(created.planets[poster.planetId]!.resources.metal > 100);
+
+    const buyerPlanet = created.planets[buyer.planetId]!;
+    buyerPlanet.resources.metal = 25_000;
+    buyerPlanet.lastTickAt = NOW - 20 * 60 * 60 * 1000;
+    const accepted = acceptPlayerTradeOffer(
+      created,
+      buyer.playerId,
+      posted.offerId,
+      buyer.planetId,
+      NOW,
+    );
+    assert.equal(accepted.ok, false);
+    if (accepted.ok) return;
+    assert.match(accepted.error, /storage/);
+    assert.ok(created.playerTradeOffers?.[posted.offerId!]);
+    assert.ok(created.planets[buyer.planetId]!.resources.metal > 25_000);
+  });
+
+  it("writes an event when an expired refund does not fit", () => {
+    const created = universe();
+    const poster = veteran(created, "Overflow");
+    const home = created.planets[poster.planetId]!;
+    const posted = postPlayerTradeOffer(
+      created,
+      poster.playerId,
+      poster.planetId,
+      "metal",
+      10_000,
+      "crystal",
+      1_000,
+      NOW,
+    );
+    assert.equal(posted.ok, true);
+    if (!posted.ok) return;
+    home.resources.metal = 29_900;
+    home.lastTickAt = NOW;
+    created.playerTradeOffers![posted.offerId!]!.expiresAt = NOW - 1;
+    const refunded = expirePlayerTradeOffers(created, NOW, 20);
+    assert.equal(refunded, 1);
+    assert.equal(home.resources.metal, 30_000);
+    const entry = created.players[poster.playerId]!.eventLog?.find(
+      (row) => row.title === "Market refund",
+    );
+    assert.ok(entry);
+    assert.match(entry!.body, /could not fit/);
+  });
+
+  it("refunds using storage now, not the cap from when the offer was posted", () => {
+    const created = universe();
+    const poster = veteran(created, "Vault");
+    const home = created.planets[poster.planetId]!;
+    const colony = structuredClone(home);
+    colony.id = `${home.id}_colony`;
+    colony.name = "Vault Colony";
+    colony.resources = { metal: 21_000, crystal: 0, deuterium: 0 };
+    created.planets[colony.id] = colony;
+    const player = created.players[poster.playerId]!;
+    player.planetIds.push(colony.id);
+    player.officers = [
+      { officerId: "vaultkeeper", activatedAt: NOW - 48 * 60 * 60 * 1000, expiresAt: NOW - 1 },
+    ];
+    const posted = postPlayerTradeOffer(
+      created,
+      poster.playerId,
+      colony.id,
+      "metal",
+      12_000,
+      "crystal",
+      1_000,
+      NOW - 60 * 60 * 1000,
+    );
+    assert.equal(posted.ok, true);
+    if (!posted.ok) return;
+    colony.resources.metal = 21_000;
+    colony.lastTickAt = NOW;
+    home.resources.metal = 0;
+    home.lastTickAt = NOW;
+    created.playerTradeOffers![posted.offerId!]!.expiresAt = NOW - 1;
+    const cancelled = cancelPlayerTradeOffer(created, poster.playerId, posted.offerId, NOW);
+    assert.equal(cancelled.ok, true);
+    if (!cancelled.ok) return;
+    assert.equal(cancelled.refunded, 12_000);
+    assert.equal(cancelled.lost, 0);
+    assert.equal(colony.resources.metal, 21_000);
+    assert.equal(home.resources.metal, 12_000);
   });
 });

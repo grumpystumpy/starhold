@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createUniverse, joinUniverse, playerView, type PlayerTradeList } from "@starhold/game";
-import { setMarketBook } from "./market-panel";
+import { setMarketBook, setMarketDraft } from "./market-panel";
 import { shopPageHtml } from "./render-shop";
 
 describe("render-shop items tab", () => {
@@ -104,18 +104,42 @@ describe("render-shop items tab", () => {
     assert.match(html, /data-testid="market-post"/);
     assert.match(html, /data-testid="market-fee-preview"/);
     assert.match(html, /10%/);
-    assert.match(html, /9k metal/);
-    assert.match(html, /3\.6k crystal/);
+    assert.match(html, /data-testid="market-post-preview"/);
+    assert.match(html, /Buyer receives 9k metal\. You receive 3\.6k crystal\./);
     assert.match(html, /data-testid="market-offer-trd_ui"/);
+    assert.match(html, /data-testid="market-offer-when-trd_ui"/);
+    assert.match(html, /Posted 0s ago\. Expires in 48h\./);
     assert.match(html, /data-testid="market-accept-trd_ui"/);
     assert.match(html, /data-testid="market-cancel-trd_ui"/);
     assert.match(html, /Not enough crystal on this planet\./);
     assert.match(html, /disabled/);
+
+    setMarketDraft({
+      offerResource: "crystal",
+      offerAmount: 15_000,
+      requestResource: "deuterium",
+      requestAmount: 2_000,
+    });
+    const short = shopPageHtml(view, false, "market");
+    assert.match(short, /Not enough crystal on this planet\./);
+    assert.match(short, /data-testid="market-post"[^>]*disabled/);
+    assert.match(short, /Buyer receives 13\.5k crystal\. You receive 1\.8k deuterium\./);
+
+    setMarketDraft({
+      offerResource: "metal",
+      offerAmount: 2_000,
+      requestResource: "metal",
+      requestAmount: 2_000,
+    });
+    const same = shopPageHtml(view, false, "market");
+    assert.match(same, /different resources/);
+    assert.match(same, /data-testid="market-post"[^>]*disabled/);
 
     const resources = shopPageHtml(view, false, "resources");
     assert.match(resources, /data-testid="trade-buy-resources"/);
     assert.match(resources, /data-testid="trade-sell-resources"/);
     assert.match(resources, /data-testid="shop-resources"/);
     setMarketBook(null);
+    setMarketDraft(null);
   });
 });

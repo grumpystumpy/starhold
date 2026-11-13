@@ -19,6 +19,7 @@ import type {
   UniverseState,
 } from "./types.js";
 import { storageForPlanet, utcDayKey } from "./world-boosts.js";
+import { pushEventLog } from "./world-event-log.js";
 
 export type PlayerTradeResult =
   | {
@@ -62,6 +63,48 @@ export interface PlayerTradeList {
 }
 
 const TRADE_RESOURCES: readonly TradeResource[] = ["metal", "crystal", "deuterium"];
+
+type PlanetTick = (universe: UniverseState, planetId: string, now: number) => void;
+let tradePlanetTick: PlanetTick | null = null;
+
+/** world-arrival installs this so market checks see produced resources without an import cycle. */
+export function bindPlayerTradePlanetTick(fn: PlanetTick): void {
+  tradePlanetTick = fn;
+}
+
+function tickPlanets(
+  universe: UniverseState,
+  now: number,
+  ids: Array<string | undefined | null>,
+): void {
+  const tick = tradePlanetTick;
+  if (!tick) return;
+  const seen = new Set<string>();
+  for (const id of ids) {
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const planet = universe.planets[id];
+    if (!planet || planet.lastTickAt >= now) continue;
+    tick(universe, id, now);
+  }
+}
+
+function tickOfferPlanets(
+  universe: UniverseState,
+  now: number,
+  extra: Array<string | undefined | null> = [],
+): void {
+  const ids: Array<string | undefined | null> = [...extra];
+  const offers = book(universe);
+  if (offers) {
+    for (const offer of Object.values(offers)) {
+      ids.push(offer.planetId);
+      const poster = universe.players[offer.posterPlayerId];
+      if (poster) ids.push(poster.homePlanetId);
+    }
+  }
+  tickPlanets(universe, now, ids);
+}
 
 export function playerTradeNetAmount(amount: number): number {
   return Math.floor((amount * (100 - PLAYER_TRADE_FEE_PERCENT)) / 100);
@@ -128,12 +171,13 @@ function addAcceptUsed(player: PlayerState, now: number, value: number): void {
 function refundTarget(
   universe: UniverseState,
   offer: PlayerTradeOffer,
+  now: number,
 ): PlanetState | null {
   const poster = universe.players[offer.posterPlayerId];
   if (!poster) return null;
   const source = universe.planets[offer.planetId];
   if (source && source.ownerPlayerId === poster.id) {
-    const caps = storageForPlanet(universe, source, offer.createdAt);
+    const caps = storageForPlanet(universe, source, now);
     const room = caps[offer.offerResource] - source.resources[offer.offerResource];
     if (room >= offer.offerAmount) return source;
   }
@@ -157,6 +201,7 @@ function payRefund(
       note: `${amount} ${resource} could not fit in storage.`,
     };
   }
+  tickPlanets(universe, now, [offer.planetId, poster.homePlanetId]);
   const source = universe.planets[offer.planetId];
   const sourceOk = Boolean(source && source.ownerPlayerId === poster.id);
   if (sourceOk && source) {
@@ -211,6 +256,7 @@ export function expirePlayerTradeOffers(
 ): number {
   const offers = book(universe);
   if (!offers) return 0;
+  tickOfferPlanets(universe, now);
   const due = Object.values(offers)
     .filter((offer) => offer.expiresAt <= now)
     .sort((a, b) => a.expiresAt - b.expiresAt || a.id.localeCompare(b.id));
@@ -220,8 +266,21 @@ export function expirePlayerTradeOffers(
     if (scanned >= PLAYER_TRADE_MAX_OPEN_TOTAL) break;
     scanned += 1;
     if (refunded >= limit) break;
-    if (!refundTarget(universe, offer)) continue;
-    payRefund(universe, offer, now);
+    if (!refundTarget(universe, offer, now)) continue;
+    const paid = payRefund(universe, offer, now);
+    if (paid.lost > 0) {
+      const poster = universe.players[offer.posterPlayerId];
+      if (poster) {
+        pushEventLog(poster, {
+          kind: "fleetReturn",
+          createdAt: now,
+          title: "Market refund",
+          body:
+            paid.note ??
+            `${paid.lost} ${offer.offerResource} could not fit in storage.`,
+        });
+      }
+    }
     delete offers[offer.id];
     refunded += 1;
   }
@@ -238,6 +297,7 @@ export function listPlayerTradeOffers(
   now = Date.now(),
   planetId?: string,
 ): PlayerTradeList {
+  tickPlanets(universe, now, [planetId]);
   expirePlayerTradeOffers(universe, now, PLAYER_TRADE_MAX_OPEN_TOTAL);
   const player = universe.players[playerId];
   const newbie = player ? isNewbie(universe, player) : true;
@@ -337,6 +397,7 @@ export function postPlayerTradeOffer(
   requestAmount: unknown,
   now = Date.now(),
 ): PlayerTradeResult {
+  tickPlanets(universe, now, [planetId]);
   expirePlayerTradeOffers(universe, now, PLAYER_TRADE_MAX_OPEN_TOTAL);
   const player = universe.players[playerId];
   if (!player) return { ok: false, error: "Unknown player." };
@@ -428,6 +489,7 @@ export function acceptPlayerTradeOffer(
   planetId: string | undefined,
   now = Date.now(),
 ): PlayerTradeResult {
+  tickPlanets(universe, now, [planetId]);
   expirePlayerTradeOffers(universe, now, PLAYER_TRADE_MAX_OPEN_TOTAL);
   const player = universe.players[playerId];
   if (!player) return { ok: false, error: "Unknown player." };

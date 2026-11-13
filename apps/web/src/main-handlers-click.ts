@@ -11,6 +11,13 @@ import {
   type ShipId,
 } from "@starhold/game";
 import { fmt } from "./ui/format";
+import { describeMarketPost } from "./ui/render-shop";
+import {
+  asMarketResource,
+  marketBook,
+  marketDraft,
+  setMarketDraft,
+} from "./ui/market-panel";
 import { syncBuildCountReason } from "./ui/render-chrome-rows";
 import {
   clearFlash,
@@ -149,6 +156,42 @@ export async function submitGalaxyJump(raw: string): Promise<void> {
 }
 
 export function bindClickHandlers(): void {
+  const onMarketField = (ev: Event) => {
+    const target = ev.target;
+    if (!(target instanceof Element) || !target.closest("[data-market-field]")) return;
+    const form = target.closest("form");
+    const view = session.view;
+    if (!form || !view) return;
+    const read = (name: string) =>
+      form.querySelector<HTMLInputElement | HTMLSelectElement>(
+        `[data-market-field="${name}"]`,
+      )?.value ?? "";
+    setMarketDraft({
+      offerResource: asMarketResource(read("offerResource")),
+      requestResource: asMarketResource(read("requestResource")),
+      offerAmount: Number(read("offerAmount")),
+      requestAmount: Number(read("requestAmount")),
+    });
+    const described = describeMarketPost(view, marketBook(), marketDraft(), session.busy);
+    const preview = form.querySelector("[data-testid='market-post-preview']");
+    if (preview) preview.textContent = described.preview;
+    const button = form.querySelector<HTMLButtonElement>("[data-testid='market-post']");
+    if (button) button.disabled = described.reason != null;
+    let reason = form.querySelector("[data-testid='market-post-reason']");
+    if (described.reason) {
+      if (!reason) {
+        reason = document.createElement("span");
+        reason.className = "market-reason";
+        reason.setAttribute("data-testid", "market-post-reason");
+        button?.insertAdjacentElement("afterend", reason);
+      }
+      reason.textContent = described.reason;
+    } else {
+      reason?.remove();
+    }
+  };
+  root.addEventListener("input", onMarketField);
+  root.addEventListener("change", onMarketField);
   root.addEventListener(
     "click",
     (ev) => {
