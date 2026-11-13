@@ -73,6 +73,8 @@ export const session = {
   pendingAcsPrefill: null as AcsPrefill | null,
   /** One-shot Fleet draft from a galaxy Colonize/Attack action. */
   pendingGalaxyFleetDraft: null as FleetDraft | null,
+  /** One-shot Fleet draft from Send fleet away. Cleared once the form is armed. */
+  pendingFleetSaveDraft: null as FleetDraft | null,
   /** Ignore duplicate click after pointerup already dispatched the armed action. */
   suppressClickUntil: 0,
   /** `?reset=` token for the email password-reset landing. Null hides the form. */

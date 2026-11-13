@@ -884,6 +884,21 @@ export interface PirateBossView {
   projectedSpawnAt?: number;
 }
 
+/** View-only prefill for the fleet-save reminder. Absent on the save. */
+export interface FleetSaveSuggestion {
+  /** Incoming hostile fleet id. Dismissal is per this attack. */
+  attackId: string;
+  originPlanetId: string;
+  mission: "deploy" | "expedition";
+  /** Docked non-stationary ships. Stationary hulls are left out. */
+  ships: Partial<FleetShips>;
+  /** Nearest other planet or moon. Null when the save is an expedition. */
+  targetPlanetId: string | null;
+  /** Deep-space coordinates for an expedition. Null on deploy. */
+  targetCoords: Coordinates | null;
+  arrivesAt: number;
+}
+
 export interface PlayerView {
   now: number;
   newbieBonusEndsAt?: number | null;
@@ -929,6 +944,11 @@ export interface PlayerView {
   sensorContacts: FleetMission[];
   /** Hostile outbound fleets targeting this player (not Moving Fortress). */
   hostileInbound: FleetMission[];
+  /**
+   * One-tap fleet-save prefills for hostile raids more than a minute out.
+   * Omitted when nothing qualifies. Not written to the save.
+   */
+  fleetSave?: FleetSaveSuggestion[];
   /** Premium currency echo. */
   starshards: number;
   /** Active (non-expired) officers. */
