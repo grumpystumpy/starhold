@@ -361,6 +361,7 @@ export {
   pruneExpiredOccupations,
   startOccupation,
 } from "./world-occupation.js";
+export { abandonColony } from "./world-abandon-colony.js";
 export {
   maybeDestroyMoonWithTitans,
   resolveMiniPlanetChoice,

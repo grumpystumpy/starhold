@@ -226,6 +226,83 @@ describe("empire overview strip", () => {
   });
 });
 
+describe("abandon colony control", () => {
+  function overview(partial: {
+    planetId: string;
+    planetName: string;
+    kind?: "planet" | "moon";
+    homePlanetId?: string;
+  }) {
+    return {
+      player: {
+        id: "p1",
+        name: "Commander",
+        homePlanetId: partial.homePlanetId,
+        cosmetics: {},
+        research: {},
+      },
+      planet: {
+        id: partial.planetId,
+        name: partial.planetName,
+        kind: partial.kind ?? "planet",
+        coords: { galaxy: 1, system: 2, slot: 4 },
+        buildings: {},
+        buildQueue: [],
+        shipQueue: [],
+        defenseQueue: [],
+        ships: {},
+        defenses: {},
+      },
+      planetArt: { artId: "earth", artUrl: "", artThumbUrl: "" },
+      economy: {
+        fields: { used: 1, cap: 100, remaining: 99 },
+        positionMult: { metal: 1, crystal: 1, deuterium: 1, energy: 1 },
+        productionPerHour: { metal: 10, crystal: 10, deuterium: 10 },
+        energy: { factor: 1, produced: 10, used: 1 },
+        temperatureK: 200,
+      },
+      goals: [],
+    } as unknown as PlayerView;
+  }
+
+  it("shows a named confirm dialog only for a non-home colony", () => {
+    const colony = pageHtml(
+      "overview",
+      overview({ planetId: "col1", planetName: "Far Reach", homePlanetId: "home1" }),
+      false,
+      null,
+    );
+    assert.match(colony, /data-testid="abandon-colony-open"/);
+    assert.match(colony, /data-testid="abandon-colony-dialog"/);
+    assert.match(colony, /Abandon Far Reach\?/);
+    assert.match(
+      colony,
+      /Buildings, docked ships, defenses, resources, and any moon are lost\./,
+    );
+
+    const home = pageHtml(
+      "overview",
+      overview({ planetId: "home1", planetName: "Cradle", homePlanetId: "home1" }),
+      false,
+      null,
+    );
+    assert.doesNotMatch(home, /data-testid="abandon-colony"/);
+
+    const moon = pageHtml(
+      "overview",
+      overview({
+        planetId: "moon1",
+        planetName: "Far Reach Moon",
+        kind: "moon",
+        homePlanetId: "home1",
+      }),
+      false,
+      null,
+    );
+    assert.doesNotMatch(moon, /data-testid="abandon-colony"/);
+  });
+});
+
 describe("fleet tab", () => {
   it("shows fleet controls and links to Messages without inline fleets or reports", () => {
     const view = {

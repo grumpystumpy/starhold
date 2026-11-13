@@ -87,6 +87,7 @@ import {
   doPostAllianceChat,
   doProposeJointStrike,
   doRaiseOfficer,
+  doAbandonColony,
   doRenamePlanet,
   doRelocateFortress,
   doLogin,
@@ -203,6 +204,22 @@ export function bindClickHandlers(): void {
       if (copyInvite) {
         ev.preventDefault();
         void doCopyInvite();
+        return;
+      }
+
+      const abandonOpen = closestActionEl(target, "[data-abandon-colony='open']");
+      if (abandonOpen instanceof HTMLButtonElement && !abandonOpen.disabled) {
+        ev.preventDefault();
+        const dialog = abandonOpen.parentElement?.querySelector("dialog");
+        if (dialog instanceof HTMLDialogElement && !dialog.open) dialog.showModal();
+        return;
+      }
+
+      const abandonCancel = closestActionEl(target, "[data-abandon-colony='cancel']");
+      if (abandonCancel) {
+        ev.preventDefault();
+        const dialog = abandonCancel.closest("dialog");
+        if (dialog instanceof HTMLDialogElement) dialog.close();
         return;
       }
 
@@ -1547,6 +1564,12 @@ export function bindClickHandlers(): void {
         "#planet-rename-input",
       );
       void doRenamePlanet(input?.value ?? "");
+      return;
+    }
+
+    if (form.id === "abandon-colony-form") {
+      ev.preventDefault();
+      void doAbandonColony();
       return;
     }
 

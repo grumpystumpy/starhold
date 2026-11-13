@@ -170,6 +170,7 @@ function overviewPage(view: PlayerView, busy: boolean): string {
         </div>
         <p class="hint">${PLANET_NAME_MAX_LEN} chars max · letters, numbers, spaces</p>
       </form>
+      ${abandonColonyHtml(view, busy)}
       <p class="hint" data-testid="position-mult" title="Position production multipliers for this slot">
         Position × metal ${pm.metal.toFixed(2)} · crystal ${pm.crystal.toFixed(2)} · deut ${pm.deuterium.toFixed(2)} · energy ${pm.energy.toFixed(2)}
         ${infoTooltip({
@@ -233,6 +234,26 @@ function empireOverviewHtml(view: PlayerView, busy: boolean): string {
     </div>
     <ul class="empire-overview-planets">${rows}</ul>
   </section>`;
+}
+
+function abandonColonyHtml(view: PlayerView, busy: boolean): string {
+  const { planet, player } = view;
+  if (planet.kind === "moon") return "";
+  if (!player.homePlanetId || planet.id === player.homePlanetId) return "";
+  const name = escapeHtml(planet.name);
+  const disabled = busy ? "disabled" : "";
+  return `
+    <div class="planet-abandon" data-testid="abandon-colony">
+      <button type="button" data-abandon-colony="open" data-testid="abandon-colony-open" ${disabled}>Abandon colony</button>
+      <dialog class="abandon-colony-dialog" data-testid="abandon-colony-dialog" aria-labelledby="abandon-colony-title">
+        <h3 id="abandon-colony-title">Abandon ${name}?</h3>
+        <p data-testid="abandon-colony-warning">Buildings, docked ships, defenses, resources, and any moon are lost.</p>
+        <form id="abandon-colony-form" data-testid="abandon-colony-form">
+          <button type="submit" data-testid="abandon-colony-confirm" ${disabled}>Abandon ${name}</button>
+          <button type="button" data-abandon-colony="cancel" data-testid="abandon-colony-cancel">Cancel</button>
+        </form>
+      </dialog>
+    </div>`;
 }
 
 function buildingsPage(view: PlayerView, busy: boolean): string {

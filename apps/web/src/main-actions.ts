@@ -14,6 +14,7 @@ export {
   doGalaxyGalaxyNav,
   doOpenFleetSave,
   doSelectPlanet,
+  doAbandonColony,
   doRenamePlanet,
   doRelocateFortress,
   doSignup,
