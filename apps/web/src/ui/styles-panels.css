@@ -1351,3 +1351,162 @@ code {
   color: var(--muted);
   font-size: 0.85rem;
 }
+
+/* Research Tree Map */
+.research-tree-wrap {
+  margin: 0.5rem 0 1.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg2) 50%, transparent);
+}
+
+.tree-header {
+  margin-bottom: 0.75rem;
+}
+
+.tree-header .subhead {
+  margin: 0 0 0.25rem;
+}
+
+.tree-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.tree-tier {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.tree-tier-label {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.tree-tier-nodes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.6rem;
+}
+
+.tree-node {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  text-align: left;
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 0.5rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.tree-node:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--bg2) 80%, white);
+}
+
+.tree-node-researched {
+  border-color: color-mix(in srgb, var(--ok) 60%, var(--line));
+}
+
+.tree-node-available {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
+}
+
+.tree-node-locked {
+  opacity: 0.65;
+  border-style: dashed;
+  cursor: not-allowed;
+}
+
+.tree-node-header {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.35rem;
+}
+
+.tree-node-header .thumb {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.tree-node-title-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tree-node-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+.tree-node-level {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.tree-node-reqs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin: 0.25rem 0 0.45rem;
+}
+
+.tree-req-pill {
+  font-size: 0.68rem;
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.tree-req-pill.met {
+  background: color-mix(in srgb, var(--ok) 20%, transparent);
+  color: var(--ok);
+}
+
+.tree-req-pill.unmet {
+  background: color-mix(in srgb, var(--bad) 20%, transparent);
+  color: var(--bad);
+}
+
+.tree-node-footer {
+  margin-top: auto;
+  padding-top: 0.2rem;
+}
+
+.tree-node-badge {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.tree-node-badge-researched {
+  color: var(--ok);
+}
+
+.tree-node-badge-available {
+  color: var(--accent);
+}
+
+.tree-node-badge-locked {
+  color: var(--muted);
+}
