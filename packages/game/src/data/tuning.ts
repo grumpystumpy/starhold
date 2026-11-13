@@ -1182,6 +1182,13 @@ export const OCCUPATION_DURATION_MS = 2 * 24 * 60 * 60 * 1000;
 /** Occupier / owner mine output split while occupied. */
 export const OCCUPATION_OCCUPIER_SHARE = 0.3;
 export const OCCUPATION_OWNER_SHARE = 0.7;
+/** Timed galaxy events. One active window, a few per week, no overlap. */
+export const GALAXY_EVENTS_PER_WEEK = 3;
+export const GALAXY_EVENT_DURATION_MS = 24 * 60 * 60 * 1000;
+/** Meteor shower: debris from fights in the event galaxy. */
+export const GALAXY_EVENT_METEOR_DEBRIS_MULT = 1.5;
+/** Solar flare: ship shields on both sides in the event galaxy. */
+export const GALAXY_EVENT_SOLAR_FLARE_SHIELD_MULT = 0.8;
 /**
  * World Eaters required to **destroy** a mini planet.
  * Direct capture on win: Void Titan / Mothership / World Eater (see canDirectCaptureMini).

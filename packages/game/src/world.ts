@@ -14,6 +14,14 @@ export {
   advanceUniverse,
   playerStateTickDue,
 } from "./world-arrival.js";
+export {
+  activeGalaxyEvent,
+  galaxyEventDebrisMult,
+  galaxyEventShieldMods,
+  galaxyEventView,
+  scheduledGalaxyEvent,
+  tickGalaxyEvents,
+} from "./world-galaxy-events.js";
 export { bindTickBudget, npcJobBudget, workersTickBudget } from "./tick-budget.js";
 export type { TickBudget } from "./tick-budget.js";
 export type { ActionResult, FleetActionResult } from "./world-queues.js";
