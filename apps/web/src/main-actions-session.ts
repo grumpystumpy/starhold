@@ -12,6 +12,7 @@ import {
   generateRecoveryCodes,
   invalidateCachedState,
   joinGame,
+  createInviteLink,
   loginAccount,
   recoverAccount,
   relocateMiniFortress,
@@ -443,8 +444,8 @@ export async function doJoin(name: string): Promise<void> {
   schedulePaint();
   try {
     session.view = session.account
-      ? await authJoin(trimmed)
-      : await joinGame(trimmed);
+      ? await authJoin(trimmed, session.inviteCode)
+      : await joinGame(trimmed, session.inviteCode);
     session.galaxySystem = session.view.planet.coords.system;
     session.galaxyGalaxy = null;
     session.joinDraft = session.view.player.name;
@@ -471,6 +472,40 @@ export async function doJoin(name: string): Promise<void> {
     session.error = null;
     setFlash("error", authFlashMessage(err, "Could not join."));
     session.view = null;
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doCopyInvite(): Promise<void> {
+  if (!session.account?.playerId || !session.view) {
+    setFlash("error", "Sign in before inviting a friend.");
+    schedulePaint();
+    return;
+  }
+  if (session.busy) return;
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    const minted = await createInviteLink();
+    const path = minted.path.startsWith("/") ? minted.path : `/?invite=${minted.code}`;
+    const url = new URL(path, window.location.origin).href;
+    session.inviteShareUrl = url;
+    let copied = false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+        copied = true;
+      }
+    } catch {
+      copied = false;
+    }
+    if (copied) setFlash("notice", "Invite link copied.");
+    else setFlash("notice", "Invite link is in the box. Copy it from there.");
+  } catch (err) {
+    setFlash("error", authFlashMessage(err, "Could not create an invite link."));
   } finally {
     session.busy = false;
     schedulePaint();

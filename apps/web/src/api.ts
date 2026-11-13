@@ -376,13 +376,28 @@ export async function claimAnonymousPlayer(
   return parse(res);
 }
 
-export async function authJoin(name: string): Promise<PlayerView> {
+export async function authJoin(
+  name: string,
+  invite?: string | null,
+): Promise<PlayerView> {
   const res = await credFetch("/api/auth/join", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({
+      name,
+      ...(invite ? { invite } : {}),
+    }),
   });
   return parse<PlayerView>(res);
+}
+
+export async function createInviteLink(): Promise<{
+  code: string;
+  path: string;
+  expiresAt: number;
+}> {
+  const res = await credFetch("/api/invite", { method: "POST" });
+  return parse(res);
 }
 
 export async function buyShopItem(
@@ -481,11 +496,17 @@ export async function confirmPasswordReset(
   return parse(res);
 }
 
-export async function joinGame(name: string): Promise<PlayerView> {
+export async function joinGame(
+  name: string,
+  invite?: string | null,
+): Promise<PlayerView> {
   const res = await credFetch("/api/join", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({
+      name,
+      ...(invite ? { invite } : {}),
+    }),
   });
   return parse<PlayerView>(res);
 }

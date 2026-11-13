@@ -50,6 +50,7 @@ import {
   rejectJoinRequest,
   cancelJoinRequest,
   joinUniverse,
+  resolveInviteCoords,
   kickFromAlliance,
   launchFleet,
   launchMaxExpeditions,
@@ -301,10 +302,19 @@ export function createApp(): Hono {
   });
 
   app.post("/api/join", async (c) => {
-    const body = (await c.req.json().catch(() => ({}))) as { name?: string };
+    const body = (await c.req.json().catch(() => ({}))) as {
+      name?: string;
+      invite?: string;
+    };
     try {
       return await withUniverse((universe) => {
-        const { player } = joinUniverse(universe, body.name ?? "");
+        const now = Date.now();
+        const coords = resolveInviteCoords(
+          universe,
+          typeof body.invite === "string" ? body.invite : "",
+          now,
+        );
+        const { player } = joinUniverse(universe, body.name ?? "", now, coords);
         return c.json(playerView(universe, player.id));
       }, { catalog: true });
     } catch (err) {

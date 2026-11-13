@@ -4,6 +4,8 @@ export {
   joinUniverse,
   planetAtCoords,
 } from "./world-bootstrap.js";
+export { createInvite, resolveInviteCoords } from "./world-invite.js";
+export type { InviteMintResult } from "./world-invite.js";
 export {
   claimPlayerToAccount,
   playerForAccount,

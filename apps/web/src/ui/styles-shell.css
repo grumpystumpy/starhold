@@ -198,6 +198,28 @@
   font-weight: 600;
 }
 
+.side-nav button.nav-link {
+  font: inherit;
+  font-weight: 500;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  border-left: 3px solid transparent;
+  border-radius: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.side-nav input.invite-link-fallback {
+  display: block;
+  width: calc(100% - 0.8rem);
+  min-width: 0;
+  max-width: calc(100% - 0.8rem);
+  margin: 0.35rem 0.4rem 0.5rem;
+  box-sizing: border-box;
+  font-size: 16px;
+}
+
 .nav-badge {
   display: inline-block;
   margin-left: 0.35rem;
@@ -509,6 +531,13 @@
   .side-nav .nav-link.active {
     border-left-color: transparent;
     border-bottom-color: var(--accent);
+  }
+
+  .side-nav button.nav-link {
+    border-left: none;
+    border-bottom: 2px solid transparent;
+    width: auto;
+    min-height: 2.75rem;
   }
 
   .resource-bar {

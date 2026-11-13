@@ -234,4 +234,14 @@ Plates are mapped in `apps/web/src/ui/assets.ts` (`BUILDING_ART`, `SHIP_ART`, `D
 
 Every referenced file is listed in `docs/ART_CREDITS.md`. game-icons.net lines on the Credits page use the required CC BY 3.0 credit. Capital hulls, shield-style defenses, Jump Gate, Chrono Lathe, Mantle Loom, the deuterium chip, and officer portraits stay on the original plates. No save fields were added.
 
+## Invite a friend nearby
+
+A signed-in commander copies an invite link from the side nav (`data-testid="copy-invite"`). The link is `/?invite=<code>`. The code is 8 characters from an unambiguous alphabet. It is not a player id and not an email. If the clipboard fails, the same URL sits in a text box under the button.
+
+`POST /api/invite` requires a session and a commander. A live code is reused, so copying again does not mint another one. A new code is refused with 429 until 60 seconds after the last mint. Codes last 7 days. The map holds at most 64 codes and is pruned only when a code is minted, not on `GET /api/state`.
+
+`POST /api/join` and `POST /api/auth/join` take an optional `invite` string. A valid code places the new home on the nearest open slot in the inviter's galaxy, within 12 systems, using the usual home-slot order. A full neighborhood, or any invalid or expired code, uses `nextCoords` and still joins. An account that already has a commander is not moved. The join screen shows a short hint when `?invite=` is present. It does not warn that a code is bad.
+
+Optional save field `universe.invites` stores `{ code, playerId, createdAt, expiresAt }`. Older saves omit it. The field is not part of the 30s player view. No rewards.
+
 
