@@ -5,6 +5,7 @@ import {
   FIELD_CENTER_BY_SLOT,
   FIELD_MIN,
   MAP_SYSTEMS,
+  moonChanceLabel,
   SHIP_ORDER,
   SHIPS,
   productionMultForSlot,
@@ -351,7 +352,7 @@ function galaxyDebrisControl(
   busy: boolean,
 ): string {
   if (!debris || (debris.metal <= 0 && debris.crystal <= 0)) return "";
-  return ` · <button type="button" class="galaxy-debris-badge" data-galaxy-harvest="${slot}" data-testid="galaxy-debris-${slot}" title="Harvest debris" aria-label="Harvest debris" ${busy ? "disabled" : ""}>debris ${fmt(debris.metal)}/${fmt(debris.crystal)}</button>`;
+  return ` · <button type="button" class="galaxy-debris-badge" data-galaxy-harvest="${slot}" data-testid="galaxy-debris-${slot}" title="Harvest debris" aria-label="Harvest debris" ${busy ? "disabled" : ""}>debris ${fmt(debris.metal)}/${fmt(debris.crystal)} · ${escapeHtml(moonChanceLabel(debris))}</button>`;
 }
 
 /**

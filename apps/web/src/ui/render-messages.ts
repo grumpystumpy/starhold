@@ -3,6 +3,7 @@ import {
   BUILDINGS,
   DEFENSE_ORDER,
   DEFENSES,
+  moonChanceLabel,
   RESEARCH,
   RESEARCH_ORDER,
   SHIP_ORDER,
@@ -200,7 +201,7 @@ function resourceNames(
 function combatMailBody(report: CombatReport): string {
   const bits = [report.summary];
   const debris = resourceNames(report.debrisCreated);
-  if (debris) bits.push(`Debris: ${debris}`);
+  if (debris) bits.push(`Debris: ${debris} · ${moonChanceLabel(report.debrisCreated)}`);
   const destroyed = namedCounts(DEFENSE_ORDER, DEFENSES, report.defensesDestroyed);
   if (destroyed) {
     const rebuilt = namedCounts(DEFENSE_ORDER, DEFENSES, report.defensesRebuilt) || "none";
@@ -275,7 +276,7 @@ function combatSideHtml(
 /** Losses, survivors, loot, and debris from the report's own counts. */
 export function combatReadoutHtml(report: CombatReport, selfId: string): string {
   const loss = combatLossSummary(report);
-  return `<div class="combat-side-compare" data-testid="combat-side-compare">${combatSideHtml("Attacker", report, selfId, loss)}${combatSideHtml("Defender", report, selfId, loss)}</div><div class="combat-spoils" data-testid="combat-spoils"><section class="combat-loot" data-testid="combat-loot"><h4>Loot</h4><p>${fullResourceLine(report.loot)}</p></section><section class="combat-debris" data-testid="combat-debris"><h4>Debris</h4><p>${fullResourceLine(report.debrisCreated)}</p></section></div>`;
+  return `<div class="combat-side-compare" data-testid="combat-side-compare">${combatSideHtml("Attacker", report, selfId, loss)}${combatSideHtml("Defender", report, selfId, loss)}</div><div class="combat-spoils" data-testid="combat-spoils"><section class="combat-loot" data-testid="combat-loot"><h4>Loot</h4><p>${fullResourceLine(report.loot)}</p></section><section class="combat-debris" data-testid="combat-debris"><h4>Debris</h4><p>${fullResourceLine(report.debrisCreated)}</p><p class="meta" data-testid="combat-moon-chance">${escapeHtml(moonChanceLabel(report.debrisCreated))}</p></section></div>`;
 }
 
 export function combatLossSummary(report: CombatReport): {

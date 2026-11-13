@@ -817,7 +817,7 @@ a.message-title:hover {
   border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
   padding: 0.1rem 0.4rem;
   border-radius: 4px;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 button.galaxy-debris-badge {

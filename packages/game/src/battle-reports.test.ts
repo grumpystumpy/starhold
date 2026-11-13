@@ -321,4 +321,37 @@ describe("replayable battle reports", () => {
     assert.ok(legacy);
     assert.equal("roundLog" in legacy, false);
   });
+
+  it("puts moon chance on the debris field line at 0%, mid, and the 20% cap", () => {
+    const cardFor = (metal: number, crystal: number, deuterium: number) =>
+      formatCombatShareCard({
+        id: "rpt_moon",
+        at: 1,
+        missionId: "m1",
+        attackerPlayerId: "p1",
+        defenderPlayerId: "p2",
+        attackerName: "A",
+        defenderName: "B",
+        targetCoords: { galaxy: 1, system: 1, slot: 8 },
+        attackerBefore: normalizeFleetShips({}),
+        attackerAfter: normalizeFleetShips({}),
+        defenderBefore: normalizeFleetShips({}),
+        defenderAfter: normalizeFleetShips({}),
+        defensesBefore: emptyDefenses(),
+        defensesAfter: emptyDefenses(),
+        loot: { metal: 0, crystal: 0, deuterium: 0 },
+        debrisCreated: { metal, crystal, deuterium },
+        outcome: "attacker_win",
+        rounds: 1,
+        summary: "Field",
+      });
+
+    assert.match(cardFor(249_999, 0, 8_000_000), /Debris field: 249,999\/0 · moon chance 0%/);
+    assert.doesNotMatch(cardFor(249_999, 0, 8_000_000), /moon chance 32%/);
+    assert.match(cardFor(750_000, 250_000, 0), /Debris field: 750,000\/250,000 · moon chance 4%/);
+    const capped = cardFor(6_000_000, 2_500_000, 0);
+    assert.match(capped, /Debris field: 6,000,000\/2,500,000 · moon chance 20%/);
+    assert.doesNotMatch(capped, /moon chance 3[0-9]%/);
+    assert.doesNotMatch(cardFor(0, 0, 0), /Debris field:/);
+  });
 });

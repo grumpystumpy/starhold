@@ -93,6 +93,12 @@ Messages in the inbox display category badges matching their filter bucket (`Com
 
 Overview shows `data-testid="away-recap"` when the signed-in commander has `fleetReturn`, `raidAlert`, or `miniNearby` rows in `eventLog` with `createdAt` after the device's last visit, or combat, spy, or expedition reports with `at` after that visit. The line counts those three kinds and the unread report count (reports have no read flag; newer than the last visit is the unread set). `buildComplete` is left out. Dismiss (`data-testid="away-recap-dismiss"`) removes the card and, together with hiding the page, writes `starhold-last-visit:<playerId>` in `localStorage` (`apps/web/src/away-recap.ts`, the same device storage pattern as `apps/web/src/pwa.ts`). A missing key counts as no prior visit, so existing rows show until dismiss or hide. Nothing is written to the save, the tick, or the 30s `/api/state` poll. An empty recap is omitted. This entry is in `docs/FEATURE_MAP.md`.
 
+The combat debris section (`combat-debris` from `combatReadoutHtml`), the inbox combat-mail debris line, the public report page, and the plaintext share card (`formatCombatShareCard`) show the moon-formation chance beside the debris already on that report. The chance is `moonChanceLabel`, which calls `moonChancePercent` in `packages/game/src/world-moons.ts`: 1% per 250,000 metal+crystal (`MOON_DEBRIS_PER_PERCENT`), capped at 20% (`MOON_CHANCE_CAP`). Deuterium does not count. The client computes it from `debrisCreated`. `tryFormMoon` still decides whether a moon forms.
+
+## Galaxy
+
+A galaxy slot that already has metal or crystal debris keeps the `galaxy-debris-<slot>` badge and adds the same moon-formation chance (`moonChancePercent` on that slot's debris). Empty slots stay unlabeled. Nothing is added to the 30s `/api/state` payload.
+
 ## Fleet tab
 
 The Fleet tab shows the composer, hostile inbound fleets, sensor contacts, and a link to Messages. In-flight fleets are in the top fleet events banner; combat, spy, and expedition reports are in Messages.
