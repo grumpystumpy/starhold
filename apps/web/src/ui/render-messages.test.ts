@@ -14,8 +14,10 @@ import {
   previousSpyReport,
   setCompareSpy,
   setConfirmDelete,
+  setCommanderMail,
   setInboxFilter,
   spyCompareSections,
+  setMessagesTab,
 } from "./render-messages";
 import { fmt, fmtCompact } from "./format";
 import { combatBattleExtrasHtml } from "./render-fleets-panels";
@@ -1247,5 +1249,36 @@ describe("spy report compare", () => {
     const again = messagesPageHtml(view);
     assert.doesNotMatch(again, /data-testid="spy-compare-curr-ui"/);
     assert.doesNotMatch(again, /data-testid="spy-compare-window-curr-ui"/);
+  });
+
+  it("renders a mail tab with escaped compose, reply, and delete", () => {
+    setMessagesTab("inbox");
+    const inbox = messagesPageHtml(baseView());
+    assert.match(inbox, /data-testid="messages-tab-mail"/);
+    assert.match(inbox, /data-testid="messages-inbox"|data-testid="messages-empty"/);
+    assert.doesNotMatch(inbox, /data-testid="commander-mail-compose"/);
+
+    setMessagesTab("mail");
+    const rawName = "<" + "Admin>";
+    const rawBody = "<" + "script>alert(1)</" + "script>";
+    setCommanderMail([
+      {
+        id: "mail-1",
+        fromName: rawName,
+        body: rawBody,
+        createdAt: 1_700_000_000_000,
+      },
+    ]);
+    const mail = messagesPageHtml(baseView());
+    const escapedName = "&" + "lt;Admin&" + "gt;";
+    const escapedBody = "&" + "lt;script&" + "gt;alert(1)&" + "lt;/script&" + "gt;";
+    assert.match(mail, /data-testid="commander-mail-compose"/);
+    assert.match(mail, /data-testid="commander-mail-send"/);
+    assert.ok(mail.includes(`data-mail-reply="${escapedName}"`));
+    assert.match(mail, /data-testid="commander-mail-delete"/);
+    assert.ok(mail.includes(escapedBody));
+    assert.equal(mail.includes(rawBody), false);
+    setMessagesTab("inbox");
+    setCommanderMail([]);
   });
 });

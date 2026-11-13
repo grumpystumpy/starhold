@@ -109,8 +109,10 @@ import {
   doClaimSeason,
   doSelectPlanet,
   doDeleteMessages,
+  doDeleteCommanderMail,
   doMarkEventsRead,
   doDismissFleetSave,
+  doSendCommanderMail,
   doGalaxyFleetAction,
   doGalaxyFleetPreset,
   doGalaxyHarvest,
@@ -143,6 +145,8 @@ import {
   setConfirmDelete,
   setInboxFilter,
   toggleCompareSpy,
+  setMailReplyTo,
+  setMessagesTab,
 } from "./ui/render-messages";
 import {
   notifyBattleReplayPaint,
@@ -446,6 +450,43 @@ export function bindClickHandlers(): void {
           setInboxFilter(raw);
           schedulePaint();
         }
+        return;
+      }
+
+      const messagesTab = closestActionEl(target, "button[data-messages-tab]");
+      if (messagesTab) {
+        ev.preventDefault();
+        const tab = messagesTab.getAttribute("data-messages-tab");
+        if (tab === "inbox" || tab === "mail") {
+          setMessagesTab(tab);
+          schedulePaint();
+        }
+        return;
+      }
+
+      const mailReply = closestActionEl(target, "[data-mail-reply]");
+      if (mailReply) {
+        ev.preventDefault();
+        const name = mailReply.getAttribute("data-mail-reply") ?? "";
+        setMailReplyTo(name);
+        schedulePaint();
+        return;
+      }
+
+      const mailDelete = closestActionEl(target, "[data-mail-delete]");
+      if (mailDelete) {
+        ev.preventDefault();
+        const mailId = mailDelete.getAttribute("data-mail-delete");
+        if (mailId) void doDeleteCommanderMail(mailId);
+        return;
+      }
+
+      const mailSend = closestActionEl(target, "[data-mail-send]");
+      if (mailSend) {
+        ev.preventDefault();
+        const to = root.querySelector<HTMLInputElement>("[data-mail-to]")?.value ?? "";
+        const body = root.querySelector<HTMLTextAreaElement>("[data-mail-body]")?.value ?? "";
+        void doSendCommanderMail(to, body);
         return;
       }
 

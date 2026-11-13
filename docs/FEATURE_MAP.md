@@ -121,6 +121,8 @@ The combat debris section (`combat-debris` from `combatReadoutHtml`), the inbox 
 
 A galaxy slot that already has metal or crystal debris keeps the `galaxy-debris-<slot>` badge and adds the same moon-formation chance (`moonChancePercent` on that slot's debris). Empty slots stay unlabeled. Nothing is added to the 30s `/api/state` payload.
 
+Private commander mail is a Mail tab on that page (`data-testid="messages-tab-mail"`). It is not part of the universe document and not part of the 30s `/api/state` poll. `GET /api/mail?since=` and `POST /api/mail` `{ to, body }` use the session cookie, same as alliance chat. `DELETE /api/mail/:id` removes one message for its recipient. Bodies are at most 500 characters. Each recipient keeps at most 100, and the oldest is dropped. A sender is limited to 20 messages a minute. The client fetches mail only while Messages is open. Compose addresses a commander name. Reply fills that name. Delete removes the row. Names and bodies are escaped. Rows live in `save_commander_mail` (`CREATE TABLE IF NOT EXISTS` in `apps/server/src/row-store.ts` and `migrations/0003_commander_mail.sql`). With no D1 binding, the same routes use an in-memory table so local play still works. Older universes have no mail field and still load.
+
 ## Fleet tab
 
 The Fleet tab shows the composer, hostile inbound fleets, sensor contacts, and a link to Messages. In-flight fleets are in the top fleet events banner; combat, spy, and expedition reports are in Messages.

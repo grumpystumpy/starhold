@@ -47,6 +47,7 @@ import {
   refreshAllianceChatIfOpen,
   ensureAllianceRecruitingDirectory,
   refreshMarketIfOpen,
+  refreshCommanderMailIfOpen,
   startPolling,
 } from "./main-actions";
 import { wireJointStrikeForm } from "./main-actions-alliances";
@@ -367,6 +368,7 @@ window.starhold = {
     await silentRefresh(session.view.player.id);
     await refreshAllianceChatIfOpen();
     await refreshMarketIfOpen();
+    await refreshCommanderMailIfOpen();
   },
   pollIntervalMs: POLL_INTERVAL_MS,
   idlePauseMs: IDLE_PAUSE_MS,

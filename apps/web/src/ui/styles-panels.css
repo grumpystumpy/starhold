@@ -301,6 +301,18 @@ button.event-recall {
   font-size: 0.82rem;
 }
 
+.commander-mail-compose {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin: 0.4rem 0 0.8rem;
+}
+
+.commander-mail-compose textarea {
+  min-height: 4.5rem;
+  resize: vertical;
+}
+
 .inbox-filter[aria-pressed="true"] {
   border-color: var(--accent);
   color: var(--accent);
