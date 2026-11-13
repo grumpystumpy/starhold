@@ -1176,6 +1176,84 @@ code {
   letter-spacing: 0.04em;
 }
 
+.empire-overview {
+  margin: 1rem 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.75rem;
+  min-width: 0;
+}
+
+.empire-overview > h3 {
+  margin: 0 0 0.6rem;
+}
+
+.empire-overview-totals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.empire-overview-totals > span,
+.empire-overview-stock {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.empire-overview-totals small,
+.empire-overview-stock small,
+.empire-overview-planet small {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.empire-overview-planets {
+  display: grid;
+  gap: 0.35rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.empire-overview-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(5rem, 1.4fr) repeat(3, minmax(3.2rem, 1fr));
+  gap: 0.5rem;
+  align-items: center;
+  text-align: left;
+  padding: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-bg);
+  color: inherit;
+}
+
+.empire-overview-row:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.empire-overview-planet,
+.empire-overview-stock {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.empire-overview-planet {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.empire-overview-queues {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
 .active-title {
   margin: 0.1rem 0 0.25rem;
   color: var(--accent);
