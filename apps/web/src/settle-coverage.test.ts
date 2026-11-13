@@ -42,6 +42,16 @@ function playerView(): PlayerView {
   } as unknown as PlayerView;
 }
 
+function reorderCoverageView(base: PlayerView): PlayerView {
+  const view = structuredClone(base);
+  view.planet.buildQueue = [
+    { id: "q0", buildingId: "metalMine", targetLevel: 1, startedAt: 1, completesAt: 2, workSeconds: 1, paidCost: { metal: 1, crystal: 0, deuterium: 0 } },
+    { id: "q1", buildingId: "crystalMine", targetLevel: 1, startedAt: null, completesAt: 3, workSeconds: 1, paidCost: { metal: 1, crystal: 0, deuterium: 0 } },
+    { id: "q2", buildingId: "solarPlant", targetLevel: 1, startedAt: null, completesAt: 4, workSeconds: 1, paidCost: { metal: 1, crystal: 0, deuterium: 0 } },
+  ] as PlayerView["planet"]["buildQueue"];
+  return view;
+}
+
 function argsFor(name: string): unknown[] {
   if (name === "doSelectPlanet") return ["pl1"];
   if (name === "doClaimAnonymous" || name === "doDeleteFleetPreset") return [];
@@ -53,6 +63,7 @@ function argsFor(name: string): unknown[] {
   if (name === "doRelocateFortress") return [2, 8];
   if (name === "doRenamePlanet") return ["New Home"];
   if (name === "doClaimGoal" || name === "doChooseClass" || name === "doChangeClass" || name === "doActivateOfficer" || name === "doRaiseOfficer" || name === "doUnlockSkill" || name === "doUpgrade" || name === "doBuild" || name === "doBuildDefense" || name === "doResearch" || name === "doCancelQueue") return ["test", 1];
+  if (name === "doReorderQueue") return ["building", "q1", "down"];
   return ["test", "test", 1];
 }
 
@@ -101,7 +112,7 @@ describe("settleMutation coverage for exported POST actions", () => {
           }
           assert.match(body, /settleMutation\s*\(/, `${name} must re-check state after POST failure`);
           const events: string[] = [];
-          session.view = initial;
+          session.view = name === "doReorderQueue" ? reorderCoverageView(initial) : initial;
           session.account = { id: "account-1", email: "test@example.com", playerId: null };
           session.claimablePlayerId = "p1";
           session.busy = false;

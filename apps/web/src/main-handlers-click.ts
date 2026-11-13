@@ -39,6 +39,7 @@ import {
   doGenerateRecoveryCodes,
   doChangePassword,
   doRecover,
+  doReorderQueue,
   doRequestEmailReset,
   doConfirmEmailReset,
   doRevokeOtherSessions,
@@ -536,6 +537,28 @@ export function bindClickHandlers(): void {
           | null;
         const itemId = cancelBtn.getAttribute("data-queue-item");
         if (kind && itemId) void doCancelQueue(kind, itemId);
+        return;
+      }
+
+      const reorderBtn = closestActionEl(target, "[data-queue-reorder]");
+      if (reorderBtn) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const kind = reorderBtn.getAttribute("data-queue-reorder") as
+          | "building"
+          | "ship"
+          | "defense"
+          | "research"
+          | null;
+        const itemId = reorderBtn.getAttribute("data-queue-item");
+        const dir = reorderBtn.getAttribute("data-queue-dir");
+        if (
+          (kind === "building" || kind === "ship" || kind === "defense" || kind === "research") &&
+          itemId &&
+          (dir === "up" || dir === "down")
+        ) {
+          void doReorderQueue(kind, itemId, dir);
+        }
         return;
       }
 
