@@ -1,4 +1,4 @@
-import type { PlayerView } from "@starhold/game";
+import { isVacationMode, type PlayerView } from "@starhold/game";
 import { session } from "../session";
 import type { NavPage } from "./nav";
 import type { FleetDraft } from "./render-fleets";
@@ -16,7 +16,12 @@ export function mainColumnHtml(
   const menu = session.accountMenu;
   switch (menu) {
     case "security":
-      return securityPageHtml(session.security, session.recoveryCodes, busy);
+      return securityPageHtml(
+        session.security,
+        session.recoveryCodes,
+        busy,
+        isVacationMode(view.player),
+      );
     case "credits":
       return creditsPageHtml();
     case null:

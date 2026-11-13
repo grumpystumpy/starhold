@@ -52,6 +52,7 @@ export {
   doClaimOnboarding,
   doDismissOnboarding,
   doDismissWhatsNew,
+  doSetVacationMode,
   doTradeResources,
   doBuyShopItem,
   doActivateOfficer,

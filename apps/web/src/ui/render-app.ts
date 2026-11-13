@@ -4,7 +4,7 @@ import { startCountdownTick } from "./countdown";
 import type { NavPage } from "./nav";
 import { morphHtml } from "./morph-dom";
 import { canPatchShell, patchLiveChrome } from "./patch-chrome";
-import { syncWhatsNewPopup } from "./render-shell";
+import { syncVacationBanner, syncWhatsNewPopup } from "./render-shell";
 import { renderJoin, reconnectScreenHtml } from "./render-chrome";
 import { creditsPageHtml } from "./render-credits";
 import {
@@ -103,6 +103,7 @@ export function renderApp(
 
   if (menuMatches && canPatchShell(root, state.view, state.activePage)) {
     patchLiveChrome(root, state.view, state);
+    syncVacationBanner(root, state.view);
     syncWhatsNewPopup(root, state.view, state.busy);
     const main = root.querySelector<HTMLElement>("#page-main");
     if (main) {

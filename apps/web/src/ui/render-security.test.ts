@@ -39,6 +39,21 @@ describe("security page", () => {
     assert.doesNotMatch(html, /data-testid="security-recovery-codes"/);
   });
 
+  it("toggles vacation copy on the security page", () => {
+    const off = securityPageHtml(status, null, false, false);
+    assert.match(off, /data-testid="vacation-mode"/);
+    assert.match(off, /data-testid="vacation-mode-state"/);
+    assert.match(off, /Vacation mode is off/);
+    assert.match(off, /data-vacation-mode="on"/);
+    assert.match(off, /Turn on vacation mode/);
+    const on = securityPageHtml(status, null, false, true);
+    assert.match(on, /Vacation mode is on/);
+    assert.match(on, /data-vacation-mode="off"/);
+    assert.match(on, /Turn off vacation mode/);
+    const busy = securityPageHtml(status, null, true, true);
+    assert.match(busy, /data-testid="vacation-mode-toggle"[^>]*disabled/);
+  });
+
   it("shows generated codes once with a copy hint", () => {
     const html = securityPageHtml(status, ["ABCD-EFGH", "IJKL-MNOP"], false);
     assert.match(html, /data-testid="security-recovery-codes"/);

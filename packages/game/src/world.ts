@@ -5,8 +5,15 @@ export {
   planetAtCoords,
 } from "./world-bootstrap.js";
 export {
+  acsGroupPredatesVacation,
   claimPlayerToAccount,
+  fleetPredatesVacation,
+  isVacationMode,
   playerForAccount,
+  setVacationMode,
+  vacationStartedAt,
+  VACATION_ATTACK_BLOCKED,
+  VACATION_SEND_BLOCKED,
 } from "./world-accounts.js";
 export { advancePlanet } from "./world-tick.js";
 export {

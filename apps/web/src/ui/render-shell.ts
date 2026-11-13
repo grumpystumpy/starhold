@@ -4,6 +4,7 @@ import {
   DAILY_LOGIN_METAL,
   PRODUCTION_MULT,
   STARSHARDS_DAILY_LOGIN,
+  isVacationMode,
   levelBonuses,
   type PlayerView,
 } from "@starhold/game";
@@ -219,6 +220,31 @@ function planetSwitcher(
     </aside>`;
 }
 
+/** Visible while vacation mode is on. Empty when the field is absent or off. */
+export function vacationBannerHtml(view: PlayerView): string {
+  if (!isVacationMode(view.player)) return "";
+  return `<p class="vacation-banner" role="status" data-testid="vacation-banner">Vacation mode is on. Your fleets already out finish and return home. You cannot send new fleets. Attacks already on the way still arrive. New attacks cannot be sent.</p>`;
+}
+
+/** Keep the banner in step with the view when the shell is patched in place. */
+export function syncVacationBanner(root: ParentNode, view: PlayerView): void {
+  const shell = root.querySelector<HTMLElement>('[data-testid="game-shell"]');
+  if (!shell) return;
+  const next = vacationBannerHtml(view);
+  const existing = shell.querySelector<HTMLElement>('[data-testid="vacation-banner"]');
+  if (!next) {
+    existing?.remove();
+    return;
+  }
+  if (!existing) {
+    const header = shell.querySelector("header");
+    if (header) header.insertAdjacentHTML("afterend", next);
+    else shell.insertAdjacentHTML("afterbegin", next);
+    return;
+  }
+  if (existing.outerHTML !== next) existing.outerHTML = next;
+}
+
 /** One-time release notes. Empty once this commander dismissed the current key. */
 export function whatsNewHtml(
   view: PlayerView,
@@ -327,6 +353,7 @@ export function shellHtml(
           </div>
         </div>
       </header>
+      ${vacationBannerHtml(view)}
       <div data-flash-slot>${flashHtml(state.error, state.notice)}</div>
       <button type="button" class="idle-pause" data-testid="idle-pause"${session.idlePaused ? "" : " hidden"}>Paused, tap to resume</button>
       ${resourceBar(view, state.busy)}
