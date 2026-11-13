@@ -68,8 +68,10 @@ import {
 } from "./ui/router";
 import { peekEmailReset } from "./ui/render-chrome-join";
 import { bindBattleReplayPaint } from "./ui/render-fleets-panels";
+import { syncCategoryBoards } from "./highscore-categories";
 
 function paint(): void {
+  if (session.view) syncCategoryBoards(session.activePage);
   renderApp(
     root,
     {

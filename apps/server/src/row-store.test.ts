@@ -9,8 +9,11 @@ import {
   applyNpcRaidOnNpc,
   applyNpcRaidOnPlanet,
   createPirateBase,
+  categoryHighscoreBoards,
   createUniverse,
+  emptyCategoryHighscores,
   empirePoints,
+  type CategoryHighscores,
   graduateNewbieProtection,
   HIGHSCORE_RANK_HISTORY_DAYS,
   joinUniverse,
@@ -825,6 +828,105 @@ describe("row save migration", () => {
     );
     assert.equal(board.rows.find((row) => row.playerId === offline.id)?.points, expectedPoints);
     assert.ok(db.count() <= 40, `maintenance used ${db.count()} D1 queries`);
+  });
+
+  it("writes category boards only during maintenance and serves them from cache", async () => {
+    resetMemoryUniverse();
+    const { db, raw } = sqliteD1();
+    const source = fixture();
+    const alpha = Object.values(source.players).find((player) => player.name === "OldHand")!;
+    const home = source.planets[alpha.homePlanetId]!;
+    home.ships.scout = 5;
+    home.defenses = { ...home.defenses, laserBattery: 3 };
+    await migrateAll(db, source);
+    const ids = ["buildings", "fleet", "research", "defense"] as const;
+    const countRows = () =>
+      (
+        raw
+          .prepare(
+            "SELECT COUNT(*) AS n FROM save_highscores WHERE id IN ('buildings', 'fleet', 'research', 'defense')",
+          )
+          .get() as { n: number }
+      ).n;
+    assert.equal(countRows(), 0);
+
+    const store = createD1Store(db);
+    const app = createApp();
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "GET", cpuMs: 0 },
+      () => withUniverseRead(() => undefined, { playerIds: [alpha.id] }),
+    );
+    assert.equal(countRows(), 0);
+
+    const request = (method: string, path: string) =>
+      runWithScope({ kv: store, db, mode: "d1", method, cpuMs: 0 }, () => app.request(path, { method }));
+    const missing = await request("GET", "/api/highscores/categories");
+    assert.equal(missing.status, 200);
+    const missingBody = (await missing.json()) as CategoryHighscores;
+    assert.deepEqual(missingBody, emptyCategoryHighscores());
+
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "POST", cpuMs: 0 },
+      () => withUniverse((universe) => {
+        advanceUniverse(universe);
+      }, { maintenance: true }),
+    );
+    assert.equal(countRows(), 4);
+    const loaded = await loadWorkingSet(db, { maintenance: true });
+    const expected = categoryHighscoreBoards(loaded.universe);
+    for (const id of ids) {
+      const row = raw.prepare("SELECT doc FROM save_highscores WHERE id = ?").get(id) as { doc: string };
+      assert.equal(row.doc, JSON.stringify(expected[id]));
+    }
+
+    const cached = await request("GET", "/api/highscores/categories");
+    assert.equal(cached.status, 200);
+    const cachedBody = (await cached.json()) as CategoryHighscores;
+    assert.deepEqual(cachedBody.buildings, expected.buildings);
+    assert.equal(cachedBody.fleet[0]?.playerId, alpha.id);
+    assert.equal(cachedBody.research[0]?.playerId, alpha.id);
+    assert.equal(cachedBody.defense[0]?.playerId, alpha.id);
+
+    const state = await request("GET", `/api/state?playerId=${encodeURIComponent(alpha.id)}`);
+    assert.equal(state.status, 200);
+    const view = (await state.json()) as {
+      categoryHighscores?: unknown;
+      highscores: Array<Record<string, unknown>>;
+    };
+    assert.equal(view.categoryHighscores, undefined);
+    const score = view.highscores[0];
+    assert.ok(score);
+    assert.equal("buildings" in score, false);
+    assert.equal("fleet" in score, false);
+    assert.equal("research" in score, false);
+    assert.equal("defense" in score, false);
+
+    const before = ids.map(
+      (id) => (raw.prepare("SELECT doc FROM save_highscores WHERE id = ?").get(id) as { doc: string }).doc,
+    );
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "POST", cpuMs: 0 },
+      () => withUniverse((universe) => {
+        const player = universe.players[alpha.id];
+        if (player) player.starshards = (player.starshards ?? 0) + 1;
+      }, { playerIds: [alpha.id] }),
+    );
+    const after = ids.map(
+      (id) => (raw.prepare("SELECT doc FROM save_highscores WHERE id = ?").get(id) as { doc: string }).doc,
+    );
+    assert.deepEqual(after, before);
+
+    const counted = subrequestD1(db, 20);
+    counted.reset();
+    await runWithScope(
+      { kv: createD1Store(counted), db: counted, mode: "d1", method: "GET", cpuMs: 0 },
+      () => app.request("/api/highscores/categories"),
+    );
+    assert.ok(counted.count() <= 2, `category read used ${counted.count()} queries`);
+
+    const memory = await createApp().request("/api/highscores/categories");
+    assert.equal(memory.status, 200);
+    assert.deepEqual(await memory.json(), emptyCategoryHighscores());
   });
 
   it("locks per player and rejects a stale row", async () => {

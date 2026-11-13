@@ -3,6 +3,7 @@ import {
   DEEP_SPACE_SLOT,
   MAP_GALAXIES,
   MAP_SLOTS,
+  HIGHSCORE_CATEGORY_CAP,
   MAP_SYSTEMS,
   OFFICER_ORDER,
   OFFICERS,
@@ -13,6 +14,7 @@ import {
 import { HIGHSCORE_RANK_HISTORY_DAYS } from "./data/tuning.js";
 import {
   astrolabeResearchTimeMult,
+  categoryPointTotals,
   classBonuses,
   allianceBonusesForPlayer,
   empireExpeditionCap,
@@ -33,10 +35,12 @@ import {
 } from "./planet-art.js";
 import type {
   AllianceRankEntry,
+  CategoryHighscores,
   GalaxyMiniBody,
   GalaxySlot,
   GalaxyView,
   HighscoreCache,
+  HighscoreCategoryId,
   HighscoreEntry,
   HighscoreRankPoint,
   PlanetArtFields,
@@ -217,6 +221,61 @@ export function appendHighscoreRankHistory(
   return next.length > HIGHSCORE_RANK_HISTORY_DAYS
     ? next.slice(next.length - HIGHSCORE_RANK_HISTORY_DAYS)
     : next;
+}
+
+export const HIGHSCORE_CATEGORY_IDS: readonly HighscoreCategoryId[] = [
+  "buildings",
+  "fleet",
+  "research",
+  "defense",
+];
+
+export function isHighscoreCategoryId(id: string): id is HighscoreCategoryId {
+  return (HIGHSCORE_CATEGORY_IDS as readonly string[]).includes(id);
+}
+
+export function emptyCategoryHighscores(): CategoryHighscores {
+  return { buildings: [], fleet: [], research: [], defense: [] };
+}
+
+/** Top category boards. Called from the maintenance rebuild, not from a page read. */
+export function categoryHighscoreBoards(universe: UniverseState): CategoryHighscores {
+  const artCtx = createPlanetArtContext(universe);
+  const scored = Object.values(universe.players).map((p) => {
+    const home = universe.planets[p.homePlanetId];
+    const totals = categoryPointTotals(universe, p);
+    const row = {
+      playerId: p.id,
+      name: p.name,
+      coords: home?.coords ?? { galaxy: 0, system: 0, slot: 0 },
+      planetCount: ownedPlanetCount(universe, p.id),
+      planetName: home?.name ?? "",
+      homePlanetId: p.homePlanetId,
+      level: p.level ?? 1,
+      xpTotal: p.xpTotal ?? 0,
+      allianceTag: allianceTagForPlayer(universe, p),
+      ...artFields(universe, home, artCtx),
+    };
+    return { row, totals };
+  });
+  const rank = (key: HighscoreCategoryId): HighscoreEntry[] =>
+    scored
+      .map((entry) => ({ ...entry.row, points: entry.totals[key] }))
+      .sort(
+        (a, b) =>
+          b.points - a.points ||
+          b.level - a.level ||
+          b.xpTotal - a.xpTotal ||
+          a.playerId.localeCompare(b.playerId),
+      )
+      .slice(0, HIGHSCORE_CATEGORY_CAP)
+      .map((entry, index) => ({ ...entry, rank: index + 1 }));
+  return {
+    buildings: rank("buildings"),
+    fleet: rank("fleet"),
+    research: rank("research"),
+    defense: rank("defense"),
+  };
 }
 
 export function publicRoster(

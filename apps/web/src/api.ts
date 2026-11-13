@@ -3,6 +3,7 @@ import type {
   AllianceChatMessage,
   AllianceRecruitingEntry,
   BuildingId,
+  CategoryHighscores,
   Coordinates,
   DefenseId,
   FleetShips,
@@ -1292,6 +1293,11 @@ export async function cancelAllianceRequest(
     body: JSON.stringify({ playerId }),
   });
   return parse<PlayerView>(res);
+}
+
+export async function fetchCategoryHighscores(): Promise<CategoryHighscores> {
+  const res = await credFetch("/api/highscores/categories");
+  return parse<CategoryHighscores>(res);
 }
 
 export async function fetchAllianceChat(

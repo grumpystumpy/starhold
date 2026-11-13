@@ -45,6 +45,7 @@ import {
   discoverMiniPlanet,
   disbandAlliance,
   empirePoints,
+  emptyCategoryHighscores,
   emptyDefenses,
   emptyFleetShips,
   ensureUniverseShape,
@@ -124,6 +125,7 @@ import { respondWithPlayerView } from "./state-response.js";
 import { staticCacheControl } from "./static-cache.js";
 import { storageMode, isUniverseBusy, withUniverse, withUniverseRead } from "./store.js";
 import {
+  readCategoryHighscores,
   readCombatReportByShareCode,
   readPublicLobby,
   rollbackRowsToLegacy,
@@ -460,6 +462,13 @@ export function createApp(): Hono {
       reportServerError(err);
       return c.json({ error: message }, 500);
     }
+  });
+
+  // Cached category boards. Not part of the /api/state poll. A missing row is [].
+  app.get("/api/highscores/categories", async (c) => {
+    const db = currentScope()?.db;
+    if (!db || storageMode() !== "d1") return c.json(emptyCategoryHighscores());
+    return c.json(await readCategoryHighscores(db));
   });
 
   app.post("/api/upgrade", async (c) => {

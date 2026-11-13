@@ -1847,6 +1847,8 @@ export const ALLIANCE_PENDING_REQUEST_CAP = 20;
 export const ALLIANCE_RELATION_CAP = 20;
 /** Alliance rank rows kept on the cached board. */
 export const ALLIANCE_RANK_CAP = 100;
+/** Category highscore rows kept on each cached board. */
+export const HIGHSCORE_CATEGORY_CAP = 100;
 /** Default join mode when creating an alliance. */
 export const ALLIANCE_JOIN_MODE_DEFAULT: "open" | "invite" | "request" = "open";
 /** Public recruitment blurb. Optional; older saves omit it. */
