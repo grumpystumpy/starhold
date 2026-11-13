@@ -1272,6 +1272,24 @@ function inList(ids: string[]): { clause: string; values: string[] } {
   return { clause: ids.map(() => "?").join(", "), values: ids };
 }
 
+const MAX_IN_BINDS = 90;
+
+async function allInList<T>(
+  db: D1Like,
+  ids: string[],
+  sql: (list: ReturnType<typeof inList>) => string,
+  repeatedLists = 1,
+): Promise<T[]> {
+  const rows: T[] = [];
+  const size = Math.floor(MAX_IN_BINDS / repeatedLists);
+  for (const group of chunkRows(ids, size)) {
+    const list = inList(group);
+    const values = Array.from({ length: repeatedLists }, () => list.values).flat();
+    rows.push(...(await all<T>(db, sql(list), ...values)));
+  }
+  return rows;
+}
+
 function systemPairs(planets: Iterable<PlanetState>): Array<[number, number]> {
   const systems = new Map<string, [number, number]>();
   for (const planet of planets) {
@@ -1489,11 +1507,10 @@ async function loadNpcPlayerPage(db: D1Like, loaded: LoadedRows): Promise<void> 
   if (ids.length === 0 || ids.length < NPC_PLAYER_PAGE) delete loaded.universe.npcPlayerPageCursor;
   else loaded.universe.npcPlayerPageCursor = ids[ids.length - 1];
   if (!ids.length) return;
-  const list = inList(ids);
-  const rows = await all<{ id: string; version: number; doc: string }>(
+  const rows = await allInList<{ id: string; version: number; doc: string }>(
     db,
-    `SELECT id, version, doc FROM save_players WHERE id IN (${list.clause})`,
-    ...list.values,
+    ids,
+    (list) => `SELECT id, version, doc FROM save_players WHERE id IN (${list.clause})`,
   );
   applyPlayerRows(loaded, rows);
 }
@@ -1569,13 +1586,12 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
       await loadNpcPlayerPage(db, loaded);
       const ownerIds = Object.keys(loaded.universe.players);
       if (ownerIds.length) {
-        const owners = inList(ownerIds);
-        await loadPlanetDocs(
+        const rows = await allInList<{ id: string; version: number; doc: string }>(
           db,
-          loaded,
-          `SELECT id, version, doc FROM save_planets WHERE owner_id IN (${owners.clause})`,
-          owners.values,
+          ownerIds,
+          (owners) => `SELECT id, version, doc FROM save_planets WHERE owner_id IN (${owners.clause})`,
         );
+        applyPlanetRows(loaded, rows);
       }
     }
     await loadScheduledRows(
@@ -1621,24 +1637,21 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
     await loadScheduledRows(db, loaded, systems, true, placePirates);
     occupancyLoaded = placePirates;
   } else {
-    const ids = inList(requestedIds);
     if (requestedIds.length) {
-      await loadPlanetDocs(
+      const rows = await allInList<{ id: string; version: number; doc: string }>(
         db,
-        loaded,
-        `SELECT id, version, doc FROM save_planets WHERE owner_id IN (${ids.clause})`,
-        ids.values,
+        requestedIds,
+        (ids) => `SELECT id, version, doc FROM save_planets WHERE owner_id IN (${ids.clause})`,
       );
+      applyPlanetRows(loaded, rows);
     }
     if (planetIds.length) {
-      const extra = inList(planetIds);
-      await loadPlanetDocs(
+      const rows = await allInList<{ id: string; version: number; doc: string }>(
         db,
-        loaded,
-        `SELECT id, version, doc FROM save_planets WHERE id IN (${extra.clause})`,
-        extra.values,
         planetIds,
+        (extra) => `SELECT id, version, doc FROM save_planets WHERE id IN (${extra.clause})`,
       );
+      applyPlanetRows(loaded, rows, planetIds);
     }
     const systems = new Map<string, [number, number]>();
     if (work?.galaxy && work.system) systems.set(`${work.galaxy}:${work.system}`, [work.galaxy, work.system]);
@@ -1653,32 +1666,34 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
     const pairs = [...systems.values()];
     await loadPlanetsAt(db, loaded, pairs);
     if (requestedIds.length) {
-      const list = inList(requestedIds);
-      const fleetSql = `SELECT id, version, doc FROM save_fleets WHERE owner_id IN (${list.clause}) OR target_owner_id IN (${list.clause})`;
-      const msgSql = `SELECT id, version, kind, doc, owner_id FROM save_messages WHERE owner_id IN (${list.clause}) OR defender_id IN (${list.clause})`;
       const [fleetRows, msgRows] = await Promise.all([
-        all<{ id: string; version: number; doc: string }>(
+        allInList<{ id: string; version: number; doc: string }>(
           db,
-          fleetSql,
-          ...list.values,
-          ...list.values,
+          requestedIds,
+          (list) => `SELECT id, version, doc FROM save_fleets WHERE owner_id IN (${list.clause}) OR target_owner_id IN (${list.clause})`,
+          2,
         ),
-        all<{
+        allInList<{
           id: string;
           version: number;
           kind: string;
           doc: string;
           owner_id: string;
-        }>(db, msgSql, ...list.values, ...list.values),
+        }>(
+          db,
+          requestedIds,
+          (list) => `SELECT id, version, kind, doc, owner_id FROM save_messages WHERE owner_id IN (${list.clause}) OR defender_id IN (${list.clause})`,
+          2,
+        ),
       ]);
-      for (const row of fleetRows) {
+      for (const row of new Map(fleetRows.map((row) => [row.id, row])).values()) {
         const fleet = timedParse(row.doc) as FleetMission;
         loaded.universe.fleets[fleet.id] = fleet;
         loaded.fleetVersions.set(fleet.id, row.version);
         loaded.fleetSnapshots.set(fleet.id, structuredClone(fleet));
         loaded.fingerprints.set(`fleet:${fleet.id}`, stable(fleet));
       }
-      for (const row of msgRows) {
+      for (const row of new Map(msgRows.map((row) => [row.id, row])).values()) {
         loaded.messageVersions.set(row.id, row.version);
         loaded.fingerprints.set(`message:${row.id}`, row.doc);
         const doc = timedParse(row.doc) as { id: string };
@@ -2256,11 +2271,10 @@ async function resolvePlayerIds(db: D1Like, work: UniverseWork | undefined): Pro
   const ids = new Set((work?.playerIds ?? []).filter(Boolean) as string[]);
   const planetIds = [...new Set((work?.planetIds ?? []).filter((id): id is string => Boolean(id)))];
   if (planetIds.length) {
-    const list = inList(planetIds);
-    const rows = await all<{ owner_id: string }>(
+    const rows = await allInList<{ owner_id: string }>(
       db,
-      `SELECT owner_id FROM save_planets WHERE id IN (${list.clause}) AND owner_id != ''`,
-      ...list.values,
+      planetIds,
+      (list) => `SELECT owner_id FROM save_planets WHERE id IN (${list.clause}) AND owner_id != ''`,
     );
     for (const row of rows) ids.add(row.owner_id);
   }
@@ -2290,16 +2304,15 @@ async function expandDueFleets(
   db: D1Like,
   playerIds: string[],
 ): Promise<{ planetIds: string[]; owners: string[]; systems: Array<[number, number]> }> {
-  const list = inList(playerIds);
-  const fleets = await all<{ doc: string }>(
+  const fleets = await allInList<{ id: string; doc: string }>(
     db,
-    `SELECT doc FROM save_fleets WHERE owner_id IN (${list.clause}) OR target_owner_id IN (${list.clause})`,
-    ...list.values,
-    ...list.values,
+    playerIds,
+    (list) => `SELECT id, doc FROM save_fleets WHERE owner_id IN (${list.clause}) OR target_owner_id IN (${list.clause})`,
+    2,
   );
   const planetIds = new Set<string>();
   const systems = new Map<string, [number, number]>();
-  for (const row of fleets) {
+  for (const row of new Map(fleets.map((row) => [row.id, row])).values()) {
     const fleet = timedParse(row.doc) as FleetMission;
     if (fleet.arrivesAt > Date.now()) continue;
     if (fleet.originPlanetId) planetIds.add(fleet.originPlanetId);
@@ -2312,11 +2325,10 @@ async function expandDueFleets(
   const owners = new Set<string>();
   if (planetIds.size) {
     const ids = [...planetIds];
-    const listIds = inList(ids);
-    const planets = await all<{ owner_id: string; galaxy: number; system: number }>(
+    const planets = await allInList<{ owner_id: string; galaxy: number; system: number }>(
       db,
-      `SELECT owner_id, galaxy, system FROM save_planets WHERE id IN (${listIds.clause})`,
-      ...listIds.values,
+      ids,
+      (listIds) => `SELECT owner_id, galaxy, system FROM save_planets WHERE id IN (${listIds.clause})`,
     );
     for (const planet of planets) {
       if (planet.owner_id) owners.add(planet.owner_id);
