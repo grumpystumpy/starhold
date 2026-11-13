@@ -523,6 +523,7 @@ export {
   PLAYER_ACTIVITY_STAMP_MS,
   PLAYER_INACTIVE_MS,
   PLAYER_LONG_INACTIVE_MS,
+  FLEET_SAVE_MIN_LEAD_MS,
 } from "./data/tuning.js";
 
 export const STARTING_RESOURCES = {

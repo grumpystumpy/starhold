@@ -24,6 +24,7 @@ import {
 } from "./session";
 import { captureGameEvent } from "./telemetry";
 import { settleMutation } from "./recover-action";
+import { dismissFleetSave } from "./ui/fleet-save-dismiss";
 import {
   fleetDraftAfterPreset,
   rememberFleetDraft,
@@ -157,6 +158,11 @@ export async function doGalaxySpy(coords: Coordinates): Promise<void> {
     ships: { probe: GALAXY_SPY_PROBES },
     targetCoords: coords,
   });
+}
+
+export function doDismissFleetSave(attackId: string): void {
+  dismissFleetSave(attackId);
+  schedulePaint();
 }
 
 export function doGalaxyFleetAction(

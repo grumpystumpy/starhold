@@ -142,6 +142,11 @@ export function fleetDraftForPage(
   const salvaged = salvageFleetForm(root);
   const prefill = session.pendingAcsPrefill;
   if (activePage !== "fleet") return salvaged;
+  const saveDraft = session.pendingFleetSaveDraft;
+  if (saveDraft) {
+    session.pendingFleetSaveDraft = null;
+    return saveDraft;
+  }
   const galaxyDraft = session.pendingGalaxyFleetDraft;
   if (galaxyDraft) {
     session.pendingGalaxyFleetDraft = null;

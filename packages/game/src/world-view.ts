@@ -66,6 +66,7 @@ import {
   moonAtCoords,
   planetAtCoords,
 } from "./world-bootstrap.js";
+import { fleetSaveSuggestions } from "./fleet-save.js";
 import { stampQueueView } from "./world-queue-manage.js";
 import { inSensorPhalanxRange, ownedPlanetCount } from "./world-moons.js";
 import { goalsView } from "./world-goals.js";
@@ -482,6 +483,13 @@ export function playerView(
     .sort((a, b) => a.arrivesAt - b.arrivesAt)
     .slice(0, 20);
 
+  const fleetSave = fleetSaveSuggestions(
+    universe,
+    playerId,
+    hostileInbound,
+    now,
+  );
+
   const activeItemBuffs = (player.itemBuffs ?? [])
     .filter((b) => b.expiresAt > now)
     .map((b) => ({
@@ -598,6 +606,7 @@ export function playerView(
       ? player.createdAt + NEWBIE_BONUS_DURATION_MS
       : null,
     hostileInbound,
+    fleetSave: fleetSave.length > 0 ? fleetSave : undefined,
     starshards: player.starshards ?? 0,
     officers: player.officers ?? [],
     skillsUnlocked: player.skillsUnlocked ?? [],
