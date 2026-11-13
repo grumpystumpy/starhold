@@ -198,6 +198,8 @@ export {
   createAlienBase,
   createPirateBase,
   cullExcessPirateBases,
+  armQuietPirateCull,
+  disarmPirateCull,
   ensurePiratePopulation,
   findNearestOpenSlot1,
   pirateBaseAtCoords,

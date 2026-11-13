@@ -8,6 +8,7 @@ import {
   advanceUniverse,
   applyNpcRaidOnNpc,
   applyNpcRaidOnPlanet,
+  claimDailyLogin,
   createPirateBase,
   createUniverse,
   empirePoints,
@@ -19,6 +20,7 @@ import {
   MAP_SLOTS,
   MAP_SYSTEMS,
   NEWBIE_PROTECTION_POINTS,
+  PIRATE_BASES_PER_GALAXY,
   PIRATE_TARGET_BASE_COUNT,
   pickRaidTarget,
   playerView,
@@ -27,6 +29,7 @@ import {
   queueShipBuild,
   resolvePirateRaidArrival,
   tickPirates,
+  workersTickBudget,
   UNIVERSE_SCHEMA_VERSION,
   emptyDefenses,
   emptyFleetShips,
@@ -2382,6 +2385,364 @@ describe("row save review fixes", () => {
     assert.ok(steps.length > 1);
     assert.ok(stepMedian <= 10, `migration median ${stepMedian}`);
     assert.ok(stepP95 <= 20, `migration p95 ${stepP95}`);
+  });
+
+  it("keeps the same view when a small save fits the message and fleet window", async () => {
+    const { db } = sqliteD1();
+    const source = fixture();
+    await migrateAll(db, source);
+    const alpha = Object.values(source.players).find((player) => player.name === "OldHand")!;
+    const bravo = Object.values(source.players).find((player) => player.name === "Other")!;
+    const full = await loadWorkingSet(db, { full: true });
+    const scopedAlpha = await loadWorkingSet(db, { playerIds: [alpha.id] });
+    const scopedBravo = await loadWorkingSet(db, { playerIds: [bravo.id] });
+    const now = Date.now();
+    const view = (loaded: { universe: UniverseState }, playerId: string) =>
+      playerView(structuredClone(loaded.universe), playerId, now);
+    const same = (playerId: string, wide: ReturnType<typeof view>, narrow: ReturnType<typeof view>) => {
+      assert.deepEqual(
+        narrow.fleets.map((fleet) => fleet.id),
+        wide.fleets.map((fleet) => fleet.id),
+        `${playerId} fleets`,
+      );
+      assert.deepEqual(
+        narrow.hostileInbound.map((fleet) => fleet.id),
+        wide.hostileInbound.map((fleet) => fleet.id),
+        `${playerId} hostile`,
+      );
+      assert.deepEqual(narrow.reports.map((report) => report.id), wide.reports.map((report) => report.id));
+      assert.deepEqual(narrow.spyReports.map((report) => report.id), wide.spyReports.map((report) => report.id));
+      assert.deepEqual(
+        narrow.expeditionReports.map((report) => report.id),
+        wide.expeditionReports.map((report) => report.id),
+      );
+      assert.deepEqual(
+        (narrow.player.eventLog ?? []).map((event) => event.id),
+        (wide.player.eventLog ?? []).map((event) => event.id),
+      );
+    };
+    same(alpha.id, view(full, alpha.id), view(scopedAlpha, alpha.id));
+    same(bravo.id, view(full, bravo.id), view(scopedBravo, bravo.id));
+  });
+
+  it("stays inside the CPU budget on a big account and still deletes every message", async () => {
+    const NOW = 1_700_000_000_000;
+    const VIEW_AT = 1_800_000_000_000;
+    const source = createUniverse("Big Account", 8, 8, { lazySeed: true });
+    if (source.seedCursor) source.seedCursor.done = true;
+    source.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
+    const players = Array.from({ length: 5 }, (_, index) => joinUniverse(source, `Big${index}`, NOW).player);
+    const hero = players[0]!;
+    const rival = players[1]!;
+    const home = source.planets[hero.homePlanetId]!;
+    home.ships = { ...emptyFleetShips(), scout: 40 };
+    home.defenses = { ...emptyDefenses(), laserBattery: 40 };
+    home.resources = { metal: 5_000, crystal: 5_000, deuterium: 5_000 };
+    for (let i = 0; i < 6; i++) {
+      const id = `colony-${i}`;
+      source.planets[id] = {
+        ...home,
+        id,
+        name: id,
+        coords: { galaxy: 1, system: 200 + i, slot: 4 },
+        moonId: null,
+        parentPlanetId: null,
+      };
+      hero.planetIds = [...hero.planetIds, id];
+    }
+    hero.eventLog = Array.from({ length: 120 }, (_, index) => ({
+      id: `ev-${index}`,
+      kind: "raidAlert" as const,
+      createdAt: NOW + index,
+      readAt: null,
+      title: "Alert",
+      body: "Kept",
+    }));
+    const bases = [];
+    for (let galaxy = 1; galaxy <= MAP_GALAXIES; galaxy++) {
+      for (let system = 1; system <= PIRATE_BASES_PER_GALAXY; system++) {
+        const base = createPirateBase(source.seed ?? source.id, galaxy, system, 15, NOW, 0);
+        base.nextRaidAt = Number.MAX_SAFE_INTEGER;
+        base.lastGrewAt = NOW;
+        base.lastFreeSpawnAt = NOW;
+        bases.push(base);
+      }
+    }
+    assert.equal(bases.length, PIRATE_TARGET_BASE_COUNT);
+    source.pirateBases = Object.fromEntries(bases.map((base) => [base.id, base]));
+    source.alienBases = {};
+    for (let i = 0; i < 4; i++) {
+      source.fleets[`own-${i}`] = {
+        id: `own-${i}`,
+        ownerPlayerId: hero.id,
+        originPlanetId: home.id,
+        targetPlanetId: home.id,
+        targetPlayerId: hero.id,
+        targetCoords: { ...home.coords },
+        mission: "deploy",
+        ships: { scout: 1 },
+        cargo: { metal: 0, crystal: 0, deuterium: 0 },
+        departedAt: NOW,
+        arrivesAt: VIEW_AT + 86_400_000,
+        phase: "outbound",
+        reportId: null,
+      };
+    }
+    const { db, raw } = sqliteD1();
+    await migrateAll(db, source);
+    const pad = "x".repeat(2400);
+    const reportStmt = raw.prepare(
+      "INSERT INTO save_messages (id, owner_id, defender_id, kind, version, doc) VALUES (?, ?, ?, ?, 1, ?)",
+    );
+    const fleetStmt = raw.prepare(
+      "INSERT INTO save_fleets (id, owner_id, target_owner_id, version, doc) VALUES (?, 'npc_pirates', ?, 1, ?)",
+    );
+    const baseId = bases[0]!.id;
+    raw.exec("BEGIN");
+    for (let i = 0; i < 2070; i++) {
+      const pvp = i === 0;
+      const id = pvp ? "rpt_pvp_keep" : `rpt_big_${i}`;
+      const attacker = pvp ? rival.id : "npc_pirates";
+      const defender = hero.id;
+      reportStmt.run(
+        id,
+        attacker,
+        defender,
+        "report",
+        JSON.stringify({
+          id,
+          at: NOW + i,
+          missionId: "m",
+          attackerPlayerId: attacker,
+          defenderPlayerId: defender,
+          attackerName: attacker,
+          defenderName: hero.name,
+          targetCoords: home.coords,
+          attackerBefore: { scout: 1 },
+          attackerAfter: {},
+          defenderBefore: { scout: 1 },
+          defenderAfter: { scout: 1 },
+          defensesBefore: {},
+          defensesAfter: {},
+          loot: { metal: 0, crystal: 0, deuterium: 0 },
+          debrisCreated: { metal: 0, crystal: 0 },
+          outcome: "defender_win",
+          rounds: 1,
+          summary: pad,
+        }),
+      );
+    }
+    for (let i = 0; i < 15; i++) {
+      const spyId = `spy_big_${i}`;
+      reportStmt.run(
+        spyId,
+        hero.id,
+        "",
+        "spy",
+        JSON.stringify({
+          id: spyId,
+          at: VIEW_AT - 60_000 + i,
+          missionId: "m",
+          spyPlayerId: hero.id,
+          targetPlayerId: rival.id,
+          targetName: rival.name,
+          targetCoords: home.coords,
+          detail: 1,
+          resources: null,
+          buildings: null,
+          ships: null,
+          defenses: null,
+          research: null,
+          summary: "Scan",
+        }),
+      );
+      const expId = `exp_big_${i}`;
+      reportStmt.run(
+        expId,
+        hero.id,
+        "",
+        "expedition",
+        JSON.stringify({
+          id: expId,
+          at: VIEW_AT - 60_000 + i,
+          missionId: "m",
+          playerId: hero.id,
+          targetCoords: { ...home.coords, slot: 16 },
+          kind: "nothing",
+          cargoGained: { metal: 0, crystal: 0, deuterium: 0 },
+          shipsDelta: {},
+          summary: "Empty",
+        }),
+      );
+    }
+    for (let i = 0; i < 420; i++) {
+      const id = `npc-due-${String(i).padStart(4, "0")}`;
+      fleetStmt.run(
+        id,
+        hero.id,
+        JSON.stringify({
+          id,
+          ownerPlayerId: "npc_pirates",
+          originPlanetId: baseId,
+          originPirateBaseId: baseId,
+          targetPlanetId: home.id,
+          targetPlayerId: hero.id,
+          targetCoords: home.coords,
+          mission: "raid",
+          ships: { scout: 1 },
+          cargo: { metal: 0, crystal: 0, deuterium: 0 },
+          departedAt: 1,
+          arrivesAt: i + 1,
+          phase: "outbound",
+          reportId: null,
+        }),
+      );
+    }
+    raw.exec("COMMIT");
+    const worldBytes = (
+      await db.prepare("SELECT length(doc) AS n FROM save_world").bind().first<{ n: number }>()
+    )?.n ?? 0;
+    assert.ok(worldBytes > 800_000, `world doc ${worldBytes}`);
+
+    const store = createD1Store(db);
+    const scope = {
+      kv: store,
+      db,
+      mode: "d1" as const,
+      method: "GET",
+      cpuMs: 0,
+      budget: workersTickBudget(),
+    };
+    const pick = (values: number[], p: number) => {
+      const sorted = [...values].sort((a, b) => a - b);
+      return sorted[Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1)]!;
+    };
+    const readOnce = async () => {
+      scope.cpuMs = 0;
+      scope.method = "GET";
+      scope.budget = workersTickBudget();
+      await runWithScope(scope, () =>
+        withUniverseRead((universe) => {
+          playerView(universe, hero.id, VIEW_AT);
+        }, { playerIds: [hero.id] }),
+      );
+      return scope.cpuMs;
+    };
+    const writeOnce = async () => {
+      scope.cpuMs = 0;
+      scope.method = "POST";
+      scope.budget = workersTickBudget();
+      await runWithScope(scope, () =>
+        withUniverse((universe) => {
+          claimDailyLogin(universe, hero.id, VIEW_AT);
+        }, { playerIds: [hero.id] }),
+      );
+      return scope.cpuMs;
+    };
+    await readOnce();
+    const readSamples: number[] = [];
+    for (let i = 0; i < 9; i++) readSamples.push(await readOnce());
+    await writeOnce();
+    const writeSamples: number[] = [];
+    for (let i = 0; i < 9; i++) writeSamples.push(await writeOnce());
+    const after = {
+      read: {
+        median: Number(pick(readSamples, 50).toFixed(2)),
+        p95: Number(pick(readSamples, 95).toFixed(2)),
+        samples: readSamples.map((n) => Number(n.toFixed(2))),
+      },
+      write: {
+        median: Number(pick(writeSamples, 50).toFixed(2)),
+        p95: Number(pick(writeSamples, 95).toFixed(2)),
+        samples: writeSamples.map((n) => Number(n.toFixed(2))),
+      },
+    };
+    console.log(`cpu ms ${JSON.stringify(after)}`);
+    assert.ok(after.read.median <= 6, `read median ${after.read.median}`);
+    assert.ok(after.read.p95 <= 10, `read p95 ${after.read.p95}`);
+    assert.ok(after.write.median <= 8, `write median ${after.write.median}`);
+    assert.ok(after.write.p95 <= 10, `write p95 ${after.write.p95}`);
+
+    const beforeDrain = await db
+      .prepare("SELECT COUNT(*) AS n FROM save_fleets WHERE id LIKE 'npc-due-%'")
+      .bind()
+      .first<{ n: number }>();
+    const resolved = new Set<string>();
+    const stepSamples: number[] = [];
+    for (let step = 0; step < 500; step++) {
+      scope.cpuMs = 0;
+      scope.method = "GET";
+      scope.budget = workersTickBudget();
+      let batch: string[] = [];
+      await runWithScope(scope, () =>
+        withUniverseRead((universe) => {
+          const before = Object.keys(universe.fleets).filter((id) => id.startsWith("npc-due-"));
+          playerView(universe, hero.id, VIEW_AT);
+          batch = before.filter((id) => !universe.fleets[id]);
+        }, { playerIds: [hero.id] }),
+      );
+      stepSamples.push(scope.cpuMs);
+      if (batch.length === 0) break;
+      for (const id of batch) {
+        assert.equal(resolved.has(id), false, `${id} resolved twice`);
+        resolved.add(id);
+      }
+    }
+    const left = await db
+      .prepare("SELECT COUNT(*) AS n FROM save_fleets WHERE id LIKE 'npc-due-%'")
+      .bind()
+      .first<{ n: number }>();
+    assert.equal(left?.n ?? -1, 0, `overdue left ${left?.n}, resolved ${resolved.size}`);
+    assert.equal(resolved.size, beforeDrain?.n ?? -1);
+    const drainP95 = Number(pick(stepSamples, 95).toFixed(2));
+    assert.ok(drainP95 <= 10, `drain p95 ${drainP95}`);
+
+    const app = createApp();
+    const post = (playerId: string, category: string) =>
+      runWithScope({ ...scope, method: "POST", cpuMs: 0, budget: workersTickBudget() }, () =>
+        app.request("/api/delete-messages", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ playerId, category }),
+        }),
+      );
+    const combat = await post(hero.id, "combat");
+    assert.equal(combat.status, 200);
+    const npcLeft = await db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM save_messages
+         WHERE kind = 'report' AND defender_id = ? AND owner_id = 'npc_pirates'`,
+      )
+      .bind(hero.id)
+      .first<{ n: number }>();
+    assert.equal(npcLeft?.n, 0);
+    const expeditions = await db
+      .prepare("SELECT COUNT(*) AS n FROM save_messages WHERE kind = 'expedition' AND owner_id = ?")
+      .bind(hero.id)
+      .first<{ n: number }>();
+    assert.equal(expeditions?.n, 0);
+    const pvp = await db
+      .prepare("SELECT id FROM save_messages WHERE id = 'rpt_pvp_keep'")
+      .bind()
+      .first<{ id: string }>();
+    assert.equal(pvp?.id, "rpt_pvp_keep");
+    const hidden = await db
+      .prepare("SELECT doc FROM save_players WHERE id = ?")
+      .bind(hero.id)
+      .first<{ doc: string }>();
+    assert.match(hidden?.doc ?? "", /rpt_pvp_keep/);
+    const spies = await db
+      .prepare("SELECT COUNT(*) AS n FROM save_messages WHERE kind = 'spy' AND owner_id = ?")
+      .bind(hero.id)
+      .first<{ n: number }>();
+    assert.equal(spies?.n, 15);
+    const other = await post(rival.id, "combat");
+    assert.equal(other.status, 200);
+    const gone = await db
+      .prepare("SELECT id FROM save_messages WHERE id = 'rpt_pvp_keep'")
+      .bind()
+      .first<{ id: string }>();
+    assert.equal(gone, null);
   });
 
   it("returns 404 from /api/state for an unknown player and does not report it", async () => {

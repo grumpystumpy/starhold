@@ -508,6 +508,30 @@ export function pirateBossSeasonFlavor(seasonId: string): {
   };
 }
 
+const noSeasonalBossFlags = new WeakSet<object>();
+
+/** A roster edit can add a boss the negative scan cache has not seen. */
+export function invalidateSeasonalBossScan(bases: object | null | undefined): void {
+  if (bases) noSeasonalBossFlags.delete(bases);
+}
+
+/**
+ * Bases with `seasonalBoss` set. An empty result is remembered on the
+ * object so a page tick does not walk every pirate base again.
+ */
+export function seasonalBossRecords<T extends { seasonalBoss?: boolean }>(
+  bases: Record<string, T> | undefined,
+): T[] {
+  if (!bases) return [];
+  if (noSeasonalBossFlags.has(bases)) return [];
+  const found: T[] = [];
+  for (const base of Object.values(bases)) {
+    if (base?.seasonalBoss === true) found.push(base);
+  }
+  if (found.length === 0) noSeasonalBossFlags.add(bases);
+  return found;
+}
+
 function seasonalBossIsUp(universe: UniverseState): boolean {
   const bases = universe.pirateBases;
   if (!bases) return false;
@@ -518,10 +542,7 @@ function seasonalBossIsUp(universe: UniverseState): boolean {
       return true;
     }
   }
-  for (const base of Object.values(bases)) {
-    if (base.seasonalBoss === true && base.destroyedAt == null) return true;
-  }
-  return false;
+  return seasonalBossRecords(bases).some((base) => base.destroyedAt == null);
 }
 
 /** Active window, cooldown, and next spawn for the open month. Does not write the save. */

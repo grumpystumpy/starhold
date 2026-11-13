@@ -8,7 +8,7 @@ import type {
   UniverseState,
 } from "./types.js";
 import { grantStarshards } from "./world-boosts.js";
-import { pirateBossSeasonFlavor, seasonIdFromTime } from "./world-seasons.js";
+import { pirateBossSeasonFlavor, seasonIdFromTime, seasonalBossRecords } from "./world-seasons.js";
 import { addCargoToPlanet } from "./world-tick.js";
 
 export type BossLeaderboardRow = {
@@ -19,9 +19,7 @@ export type BossLeaderboardRow = {
 };
 
 function seasonalBases(universe: UniverseState): PirateBase[] {
-  return Object.values(universe.pirateBases ?? {}).filter(
-    (base) => base.seasonalBoss === true,
-  );
+  return seasonalBossRecords(universe.pirateBases);
 }
 
 function livingBoss(universe: UniverseState): PirateBase | undefined {

@@ -12,6 +12,8 @@ import {
   ensureUniverseShape,
   highscoresBoard,
   allianceRankBoard,
+  armQuietPirateCull,
+  disarmPirateCull,
   type AllianceRankEntry,
   type AsteroidField,
   type CombatReport,
@@ -21,6 +23,7 @@ import {
   type FleetMission,
   type HighscoreEntry,
   type HighscoreCache,
+  type MessageCategory,
   type PlanetState,
   type PlayerState,
   type EspionageReport,
@@ -91,6 +94,16 @@ export interface UniverseWork {
   full?: boolean;
   /** Systems to load besides the caller's home and the open galaxy. */
   extraSystems?: Array<[number, number]>;
+  /**
+   * Oldest due fleet ids chosen for this request. Set by withRowUniverse.
+   * Not a caller input.
+   */
+  dueFleetIds?: string[];
+  /**
+   * Delete every matching inbox row for this player, including rows that
+   * were not loaded into the working set. Never stored on the world doc.
+   */
+  messagePurge?: { playerId: string; category: MessageCategory };
 }
 
 interface MigrateState {
@@ -138,8 +151,21 @@ interface LoadedRows {
   fleetSnapshots: Map<string, FleetMission>;
   pendingSystems: SystemWrite[];
   fingerprints: Map<string, string>;
+  /** Cheap world-doc fingerprint taken after ensureUniverseShape. Not persisted. */
+  worldStamp: string;
   /** Planet rows as loaded, so a resource-only change can be told apart from growth. */
   planetDocs: Map<string, string>;
+  messageKinds: Map<string, string>;
+  messageOwners: Map<string, string>;
+  /** Loaded report objects. Same reference means the 3KB doc was not edited. */
+  messageRefs: Map<string, object>;
+  /** Set when a purge must hit D1 even if the loaded window did not change. */
+  forceSave: boolean;
+  /** Report ids a purge removes, including rows outside the loaded window. */
+  purgeReportIds: string[];
+  messagePurge?: { playerId: string; category: MessageCategory };
+  /** Stamp after the request callback. Reused by the save so the walk runs once. */
+  worldStampAfter?: string;
 }
 
 const TABLE_SQL = [
@@ -179,6 +205,25 @@ const OMIT_KEYS = new Set([
   "skipPirateTopUp",
 ]);
 
+/** Newest rows the per-player view reads. Wider loads stay unbounded. */
+const REPORT_WINDOW = 12;
+const EVENT_WINDOW = 100;
+const HOSTILE_FLEET_WINDOW = 20;
+
+const WORLD_STAMP_SKIP = new Set<string>([
+  ...OMIT_KEYS,
+  "players",
+  "planets",
+  "fleets",
+  "reports",
+  "spyReports",
+  "expeditionReports",
+  "asteroids",
+  "debris",
+  "pirateBases",
+  "alienBases",
+]);
+
 const parseJson = JSON.parse;
 const stringifyJson = JSON.stringify;
 
@@ -212,6 +257,333 @@ function stable(value: unknown): string {
   } finally {
     addCpu(performance.now() - started);
   }
+}
+
+function hashTree(value: unknown): string {
+  let h1 = 2166136261;
+  let h2 = 2166136261 ^ 0x9e3779b9;
+  let count = 0;
+  let sum = 0;
+  const mix = (hash: number, n: number): number => Math.imul(hash ^ n, 16777619);
+  const walk = (inner: unknown): void => {
+    count += 1;
+    if (inner == null) {
+      h1 = mix(h1, 0);
+      h2 = mix(h2, 1);
+      return;
+    }
+    const kind = typeof inner;
+    if (kind === "number") {
+      const n = inner as number;
+      sum += n;
+      const bits = (Number.isFinite(n) ? n * 1000 : 0) | 0;
+      h1 = mix(h1, bits);
+      h2 = mix(h2, bits >>> 8);
+      return;
+    }
+    if (kind === "boolean") {
+      h1 = mix(h1, (inner as boolean) ? 7 : 11);
+      return;
+    }
+    if (kind === "string") {
+      const text = inner as string;
+      h1 = mix(h1, text.length);
+      for (let i = 0; i < text.length; i++) {
+        const code = text.charCodeAt(i);
+        h1 = mix(h1, code);
+        h2 = mix(h2, code);
+      }
+      return;
+    }
+    if (Array.isArray(inner)) {
+      h1 = mix(h1, inner.length);
+      for (const item of inner) walk(item);
+      return;
+    }
+    if (kind === "object") {
+      const record = inner as Record<string, unknown>;
+      const keys = Object.keys(record);
+      h1 = mix(h1, keys.length);
+      for (const key of keys) {
+        for (let i = 0; i < key.length; i++) h1 = mix(h1, key.charCodeAt(i));
+        walk(record[key]);
+      }
+    }
+  };
+  walk(value ?? null);
+  return `${count}:${h1 >>> 0}:${h2 >>> 0}:${sum}`;
+}
+
+/**
+ * Detects a world-doc edit without stringifying pirateBases.
+ * The shell is exact JSON. Bases are a numeric walk, cached until a
+ * proxy sees a write, so a quiet page tick does not walk 750 bases.
+ * lastAiSimAt is ignored, matching stable().
+ */
+interface NpcWatch {
+  dirty: boolean;
+  noDestroyed: boolean;
+  basesStamp: string;
+  pirate: object;
+  alien: object;
+  seen: WeakMap<object, unknown>;
+  pirateParts: Map<string, string>;
+  alienParts: Map<string, string>;
+  dirtyPirate: Set<string>;
+  dirtyAlien: Set<string>;
+}
+
+interface ShellCacheEntry {
+  version: number;
+  docLength: number;
+  universe: UniverseState;
+}
+
+const shellCache = new WeakMap<D1Like, ShellCacheEntry>();
+const npcWatches = new WeakMap<UniverseState, NpcWatch>();
+const proxyTargets = new WeakMap<object, object>();
+const nativeStructuredClone = globalThis.structuredClone.bind(globalThis);
+
+function unwrapClone(value: unknown, seen: WeakMap<object, unknown>): unknown {
+  if (value === null || typeof value !== "object") return value;
+  const obj = value as object;
+  const cached = seen.get(obj);
+  if (cached) return cached;
+  const target = proxyTargets.get(obj) ?? obj;
+  if (Array.isArray(target)) {
+    const copy: unknown[] = [];
+    seen.set(obj, copy);
+    for (const item of target) copy.push(unwrapClone(item, seen));
+    return copy;
+  }
+  const copy: Record<string, unknown> = {};
+  seen.set(obj, copy);
+  const record = target as Record<string, unknown>;
+  for (const key of Object.keys(record)) copy[key] = unwrapClone(record[key], seen);
+  return copy;
+}
+
+function cloneTouchesProxy(value: unknown): boolean {
+  if (value === null || typeof value !== "object") return false;
+  const obj = value as object;
+  if (proxyTargets.has(obj)) return true;
+  const record = value as { pirateBases?: object; alienBases?: object };
+  if (record.pirateBases && proxyTargets.has(record.pirateBases)) return true;
+  if (record.alienBases && proxyTargets.has(record.alienBases)) return true;
+  return false;
+}
+
+globalThis.structuredClone = ((value: unknown, options?: StructuredSerializeOptions) => {
+  if (!cloneTouchesProxy(value)) return nativeStructuredClone(value, options);
+  return nativeStructuredClone(unwrapClone(value, new WeakMap()), options);
+}) as typeof structuredClone;
+
+function rawObject(value: object): object {
+  return proxyTargets.get(value) ?? value;
+}
+
+function foldParts(parts: Map<string, string>): string {
+  let h1 = 2166136261;
+  let h2 = 2166136261 ^ 0x9e3779b9;
+  const ids = [...parts.keys()].sort();
+  for (const id of ids) {
+    const hash = parts.get(id) ?? "";
+    for (let i = 0; i < id.length; i++) h1 = Math.imul(h1 ^ id.charCodeAt(i), 16777619);
+    for (let i = 0; i < hash.length; i++) {
+      const code = hash.charCodeAt(i);
+      h1 = Math.imul(h1 ^ code, 16777619);
+      h2 = Math.imul(h2 ^ code, 16777619);
+    }
+  }
+  return `${ids.length}:${h1 >>> 0}:${h2 >>> 0}`;
+}
+
+function indexParts(record: object, parts: Map<string, string>): void {
+  parts.clear();
+  const raw = rawObject(record) as Record<string, unknown>;
+  for (const id of Object.keys(raw)) {
+    const base = raw[id];
+    const body = base !== null && typeof base === "object" ? rawObject(base) : base;
+    parts.set(id, hashTree(body));
+  }
+}
+
+function refreshDirty(watch: NpcWatch): void {
+  const apply = (
+    ids: Set<string>,
+    record: object,
+    parts: Map<string, string>,
+  ) => {
+    const raw = rawObject(record) as Record<string, unknown>;
+    for (const id of ids) {
+      if (!Object.prototype.hasOwnProperty.call(raw, id)) {
+        parts.delete(id);
+        continue;
+      }
+      const base = raw[id];
+      const body = base !== null && typeof base === "object" ? rawObject(base) : base;
+      parts.set(id, hashTree(body));
+    }
+    ids.clear();
+    if (parts.size !== Object.keys(raw).length) {
+      for (const id of parts.keys()) {
+        if (!Object.prototype.hasOwnProperty.call(raw, id)) parts.delete(id);
+      }
+    }
+  };
+  apply(watch.dirtyPirate, watch.pirate, watch.pirateParts);
+  apply(watch.dirtyAlien, watch.alien, watch.alienParts);
+  watch.basesStamp = `${foldParts(watch.pirateParts)}|${foldParts(watch.alienParts)}`;
+  watch.dirty = false;
+}
+
+function markBase(watch: NpcWatch, kind: "pirate" | "alien", id: string): void {
+  watch.dirty = true;
+  watch.noDestroyed = false;
+  (kind === "pirate" ? watch.dirtyPirate : watch.dirtyAlien).add(id);
+  disarmPirateCull(watch.pirate);
+  if (watch.alien !== watch.pirate) disarmPirateCull(watch.alien);
+}
+
+function watchNested(
+  value: unknown,
+  watch: NpcWatch,
+  kind: "pirate" | "alien",
+  id: string,
+): unknown {
+  if (value === null || typeof value !== "object") return value;
+  const obj = value as object;
+  const existing = watch.seen.get(obj);
+  if (existing) return existing;
+  const proxy = new Proxy(obj, {
+    get(target, prop, receiver) {
+      if (typeof prop === "symbol") return Reflect.get(target, prop, receiver);
+      const inner = Reflect.get(target, prop, receiver);
+      return inner !== null && typeof inner === "object"
+        ? watchNested(inner, watch, kind, id)
+        : inner;
+    },
+    set(target, prop, val, receiver) {
+      const current = Reflect.get(target, prop, receiver);
+      if (!Object.is(current, val)) markBase(watch, kind, id);
+      return Reflect.set(target, prop, val, receiver);
+    },
+    deleteProperty(target, prop) {
+      markBase(watch, kind, id);
+      return Reflect.deleteProperty(target, prop);
+    },
+  });
+  proxyTargets.set(proxy, obj);
+  watch.seen.set(obj, proxy);
+  return proxy;
+}
+
+function watchMap(record: object, watch: NpcWatch, kind: "pirate" | "alien"): object {
+  const existing = watch.seen.get(record);
+  if (existing) return existing as object;
+  const proxy = new Proxy(record, {
+    get(target, prop, receiver) {
+      if (typeof prop !== "string") return Reflect.get(target, prop, receiver);
+      const inner = Reflect.get(target, prop, receiver);
+      return inner !== null && typeof inner === "object"
+        ? watchNested(inner, watch, kind, prop)
+        : inner;
+    },
+    set(target, prop, val, receiver) {
+      if (typeof prop === "string") {
+        const current = Reflect.get(target, prop, receiver);
+        if (!Object.is(current, val)) markBase(watch, kind, prop);
+      }
+      return Reflect.set(target, prop, val, receiver);
+    },
+    deleteProperty(target, prop) {
+      if (typeof prop === "string") markBase(watch, kind, prop);
+      return Reflect.deleteProperty(target, prop);
+    },
+  });
+  proxyTargets.set(proxy, record);
+  watch.seen.set(record, proxy);
+  return proxy;
+}
+
+function pinNpcWatch(universe: UniverseState): void {
+  const watch: NpcWatch = {
+    dirty: false,
+    noDestroyed: false,
+    basesStamp: "",
+    pirate: {},
+    alien: {},
+    seen: new WeakMap(),
+    pirateParts: new Map(),
+    alienParts: new Map(),
+    dirtyPirate: new Set(),
+    dirtyAlien: new Set(),
+  };
+  const pirate = universe.pirateBases;
+  if (pirate) {
+    indexParts(pirate, watch.pirateParts);
+    const wrapped = watchMap(pirate, watch, "pirate");
+    universe.pirateBases = wrapped as UniverseState["pirateBases"];
+    watch.pirate = wrapped;
+  }
+  const alien = universe.alienBases;
+  if (alien) {
+    indexParts(alien, watch.alienParts);
+    const wrapped = watchMap(alien, watch, "alien");
+    universe.alienBases = wrapped as UniverseState["alienBases"];
+    watch.alien = wrapped;
+  }
+  watch.basesStamp = `${foldParts(watch.pirateParts)}|${foldParts(watch.alienParts)}`;
+  npcWatches.set(universe, watch);
+}
+
+function shellJson(universe: UniverseState): string {
+  const shell: Record<string, unknown> = {};
+  const source = universe as unknown as Record<string, unknown>;
+  for (const key of Object.keys(source).sort()) {
+    if (WORLD_STAMP_SKIP.has(key)) continue;
+    shell[key] = source[key];
+  }
+  return stringifyJson(shell);
+}
+
+function worldStamp(universe: UniverseState): string {
+  const started = performance.now();
+  try {
+    const shell = shellJson(universe);
+    const watch = npcWatches.get(universe);
+    const pirateRef = (universe.pirateBases ?? watch?.pirate) as object | undefined;
+    const alienRef = (universe.alienBases ?? watch?.alien) as object | undefined;
+    const sameRefs =
+      watch !== undefined &&
+      pirateRef === watch.pirate &&
+      alienRef === watch.alien;
+    if (watch && sameRefs) {
+      if (watch.dirty) refreshDirty(watch);
+      return `${shell}|${watch.basesStamp}`;
+    }
+    pinNpcWatch(universe);
+    return `${shell}|${npcWatches.get(universe)!.basesStamp}`;
+  } finally {
+    addCpu(performance.now() - started);
+  }
+}
+
+function dropShellCache(db: D1Like, universe: UniverseState): void {
+  const entry = shellCache.get(db);
+  if (entry?.universe === universe) shellCache.delete(db);
+}
+
+function noteShellVersion(db: D1Like, universe: UniverseState, version: number, docLength: number): void {
+  const entry = shellCache.get(db);
+  if (!entry || entry.universe !== universe) return;
+  entry.version = version;
+  entry.docLength = docLength;
+}
+
+function readWorldStamp(loaded: LoadedRows): string {
+  if (loaded.worldStampAfter === undefined) loaded.worldStampAfter = worldStamp(loaded.universe);
+  return loaded.worldStampAfter;
 }
 
 async function run(db: D1Like, sql: string, ...values: unknown[]): Promise<number> {
@@ -336,6 +708,8 @@ export async function readCombatReportByShareCode(
 
 function worldDoc(universe: UniverseState): UniverseState {
   // Keep aiCatchUpCursor durable so the NPC cron resumes after each row save.
+  // Stringify the raw base maps. The watch proxies would allocate a proxy per
+  // nested field while walking 750 bases.
   const doc = {
     ...universe,
     players: {},
@@ -346,10 +720,17 @@ function worldDoc(universe: UniverseState): UniverseState {
     expeditionReports: {},
     asteroids: {},
     debris: {},
+    pirateBases: rawBases(universe.pirateBases),
+    alienBases: rawBases(universe.alienBases),
   };
   delete doc.skipNpcRaids;
   delete doc.skipPirateTopUp;
   return doc;
+}
+
+function rawBases<T>(value: T): T {
+  if (!value || typeof value !== "object") return value;
+  return (proxyTargets.get(value as object) as T | undefined) ?? value;
 }
 
 function playerDoc(player: PlayerState): PlayerState {
@@ -1052,8 +1433,9 @@ function emptyUniverse(shell: UniverseState): UniverseState {
   shell.reports = {};
   shell.spyReports = {};
   shell.expeditionReports = {};
-  shell.asteroids = shell.asteroids ?? {};
-  shell.debris = shell.debris ?? {};
+  // System rows refill these. A reused shell must not keep another request's fields.
+  shell.asteroids = {};
+  shell.debris = {};
   return shell;
 }
 
@@ -1165,10 +1547,14 @@ async function loadMessages(
   }>(db, `SELECT id, version, kind, doc, owner_id FROM save_messages ${where}`, ...values);
   for (const row of rows) {
     into.messageVersions.set(row.id, row.version);
+    into.messageKinds.set(row.id, row.kind);
+    into.messageOwners.set(row.id, row.owner_id);
     into.fingerprints.set(`message:${row.id}`, row.doc);
     const doc = timedParse(row.doc) as { id: string };
-    if (row.kind === "report") into.universe.reports[doc.id] = doc as CombatReport;
-    else if (row.kind === "spy") into.universe.spyReports[doc.id] = doc as EspionageReport;
+    if (row.kind === "report") {
+      into.messageRefs.set(row.id, doc);
+      into.universe.reports[doc.id] = doc as CombatReport;
+    } else if (row.kind === "spy") into.universe.spyReports[doc.id] = doc as EspionageReport;
     else if (row.kind === "expedition") {
       into.universe.expeditionReports[doc.id] = doc as ExpeditionReport;
     } else if (row.kind === "event") {
@@ -1302,7 +1688,18 @@ function systemPairs(planets: Iterable<PlanetState>): Array<[number, number]> {
 }
 
 function pirateSitesNeeded(universe: UniverseState): boolean {
-  return Object.values(universe.pirateBases ?? {}).some((base) => base.destroyedAt != null);
+  const watch = npcWatches.get(universe);
+  if (
+    watch &&
+    !watch.dirty &&
+    watch.noDestroyed &&
+    universe.pirateBases === watch.pirate
+  ) {
+    return false;
+  }
+  const needed = Object.values(universe.pirateBases ?? {}).some((base) => base.destroyedAt != null);
+  if (watch) watch.noDestroyed = !needed;
+  return needed;
 }
 
 async function loadOccupancy(db: D1Like, loaded: LoadedRows): Promise<void> {
@@ -1346,10 +1743,14 @@ function applyMessageRows(
 ): void {
   for (const row of rows) {
     into.messageVersions.set(row.id, row.version);
+    into.messageKinds.set(row.id, row.kind);
+    into.messageOwners.set(row.id, row.owner_id);
     into.fingerprints.set(`message:${row.id}`, row.doc);
     const doc = timedParse(row.doc) as { id: string };
-    if (row.kind === "report") into.universe.reports[doc.id] = doc as CombatReport;
-    else if (row.kind === "spy") into.universe.spyReports[doc.id] = doc as EspionageReport;
+    if (row.kind === "report") {
+      into.messageRefs.set(row.id, doc);
+      into.universe.reports[doc.id] = doc as CombatReport;
+    } else if (row.kind === "spy") into.universe.spyReports[doc.id] = doc as EspionageReport;
     else if (row.kind === "expedition") {
       into.universe.expeditionReports[doc.id] = doc as ExpeditionReport;
     } else if (row.kind === "event") {
@@ -1515,6 +1916,104 @@ async function loadNpcPlayerPage(db: D1Like, loaded: LoadedRows): Promise<void> 
   applyPlayerRows(loaded, rows);
 }
 
+async function loadPlayerFleets(
+  db: D1Like,
+  into: LoadedRows,
+  playerIds: string[],
+  dueFleetIds: string[],
+): Promise<void> {
+  const rows: Array<{ id: string; version: number; doc: string }> = [];
+  let dueLeft = dueFleetIds;
+  for (const group of chunkRows(playerIds, Math.floor(MAX_IN_BINDS / 2))) {
+    const owners = inList(group);
+    let sql = `SELECT id, version, doc FROM save_fleets WHERE owner_id IN (${owners.clause})
+      UNION
+      SELECT id, version, doc FROM (
+        SELECT id, version, doc,
+          ROW_NUMBER() OVER (
+            PARTITION BY target_owner_id
+            ORDER BY json_extract(doc, '$.arrivesAt') ASC
+          ) AS rn
+        FROM save_fleets
+        WHERE target_owner_id IN (${owners.clause})
+          AND json_extract(doc, '$.phase') = 'outbound'
+          AND json_extract(doc, '$.mission') IN ('raid', 'espionage')
+      ) WHERE rn <= ${HOSTILE_FLEET_WINDOW}`;
+    const values: unknown[] = [...owners.values, ...owners.values];
+    if (dueLeft.length) {
+      const room = MAX_IN_BINDS - values.length;
+      const take = dueLeft.slice(0, room);
+      dueLeft = dueLeft.slice(take.length);
+      if (take.length) {
+        const due = inList(take);
+        sql += ` UNION SELECT id, version, doc FROM save_fleets WHERE id IN (${due.clause})`;
+        values.push(...due.values);
+      }
+    }
+    rows.push(...(await all<{ id: string; version: number; doc: string }>(db, sql, ...values)));
+  }
+  if (dueLeft.length) {
+    rows.push(
+      ...(await allInList<{ id: string; version: number; doc: string }>(
+        db,
+        dueLeft,
+        (list) => `SELECT id, version, doc FROM save_fleets WHERE id IN (${list.clause})`,
+      )),
+    );
+  }
+  applyFleetRows(into, [...new Map(rows.map((row) => [row.id, row])).values()]);
+}
+
+async function loadPlayerMessages(db: D1Like, into: LoadedRows, playerIds: string[]): Promise<void> {
+  const rows: Array<{
+    id: string;
+    version: number;
+    kind: string;
+    doc: string;
+    owner_id: string;
+  }> = [];
+  // Four selects per commander. D1 rejects a compound SELECT with 6 or more terms,
+  // so this stays one commander per statement (4 terms).
+  for (const id of playerIds) {
+    const branches = [
+      `SELECT id, version, kind, doc, owner_id FROM (
+         SELECT id, version, kind, doc, owner_id FROM save_messages
+         WHERE kind = 'report' AND (owner_id = ? OR defender_id = ?)
+         ORDER BY json_extract(doc, '$.at') DESC
+         LIMIT ${REPORT_WINDOW}
+       )`,
+      `SELECT id, version, kind, doc, owner_id FROM (
+         SELECT id, version, kind, doc, owner_id FROM save_messages
+         WHERE kind = 'spy' AND owner_id = ?
+         ORDER BY json_extract(doc, '$.at') DESC
+         LIMIT ${REPORT_WINDOW}
+       )`,
+      `SELECT id, version, kind, doc, owner_id FROM (
+         SELECT id, version, kind, doc, owner_id FROM save_messages
+         WHERE kind = 'expedition' AND owner_id = ?
+         ORDER BY json_extract(doc, '$.at') DESC
+         LIMIT ${REPORT_WINDOW}
+       )`,
+      `SELECT id, version, kind, doc, owner_id FROM (
+         SELECT id, version, kind, doc, owner_id FROM save_messages
+         WHERE kind = 'event' AND owner_id = ?
+         ORDER BY json_extract(doc, '$.createdAt') DESC
+         LIMIT ${EVENT_WINDOW}
+       )`,
+    ];
+    rows.push(
+      ...(await all<{
+        id: string;
+        version: number;
+        kind: string;
+        doc: string;
+        owner_id: string;
+      }>(db, branches.join(" UNION ALL "), id, id, id, id, id)),
+    );
+  }
+  applyMessageRows(into, [...new Map(rows.map((row) => [row.id, row])).values()]);
+}
+
 export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined): Promise<LoadedRows> {
   const requestedIds = [...new Set((work?.playerIds ?? []).filter(Boolean))] as string[];
   const planetIds = [...new Set((work?.planetIds ?? []).filter((id): id is string => Boolean(id)))];
@@ -1552,7 +2051,19 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
     );
   }
   if (!world) throw new Error("Row save is missing the world document.");
-  const universe = emptyUniverse(timedParse(world.doc) as UniverseState);
+  const cachedShell = shellCache.get(db);
+  const reuseShell =
+    cachedShell !== undefined &&
+    cachedShell.version === world.version &&
+    cachedShell.docLength === world.doc.length &&
+    cachedShell.docLength > 0;
+  const universe = reuseShell
+    ? emptyUniverse(cachedShell.universe)
+    : emptyUniverse(timedParse(world.doc) as UniverseState);
+  const shellCursor = universe.npcPlayerPageCursor;
+  if (!reuseShell) {
+    shellCache.set(db, { version: world.version, docLength: world.doc.length, universe });
+  }
   const loaded: LoadedRows = {
     universe,
     worldVersion: world.version,
@@ -1567,8 +2078,14 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
     loadedSystemKeys: new Set(),
     fleetSnapshots: new Map(),
     pendingSystems: [],
-    fingerprints: new Map([["world", stable(worldDoc(universe))]]),
+    fingerprints: new Map(),
+    worldStamp: worldStamp(universe),
     planetDocs: new Map(),
+    messageKinds: new Map(),
+    messageOwners: new Map(),
+    messageRefs: new Map(),
+    forceSave: false,
+    purgeReportIds: [],
   };
   if (playerRows) applyPlayerRows(loaded, playerRows);
   else if (!pageNpc) await loadPlayers(db, loaded);
@@ -1666,52 +2183,8 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
     const pairs = [...systems.values()];
     await loadPlanetsAt(db, loaded, pairs);
     if (requestedIds.length) {
-      const [fleetRows, msgRows] = await Promise.all([
-        allInList<{ id: string; version: number; doc: string }>(
-          db,
-          requestedIds,
-          (list) => `SELECT id, version, doc FROM save_fleets WHERE owner_id IN (${list.clause}) OR target_owner_id IN (${list.clause})`,
-          2,
-        ),
-        allInList<{
-          id: string;
-          version: number;
-          kind: string;
-          doc: string;
-          owner_id: string;
-        }>(
-          db,
-          requestedIds,
-          (list) => `SELECT id, version, kind, doc, owner_id FROM save_messages WHERE owner_id IN (${list.clause}) OR defender_id IN (${list.clause})`,
-          2,
-        ),
-      ]);
-      for (const row of new Map(fleetRows.map((row) => [row.id, row])).values()) {
-        const fleet = timedParse(row.doc) as FleetMission;
-        loaded.universe.fleets[fleet.id] = fleet;
-        loaded.fleetVersions.set(fleet.id, row.version);
-        loaded.fleetSnapshots.set(fleet.id, structuredClone(fleet));
-        loaded.fingerprints.set(`fleet:${fleet.id}`, stable(fleet));
-      }
-      for (const row of new Map(msgRows.map((row) => [row.id, row])).values()) {
-        loaded.messageVersions.set(row.id, row.version);
-        loaded.fingerprints.set(`message:${row.id}`, row.doc);
-        const doc = timedParse(row.doc) as { id: string };
-        if (row.kind === "report") loaded.universe.reports[doc.id] = doc as CombatReport;
-        else if (row.kind === "spy") loaded.universe.spyReports[doc.id] = doc as EspionageReport;
-        else if (row.kind === "expedition") {
-          loaded.universe.expeditionReports[doc.id] = doc as ExpeditionReport;
-        } else if (row.kind === "event") {
-          const player = loaded.universe.players[row.owner_id];
-          if (player) {
-            player.eventLog = player.eventLog ?? [];
-            player.eventLog.push(doc as EventLogEntry);
-          }
-        }
-      }
-      for (const player of Object.values(loaded.universe.players)) {
-        player.eventLog?.sort((a, b) => a.createdAt - b.createdAt);
-      }
+      await loadPlayerFleets(db, loaded, requestedIds, work?.dueFleetIds ?? []);
+      await loadPlayerMessages(db, loaded, requestedIds);
     }
     await loadSystems(db, loaded, pairs);
   }
@@ -1730,6 +2203,9 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
       const home = player && loaded.universe.planets[player.homePlanetId];
       if (home) ensureSystemVisited(loaded.universe, home.coords.galaxy, home.coords.system, now);
     }
+  }
+  if (loaded.universe.npcPlayerPageCursor !== shellCursor) {
+    dropShellCache(db, loaded.universe);
   }
   return loaded;
 }
@@ -1940,17 +2416,21 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
   const newPlayerIds: string[] = [];
   const changedPlayerIds: string[] = [];
 
-  const nextWorld = stable(worldDoc(universe));
-  if (nextWorld !== loaded.fingerprints.get("world")) {
+  const nextWorld = readWorldStamp(loaded);
+  if (nextWorld !== loaded.worldStamp) {
     const version = loaded.worldVersion + 1;
+    const doc = timedStringify(worldDoc(universe));
     guards += pushUpdate(
       db,
       stmts,
       "save_world",
       ["doc", "version"],
       ["id"],
-      [[timedStringify(worldDoc(universe)), version, "world", loaded.worldVersion]],
+      [[doc, version, "world", loaded.worldVersion]],
     );
+    noteShellVersion(db, universe, version, doc.length);
+    loaded.worldVersion = version;
+    loaded.worldStamp = nextWorld;
   }
 
   const playerInserts: unknown[][] = [];
@@ -2102,8 +2582,9 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
   const messageUpdates: unknown[][] = [];
   for (const row of drafts) {
     const key = `message:${row.id}`;
-    const next = timedStringify(row.doc);
     const previous = loaded.fingerprints.get(key);
+    const untouched = row.kind === "report" && loaded.messageRefs.get(row.id) === row.doc;
+    const next = untouched && previous !== undefined ? previous : timedStringify(row.doc);
     if (previous === undefined) {
       messageInserts.push([row.id, row.owner, row.defender, row.kind, 1, next]);
       continue;
@@ -2127,6 +2608,40 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
     ["id"],
     messageUpdates,
   );
+
+  const purge = loaded.messagePurge;
+  if (purge) {
+    const want = (bucket: "alerts" | "spy" | "combat"): boolean =>
+      purge.category === "all" || purge.category === bucket;
+    if (want("alerts")) {
+      stmts.push(bind(db, "DELETE FROM save_messages WHERE kind = 'event' AND owner_id = ?", [purge.playerId]));
+    }
+    if (want("spy")) {
+      stmts.push(bind(db, "DELETE FROM save_messages WHERE kind = 'spy' AND owner_id = ?", [purge.playerId]));
+    }
+    if (want("combat")) {
+      stmts.push(bind(db, "DELETE FROM save_messages WHERE kind = 'expedition' AND owner_id = ?", [purge.playerId]));
+      stmts.push(
+        bind(
+          db,
+          `DELETE FROM save_messages
+           WHERE kind = 'report' AND (owner_id = ? OR defender_id = ?)
+             AND (
+               json_extract(doc, '$.attackerPlayerId') IN ('npc_pirates', 'npc_aliens')
+               OR json_extract(doc, '$.defenderPlayerId') IN ('npc_pirates', 'npc_aliens')
+               OR json_extract(doc, '$.attackerPlayerId') IS NULL
+               OR json_extract(doc, '$.defenderPlayerId') IS NULL
+               OR json_extract(doc, '$.attackerPlayerId') = json_extract(doc, '$.defenderPlayerId')
+             )`,
+          [purge.playerId, purge.playerId],
+        ),
+      );
+      for (const group of chunkRows(loaded.purgeReportIds, MAX_IN_BINDS)) {
+        const list = inList(group);
+        stmts.push(bind(db, `DELETE FROM save_messages WHERE id IN (${list.clause})`, list.values));
+      }
+    }
+  }
 
   const systemInserts: unknown[][] = [];
   const systemUpdates: unknown[][] = [];
@@ -2300,26 +2815,66 @@ async function resolvePlayerIds(db: D1Like, work: UniverseWork | undefined): Pro
   return [...ids].sort();
 }
 
+function dueFleetLimit(): number | null {
+  const fleets = currentScope()?.budget?.fleets;
+  if (fleets == null || !Number.isFinite(fleets)) return null;
+  return Math.max(0, Math.floor(fleets));
+}
+
 async function expandDueFleets(
   db: D1Like,
   playerIds: string[],
-): Promise<{ planetIds: string[]; owners: string[]; systems: Array<[number, number]> }> {
-  const fleets = await allInList<{ id: string; doc: string }>(
-    db,
-    playerIds,
-    (list) => `SELECT id, doc FROM save_fleets WHERE owner_id IN (${list.clause}) OR target_owner_id IN (${list.clause})`,
-    2,
+): Promise<{ planetIds: string[]; owners: string[]; systems: Array<[number, number]>; fleetIds: string[] }> {
+  const limit = dueFleetLimit();
+  const now = Date.now();
+  // Two IN lists per statement. Chunk so a 110-player read stays under 90 binds.
+  const chunkSize = Math.floor(MAX_IN_BINDS / 2);
+  const found = new Map<string, {
+    id: string;
+    origin_planet_id: string | null;
+    target_planet_id: string | null;
+    galaxy: number | null;
+    system: number | null;
+    arrives_at: number | null;
+  }>();
+  for (const group of chunkRows(playerIds, chunkSize)) {
+    const list = inList(group);
+    const sql = `SELECT id,
+        json_extract(doc, '$.originPlanetId') AS origin_planet_id,
+        json_extract(doc, '$.targetPlanetId') AS target_planet_id,
+        json_extract(doc, '$.targetCoords.galaxy') AS galaxy,
+        json_extract(doc, '$.targetCoords.system') AS system,
+        json_extract(doc, '$.arrivesAt') AS arrives_at
+      FROM save_fleets
+      WHERE (owner_id IN (${list.clause}) OR target_owner_id IN (${list.clause}))
+        AND json_extract(doc, '$.arrivesAt') <= ?
+      ORDER BY json_extract(doc, '$.arrivesAt') ASC
+      ${limit == null ? "" : "LIMIT ?"}`;
+    const values: unknown[] = [...list.values, ...list.values, now];
+    if (limit != null) values.push(limit);
+    const rows = await all<{
+      id: string;
+      origin_planet_id: string | null;
+      target_planet_id: string | null;
+      galaxy: number | null;
+      system: number | null;
+      arrives_at: number | null;
+    }>(db, sql, ...values);
+    for (const row of rows) found.set(row.id, row);
+  }
+  const fleets = [...found.values()].sort(
+    (a, b) => (a.arrives_at ?? 0) - (b.arrives_at ?? 0) || a.id.localeCompare(b.id),
   );
+  const chosen = limit == null ? fleets : fleets.slice(0, limit);
   const planetIds = new Set<string>();
   const systems = new Map<string, [number, number]>();
-  for (const row of new Map(fleets.map((row) => [row.id, row])).values()) {
-    const fleet = timedParse(row.doc) as FleetMission;
-    if (fleet.arrivesAt > Date.now()) continue;
-    if (fleet.originPlanetId) planetIds.add(fleet.originPlanetId);
-    if (fleet.targetPlanetId) planetIds.add(fleet.targetPlanetId);
-    const coords = fleet.targetCoords;
-    if (coords?.galaxy && coords.system) {
-      systems.set(`${coords.galaxy}:${coords.system}`, [coords.galaxy, coords.system]);
+  const fleetIds: string[] = [];
+  for (const fleet of chosen) {
+    fleetIds.push(fleet.id);
+    if (fleet.origin_planet_id) planetIds.add(fleet.origin_planet_id);
+    if (fleet.target_planet_id) planetIds.add(fleet.target_planet_id);
+    if (fleet.galaxy && fleet.system) {
+      systems.set(`${fleet.galaxy}:${fleet.system}`, [fleet.galaxy, fleet.system]);
     }
   }
   const owners = new Set<string>();
@@ -2335,7 +2890,7 @@ async function expandDueFleets(
       systems.set(`${planet.galaxy}:${planet.system}`, [planet.galaxy, planet.system]);
     }
   }
-  return { planetIds: [...planetIds], owners: [...owners], systems: [...systems.values()] };
+  return { planetIds: [...planetIds], owners: [...owners], systems: [...systems.values()], fleetIds };
 }
 
 /** Resources may drift this far from plain growth (float noise) and still count as untouched. */
@@ -2381,9 +2936,8 @@ function planetChanged(loaded: LoadedRows, planet: PlanetState, next: string): b
 
 function changed(loaded: LoadedRows): boolean {
   const universe = loaded.universe;
-  if (stable(worldDoc({ ...universe, skipNpcRaids: undefined })) !== loaded.fingerprints.get("world")) {
-    return true;
-  }
+  if (loaded.forceSave) return true;
+  if (readWorldStamp(loaded) !== loaded.worldStamp) return true;
   for (const player of Object.values(universe.players)) {
     if (stable(playerDoc(player)) !== loaded.fingerprints.get(`player:${player.id}`)) return true;
   }
@@ -2395,6 +2949,8 @@ function changed(loaded: LoadedRows): boolean {
     if (stable(fleet) !== loaded.fingerprints.get(`fleet:${fleet.id}`)) return true;
   }
   for (const row of messageDrafts(universe)) {
+    const untouched = row.kind === "report" && loaded.messageRefs.get(row.id) === row.doc;
+    if (untouched) continue;
     if (timedStringify(row.doc) !== loaded.fingerprints.get(`message:${row.id}`)) return true;
   }
   if (messageDrafts(universe).length !== loaded.messageVersions.size) return true;
@@ -2434,6 +2990,101 @@ async function runGame<T>(
   }
 }
 
+function hiddenIdSet(raw: string | null): Set<string> {
+  const ids = new Set<string>();
+  if (!raw) return ids;
+  try {
+    const parsed = timedParse(raw) as unknown;
+    if (Array.isArray(parsed)) {
+      for (const id of parsed) if (typeof id === "string") ids.add(id);
+    }
+  } catch {
+    /* a bad hidden list still counts as present so the row is not dropped */
+  }
+  return ids;
+}
+
+/**
+ * Extend a windowed delete to every matching row. NPC, spy, expedition, and
+ * event rows are removed. A player-vs-player report is hidden, and the row
+ * is removed only when the other commander already hid it or is not in
+ * save_players. Loaded ids that leave memory stay in messageVersions so the
+ * versioned delete still matches; the bulk delete then covers the rest.
+ */
+async function prepareMessagePurge(db: D1Like, loaded: LoadedRows): Promise<void> {
+  const purge = loaded.messagePurge;
+  if (!purge) return;
+  const player = loaded.universe.players[purge.playerId];
+  if (!player) return;
+  loaded.forceSave = true;
+  const want = (bucket: "alerts" | "spy" | "combat"): boolean =>
+    purge.category === "all" || purge.category === bucket;
+  if (!want("combat")) return;
+
+  const rows = await all<{ id: string; attacker: string | null; defender: string | null }>(
+    db,
+    `SELECT id,
+       json_extract(doc, '$.attackerPlayerId') AS attacker,
+       json_extract(doc, '$.defenderPlayerId') AS defender
+     FROM save_messages
+     WHERE kind = 'report' AND (owner_id = ? OR defender_id = ?)`,
+    purge.playerId,
+    purge.playerId,
+  );
+  const others = new Set<string>();
+  const pvp: Array<{ id: string; other: string }> = [];
+  for (const row of rows) {
+    const attacker = row.attacker ?? "";
+    const defender = row.defender ?? "";
+    const other = attacker === purge.playerId ? defender : attacker;
+    const npc =
+      !other ||
+      other === purge.playerId ||
+      other === "npc_pirates" ||
+      other === "npc_aliens";
+    if (npc) continue;
+    others.add(other);
+    pvp.push({ id: row.id, other });
+  }
+  const alive = new Map<string, Set<string>>();
+  if (others.size) {
+    const found = await allInList<{ id: string; hidden: string | null }>(
+      db,
+      [...others],
+      (list) =>
+        `SELECT id, json_extract(doc, '$.hiddenReportIds') AS hidden FROM save_players WHERE id IN (${list.clause})`,
+    );
+    for (const row of found) {
+      const hidden = hiddenIdSet(row.hidden);
+      const memory = loaded.universe.players[row.id];
+      if (memory?.hiddenReportIds) {
+        for (const id of memory.hiddenReportIds) hidden.add(id);
+      }
+      alive.set(row.id, hidden);
+    }
+  }
+  if (!Array.isArray(player.hiddenReportIds)) player.hiddenReportIds = [];
+  const already = new Set(player.hiddenReportIds);
+  const drop: string[] = [];
+  for (const row of pvp) {
+    const otherHidden = alive.get(row.other);
+    if (!otherHidden || otherHidden.has(row.id)) {
+      drop.push(row.id);
+      delete loaded.universe.reports[row.id];
+      continue;
+    }
+    if (!already.has(row.id)) {
+      player.hiddenReportIds.push(row.id);
+      already.add(row.id);
+    }
+    // deletePlayerMessages drops a shared report when the other commander
+    // was not in this working set. Put that row back out of the delete set
+    // so the saved copy stays until they hide it too.
+    if (!loaded.universe.reports[row.id]) loaded.messageVersions.delete(row.id);
+  }
+  loaded.purgeReportIds = drop;
+}
+
 /**
  * Writes lock the named players (or the world, when the action is global)
  * and reject a stale row version. Reads never wait on a lock.
@@ -2453,13 +3104,14 @@ export async function withRowUniverse<T>(
   const requested = [...new Set((work?.playerIds ?? []).filter(Boolean))] as string[];
   const due =
     broad || requested.length === 0
-      ? { planetIds: [] as string[], owners: [] as string[], systems: [] as Array<[number, number]> }
+      ? { planetIds: [] as string[], owners: [] as string[], systems: [] as Array<[number, number]>, fleetIds: [] as string[] }
       : await expandDueFleets(db, requested);
   const merged: UniverseWork = {
     ...work,
     playerIds: [...new Set([...requested, ...due.owners])],
     planetIds: [...new Set([...(work?.planetIds ?? []), ...due.planetIds])],
     extraSystems: [...(work?.extraSystems ?? []), ...due.systems],
+    dueFleetIds: due.fleetIds,
   };
   const playerIds = [
     ...new Set([...(await resolvePlayerIds(db, work)), ...due.owners]),
@@ -2474,6 +3126,14 @@ export async function withRowUniverse<T>(
     const loaded = await loadWorkingSet(db, loadWork);
     await attachBoard(db, work);
     const result = await runGame(loaded.universe, fn);
+    const watch = npcWatches.get(loaded.universe);
+    if (watch && !watch.dirty && loaded.universe.pirateBases === watch.pirate) {
+      armQuietPirateCull(loaded.universe.pirateBases);
+    }
+    if (work?.messagePurge) {
+      loaded.messagePurge = work.messagePurge;
+      await prepareMessagePurge(db, loaded);
+    }
     restoreUnresolvedFleets(loaded);
     loaded.pendingSystems = await planSystemWrites(db, loaded);
     const scoresDue = Boolean(work?.maintenance);
@@ -2482,12 +3142,17 @@ export async function withRowUniverse<T>(
 
   const runOnce = async () => {
     const { loaded, result } = await play();
-    if (!changed(loaded)) return result;
-    if (!kv || !(await acquireLocks(kv, locks, false))) return result;
+    const dirty = changed(loaded);
+    if (!dirty) return result;
+    if (!kv || !(await acquireLocks(kv, locks, false))) {
+      dropShellCache(db, loaded.universe);
+      return result;
+    }
     try {
       await saveWorkingSet(db, loaded, false);
       return result;
     } catch (err) {
+      dropShellCache(db, loaded.universe);
       if (!(err instanceof RowStaleError)) throw err;
       return result;
     } finally {
@@ -2503,11 +3168,16 @@ export async function withRowUniverse<T>(
     let killed = false;
     try {
       for (let attempt = 0; attempt < 4; attempt++) {
+        let loadedUniverse: UniverseState | undefined;
         try {
-          const { loaded, result, scoresDue } = await play();
-          if (changed(loaded) || scoresDue) await saveWorkingSet(db, loaded, scoresDue);
-          return result;
+          const played = await play();
+          loadedUniverse = played.loaded.universe;
+          if (changed(played.loaded) || played.scoresDue) {
+            await saveWorkingSet(db, played.loaded, played.scoresDue);
+          }
+          return played.result;
         } catch (err) {
+          if (loadedUniverse) dropShellCache(db, loadedUniverse);
           if (err instanceof SaveKilledError) {
             killed = true;
             throw err;
