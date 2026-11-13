@@ -21,6 +21,7 @@ import {
   NEWBIE_PROTECTION_POINTS,
   PIRATE_TARGET_BASE_COUNT,
   pickRaidTarget,
+  abandonColony,
   playerView,
   queueBuildingUpgrade,
   queueResearch,
@@ -2899,5 +2900,73 @@ describe("row save review fixes", () => {
     assert.equal(done, true);
     assert.ok(totalPlayers >= 115);
     assert.ok(maxQueries <= 50);
+  });
+});
+
+describe("abandon colony row save", () => {
+  it("deletes the colony and its moon row and keeps debris", async () => {
+    const { db } = sqliteD1();
+    const source = fixture();
+    const alpha = Object.values(source.players).find((player) => player.name === "OldHand")!;
+    const home = source.planets[alpha.homePlanetId]!;
+    let coords: { galaxy: number; system: number; slot: number } | null = null;
+    for (let system = 1; system <= 40 && !coords; system++) {
+      const taken = new Set(
+        Object.values(source.planets)
+          .filter((planet) => planet.kind !== "moon" && planet.coords.galaxy === 1 && planet.coords.system === system)
+          .map((planet) => planet.coords.slot),
+      );
+      for (let slot = 1; slot <= 15; slot++) {
+        if (!taken.has(slot)) {
+          coords = { galaxy: 1, system, slot };
+          break;
+        }
+      }
+    }
+    assert.ok(coords);
+    const colonyId = "colony-row";
+    const moonId = "colony-row-moon";
+    const colony: PlanetState = {
+      ...structuredClone(home),
+      id: colonyId,
+      name: "Far Reach",
+      coords,
+      kind: "planet",
+      parentPlanetId: null,
+      moonId,
+      resources: { metal: 111, crystal: 222, deuterium: 333 },
+    };
+    const moon: PlanetState = {
+      ...structuredClone(colony),
+      id: moonId,
+      name: "Far Reach Moon",
+      kind: "moon",
+      parentPlanetId: colonyId,
+      moonId: null,
+      resources: { metal: 9, crystal: 8, deuterium: 7 },
+    };
+    source.planets[colonyId] = colony;
+    source.planets[moonId] = moon;
+    alpha.planetIds = [...alpha.planetIds, colonyId, moonId];
+    const debrisKey = `${coords.galaxy}:${coords.system}:${coords.slot}`;
+    source.debris[debrisKey] = { coords, metal: 50, crystal: 25 };
+    await migrateAll(db, source);
+    const store = createD1Store(db);
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "POST", cpuMs: 0 },
+      () =>
+        withUniverse((universe) => {
+          const result = abandonColony(universe, alpha.id, colonyId);
+          assert.equal(result.ok, true);
+        }, { playerIds: [alpha.id], planetIds: [colonyId, moonId] }),
+    );
+    const loaded = await loadWorkingSet(db, { full: true });
+    assert.equal(loaded.universe.planets[colonyId], undefined);
+    assert.equal(loaded.universe.planets[moonId], undefined);
+    assert.equal(loaded.universe.players[alpha.id]?.planetIds.includes(colonyId), false);
+    assert.equal(loaded.universe.players[alpha.id]?.planetIds.includes(moonId), false);
+    assert.ok(loaded.universe.planets[alpha.homePlanetId]);
+    assert.equal(loaded.universe.debris[debrisKey]?.metal, 50);
+    assert.equal(loaded.universe.debris[debrisKey]?.crystal, 25);
   });
 });

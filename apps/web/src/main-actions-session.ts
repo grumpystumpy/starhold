@@ -15,6 +15,7 @@ import {
   loginAccount,
   recoverAccount,
   relocateMiniFortress,
+  abandonColony,
   renamePlanet,
   requestPasswordReset,
   confirmPasswordReset,
@@ -978,6 +979,38 @@ export async function doRenamePlanet(name: string): Promise<void> {
       failureFallback: "Rename failed.",
       applied: (view) => view.planet.name === name,
       successNotice: (view) => `Colony renamed to ${view.planet.name}.`,
+    });
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doAbandonColony(): Promise<void> {
+  if (!session.view) return;
+  const planetId = session.view.planet.id;
+  const name = session.view.planet.name;
+  if (session.busy) {
+    setFlash("error", "Still applying the last action — try again in a moment.");
+    schedulePaint();
+    return;
+  }
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    session.view = await abandonColony(session.view.player.id, planetId);
+    session.galaxySystem = session.view.planet.coords.system;
+    syncSessionUrl({ replace: true });
+    setFlash("notice", `${name} abandoned.`);
+  } catch (err) {
+    await settleMutation({
+      err,
+      failureFallback: "Abandon failed.",
+      applied: (view) =>
+        view.planet.id !== planetId &&
+        !view.ownedPlanets.some((planet) => planet.id === planetId),
+      successNotice: () => `${name} abandoned.`,
     });
   } finally {
     session.busy = false;

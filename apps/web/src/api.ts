@@ -662,6 +662,18 @@ export async function renamePlanet(
   return parse<PlayerView>(res);
 }
 
+export async function abandonColony(
+  playerId: string,
+  planetId: string,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/abandon-colony", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, planetId }),
+  });
+  return parse<PlayerView>(res);
+}
+
 export async function launchFleetMission(
   playerId: string,
   opts: {

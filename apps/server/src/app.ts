@@ -16,6 +16,7 @@ import {
   type Resources,
   type ShipId,
   OFFICER_DURATION_OPTIONS_HOURS,
+  abandonColony,
   abandonOccupation,
   activateOfficer,
   buyShopItem,
@@ -1322,6 +1323,35 @@ export function createApp(): Hono {
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
     }, { playerIds: [body.playerId] });
+  });
+
+  app.post("/api/abandon-colony", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      planetId?: string;
+    };
+    if (!body.playerId || !body.planetId) {
+      return c.json({ error: "playerId and planetId required." }, 400);
+    }
+    const sessionId = readSessionId(c);
+    if (!sessionId) return c.json({ error: "Sign in required." }, 401);
+    const session = await getSession(sessionId);
+    if (!session) return c.json({ error: "Sign in required." }, 401);
+    const account = await getAccountById(session.accountId);
+    if (!account?.playerId) return c.json({ error: "Sign in required." }, 401);
+    if (account.playerId !== body.playerId) {
+      return c.json({ error: "You do not own this player." }, 403);
+    }
+    return withUniverse((universe) => {
+      advanceUniverse(universe);
+      const result = abandonColony(
+        universe,
+        body.playerId!,
+        body.planetId!,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    }, { playerIds: [body.playerId], planetIds: [body.planetId] });
   });
 
   app.post("/api/abandon-occupation", async (c) => {
