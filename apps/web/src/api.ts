@@ -1086,6 +1086,46 @@ export async function postAllianceChatRequest(body: string): Promise<PlayerView>
   return parse<PlayerView>(res);
 }
 
+export interface CommanderMailMessage {
+  id: string;
+  fromPlayerId: string;
+  fromName: string;
+  toPlayerId: string;
+  toName: string;
+  body: string;
+  createdAt: number;
+}
+
+export async function fetchCommanderMail(
+  since?: number,
+): Promise<{ messages: CommanderMailMessage[] }> {
+  const query =
+    since != null && Number.isFinite(since)
+      ? `?since=${encodeURIComponent(String(since))}`
+      : "";
+  const res = await credFetch(`/api/mail${query}`);
+  return parse(res);
+}
+
+export async function postCommanderMail(
+  to: string,
+  body: string,
+): Promise<{ message: CommanderMailMessage }> {
+  const res = await credFetch("/api/mail", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ to, body }),
+  });
+  return parse(res);
+}
+
+export async function deleteCommanderMailRequest(mailId: string): Promise<{ ok: true }> {
+  const res = await credFetch(`/api/mail/${encodeURIComponent(mailId)}`, {
+    method: "DELETE",
+  });
+  return parse(res);
+}
+
 export async function shareAllianceIntelRequest(
   spyReportId: string,
 ): Promise<PlayerView> {

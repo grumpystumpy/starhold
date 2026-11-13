@@ -2106,6 +2106,10 @@ export const ALLIANCE_CHAT_MAX_MESSAGES = 200;
 export const ALLIANCE_CHAT_RETURN_MAX = 50;
 export const ALLIANCE_CHAT_MAX_CHARS = 500;
 export const ALLIANCE_CHAT_RATE_PER_MIN = 20;
+/** Private commander mail. Not stored on the universe document. */
+export const COMMANDER_MAIL_MAX_CHARS = 500;
+export const COMMANDER_MAIL_MAX_PER_RECIPIENT = 100;
+export const COMMANDER_MAIL_RATE_PER_MIN = 20;
 export const ALLIANCE_INTEL_MAX_REPORTS = 50;
 export const ALLIANCE_MARKERS_MAX = 30;
 /** Galaxy marker lifetime. Lazy purge on read — no cron. */

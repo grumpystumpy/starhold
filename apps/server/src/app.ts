@@ -95,6 +95,7 @@ import {
 } from "./accounts.js";
 import { readSessionId } from "./cookies.js";
 import { mountAllianceIntelRoutes } from "./alliance-intel-routes.js";
+import { mountCommanderMailRoutes } from "./commander-mail-routes.js";
 import { mountAuthRoutes } from "./auth-routes.js";
 import { mountOAuthRoutes } from "./oauth-routes.js";
 import { mountCpuRoutes } from "./cpu-routes.js";
@@ -1241,6 +1242,7 @@ export function createApp(): Hono {
   });
 
   mountAllianceIntelRoutes(app);
+  mountCommanderMailRoutes(app);
 
   app.post("/api/alliance/disband", async (c) => {
     const body = (await c.req.json().catch(() => ({}))) as {

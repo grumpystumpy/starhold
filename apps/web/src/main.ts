@@ -44,6 +44,7 @@ import {
   POLL_INTERVAL_MS,
   silentRefresh,
   refreshAllianceChatIfOpen,
+  refreshCommanderMailIfOpen,
   startPolling,
 } from "./main-actions";
 import { wireJointStrikeForm } from "./main-actions-alliances";
@@ -329,6 +330,7 @@ window.starhold = {
     if (!session.view) return;
     await silentRefresh(session.view.player.id);
     await refreshAllianceChatIfOpen();
+    await refreshCommanderMailIfOpen();
   },
   pollIntervalMs: POLL_INTERVAL_MS,
   idlePauseMs: IDLE_PAUSE_MS,

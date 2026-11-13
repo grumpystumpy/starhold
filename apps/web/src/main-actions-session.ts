@@ -6,6 +6,7 @@ import {
   claimAnonymousPlayer,
   fetchAuthMe,
   fetchAllianceChat,
+  fetchCommanderMail,
   fetchSecurity,
   fetchState,
   changeAccountPassword,
@@ -37,6 +38,10 @@ import {
   stripJoinParams,
 } from "./session";
 import { syncSessionUrl } from "./ui/router";
+import {
+  commanderMailRowsForView,
+  setCommanderMail,
+} from "./ui/render-messages";
 import { captureGameEvent, identifyCommander } from "./telemetry";
 import { settleMutation } from "./recover-action";
 
@@ -229,6 +234,7 @@ function pollNow(): Promise<void> {
       if (!playerId || pollPlayerId !== playerId || !pollsAllowed()) return;
       await silentRefresh(playerId);
       await refreshAllianceChatIfOpen();
+      await refreshCommanderMailIfOpen();
     } finally {
       pollChain = null;
       if (pollPlayerId === playerId) schedulePoll(POLL_INTERVAL_MS);
@@ -270,6 +276,34 @@ export async function refreshAllianceChatIfOpen(): Promise<void> {
   } catch {
     /* a chat poll must not fail the state refresh */
   }
+}
+
+/** Private commander mail. Only while the Messages page is open. */
+export async function refreshCommanderMailIfOpen(): Promise<void> {
+  if (session.activePage !== "messages") return;
+  if (!session.view) return;
+  const since = commanderMailRowsForView().reduce(
+    (max, message) => Math.max(max, message.createdAt),
+    0,
+  );
+  try {
+    const payload = await fetchCommanderMail(since > 0 ? since : undefined);
+    const incoming = payload.messages ?? [];
+    if (since > 0 && incoming.length === 0) return;
+    const byId = new Map(commanderMailRowsForView().map((message) => [message.id, message]));
+    for (const message of incoming) byId.set(message.id, message);
+    setCommanderMail(
+      [...byId.values()].sort((a, b) => a.createdAt - b.createdAt).slice(-100),
+    );
+    schedulePaint();
+  } catch {
+    /* a mail poll must not fail the state refresh */
+  }
+}
+
+export async function reloadCommanderMail(): Promise<void> {
+  const payload = await fetchCommanderMail();
+  setCommanderMail(payload.messages ?? []);
 }
 
 function clearIdleTimer(): void {

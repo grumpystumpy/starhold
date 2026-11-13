@@ -6,6 +6,7 @@ export {
   deferBackgroundPoll,
   silentRefresh,
   refreshAllianceChatIfOpen,
+  refreshCommanderMailIfOpen,
   doJoin,
   doRefresh,
   doGalaxyNav,
@@ -82,7 +83,12 @@ export {
   doUpsertAllianceMarker,
   fleetStrikeTarget,
 } from "./main-actions-alliances.js";
-export { doDeleteMessages, doMarkEventsRead } from "./main-actions-events.js";
+export {
+  doDeleteMessages,
+  doDeleteCommanderMail,
+  doMarkEventsRead,
+  doSendCommanderMail,
+} from "./main-actions-events.js";
 export {
   doClaimSeason,
   doSetSeasonSkin,
