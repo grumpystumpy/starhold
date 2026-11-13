@@ -120,7 +120,7 @@ describe("galaxy page rendering", () => {
     assert.match(html, /debris 500\/200/);
     assert.match(
       html,
-      /<button type="button" class="galaxy-debris-badge" data-galaxy-harvest="1" data-testid="galaxy-debris-1"[^>]*>debris 500\/200<\/button>/,
+      /<button type="button" class="galaxy-debris-badge" data-galaxy-harvest="1" data-testid="galaxy-debris-1"[^>]*>debris 500\/200 · moon chance 0%<\/button>/,
     );
     assert.doesNotMatch(html, /<span class="galaxy-debris-badge"/);
     assert.doesNotMatch(html, /data-galaxy-harvest="2"/);
@@ -379,8 +379,8 @@ describe("galaxy page rendering", () => {
       galaxy: { galaxy: 2, system: 3, slots, minis: [], asteroids: [] },
     } as unknown as PlayerView;
     const html = pageHtml("galaxy", view, false, null);
-    assert.match(html, /data-galaxy-harvest="1"[^>]*>debris 0\/40<\/button>/);
-    assert.match(html, /data-galaxy-harvest="2"[^>]*>debris 15\/0<\/button>/);
+    assert.match(html, /data-galaxy-harvest="1"[^>]*>debris 0\/40 · moon chance 0%<\/button>/);
+    assert.match(html, /data-galaxy-harvest="2"[^>]*>debris 15\/0 · moon chance 0%<\/button>/);
     assert.doesNotMatch(html, /data-galaxy-harvest="3"/);
     assert.doesNotMatch(html, /data-testid="galaxy-debris-3"/);
   });
@@ -495,9 +495,9 @@ describe("galaxy page rendering", () => {
       html,
       /data-testid="galaxy-inactive-2"[^>]*title="Inactive for 28 days or more"[^>]*>I<\/abbr>/,
     );
-    assert.match(html, /<span class="galaxy-slot-label">Quiet<abbr class="galaxy-inactive"[^>]*>i<\/abbr> \[OLD\]/);
-    assert.match(html, /<span class="galaxy-slot-label">Gone<abbr class="galaxy-inactive"[^>]*>I<\/abbr>/);
-    assert.match(html, /<span class="galaxy-slot-label">Here \(you\)/);
+    assert.match(html, /<span class="galaxy-slot-label"><button type="button" class="commander-name"[^>]*>Quiet<\/button><abbr class="galaxy-inactive"[^>]*>i<\/abbr> \[OLD\]/);
+    assert.match(html, /<span class="galaxy-slot-label"><button type="button" class="commander-name"[^>]*>Gone<\/button><abbr class="galaxy-inactive"[^>]*>I<\/abbr>/);
+    assert.match(html, /<span class="galaxy-slot-label"><button type="button" class="commander-name"[^>]*>Here<\/button> \(you\)/);
     assert.doesNotMatch(html, /data-testid="galaxy-inactive-3"/);
     assert.match(
       html,
@@ -542,7 +542,7 @@ describe("galaxy page rendering", () => {
     const html = galaxyPanel(view, false);
     const badge = (n: number) =>
       html.match(
-        new RegExp(`data-testid="galaxy-debris-${n}">([^<]*)</span>`),
+        new RegExp(`data-testid="galaxy-debris-${n}"[^>]*>([^<]*)</button>`),
       )?.[1] ?? "";
 
     assert.match(badge(1), /debris 249\.9k\/0/);

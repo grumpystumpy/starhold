@@ -128,10 +128,10 @@ describe("mid-game briefing ui", () => {
       overview({
         onboarding: briefing({ dismissed: true }),
         owned: [
-          { id: "pl1", isMoon: false, isMini: false, jumpGateLevel: 0, researchLab: 1 },
-          { id: "pl2", isMoon: false, isMini: false, jumpGateLevel: 0, researchLab: 0 },
+          { id: "pl1", name: "pl1", coords: { galaxy: 1, system: 1, slot: 4 }, resources: { metal: 0, crystal: 0, deuterium: 0 }, buildQueueHead: null, shipQueueHead: null, defenseQueueHead: null, isMoon: false, isMini: false, jumpGateLevel: 0, researchLab: 1 },
+          { id: "pl2", name: "pl2", coords: { galaxy: 1, system: 1, slot: 5 }, resources: { metal: 0, crystal: 0, deuterium: 0 }, buildQueueHead: null, shipQueueHead: null, defenseQueueHead: null, isMoon: false, isMini: false, jumpGateLevel: 0, researchLab: 0 },
           {
-            id: "moon1",
+            id: "moon1", name: "moon1", coords: { galaxy: 1, system: 1, slot: 4 }, resources: { metal: 0, crystal: 0, deuterium: 0 }, buildQueueHead: null, shipQueueHead: null, defenseQueueHead: null,
             isMoon: true,
             isMini: false,
             jumpGateLevel: 1,

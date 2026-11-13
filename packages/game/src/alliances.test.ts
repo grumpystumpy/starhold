@@ -27,7 +27,6 @@ import {
   leaveAlliance,
   migrateOrResetUniverse,
   offerAllianceNap,
-  migrateOrResetUniverse,
   playerView,
   rejectJoinRequest,
   setAllianceJoinMode,

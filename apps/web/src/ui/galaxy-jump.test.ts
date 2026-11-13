@@ -333,7 +333,7 @@ describe("galaxy jump controls", () => {
     assert.match(emptyMid, /data-testid="galaxy-slot-climate-8"/);
     assert.match(emptyMid, /fields 370–400/);
     assert.doesNotMatch(occupied, /galaxy-slot-climate/);
-    assert.match(occupied, /<span class="galaxy-slot-label">Commander \(you\)<\/span>/);
+    assert.match(occupied, /<span class="galaxy-slot-label"><button type="button" class="commander-name"[^>]*>Commander<\/button> \(you\)<\/span>/);
 
     for (const classId of ["miner", "explorer", "fleeter", null, undefined] as const) {
       const html = panelFor(classId);

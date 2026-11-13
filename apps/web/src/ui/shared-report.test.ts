@@ -43,6 +43,7 @@ describe("public battle report view", () => {
     assert.match(html, /<th scope="row">Strike Fighter<\/th><td>4<\/td><td>2<\/td><td>2<\/td>/);
     assert.match(html, /<th scope="row">Light Laser Turret<\/th><td>3<\/td><td>2<\/td>/);
     assert.doesNotMatch(html, /attackerPlayerId|defenderPlayerId|missionId|privatePlanet/);
+    assert.match(html, /Debris:<\/strong> 40 metal, 50 crystal · moon chance 0%/);
     assert.match(html, /data-testid="battle-replay-legacy"/);
     assert.doesNotMatch(html, /data-testid="battle-replay-play"/);
   });
@@ -94,7 +95,6 @@ describe("public battle report view", () => {
     assert.match(summary, /data-testid="battle-replay-legacy"/);
     assert.doesNotMatch(summary, /data-testid="battle-replay-play"/);
     assert.match(summary, /Recon Drone/);
-    assert.match(html, /Debris:<\/strong> 40 metal, 50 crystal · moon chance 0%/);
   });
 
   it("escapes public lookup errors", () => {
