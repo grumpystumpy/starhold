@@ -2,7 +2,7 @@ import "../test-dom";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { PlayerView } from "@starhold/game";
-import { pageHtml } from "./render-pages";
+import { pageHtml, setHighscoreTab } from "./render-pages";
 
 describe("highscore combat halls", () => {
   it("renders both cached halls and public report links", () => {
@@ -34,6 +34,36 @@ describe("highscore combat halls", () => {
     assert.match(html, /data-testid="hall-of-shame"/);
     assert.match(html, /Lost/);
     assert.match(html, /9\.9K ship value lost/);
+  });
+
+  it("renders a cached category tab and escapes the commander name", () => {
+    const rawName = "<" + "Ops>";
+    const escaped = "&" + "lt;Ops" + "&" + "gt;";
+    const view = {
+      player: { id: "p1", name: "Alpha" },
+      highscores: [],
+      roster: [],
+      categoryHighscores: {
+        buildings: [{ rank: 1, playerId: "p9", name: rawName, points: 42, allianceTag: null }],
+        fleet: [],
+        research: [],
+        defense: [],
+      },
+    } as unknown as PlayerView;
+    setHighscoreTab("buildings");
+    try {
+      const html = pageHtml("highscore", view, false, null);
+      assert.match(html, /data-testid="highscore-tab-buildings"/);
+      assert.match(html, /data-testid="highscore-tab-fleet"/);
+      assert.match(html, /data-testid="highscore-tab-research"/);
+      assert.match(html, /data-testid="highscore-tab-defense"/);
+      assert.match(html, /data-testid="category-highscores-buildings"/);
+      assert.equal(html.includes(escaped), true);
+      assert.equal(html.includes(rawName), false);
+      assert.doesNotMatch(html, /data-testid="highscores-list"/);
+    } finally {
+      setHighscoreTab("players");
+    }
   });
 });
 

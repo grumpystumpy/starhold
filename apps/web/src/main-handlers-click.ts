@@ -862,7 +862,14 @@ export function bindClickHandlers(): void {
       if (highscoreTab) {
         ev.preventDefault();
         const tab = highscoreTab.getAttribute("data-highscore-tab");
-        if (tab === "players" || tab === "alliances") {
+        if (
+          tab === "players" ||
+          tab === "alliances" ||
+          tab === "buildings" ||
+          tab === "fleet" ||
+          tab === "research" ||
+          tab === "defense"
+        ) {
           setHighscoreTab(tab);
           schedulePaint();
         }

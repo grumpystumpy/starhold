@@ -131,7 +131,12 @@ export {
   publicRoster,
   bindHighscoreSource,
   bindAllianceRankSource,
+  bindCategoryRankSource,
 } from "./world-view.js";
+export {
+  categoryHighscoreBoards,
+  emptyCategoryBoards,
+} from "./world-highscore-categories.js";
 export { ensureSystemVisited } from "./world-seed.js";
 export {
   NEWBIE_BONUS_DURATION_MS,

@@ -2,9 +2,11 @@ import { Redis } from "@upstash/redis";
 import {
   archiveUniverseKey,
   bindAllianceRankSource,
+  bindCategoryRankSource,
   bindHighscoreSource,
   bindTickBudget,
   createUniverse,
+  emptyCategoryBoards,
   ensureUniverseShape,
   migrateOrResetUniverse,
   UNIVERSE_SCHEMA_VERSION,
@@ -54,6 +56,12 @@ bindAllianceRankSource(() => {
   const scope = currentScope();
   if (!scope?.rowSave) return undefined;
   return scope.allianceHighscores ?? [];
+});
+
+bindCategoryRankSource(() => {
+  const scope = currentScope();
+  if (!scope?.rowSave) return undefined;
+  return scope.categoryHighscores ?? emptyCategoryBoards();
 });
 
 bindTickBudget(() => currentScope()?.budget);

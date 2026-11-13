@@ -516,6 +516,59 @@ describe("row save migration", () => {
     assert.equal(rebuiltCache.hallOfShame[0]?.lostValue, 750);
   });
 
+  it("writes category highscore rows on maintenance and serves a missing row as empty", async () => {
+    resetMemoryUniverse();
+    const { db, raw } = sqliteD1();
+    const source = fixture();
+    await migrateAll(db, source);
+    raw
+      .prepare(
+        "DELETE FROM save_highscores WHERE id IN ('buildings', 'fleet', 'research', 'defense')",
+      )
+      .run();
+    const store = createD1Store(db);
+    const alpha = Object.values(source.players).find((player) => player.name === "OldHand")!;
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "GET", cpuMs: 0 },
+      () =>
+        withUniverseRead((universe) => {
+          const view = playerView(universe, alpha.id);
+          assert.deepEqual(view.categoryHighscores, {
+            buildings: [],
+            fleet: [],
+            research: [],
+            defense: [],
+          });
+        }, { playerIds: [alpha.id] }),
+    );
+    const afterRead = raw
+      .prepare(
+        "SELECT COUNT(*) AS n FROM save_highscores WHERE id IN ('buildings', 'fleet', 'research', 'defense')",
+      )
+      .get() as { n: number };
+    assert.equal(afterRead.n, 0);
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "POST", cpuMs: 0 },
+      () => withUniverse(() => undefined, { maintenance: true }),
+    );
+    for (const id of ["buildings", "fleet", "research", "defense"]) {
+      const row = raw.prepare("SELECT doc FROM save_highscores WHERE id = ?").get(id) as
+        | { doc: string }
+        | undefined;
+      assert.ok(row, id);
+      assert.equal(Array.isArray(JSON.parse(row!.doc)), true);
+    }
+    const board = JSON.parse(
+      (raw.prepare("SELECT doc FROM save_highscores WHERE id = 'board'").get() as { doc: string }).doc,
+    ) as { rows: Array<Record<string, unknown>> };
+    const sample = board.rows[0];
+    assert.ok(sample);
+    assert.equal("buildings" in sample, false);
+    assert.equal("fleet" in sample, false);
+    assert.equal("research" in sample, false);
+    assert.equal("defense" in sample, false);
+  });
+
   it("keeps other players on both halls when one commander is saved", async () => {
     resetMemoryUniverse();
     const { db, raw } = sqliteD1();

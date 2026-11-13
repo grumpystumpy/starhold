@@ -12,7 +12,11 @@ import {
   ensureUniverseShape,
   highscoresBoard,
   allianceRankBoard,
+  categoryHighscoreBoards,
+  emptyCategoryBoards,
   type AllianceRankEntry,
+  type CategoryBoards,
+  type CategoryRankEntry,
   type AsteroidField,
   type CombatReport,
   type DebrisField,
@@ -731,6 +735,7 @@ async function writeHighscoreCache(
   db: D1Like,
   cache: HighscoreCache,
   builtAt: number,
+  categories?: CategoryBoards,
 ): Promise<void> {
   await run(
     db,
@@ -738,6 +743,29 @@ async function writeHighscoreCache(
      ON CONFLICT(id) DO UPDATE SET built_at = excluded.built_at, doc = excluded.doc`,
     builtAt,
     timedStringify(cache),
+  );
+  if (!categories) return;
+  const stmts: D1Stmt[] = [];
+  queueCategoryHighscores(db, stmts, categories, builtAt);
+  await commitRows(db, stmts);
+}
+
+const CATEGORY_SCORE_IDS = ["buildings", "fleet", "research", "defense"] as const;
+
+/** One multi-row write. D1 allows at most 5 rows in a statement. */
+function queueCategoryHighscores(
+  db: D1Like,
+  stmts: D1Stmt[],
+  categories: CategoryBoards,
+  builtAt: number,
+): void {
+  stmts.push(
+    bind(
+      db,
+      `INSERT INTO save_highscores (id, built_at, doc) VALUES (?, ?, ?), (?, ?, ?), (?, ?, ?), (?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET built_at = excluded.built_at, doc = excluded.doc`,
+      CATEGORY_SCORE_IDS.flatMap((id) => [id, builtAt, timedStringify(categories[id])]),
+    ),
   );
 }
 
@@ -823,6 +851,7 @@ export async function migrateChunk(
   const systems = systemDrafts(universe);
   const stmts: D1Stmt[] = [];
   let writes = 0;
+  let categoryCache: CategoryBoards | null = null;
   const room = () => writes < limit && (stopAfter == null || writes < stopAfter);
   const push = (sql: string, values: unknown[]) => {
     stmts.push(bind(db, sql, values));
@@ -942,7 +971,7 @@ export async function migrateChunk(
       continue;
     }
     if (state.stage === "scores") {
-      if (state.cursor !== "board-done") {
+      if (state.cursor === "") {
         push(
           `INSERT INTO save_highscores (id, built_at, doc) VALUES ('board', ?, ?)
            ON CONFLICT(id) DO UPDATE SET built_at = excluded.built_at, doc = excluded.doc`,
@@ -951,11 +980,33 @@ export async function migrateChunk(
         state.cursor = "board-done";
         continue;
       }
-      push(
-        `INSERT INTO save_highscores (id, built_at, doc) VALUES ('alliances', ?, ?)
-         ON CONFLICT(id) DO UPDATE SET built_at = excluded.built_at, doc = excluded.doc`,
-        [Date.now(), timedStringify(allianceRankBoard(universe))],
-      );
+      const nextScore =
+        state.cursor === "board-done"
+          ? "alliances"
+          : state.cursor === "alliances-done"
+            ? "buildings"
+            : state.cursor === "buildings-done"
+              ? "fleet"
+              : state.cursor === "fleet-done"
+                ? "research"
+                : state.cursor === "research-done"
+                  ? "defense"
+                  : null;
+      if (nextScore) {
+        const doc =
+          nextScore === "alliances"
+            ? timedStringify(allianceRankBoard(universe))
+            : timedStringify(
+                (categoryCache ??= categoryHighscoreBoards(universe))[nextScore],
+              );
+        push(
+          `INSERT INTO save_highscores (id, built_at, doc) VALUES (?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET built_at = excluded.built_at, doc = excluded.doc`,
+          [nextScore, Date.now(), doc],
+        );
+        state.cursor = `${nextScore}-done`;
+        if (nextScore !== "defense") continue;
+      }
       if (state.pass < 1) {
         state.pass = 1;
         state.stage = "world";
@@ -2154,10 +2205,12 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
 
   let boardJson: string | null = null;
   let allianceJson: string | null = null;
+  let categoryBoards: CategoryBoards | null = null;
   let boardAt = 0;
   if (rebuildScores) {
     boardJson = timedStringify(buildHighscoreCache(universe, true));
     allianceJson = timedStringify(allianceRankBoard(universe));
+    categoryBoards = categoryHighscoreBoards(universe);
     boardAt = Date.now();
   } else {
     // Keep the board in step with every player this save scored correctly:
@@ -2214,6 +2267,7 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
       ),
     );
   }
+  if (categoryBoards) queueCategoryHighscores(db, stmts, categoryBoards, boardAt);
 
   if (guards) stmts.push(bind(db, "DELETE FROM save_assert", []));
   await commitRows(db, stmts);
@@ -2222,13 +2276,15 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
 async function readScoreCache(db: D1Like): Promise<{
   board: { builtAt: number; cache: HighscoreCache } | null;
   alliances: AllianceRankEntry[];
+  categories: CategoryBoards;
 }> {
   const rows = await all<{ id: string; built_at: number; doc: string }>(
     db,
-    "SELECT id, built_at, doc FROM save_highscores WHERE id IN ('board', 'alliances')",
+    "SELECT id, built_at, doc FROM save_highscores WHERE id IN ('board', 'alliances', 'buildings', 'fleet', 'research', 'defense')",
   );
   let board: { builtAt: number; cache: HighscoreCache } | null = null;
   let alliances: AllianceRankEntry[] = [];
+  const categories = emptyCategoryBoards();
   for (const row of rows) {
     if (row.id === "board") {
       const parsed = timedParse(row.doc) as HighscoreCache | HighscoreEntry[];
@@ -2243,9 +2299,17 @@ async function readScoreCache(db: D1Like): Promise<{
     } else if (row.id === "alliances") {
       const parsed = timedParse(row.doc);
       alliances = Array.isArray(parsed) ? (parsed as AllianceRankEntry[]) : [];
+    } else if (
+      row.id === "buildings" ||
+      row.id === "fleet" ||
+      row.id === "research" ||
+      row.id === "defense"
+    ) {
+      const parsed = timedParse(row.doc);
+      categories[row.id] = Array.isArray(parsed) ? (parsed as CategoryRankEntry[]) : [];
     }
   }
-  return { board, alliances };
+  return { board, alliances, categories };
 }
 
 async function readBoard(db: D1Like): Promise<{ builtAt: number; cache: HighscoreCache } | null> {
@@ -2399,6 +2463,7 @@ async function attachBoard(db: D1Like, work: UniverseWork | undefined): Promise<
   const board = cached.board;
   if (!scope) return;
   scope.allianceHighscores = cached.alliances;
+  scope.categoryHighscores = cached.categories;
   if (work?.maintenance) {
     scope.highscores = undefined;
     scope.hallOfFame = undefined;

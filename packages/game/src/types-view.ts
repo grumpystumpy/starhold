@@ -376,6 +376,23 @@ export interface AllianceListEntry {
   maxMembers: number;
 }
 
+/** Cached category rank row. Rebuilt with the player highscore board. */
+export interface CategoryRankEntry {
+  rank: number;
+  playerId: string;
+  name: string;
+  points: number;
+  allianceTag?: string | null;
+}
+
+/** Buildings, fleet, research, and defense boards. Missing cache rows are empty. */
+export interface CategoryBoards {
+  buildings: CategoryRankEntry[];
+  fleet: CategoryRankEntry[];
+  research: CategoryRankEntry[];
+  defense: CategoryRankEntry[];
+}
+
 /** Cached alliance rank row. Rebuilt with the player highscore board. */
 export interface AllianceRankEntry {
   rank: number;
@@ -916,6 +933,8 @@ export interface PlayerView {
   highscores: HighscoreEntry[];
   /** Cached alliance ranks. Empty until the next highscore rebuild. */
   allianceHighscores?: AllianceRankEntry[];
+  /** Cached category boards. Empty until the next highscore rebuild. */
+  categoryHighscores?: CategoryBoards;
   hallOfFame?: HallOfFameEntry[];
   hallOfShame?: HallOfShameEntry[];
   galaxy: GalaxyView;

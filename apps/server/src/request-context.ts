@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type {
   AllianceRankEntry,
+  CategoryBoards,
   HallOfFameEntry,
   HallOfShameEntry,
   HighscoreEntry,
@@ -22,6 +23,8 @@ export interface RequestScope {
   highscores?: HighscoreEntry[];
   /** Cached alliance ranks. Missing row serves [] — never computed on a page load. */
   allianceHighscores?: AllianceRankEntry[];
+  /** Cached category boards. Missing rows serve [] — never computed on a page load. */
+  categoryHighscores?: CategoryBoards;
   hallOfFame?: HallOfFameEntry[];
   hallOfShame?: HallOfShameEntry[];
   /** Page loads on the row path must not recompute rankings. */

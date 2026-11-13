@@ -32,6 +32,7 @@ import {
 } from "./planet-art.js";
 import type {
   AllianceRankEntry,
+  CategoryBoards,
   GalaxyMiniBody,
   GalaxySlot,
   GalaxyView,
@@ -42,6 +43,7 @@ import type {
   PublicPlayer,
   UniverseState,
 } from "./types.js";
+import { categoryHighscoreBoards } from "./world-highscore-categories.js";
 import {
   allianceDirectory,
   allianceRankBoard,
@@ -111,6 +113,21 @@ export function bindAllianceRankSource(
   source: AllianceRankSource | undefined,
 ): void {
   allianceRankSource = source;
+}
+
+export type CategoryRankSource = () => CategoryBoards | undefined;
+
+let categoryRankSource: CategoryRankSource | undefined;
+
+/**
+ * Server installs this so a page load can pass cached category boards.
+ * `undefined` means "compute now" (tests, memory mode).
+ * An object, including empty arrays, is served as-is and is never rebuilt here.
+ */
+export function bindCategoryRankSource(
+  source: CategoryRankSource | undefined,
+): void {
+  categoryRankSource = source;
 }
 
 function highscoreRoster(rows: HighscoreEntry[]): PublicPlayer[] {
@@ -377,6 +394,8 @@ export function playerView(
   const highscores = provided?.rows ?? highscoresBoard(universe);
   const allianceProvided = allianceRankSource?.();
   const allianceHighscores = allianceProvided ?? allianceRankBoard(universe);
+  const categoryProvided = categoryRankSource?.();
+  const categoryHighscores = categoryProvided ?? categoryHighscoreBoards(universe);
   maybeGrantHighscoreStarshards(universe, playerId, highscores);
   const pointsById = new Map(
     highscores.map((row) => [row.playerId, row.points]),
@@ -563,6 +582,7 @@ export function playerView(
       : publicRoster(universe, pointsById),
     highscores,
     allianceHighscores,
+    categoryHighscores,
     hallOfFame: provided?.hallOfFame ?? combatHallOfFame(universe),
     hallOfShame: provided?.hallOfShame ?? combatHallOfShame(universe),
     galaxy: galaxyViewFor(universe, playerId, g, s, now),
