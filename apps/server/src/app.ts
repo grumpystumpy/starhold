@@ -951,7 +951,13 @@ export function createApp(): Hono {
       );
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
-    }, { playerIds: [body.playerId] });
+    }, {
+      playerIds: [body.playerId],
+      messagePurge: {
+        playerId: body.playerId,
+        category: body.category,
+      },
+    });
   });
 
   app.post("/api/unlock-skill", async (c) => {

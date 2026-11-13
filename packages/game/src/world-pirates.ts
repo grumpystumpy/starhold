@@ -111,6 +111,8 @@ import { coordDistance, flightSecondsOneWay } from "./formulas-travel.js";
 import {
   awardSeasonPirateKill,
   awardSeasonPveWin,
+  invalidateSeasonalBossScan,
+  seasonalBossRecords,
 } from "./world-seasons.js";
 import type {
   AlienBase,
@@ -676,6 +678,20 @@ function alienName(seed: string, galaxy: number, system: number): string {
   return ALIEN_NAMES[hashSeed(`${seed}:aname:${galaxy}:${system}`) % ALIEN_NAMES.length]!;
 }
 
+const quietPirateCull = new WeakSet<object>();
+
+/** Page loads arm this after a tick that did not edit the pirate roster. */
+export function armQuietPirateCull(bases: object | null | undefined): void {
+  if (bases) quietPirateCull.add(bases);
+}
+
+/** Drop the no-op cull and the empty boss scan. A roster edit must call this. */
+export function disarmPirateCull(bases: object | null | undefined): void {
+  if (!bases) return;
+  quietPirateCull.delete(bases);
+  invalidateSeasonalBossScan(bases);
+}
+
 export function activePirateBases(universe: UniverseState): PirateBase[] {
   return Object.values(universe.pirateBases ?? {}).filter((b) => b.destroyedAt == null);
 }
@@ -1206,6 +1222,7 @@ function compareCullPriority(a: PirateBase, b: PirateBase, now: number): number 
  */
 export function cullExcessPirateBases(universe: UniverseState, now: number): number {
   if (!universe.pirateBases) return 0;
+  if (quietPirateCull.has(universe.pirateBases)) return 0;
   const living = activePirateBases(universe);
   const bosses: PirateBase[] = [];
   const byGalaxy = new Map<number, PirateBase[]>();
@@ -1244,6 +1261,7 @@ export function cullExcessPirateBases(universe: UniverseState, now: number): num
     doomed.push(...survivors.splice(0, more));
   }
   if (doomed.length === 0) return 0;
+  disarmPirateCull(universe.pirateBases);
   const pinned = aiCatchUpBaseId(universe);
   let removed = 0;
   for (const base of doomed) {
@@ -1600,13 +1618,12 @@ function tickSeasonalPirateBoss(
   allowSpawn: boolean,
 ): void {
   const bossId = universe.pirateBossBaseId;
-  const savedBoss = bossId ? universe.pirateBases?.[bossId] : undefined;
+  const bases = universe.pirateBases ?? {};
+  const savedBoss = bossId ? bases[bossId] : undefined;
   const activeBoss =
     savedBoss?.seasonalBoss && savedBoss.destroyedAt == null
       ? savedBoss
-      : Object.values(universe.pirateBases ?? {}).find(
-          (base) => base.seasonalBoss && base.destroyedAt == null,
-        );
+      : seasonalBossRecords(bases).find((base) => base.destroyedAt == null);
   if (activeBoss) {
     const alreadyTracked = universe.pirateBossBaseId === activeBoss.id;
     universe.pirateBossBaseId = activeBoss.id;
@@ -1671,6 +1688,7 @@ function tickSeasonalPirateBoss(
   };
   ensurePirateBaseShape(boss, now);
   universe.pirateBases ??= {};
+  disarmPirateCull(universe.pirateBases);
   universe.pirateBases[boss.id] = boss;
   boss.nextRaidAt = Number.MAX_SAFE_INTEGER;
   universe.pirateBossBaseId = boss.id;
