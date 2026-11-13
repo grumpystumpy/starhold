@@ -1,5 +1,6 @@
 import type {
   AcsPrefill,
+  AllianceRecruitingEntry,
   BuildingId,
   DefenseId,
   PlayerView,
@@ -73,6 +74,10 @@ export const session = {
   galaxyGalaxy: null as number | null,
   /** Active routed page (synced to URL pathname). */
   activePage: "overview" as NavPage,
+  /** Alliances-page directory from GET /api/alliance/list. Not part of the state poll. */
+  alliancePageDirectory: null as AllianceRecruitingEntry[] | null,
+  /** Request-mode apply panel open for this alliance id. */
+  allianceRequestId: null as string | null,
   /** Fleet deep-link from Propose Joint Strike. Cleared once the form is armed. */
   pendingAcsPrefill: null as AcsPrefill | null,
   /** One-shot Fleet draft from a galaxy Colonize/Attack action. */

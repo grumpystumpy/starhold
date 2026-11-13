@@ -89,6 +89,8 @@ export {
   doPostAllianceChat,
   doProposeJointStrike,
   doSetAllianceJoinMode,
+  doSetAllianceRecruiting,
+  ensureAllianceRecruitingDirectory,
   doSetAllianceClass,
   doSetAllianceRole,
   doShareAllianceIntel,

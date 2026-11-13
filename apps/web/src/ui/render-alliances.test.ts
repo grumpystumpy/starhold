@@ -304,4 +304,134 @@ describe("alliances panel", () => {
     assert.match(players, /data-testid="highscores-list"/);
     assert.doesNotMatch(players, /data-testid="alliance-highscore-1"/);
   });
+
+  it("renders escaped recruiting text and hides edit controls from other roles", () => {
+    const blurb = `<img src=x onerror=alert(1)>`;
+    const note = `<script>alert("x")</script>`;
+    const directory = [
+      {
+        id: "ally_r",
+        name: `Request <Gate>`,
+        tag: "REQ",
+        joinMode: "request" as const,
+        memberCount: 2,
+        maxMembers: 16,
+        recruitmentBlurb: blurb,
+        recruiting: true,
+        applicationNote: note,
+      },
+    ];
+    const open = alliancesPageHtml(
+      baseView({
+        allianceDirectory: [
+          {
+            id: "ally_r",
+            name: "Request Gate",
+            tag: "REQ",
+            joinMode: "request",
+            memberCount: 2,
+            maxMembers: 16,
+          },
+        ],
+      }),
+      false,
+      { directory, requestAllianceId: "ally_r" },
+    );
+    assert.match(open, /data-testid="alliance-recruiting-ally_r"/);
+    assert.match(open, /data-recruiting="1"/);
+    assert.match(open, /Recruiting/);
+    assert.match(open, /&lt;img src=x onerror=alert\(1\)&gt;/);
+    assert.match(open, /data-testid="alliance-request-confirm-ally_r"/);
+    assert.match(open, /data-testid="alliance-application-note"/);
+    assert.match(open, /&lt;script&gt;alert\(&quot;x&quot;\)&lt;\/script&gt;/);
+    assert.match(open, /Request &lt;Gate&gt;/);
+    assert.doesNotMatch(open, /<img/);
+    assert.doesNotMatch(open, /<script/);
+    assert.doesNotMatch(open, /data-testid="alliance-recruiting-form"/);
+
+    const leader = alliancesPageHtml(
+      baseView({
+        alliance: {
+          id: "ally_r",
+          name: "Request Gate",
+          tag: "REQ",
+          joinMode: "request",
+          createdAt: 1,
+          founderPlayerId: "p1",
+          myRole: "founder",
+          members: [],
+          pendingInvites: [],
+          memberCount: 2,
+          maxMembers: 16,
+          chat: [],
+          intel: [],
+          markers: [],
+          allianceClass: null,
+        },
+      }),
+      false,
+      { directory },
+    );
+    assert.match(leader, /data-testid="alliance-recruiting-form"/);
+    assert.match(leader, /data-testid="alliance-recruiting-save"/);
+    assert.match(leader, /data-testid="alliance-recruitment-summary"/);
+    assert.match(leader, /data-testid="alliance-recruiting-flag"/);
+    assert.match(leader, /value="&lt;img src=x onerror=alert\(1\)&gt;"/);
+    assert.doesNotMatch(leader, /<img/);
+    assert.doesNotMatch(leader, /<script/);
+
+    const officer = alliancesPageHtml(
+      baseView({
+        alliance: {
+          id: "ally_r",
+          name: "Request Gate",
+          tag: "REQ",
+          joinMode: "request",
+          createdAt: 1,
+          founderPlayerId: "p9",
+          myRole: "officer",
+          members: [],
+          pendingInvites: [],
+          memberCount: 2,
+          maxMembers: 16,
+          chat: [],
+          intel: [],
+          markers: [],
+          allianceClass: null,
+        },
+      }),
+      false,
+      { directory },
+    );
+    assert.match(officer, /data-testid="alliance-recruitment-summary"/);
+    assert.doesNotMatch(officer, /data-testid="alliance-recruiting-form"/);
+    assert.doesNotMatch(officer, /data-testid="alliance-recruiting-save"/);
+    assert.doesNotMatch(officer, /data-testid="alliance-recruitment-blurb-input"/);
+
+    const member = alliancesPageHtml(
+      baseView({
+        alliance: {
+          id: "ally_r",
+          name: "Request Gate",
+          tag: "REQ",
+          joinMode: "request",
+          createdAt: 1,
+          founderPlayerId: "p9",
+          myRole: "member",
+          members: [],
+          pendingInvites: [],
+          memberCount: 2,
+          maxMembers: 16,
+          chat: [],
+          intel: [],
+          markers: [],
+          allianceClass: null,
+        },
+      }),
+      false,
+      { directory },
+    );
+    assert.doesNotMatch(member, /data-testid="alliance-recruiting-form"/);
+    assert.doesNotMatch(member, /alliance-recruiting-save/);
+  });
 });

@@ -84,7 +84,9 @@ import {
   saveFleetPreset,
   setActivePlanet,
   tryFormMoon,
+  allianceRecruitingDirectory,
   setAllianceJoinMode,
+  setAllianceRecruiting,
   setAllianceClass,
   setAllianceRole,
   dismissWhatsNew,
@@ -1223,8 +1225,10 @@ export function createApp(): Hono {
     const playerId = c.req.query("playerId");
     if (!playerId) return c.json({ error: "playerId required." }, 400);
     return withUniverse((universe) => {
-      const view = playerView(universe, playerId);
-      return c.json({ alliances: view.allianceDirectory });
+      if (!universe.players[playerId]) {
+        return c.json({ error: "Unknown player." }, 400);
+      }
+      return c.json({ alliances: allianceRecruitingDirectory(universe) });
     }, { playerIds: [playerId] });
   });
 
@@ -1421,6 +1425,38 @@ export function createApp(): Hono {
         body.playerId!,
         body.joinMode as AllianceJoinMode,
       );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    }, { playerIds: [body.playerId] });
+  });
+
+  app.post("/api/alliance/set-recruiting", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      recruitmentBlurb?: string;
+      recruiting?: boolean;
+      applicationNote?: string;
+    };
+    if (
+      !body.playerId ||
+      typeof body.recruitmentBlurb !== "string" ||
+      typeof body.applicationNote !== "string" ||
+      typeof body.recruiting !== "boolean"
+    ) {
+      return c.json(
+        {
+          error:
+            "playerId, recruitmentBlurb, recruiting, and applicationNote required.",
+        },
+        400,
+      );
+    }
+    return withUniverse((universe) => {
+      const result = setAllianceRecruiting(universe, body.playerId!, {
+        recruitmentBlurb: body.recruitmentBlurb!,
+        recruiting: body.recruiting!,
+        applicationNote: body.applicationNote!,
+      });
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
     }, { playerIds: [body.playerId] });

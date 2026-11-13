@@ -1,5 +1,6 @@
 import {
   ALLIANCE_CREATE_MIN_POINTS,
+  ALLIANCE_APPLICATION_NOTE_MAX,
   ALLIANCE_JOIN_MODE_DEFAULT,
   ALLIANCE_MAX_MEMBERS,
   ALLIANCE_MAX_OFFICERS,
@@ -7,6 +8,7 @@ import {
   ALLIANCE_NAME_MIN,
   ALLIANCE_PENDING_REQUEST_CAP,
   ALLIANCE_RANK_CAP,
+  ALLIANCE_RECRUITMENT_BLURB_MAX,
   ALLIANCE_TAG_MAX,
   ALLIANCE_TAG_MIN,
   ALLIANCE_CLASS_ORDER,
@@ -20,6 +22,7 @@ import {
 import type {
   AllianceJoinMode,
   AllianceListEntry,
+  AllianceRecruitingEntry,
   AllianceMemberView,
   AllianceRankEntry,
   AllianceRecord,
@@ -240,25 +243,114 @@ function storeJoinRequest(
   return { ok: true, requested: true };
 }
 
+function listEntry(alliance: AllianceRecord): AllianceListEntry {
+  return {
+    id: alliance.id,
+    name: alliance.name,
+    tag: alliance.tag,
+    joinMode: alliance.joinMode,
+    memberCount: memberCount(alliance),
+    maxMembers: ALLIANCE_MAX_MEMBERS,
+  };
+}
+
+function sortDirectory<T extends AllianceListEntry>(rows: T[]): T[] {
+  return rows.sort(
+    (a, b) =>
+      b.memberCount - a.memberCount ||
+      a.tag.localeCompare(b.tag) ||
+      a.id.localeCompare(b.id),
+  );
+}
+
+/** State-poll directory. Recruiting text is intentionally omitted. */
 export function allianceDirectory(
   universe: UniverseState,
 ): AllianceListEntry[] {
   ensureUniverseShape(universe);
-  return Object.values(alliancesMap(universe))
-    .map((a) => ({
-      id: a.id,
-      name: a.name,
-      tag: a.tag,
-      joinMode: a.joinMode,
-      memberCount: memberCount(a),
-      maxMembers: ALLIANCE_MAX_MEMBERS,
-    }))
-    .sort(
-      (a, b) =>
-        b.memberCount - a.memberCount ||
-        a.tag.localeCompare(b.tag) ||
-        a.id.localeCompare(b.id),
-    );
+  return sortDirectory(Object.values(alliancesMap(universe)).map(listEntry));
+}
+
+/**
+ * Alliances page directory. Includes the public blurb, Recruiting flag,
+ * and application note. Do not attach this to `playerView`.
+ */
+export function allianceRecruitingDirectory(
+  universe: UniverseState,
+): AllianceRecruitingEntry[] {
+  const alliances = universe.alliances ?? {};
+  return sortDirectory(
+    Object.values(alliances).map((alliance) => ({
+      ...listEntry(alliance),
+      recruitmentBlurb: alliance.recruitmentBlurb ?? "",
+      recruiting: alliance.recruiting === true,
+      applicationNote: alliance.applicationNote ?? "",
+    })),
+  );
+}
+
+function normalizeRecruitingText(raw: string, singleLine: boolean): string {
+  let value = raw.replace(/\r\n/g, "\n").trim();
+  if (singleLine) {
+    value = value.replace(/[\t\n\r]+/g, " ").replace(/ {2,}/g, " ").trim();
+  }
+  return value;
+}
+
+/** Leader-only. Empty text clears the optional field. */
+export function setAllianceRecruiting(
+  universe: UniverseState,
+  playerId: string,
+  input: {
+    recruitmentBlurb: string;
+    recruiting: boolean;
+    applicationNote: string;
+  },
+  now = Date.now(),
+): AllianceActionResult {
+  ensureUniverseShape(universe);
+  advanceUniverse(universe, now);
+  if (
+    typeof input.recruitmentBlurb !== "string" ||
+    typeof input.applicationNote !== "string"
+  ) {
+    return { ok: false, error: "Recruitment text must be a string." };
+  }
+  if (typeof input.recruiting !== "boolean") {
+    return { ok: false, error: "Recruiting must be true or false." };
+  }
+  const blurb = normalizeRecruitingText(input.recruitmentBlurb, true);
+  const note = normalizeRecruitingText(input.applicationNote, false);
+  if (blurb.length > ALLIANCE_RECRUITMENT_BLURB_MAX) {
+    return {
+      ok: false,
+      error: `Recruitment blurb must be ${ALLIANCE_RECRUITMENT_BLURB_MAX} characters or fewer.`,
+    };
+  }
+  if (note.length > ALLIANCE_APPLICATION_NOTE_MAX) {
+    return {
+      ok: false,
+      error: `Application note must be ${ALLIANCE_APPLICATION_NOTE_MAX} characters or fewer.`,
+    };
+  }
+  const player = universe.players[playerId];
+  if (!player?.allianceId) {
+    return { ok: false, error: "Not in an alliance." };
+  }
+  const alliance = alliancesMap(universe)[player.allianceId];
+  const me = alliance?.members[playerId];
+  if (!alliance || !me) return { ok: false, error: "Not in an alliance." };
+  if (me.role !== "founder") {
+    return { ok: false, error: "Only the Leader can change recruiting." };
+  }
+  if (blurb) alliance.recruitmentBlurb = blurb;
+  else delete alliance.recruitmentBlurb;
+  if (input.recruiting) alliance.recruiting = true;
+  else delete alliance.recruiting;
+  if (note) alliance.applicationNote = note;
+  else delete alliance.applicationNote;
+  alliancesMap(universe)[alliance.id] = alliance;
+  return { ok: true };
 }
 
 export function allianceViewFor(

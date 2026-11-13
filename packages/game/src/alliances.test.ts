@@ -3,10 +3,13 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
+  ALLIANCE_APPLICATION_NOTE_MAX,
   ALLIANCE_MAX_MEMBERS,
   ALLIANCE_PENDING_REQUEST_CAP,
   ALLIANCE_RELATION_CAP,
   acceptAllianceNap,
+  ALLIANCE_RECRUITMENT_BLURB_MAX,
+  allianceRecruitingDirectory,
   approveJoinRequest,
   cancelAllianceRelation,
   cancelJoinRequest,
@@ -20,12 +23,15 @@ import {
   joinAlliance,
   joinUniverse,
   kickFromAlliance,
+  launchFleet,
   leaveAlliance,
   migrateOrResetUniverse,
   offerAllianceNap,
+  migrateOrResetUniverse,
   playerView,
   rejectJoinRequest,
   setAllianceJoinMode,
+  setAllianceRecruiting,
   setAllianceRole,
 } from "./index.js";
 
@@ -544,5 +550,162 @@ describe("alliance diplomacy", () => {
     assert.equal(loaded.universe.alliances?.ally_old?.relations, undefined);
     assert.equal(loaded.universe.fleets[fleetId]?.phase, "outbound");
     assert.equal(loaded.universe.fleets[fleetId]?.ships.scout, 1);
+  });
+});
+
+describe("alliance recruiting", () => {
+  function founded() {
+    const universe = createUniverse("Recruit", 1);
+    const leader = joinUniverse(universe, "Leader");
+    const officer = joinUniverse(universe, "Officer");
+    const member = joinUniverse(universe, "Member");
+    const outsider = joinUniverse(universe, "Outsider");
+    assert.equal(
+      createAlliance(universe, leader.player.id, "Open Door", "door").ok,
+      true,
+    );
+    const id = playerView(universe, leader.player.id).alliance!.id;
+    assert.equal(joinAlliance(universe, officer.player.id, { allianceId: id }).ok, true);
+    assert.equal(joinAlliance(universe, member.player.id, { allianceId: id }).ok, true);
+    assert.equal(
+      setAllianceRole(universe, leader.player.id, officer.player.id, "officer").ok,
+      true,
+    );
+    return { universe, leader, officer, member, outsider, id };
+  }
+
+  it("lets only the Leader set the blurb, flag, and note", () => {
+    const { universe, leader, officer, member, outsider, id } = founded();
+    const input = {
+      recruitmentBlurb: "  Fly with us  ",
+      recruiting: true,
+      applicationNote: "  Tell us your home system.\n",
+    };
+    const officerDenied = setAllianceRecruiting(universe, officer.player.id, input);
+    assert.equal(officerDenied.ok, false);
+    if (!officerDenied.ok) {
+      assert.equal(officerDenied.error, "Only the Leader can change recruiting.");
+    }
+    const memberDenied = setAllianceRecruiting(universe, member.player.id, input);
+    assert.equal(memberDenied.ok, false);
+    if (!memberDenied.ok) {
+      assert.equal(memberDenied.error, "Only the Leader can change recruiting.");
+    }
+    assert.equal(setAllianceRecruiting(universe, outsider.player.id, input).ok, false);
+    assert.equal(universe.alliances?.[id]?.recruitmentBlurb, undefined);
+
+    const saved = setAllianceRecruiting(universe, leader.player.id, input);
+    assert.equal(saved.ok, true);
+    assert.equal(universe.alliances?.[id]?.recruitmentBlurb, "Fly with us");
+    assert.equal(universe.alliances?.[id]?.recruiting, true);
+    assert.equal(
+      universe.alliances?.[id]?.applicationNote,
+      "Tell us your home system.",
+    );
+
+    const cleared = setAllianceRecruiting(universe, leader.player.id, {
+      recruitmentBlurb: "   ",
+      recruiting: false,
+      applicationNote: "",
+    });
+    assert.equal(cleared.ok, true);
+    assert.equal(universe.alliances?.[id]?.recruitmentBlurb, undefined);
+    assert.equal(universe.alliances?.[id]?.recruiting, undefined);
+    assert.equal(universe.alliances?.[id]?.applicationNote, undefined);
+  });
+
+  it("rejects text over the cap and leaves the record unchanged", () => {
+    const { universe, leader, id } = founded();
+    assert.equal(
+      setAllianceRecruiting(universe, leader.player.id, {
+        recruitmentBlurb: "x".repeat(ALLIANCE_RECRUITMENT_BLURB_MAX + 1),
+        recruiting: true,
+        applicationNote: "ok",
+      }).ok,
+      false,
+    );
+    assert.equal(universe.alliances?.[id]?.recruiting, undefined);
+    assert.equal(
+      setAllianceRecruiting(universe, leader.player.id, {
+        recruitmentBlurb: "ok",
+        recruiting: true,
+        applicationNote: "y".repeat(ALLIANCE_APPLICATION_NOTE_MAX + 1),
+      }).ok,
+      false,
+    );
+    assert.equal(universe.alliances?.[id]?.recruitmentBlurb, undefined);
+  });
+
+  it("keeps recruiting text off the state directory", () => {
+    const { universe, leader, id } = founded();
+    assert.equal(
+      setAllianceRecruiting(universe, leader.player.id, {
+        recruitmentBlurb: "<b>Join</b>",
+        recruiting: true,
+        applicationNote: "<script>nope</script>",
+      }).ok,
+      true,
+    );
+    const view = playerView(universe, leader.player.id);
+    const row = view.allianceDirectory.find((entry) => entry.id === id);
+    assert.ok(row);
+    assert.equal(Object.hasOwn(row!, "recruitmentBlurb"), false);
+    assert.equal(Object.hasOwn(row!, "recruiting"), false);
+    assert.equal(Object.hasOwn(row!, "applicationNote"), false);
+    assert.equal(Object.hasOwn(view.alliance ?? {}, "recruitmentBlurb"), false);
+    assert.equal(Object.hasOwn(view.alliance ?? {}, "applicationNote"), false);
+    const page = allianceRecruitingDirectory(universe).find((entry) => entry.id === id);
+    assert.equal(page?.recruitmentBlurb, "<b>Join</b>");
+    assert.equal(page?.recruiting, true);
+    assert.equal(page?.applicationNote, "<script>nope</script>");
+  });
+
+  it("loads an older save that omits recruiting fields", () => {
+    const universe = createUniverse("Old Recruit", 1);
+    const leader = joinUniverse(universe, "OldLead");
+    const other = joinUniverse(universe, "OldOther");
+    assert.equal(
+      createAlliance(universe, leader.player.id, "Old Ring", "oldr").ok,
+      true,
+    );
+    const id = leader.player.allianceId!;
+    const home = universe.planets[leader.planet.id]!;
+    home.buildings.metalMine = 4;
+    home.ships.scout = 1;
+    home.resources.deuterium = 10_000;
+    const launch = launchFleet(
+      universe,
+      leader.player.id,
+      other.planet.id,
+      "deploy",
+      { scout: 1 },
+      80_000_000,
+    );
+    assert.equal(launch.ok, true);
+    const fleetId = launch.ok ? launch.fleet.id : "";
+    delete universe.alliances![id]!.recruitmentBlurb;
+    delete universe.alliances![id]!.recruiting;
+    delete universe.alliances![id]!.applicationNote;
+    const research = structuredClone(universe.players[leader.player.id]!.research);
+    const raw = JSON.parse(JSON.stringify(universe));
+    const loaded = migrateOrResetUniverse(raw);
+    assert.equal(loaded.didReset, false);
+    const player = loaded.universe.players[leader.player.id]!;
+    assert.equal(player.name, "OldLead");
+    assert.equal(player.allianceId, id);
+    const planet = loaded.universe.planets[leader.planet.id]!;
+    assert.equal(planet.buildings.metalMine, 4);
+    assert.deepEqual(player.research, research);
+    const fleet = loaded.universe.fleets[fleetId];
+    assert.ok(fleet);
+    assert.equal(fleet?.ownerPlayerId, leader.player.id);
+    assert.equal(fleet?.mission, "deploy");
+    assert.equal(fleet?.ships.scout, 1);
+    assert.equal(loaded.universe.alliances?.[id]?.recruitmentBlurb, undefined);
+    assert.equal(loaded.universe.alliances?.[id]?.recruiting, undefined);
+    assert.equal(loaded.universe.alliances?.[id]?.applicationNote, undefined);
+    const again = playerView(loaded.universe, leader.player.id);
+    assert.equal(again.alliance?.name, "Old Ring");
+    assert.equal(Object.hasOwn(again.allianceDirectory[0] ?? {}, "recruiting"), false);
   });
 });

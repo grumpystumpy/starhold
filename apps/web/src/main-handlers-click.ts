@@ -106,6 +106,7 @@ import {
   doSetVacationMode,
   doOpenFleetSave,
   doSetAllianceJoinMode,
+  doSetAllianceRecruiting,
   doSetAllianceClass,
   doSetAllianceRole,
   doSetSeasonSkin,
@@ -1046,7 +1047,29 @@ export function bindClickHandlers(): void {
       if (requestAlly) {
         ev.preventDefault();
         const id = requestAlly.getAttribute("data-alliance-request");
+        if (id) {
+          session.allianceRequestId = id;
+          schedulePaint();
+        }
+        return;
+      }
+
+      const confirmRequest = closestActionEl(
+        target,
+        "[data-alliance-request-confirm]",
+      );
+      if (confirmRequest) {
+        ev.preventDefault();
+        const id = confirmRequest.getAttribute("data-alliance-request-confirm");
+        session.allianceRequestId = null;
         if (id) void doRequestAllianceJoin(id);
+        return;
+      }
+
+      if (closestActionEl(target, "[data-alliance-request-dismiss]")) {
+        ev.preventDefault();
+        session.allianceRequestId = null;
+        schedulePaint();
         return;
       }
 
@@ -1556,6 +1579,23 @@ export function bindClickHandlers(): void {
         tagInput?.value ?? "",
         joinMode,
       );
+      return;
+    }
+
+    if (form.id === "alliance-recruiting-form") {
+      ev.preventDefault();
+      const blurb =
+        form.querySelector<HTMLInputElement>(
+          '[name="alliance-recruitment-blurb"]',
+        )?.value ?? "";
+      const note =
+        form.querySelector<HTMLTextAreaElement>(
+          '[name="alliance-application-note"]',
+        )?.value ?? "";
+      const recruiting =
+        form.querySelector<HTMLInputElement>('[name="alliance-recruiting"]')
+          ?.checked ?? false;
+      void doSetAllianceRecruiting(blurb, recruiting, note);
       return;
     }
 

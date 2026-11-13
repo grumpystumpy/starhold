@@ -12,6 +12,8 @@ Records live on the universe document (`alliances`). Membership is `player.allia
 
 Optional save fields (no schema bump, no migration): `alliance.pendingRequests[]` `{ playerId, requestedAt }` capped at 20, and `player.pendingAllianceId` (one outstanding request). Older saves omit both and still load.
 
+Optional recruitment fields on the alliance record (no schema bump): `recruitmentBlurb` (max 160), `recruiting`, and `applicationNote` (max 400). Older saves omit them and still load. The Leader edits them on the Alliances page (`POST /api/alliance/set-recruiting`). The public blurb and Recruiting flag render on each directory row and on the alliance summary. The application note is shown when a commander opens a request-mode apply. Those fields are not on `GET /api/state`. The Alliances page loads them from `GET /api/alliance/list`.
+
 | Action | Route | Who |
 | --- | --- | --- |
 | Create | `POST /api/alliance/create` | any unaffiliated player (`joinMode` open, invite, or request) |
@@ -20,6 +22,8 @@ Optional save fields (no schema bump, no migration): `alliance.pendingRequests[]
 | Reject | `POST /api/alliance/request/reject` | Leader or Officer |
 | Cancel | `POST /api/alliance/request/cancel` | the requester |
 | Leave / kick / role / join mode / class / disband | existing `/api/alliance/*` routes | unchanged permissions |
+| Set recruiting | `POST /api/alliance/set-recruiting` | Leader only |
+| Page directory | `GET /api/alliance/list` | any player; includes blurb, Recruiting flag, and application note |
 | Chat | `GET /api/alliance/chat?since=<ts>` and `POST /api/alliance/chat` | members, session cookie |
 
 Leader can promote and demote Officers and kick anyone except themselves. Officers can invite, approve or reject requests, and kick Members. Officers cannot change join mode or disband. A Leader who leaves hands the role to the oldest Officer (earliest `joinedAt`, then `playerId`), else the oldest Member, else the alliance disbands.

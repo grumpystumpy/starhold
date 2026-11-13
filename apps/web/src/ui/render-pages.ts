@@ -48,7 +48,7 @@ import {
   sensorContactsHtml,
   type FleetDraft,
 } from "./render-fleets";
-import { alliancesPageHtml } from "./render-alliances";
+import { alliancesPageHtml, type AlliancePageExtras } from "./render-alliances";
 import { recommendedNext } from "./render-helpers";
 import { goalsPageHtml } from "./render-goals";
 import { midgameBriefingHtml } from "./render-midgame";
@@ -545,6 +545,7 @@ export function pageHtml(
   view: PlayerView,
   busy: boolean,
   fleetDraft: FleetDraft | null,
+  alliancePage?: AlliancePageExtras | null,
 ): string {
   switch (page) {
     case "overview":
@@ -570,7 +571,7 @@ export function pageHtml(
     case "highscore":
       return highscorePage(view);
     case "alliances":
-      return alliancesPageHtml(view, busy);
+      return alliancesPageHtml(view, busy, alliancePage);
     case "seasons":
       return seasonsPage(view, busy);
     case "messages":

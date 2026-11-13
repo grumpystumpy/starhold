@@ -1842,6 +1842,10 @@ export const ALLIANCE_RELATION_CAP = 20;
 export const ALLIANCE_RANK_CAP = 100;
 /** Default join mode when creating an alliance. */
 export const ALLIANCE_JOIN_MODE_DEFAULT: "open" | "invite" | "request" = "open";
+/** Public recruitment blurb. Optional; older saves omit it. */
+export const ALLIANCE_RECRUITMENT_BLURB_MAX = 160;
+/** Note shown when a commander opens a request-mode apply. Optional. */
+export const ALLIANCE_APPLICATION_NOTE_MAX = 400;
 
 /**
  * Newbie protection (Micah CHANGE #15): empire points below this are
