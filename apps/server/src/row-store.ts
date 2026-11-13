@@ -167,6 +167,10 @@ const TABLE_SQL = [
     asteroids TEXT NOT NULL, debris TEXT NOT NULL, PRIMARY KEY (galaxy, system))`,
   `CREATE TABLE IF NOT EXISTS save_highscores (
     id TEXT PRIMARY KEY, built_at INTEGER NOT NULL, doc TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS save_commander_mail (
+    id TEXT PRIMARY KEY, to_player_id TEXT NOT NULL, from_player_id TEXT NOT NULL,
+    created_at INTEGER NOT NULL, doc TEXT NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS save_commander_mail_to ON save_commander_mail (to_player_id, created_at)`,
   `CREATE TABLE IF NOT EXISTS save_assert (ok INTEGER NOT NULL CHECK (ok = 1))`,
 ];
 

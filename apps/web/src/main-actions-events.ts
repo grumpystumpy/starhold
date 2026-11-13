@@ -1,5 +1,6 @@
 import type { PlayerView } from "@starhold/game";
-import { deleteMessages, markEventsRead } from "./api";
+import { deleteMessages, deleteCommanderMailRequest, markEventsRead, postCommanderMail } from "./api";
+import { reloadCommanderMail } from "./main-actions-session";
 import { setConfirmDelete } from "./ui/render-messages";
 import { clearFlash, schedulePaint, session, setFlash } from "./session";
 import { settleMutation } from "./recover-action";
@@ -96,6 +97,50 @@ export async function doMarkEventsRead(ids?: string[]): Promise<void> {
         return !events.some((e) => !e.readAt);
       },
       successNotice: () => noticeLabel,
+    });
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doSendCommanderMail(to: string, body: string): Promise<void> {
+  if (!session.view || session.busy) return;
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    await postCommanderMail(to, body);
+    await reloadCommanderMail();
+    setFlash("notice", "Mail sent.");
+  } catch (err) {
+    await settleMutation({
+      err,
+      failureFallback: "Mail failed.",
+      applied: () => false,
+      successNotice: () => "Mail sent.",
+    });
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doDeleteCommanderMail(mailId: string): Promise<void> {
+  if (!session.view || session.busy) return;
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    await deleteCommanderMailRequest(mailId);
+    await reloadCommanderMail();
+    setFlash("notice", "Mail deleted.");
+  } catch (err) {
+    await settleMutation({
+      err,
+      failureFallback: "Could not delete that mail.",
+      applied: () => false,
+      successNotice: () => "Mail deleted.",
     });
   } finally {
     session.busy = false;
