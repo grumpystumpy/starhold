@@ -515,6 +515,11 @@ export function invalidateSeasonalBossScan(bases: object | null | undefined): vo
   if (bases) noSeasonalBossFlags.delete(bases);
 }
 
+/** The saved roster has no seasonal boss, so a page tick must not walk it. */
+export function armNoSeasonalBoss(bases: object | null | undefined): void {
+  if (bases) noSeasonalBossFlags.add(bases);
+}
+
 /**
  * Bases with `seasonalBoss` set. An empty result is remembered on the
  * object so a page tick does not walk every pirate base again.

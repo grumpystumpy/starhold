@@ -1,7 +1,9 @@
 export {
   createUniverse,
   ensureUniverseShape,
+  isLazyPirateRoster,
   joinUniverse,
+  noteLazyPirateRoster,
   planetAtCoords,
 } from "./world-bootstrap.js";
 export {
@@ -371,4 +373,5 @@ export {
   seasonPilotTitle,
   setSeasonSkin,
   setSeasonTitle,
+  armNoSeasonalBoss,
 } from "./world-seasons.js";

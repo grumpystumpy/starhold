@@ -732,6 +732,17 @@ export interface UniverseState {
   pirateBases?: Record<string, PirateBase>;
   /** Alien bases — empty until expedition find. */
   alienBases?: Record<string, AlienBase>;
+  /**
+   * Counts for the pirate roster stored on the world doc.
+   * Lets a page load skip walking every base. Older saves omit it.
+   * Not a gameplay field.
+   */
+  npcRoster?: {
+    living: number;
+    perGalaxy: number[];
+    destroyed: number;
+    boss: boolean;
+  };
   /** UTC-day key for alien find RNG window. */
   alienDailyFindDay?: string;
   alienDailyFindSeed?: number;

@@ -148,6 +148,16 @@ export {
 } from "./planet-index.js";
 
 const shapedUniverses = new WeakSet<UniverseState>();
+const lazyPirateRosters = new WeakSet<object>();
+
+/** The row save already shaped this roster. A page load must not walk it. */
+export function noteLazyPirateRoster(bases: object | null | undefined): void {
+  if (bases) lazyPirateRosters.add(bases);
+}
+
+export function isLazyPirateRoster(bases: object | null | undefined): boolean {
+  return Boolean(bases && lazyPirateRosters.has(bases));
+}
 
 export function ensureUniverseShape(universe: UniverseState): void {
   if (!universe.fleets) universe.fleets = {};
@@ -222,8 +232,10 @@ export function ensureUniverseShape(universe: UniverseState): void {
   // been shaped in this isolate. Cheap field fills above still run so a
   // deleted chat log or event log is restored.
   if (shapedUniverses.has(universe)) return;
-  for (const base of Object.values(universe.pirateBases)) {
-    ensurePirateBaseShape(base);
+  if (!isLazyPirateRoster(universe.pirateBases)) {
+    for (const base of Object.values(universe.pirateBases)) {
+      ensurePirateBaseShape(base);
+    }
   }
   const seed = universe.seed ?? universe.id;
   for (const planet of Object.values(universe.planets)) {

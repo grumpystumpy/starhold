@@ -30,6 +30,7 @@ import {
   resolvePirateRaidArrival,
   tickPirates,
   workersTickBudget,
+  npcJobBudget,
   UNIVERSE_SCHEMA_VERSION,
   emptyDefenses,
   emptyFleetShips,
@@ -2658,6 +2659,12 @@ describe("row save review fixes", () => {
       },
     };
     console.log(`cpu ms ${JSON.stringify(after)}`);
+    const packed = await loadWorkingSet(db, { playerIds: [hero.id] });
+    const packedBase = packed.universe.pirateBases?.[baseId];
+    assert.equal(packedBase?.destroyedAt ?? null, null);
+    assert.equal(typeof packedBase?.name, "string");
+    assert.ok(packedBase?.ships);
+    assert.equal(Object.keys(packed.universe.pirateBases ?? {}).length, bases.length);
     assert.ok(after.read.median <= 6, `read median ${after.read.median}`);
     assert.ok(after.read.p95 <= 10, `read p95 ${after.read.p95}`);
     assert.ok(after.write.median <= 8, `write median ${after.write.median}`);
@@ -2743,6 +2750,142 @@ describe("row save review fixes", () => {
       .bind()
       .first<{ id: string }>();
     assert.equal(gone, null);
+  });
+
+  it("overlapping /api/state reads and an NPC tick do not share a world", async () => {
+    const NOW = 1_700_000_000_000;
+    const source = createUniverse("Overlap Account", 8, 8, { lazySeed: true });
+    if (source.seedCursor) source.seedCursor.done = true;
+    source.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
+    const players = Array.from({ length: 5 }, (_, index) => joinUniverse(source, `Lap${index}`, NOW).player);
+    const hero = players[0]!;
+    const home = source.planets[hero.homePlanetId]!;
+    home.ships = { ...emptyFleetShips(), scout: 40 };
+    home.defenses = { ...emptyDefenses(), laserBattery: 40 };
+    home.resources = { metal: 5_000, crystal: 5_000, deuterium: 5_000 };
+    const bases = [];
+    for (let galaxy = 1; galaxy <= MAP_GALAXIES; galaxy++) {
+      for (let system = 1; system <= PIRATE_BASES_PER_GALAXY; system++) {
+        const base = createPirateBase(source.seed ?? source.id, galaxy, system, 15, NOW, 0);
+        base.nextRaidAt = Number.MAX_SAFE_INTEGER;
+        base.lastGrewAt = NOW;
+        base.lastFreeSpawnAt = NOW;
+        bases.push(base);
+      }
+    }
+    source.pirateBases = Object.fromEntries(bases.map((base) => [base.id, base]));
+    source.alienBases = {};
+    const baseId = bases[0]!.id;
+
+    const install = async () => {
+      const { db, raw } = sqliteD1();
+      await migrateAll(db, structuredClone(source));
+      const fleetStmt = raw.prepare(
+        "INSERT INTO save_fleets (id, owner_id, target_owner_id, version, doc) VALUES (?, 'npc_pirates', ?, 1, ?)",
+      );
+      raw.exec("BEGIN");
+      for (let i = 0; i < 420; i++) {
+        const id = `npc-due-${String(i).padStart(4, "0")}`;
+        fleetStmt.run(
+          id,
+          hero.id,
+          JSON.stringify({
+            id,
+            ownerPlayerId: "npc_pirates",
+            originPlanetId: baseId,
+            originPirateBaseId: baseId,
+            targetPlanetId: home.id,
+            targetPlayerId: hero.id,
+            targetCoords: home.coords,
+            mission: "raid",
+            ships: { scout: 1 },
+            cargo: { metal: 0, crystal: 0, deuterium: 0 },
+            departedAt: 1,
+            arrivesAt: i + 1,
+            phase: "outbound",
+            reportId: null,
+          }),
+        );
+      }
+      raw.exec("COMMIT");
+      return db;
+    };
+
+    const fleetIds = async (db: D1Like) => {
+      const rows = await db
+        .prepare("SELECT id FROM save_fleets WHERE id LIKE 'npc-due-%' ORDER BY id")
+        .bind()
+        .all<{ id: string }>();
+      return (rows.results ?? []).map((row) => row.id);
+    };
+    const planetDoc = async (db: D1Like) => {
+      const row = await db
+        .prepare("SELECT doc FROM save_planets WHERE id = ?")
+        .bind(home.id)
+        .first<{ doc: string }>();
+      const planet = JSON.parse(row?.doc ?? "{}") as { ships?: unknown; defenses?: unknown };
+      return JSON.stringify({ ships: planet.ships, defenses: planet.defenses });
+    };
+
+    const play = async (db: D1Like, parallel: boolean) => {
+      const store = createD1Store(db);
+      const app = createApp();
+      const errors: unknown[] = [];
+      const stateRead = () =>
+        runWithScope(
+          { kv: store, db, mode: "d1", method: "GET", cpuMs: 0, budget: workersTickBudget() },
+          () => app.request(`/api/state?playerId=${encodeURIComponent(hero.id)}`),
+        ).catch((err: unknown) => {
+          errors.push(err);
+          throw err;
+        });
+      const npc = () =>
+        runWithScope(
+          { kv: store, db, mode: "d1", method: "POST", cpuMs: 0, budget: npcJobBudget() },
+          () => withUniverse((universe) => {
+            tickPirates(universe, Date.now());
+          }, { npc: true }),
+        ).catch((err: unknown) => {
+          errors.push(err);
+          throw err;
+        });
+      if (parallel) {
+        const responses = await Promise.all([
+          stateRead(), stateRead(), stateRead(), stateRead(),
+          stateRead(), stateRead(), stateRead(), stateRead(),
+          npc(),
+        ]);
+        for (const response of responses) {
+          if (response && typeof response === "object" && "status" in response) {
+            assert.equal(response.status, 200);
+          }
+        }
+      } else {
+        for (let i = 0; i < 8; i++) {
+          const response = await stateRead();
+          assert.equal(response.status, 200);
+        }
+        await npc();
+      }
+      assert.deepEqual(errors, []);
+      return { fleets: await fleetIds(db), planet: await planetDoc(db) };
+    };
+
+    const sideBySide = await play(await install(), true);
+    const oneByOne = await play(await install(), false);
+    assert.deepEqual(sideBySide.fleets, oneByOne.fleets);
+    assert.deepEqual(sideBySide.planet, oneByOne.planet);
+    const gone = 420 - sideBySide.fleets.length;
+    assert.ok(gone > 0, "expected at least one overdue fleet to resolve");
+    const resolved = new Set<string>();
+    for (let i = 0; i < 420; i++) {
+      const id = `npc-due-${String(i).padStart(4, "0")}`;
+      if (!sideBySide.fleets.includes(id)) {
+        assert.equal(resolved.has(id), false);
+        resolved.add(id);
+      }
+    }
+    assert.equal(resolved.size, gone);
   });
 
   it("returns 404 from /api/state for an unknown player and does not report it", async () => {
