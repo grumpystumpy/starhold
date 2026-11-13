@@ -133,6 +133,7 @@ import {
   grantPirateFleetKillStarshards,
   utcDayKey,
 } from "./world-boosts.js";
+import { noteAchievementCount } from "./world-achievements.js";
 import { noteGoalMetric } from "./world-goals.js";
 import { emptyCargo, planetAtCoords } from "./world-bootstrap.js";
 import { consumeTickBudget, syncPlanetForTick, tickBudget } from "./tick-budget.js";
@@ -2831,7 +2832,10 @@ function resolveNpcRaidArrival(
           ? PIRATE_BOSS_STARSHARD_REWARD_MULT
           : 1,
       );
-      if (kind === "pirate") noteGoalMetric(owner, "pirateWin", 1, now);
+      if (kind === "pirate") {
+        noteGoalMetric(owner, "pirateWin", 1, now);
+        noteAchievementCount(owner, "pirateBasesDestroyed", 1);
+      }
       attackerXp =
         xpForCombatWin(killed) +
         xpForPirateBaseDestroy(tierAtFight) +

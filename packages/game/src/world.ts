@@ -275,6 +275,13 @@ export {
   type GoalActionResult,
 } from "./world-goals.js";
 export {
+  achievementsView,
+  evaluatePlayerAchievements,
+  noteAchievementCount,
+  type AchievementBoardContext,
+  type AchievementCounter,
+} from "./world-achievements.js";
+export {
   claimOnboardingStep,
   noteOnboardingRecon,
   onboardingViewFor,

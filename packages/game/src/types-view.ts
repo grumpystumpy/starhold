@@ -577,6 +577,12 @@ export interface PlayerState {
   /** Lifetime combat counters; missing on old saves means zero. */
   combatStats?: PlayerCombatStats;
   /**
+   * One-time achievements. Missing on older saves.
+   * `unlocked` is the id and the time it was paid. Counters cover events
+   * the save did not already store (enemy hulls, expeditions, pirate bases).
+   */
+  achievements?: PlayerAchievementsState;
+  /**
    * Daily / weekly goal counters for the current UTC periods.
    * Lives on the player inside the universe document (no extra KV keys).
    */
@@ -625,6 +631,23 @@ export interface PlayerGoalState {
   claimed: string[];
 }
 
+/** One paid achievement. `at` is the universe clock used when it unlocked. */
+export interface PlayerAchievementUnlock {
+  id: string;
+  at: number;
+}
+
+/**
+ * Optional player field. Absent means the commander has not been checked yet.
+ * Counters start at 0 when missing and are not backfilled from old reports.
+ */
+export interface PlayerAchievementsState {
+  unlocked: PlayerAchievementUnlock[];
+  shipsDestroyed?: number;
+  expeditions?: number;
+  pirateBasesDestroyed?: number;
+}
+
 export type GoalCadence = "daily" | "weekly";
 
 export interface GoalRewardView {
@@ -643,6 +666,21 @@ export interface GoalView {
   target: number;
   claimed: boolean;
   reward: GoalRewardView;
+}
+
+/** One row on the achievements board. Locked rows stay visible. */
+export interface AchievementView {
+  id: string;
+  title: string;
+  detail: string;
+  progress: number;
+  target: number;
+  unlocked: boolean;
+  unlockedAt?: number;
+  starshards: number;
+  /** False when a live meter would be misleading (commander rank). */
+  showProgress: boolean;
+  note?: string;
 }
 
 /**
@@ -1020,6 +1058,10 @@ export interface PlayerView {
   openAcsGroups: AcsGroup[];
   /** Daily and weekly goals for the current UTC periods. */
   goals: GoalView[];
+  /**
+   * One-time achievements. Filled by playerView. Older responses may omit it.
+   */
+  achievements?: AchievementView[];
   /** Commander tutorial. Always filled by playerView; older clients may omit it. */
   onboarding?: OnboardingView;
   /**

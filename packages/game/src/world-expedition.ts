@@ -101,6 +101,7 @@ export function expeditionPlayerEncounterRoll(
   return (hashSeed(`pvpExped:${fleetId}:${at}`) % rollSpace) < threshold;
 }
 
+import { noteAchievementCount } from "./world-achievements.js";
 import { noteGoalMetric } from "./world-goals.js";
 import { noteOnboardingRecon } from "./world-onboarding.js";
 import { addDebris } from "./world-tick.js";
@@ -668,6 +669,7 @@ export function resolveExpeditionArrival(
     // Outbound arrival counts as a run, including an empty find.
     // `now` is the lazy catch-up clock, so offline flights credit the open period.
     noteGoalMetric(owner, "expedition", 1, now);
+    noteAchievementCount(owner, "expeditions", 1);
     noteOnboardingRecon(owner);
     universe.players[owner.id] = owner;
   }

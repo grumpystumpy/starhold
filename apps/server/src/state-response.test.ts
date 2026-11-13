@@ -437,7 +437,7 @@ describe("player state payload", () => {
       });
       assert.equal(bought.status, 200);
       const afterBuy = (await bought.json()) as PlayerView;
-      assert.equal(afterBuy.starshards, 50);
+      assert.equal(afterBuy.starshards, 70);
       assert.deepEqual(afterBuy.planet.resources, {
         metal: 3100,
         crystal: 2200,
@@ -455,7 +455,7 @@ describe("player state payload", () => {
       });
       assert.equal(sold.status, 200);
       const afterSell = (await sold.json()) as PlayerView;
-      assert.equal(afterSell.starshards, 1550);
+      assert.equal(afterSell.starshards, 1570);
       assert.deepEqual(afterSell.planet.resources, {
         metal: 100,
         crystal: 200,

@@ -70,6 +70,10 @@ import { fleetSaveSuggestions } from "./fleet-save.js";
 import { stampQueueView } from "./world-queue-manage.js";
 import { inSensorPhalanxRange, ownedPlanetCount } from "./world-moons.js";
 import { goalsView } from "./world-goals.js";
+import {
+  achievementsView,
+  evaluatePlayerAchievements,
+} from "./world-achievements.js";
 import { onboardingViewFor } from "./world-onboarding.js";
 import { inactivityMark } from "./player-activity.js";
 import { whatsNewViewFor } from "./release-notes.js";
@@ -384,6 +388,11 @@ export function playerView(
   const allianceProvided = allianceRankSource?.();
   const allianceHighscores = allianceProvided ?? allianceRankBoard(universe);
   maybeGrantHighscoreStarshards(universe, playerId, highscores);
+  const achievementCtx = {
+    rank: highscores.find((row) => row.playerId === playerId)?.rank ?? null,
+    rivals: highscores.length,
+  };
+  evaluatePlayerAchievements(universe, player, now, achievementCtx);
   const pointsById = new Map(
     highscores.map((row) => [row.playerId, row.points]),
   );
@@ -624,6 +633,7 @@ export function playerView(
     allianceDirectory: allianceDirectory(universe),
     openAcsGroups: listOpenAcsForAlliance(universe, player.allianceId),
     goals: goalsView(player, now),
+    achievements: achievementsView(universe, player, now, achievementCtx),
     onboarding: onboardingViewFor(universe, player),
     whatsNew: whatsNewViewFor(player),
     presetUnlockPlanets: player.planetIds
