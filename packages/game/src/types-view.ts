@@ -1015,6 +1015,12 @@ export interface PublicPlayer extends PlanetArtFields {
   allianceTag?: string | null;
 }
 
+/** One UTC day's rank on the commander board. Days are `YYYY-MM-DD`, oldest first. */
+export interface HighscoreRankPoint {
+  day: string;
+  rank: number;
+}
+
 export interface HighscoreEntry extends PlanetArtFields {
   rank: number;
   playerId: string;
@@ -1030,6 +1036,11 @@ export interface HighscoreEntry extends PlanetArtFields {
   /** Lifetime XP (Round 2). */
   xpTotal: number;
   allianceTag?: string | null;
+  /**
+   * Daily rank snapshots, oldest first, capped at `HIGHSCORE_RANK_HISTORY_DAYS`.
+   * The maintenance rebuild writes this. Older boards omit it.
+   */
+  rankHistory?: HighscoreRankPoint[];
 }
 
 export interface EconomySnapshot {

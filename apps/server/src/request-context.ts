@@ -20,6 +20,11 @@ export interface RequestScope {
   cpuMs: number;
   /** Cached highscore board for this request. Only set on the row-save path. */
   highscores?: HighscoreEntry[];
+  /**
+   * Commander rows read at the start of a maintenance rebuild.
+   * Used only to append that UTC day's rank snapshot. Not served on the page.
+   */
+  priorHighscoreRows?: HighscoreEntry[];
   /** Cached alliance ranks. Missing row serves [] — never computed on a page load. */
   allianceHighscores?: AllianceRankEntry[];
   hallOfFame?: HallOfFameEntry[];

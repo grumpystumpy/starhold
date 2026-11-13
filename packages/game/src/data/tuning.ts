@@ -28,6 +28,9 @@ export const BASE_INCOME_PER_HOUR = {
  * balance; follow-up can migrate remaining economy constants from catalog.ts.
  */
 
+/** Daily commander-rank points kept on the highscore board. Older days drop. */
+export const HIGHSCORE_RANK_HISTORY_DAYS = 7;
+
 export const SHIPS: Record<ShipId, ShipDef> = {
   scout: {
     id: "scout",

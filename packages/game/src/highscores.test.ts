@@ -10,16 +10,19 @@ import {
 } from "./formulas.js";
 import {
   allianceRankBoard,
+  appendHighscoreRankHistory,
   bindAllianceRankSource,
   createAlliance,
   createUniverse,
   empirePoints,
   galaxyViewFor,
+  HIGHSCORE_RANK_HISTORY_DAYS,
   highscoresBoard,
   joinAlliance,
   joinUniverse,
   launchFleet,
   playerView,
+  utcHighscoreDay,
 } from "./world.js";
 import { emptyBuildings } from "./world-bootstrap.js";
 import { graduateNewbieProtection } from "./test-graduate.js";
@@ -341,5 +344,42 @@ describe("P2 highscores", () => {
     assert.ok((view.hallOfFame[0]?.destroyedValue ?? 0) > 0);
     assert.equal(view.hallOfShame[0]?.playerId, defender.id);
     assert.ok((view.hallOfShame[0]?.lostValue ?? 0) > (view.hallOfShame[1]?.lostValue ?? 0));
+  });
+});
+
+describe("highscore daily rank history", () => {
+  it("keeps current rank math free of history and caps snapshots at 7 UTC days", () => {
+    assert.equal(HIGHSCORE_RANK_HISTORY_DAYS, 7);
+    const universe = createUniverse("Rank History", 8);
+    joinUniverse(universe, "Ada", 170_000_000_000);
+    joinUniverse(universe, "Bea", 170_000_000_001);
+    const board = highscoresBoard(universe);
+    assert.ok(board.length >= 2);
+    assert.equal(board[0]?.rankHistory, undefined);
+    assert.equal(board[0]!.rank, 1);
+
+    const day = utcHighscoreDay(Date.UTC(2026, 10, 10));
+    assert.equal(day, "2026-11-10");
+    const first = appendHighscoreRankHistory(undefined, day, 2);
+    assert.deepEqual(first, [{ day, rank: 2 }]);
+    const sameDay = appendHighscoreRankHistory(first, day, 1);
+    assert.deepEqual(sameDay, [{ day, rank: 1 }]);
+    assert.equal(new Set(sameDay.map((point) => point.day)).size, 1);
+
+    const prior = Array.from({ length: HIGHSCORE_RANK_HISTORY_DAYS }, (_, index) => ({
+      day: `2026-11-${String(index + 1).padStart(2, "0")}`,
+      rank: HIGHSCORE_RANK_HISTORY_DAYS - index,
+    }));
+    const eighth = appendHighscoreRankHistory(
+      [{ day: "nope", rank: 1 }, ...prior],
+      "2026-11-08",
+      1,
+    );
+    assert.equal(eighth.length, 7);
+    assert.equal(eighth[0]?.day, "2026-11-02");
+    assert.equal(eighth[0]?.rank, prior[1]?.rank);
+    assert.equal(eighth[6]?.day, "2026-11-08");
+    assert.equal(eighth[6]?.rank, 1);
+    assert.equal(new Set(eighth.map((point) => point.day)).size, 7);
   });
 });
