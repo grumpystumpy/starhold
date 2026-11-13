@@ -1542,8 +1542,8 @@ export const PIRATE_BASES_PER_GALAXY = 75;
 /** A base will not raid the same target again until this elapses. */
 export const PIRATE_SAME_TARGET_COOLDOWN_MS = 4 * 60 * 60 * 1000;
 
-/** Once per 180 minutes; each base rolls nextRaidAt = periodStart + offset. */
-export const PIRATE_RAID_PERIOD_MS = 180 * 60 * 1000;
+/** Once per 360 minutes; each base rolls nextRaidAt = periodStart + offset. */
+export const PIRATE_RAID_PERIOD_MS = 360 * 60 * 1000;
 export const PIRATE_FATIGUE_WINDOW_MS = 2 * 60 * 60 * 1000;
 export const PIRATE_FATIGUE_FIRST_HITS = 5;
 export const PIRATE_FATIGUE_EXTRA_HITS = 3;
