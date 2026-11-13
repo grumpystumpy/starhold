@@ -50,6 +50,10 @@ import { awardSeasonPvpWin, isSeasonPvpMission } from "./world-seasons.js";
 import { addDebris, subtractCargo } from "./world-tick.js";
 import { fleetPredatesVacation, isVacationMode } from "./world-accounts.js";
 import { isNewbieBonusActive, NEWBIE_DEFENSE_MULT } from "./world-protection.js";
+import {
+  galaxyEventDebrisMult,
+  galaxyEventShieldMods,
+} from "./world-galaxy-events.js";
 
 /** Resolve outbound raid at target; mutates fleet cargo/ships/reportId. */
 export function resolveRaidArrival(
@@ -84,6 +88,14 @@ export function resolveRaidArrival(
         armorMult: MINI_FORTRESS_ARMOR_MULT,
       }
     : undefined;
+  const eventShields = galaxyEventShieldMods(
+    universe,
+    target.coords,
+    now,
+    atkAlly.shipShield * atkBoosts.shieldBuff,
+    defAlly.shipShield * defBoosts.shieldBuff,
+  );
+  const debrisMult = galaxyEventDebrisMult(universe, target.coords, now);
   const combat = resolveCombat(
     fleet.ships,
     defenderBefore,
@@ -96,8 +108,8 @@ export function resolveRaidArrival(
       defenseSlot: target.coords.slot,
       battlefield: fortressField,
       seed: `${fleet.id}:${fleet.arrivesAt}`,
-      attackerShieldMult: atkAlly.shipShield * atkBoosts.shieldBuff,
-      defenderShieldMult: defAlly.shipShield * defBoosts.shieldBuff,
+      attackerShieldMult: eventShields.attackerShieldMult,
+      defenderShieldMult: eventShields.defenderShieldMult,
       attackerArmorMult: atkBoosts.armorBuff,
       defenderArmorMult: defBoosts.armorBuff,
       attackerHullMult: atkBoosts.hullBuff,
@@ -112,6 +124,7 @@ export function resolveRaidArrival(
       )
         ? NEWBIE_DEFENSE_MULT
         : 1,
+      debrisMult,
     },
   );
   target.ships = combat.defenderAfter;
@@ -124,11 +137,16 @@ export function resolveRaidArrival(
 
   const debrisAtk = debrisFromDestroyed(
     destroyedShipResources(fleet.ships, combat.attackerAfter),
+    debrisMult,
   );
   const debrisDef = debrisFromDestroyed(
     destroyedShipResources(defenderBefore, combat.defenderAfter),
+    debrisMult,
   );
-  const debrisGuns = debrisFromDestroyedDefenses(rebuilt.defensesPermanentlyLost);
+  const debrisGuns = debrisFromDestroyedDefenses(
+    rebuilt.defensesPermanentlyLost,
+    debrisMult,
+  );
   let debrisCreated: Resources = {
     metal: debrisAtk.metal + debrisDef.metal + debrisGuns.metal,
     crystal: debrisAtk.crystal + debrisDef.crystal + debrisGuns.crystal,

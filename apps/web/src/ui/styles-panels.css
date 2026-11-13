@@ -1845,6 +1845,24 @@ code {
   min-width: 0;
 }
 
+.galaxy-event-banner,
+.galaxy-event-elsewhere {
+  margin: 0 0 0.75rem;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.galaxy-event-banner {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.55rem 0.75rem;
+}
+
+.galaxy-event-banner p {
+  margin: 0;
+}
+
 .skill-branch h3 {
   margin: 0.75rem 0 0.35rem;
   font-size: 1rem;

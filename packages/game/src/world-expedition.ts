@@ -40,6 +40,7 @@ import {
   grantStarshards,
 } from "./world-boosts.js";
 import { recordCombatReport } from "./combat-share.js";
+import { galaxyEventShieldMods } from "./world-galaxy-events.js";
 
 /** OGame-style expedition find scaling constants. */
 export const EXPEDITION_STRUCTURAL_CAP = 10_000;
@@ -317,6 +318,11 @@ export function resolveExpeditionArrival(
       const rivalFleet = otherExpeditionFleets[targetIndex]!;
       const rivalBefore = normalizeFleetShips(rivalFleet.ships);
       const rivalOwner = universe.players[rivalFleet.ownerPlayerId];
+      const encounterShields = galaxyEventShieldMods(
+        universe,
+        fleet.targetCoords,
+        now,
+      );
 
       const combat = resolveCombat(
         before,
@@ -324,6 +330,10 @@ export function resolveExpeditionArrival(
         emptyDefenses(),
         effectiveCombatResearch(ownerForYield),
         effectiveCombatResearch(rivalOwner),
+        {
+          attackerShieldMult: encounterShields.attackerShieldMult,
+          defenderShieldMult: encounterShields.defenderShieldMult,
+        },
       );
 
       fleet.ships = combat.attackerAfter;
@@ -435,7 +445,10 @@ export function resolveExpeditionArrival(
       emptyDefenses(),
       attackerResearch,
       defenderResearch,
-      { seed: `${fleet.id}:ambush:${fleet.arrivesAt}` },
+      {
+        seed: `${fleet.id}:ambush:${fleet.arrivesAt}`,
+        ...galaxyEventShieldMods(universe, fleet.targetCoords, now),
+      },
     );
 
     let attackerSurvivingShips: FleetShips;

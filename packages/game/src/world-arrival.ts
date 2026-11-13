@@ -35,6 +35,7 @@ import {
   tickAcsGroups,
 } from "./world-acs.js";
 import { resolveRaidArrival } from "./world-arrival-raid.js";
+import { tickGalaxyEvents } from "./world-galaxy-events.js";
 import { isNewbieBonusActive, NEWBIE_PRODUCTION_MULT } from "./world-protection.js";
 import { harvestAsteroidField } from "./world-asteroids.js";
 import {
@@ -689,6 +690,7 @@ export function advanceUniverse(universe: UniverseState, now = Date.now()): void
     });
     if (deferTick) return;
   }
+  tickGalaxyEvents(universe, now);
   rollSeasons(universe, now);
   pruneExpiredOccupations(universe, now);
   for (const player of Object.values(universe.players)) {

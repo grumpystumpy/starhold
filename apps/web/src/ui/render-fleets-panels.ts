@@ -407,6 +407,24 @@ function scannerOverlayHtml(view: PlayerView): {
   return { hint, mark, inRange };
 }
 
+function galaxyEventBanner(view: PlayerView): string {
+  const event = view.galaxyEvent;
+  if (!event) return "";
+  const viewing = view.galaxy?.galaxy;
+  if (viewing === event.galaxy) {
+    const effect =
+      event.type === "meteor_shower"
+        ? "Debris from fights in this galaxy is 50% higher."
+        : "Ship shields in this galaxy are 20% weaker.";
+    const left =
+      typeof view.now === "number" && Number.isFinite(view.now)
+        ? ` ${formatBossCountdown(event.endsAt, view.now)} left.`
+        : "";
+    return `<div class="galaxy-event-banner" data-testid="galaxy-event-banner"><p>${escapeHtml(event.label)} in galaxy ${fmt(event.galaxy)}. ${escapeHtml(effect)}${left}</p></div>`;
+  }
+  return `<p class="hint galaxy-event-elsewhere" data-testid="galaxy-event-elsewhere">${escapeHtml(event.label)} is in galaxy ${fmt(event.galaxy)}.</p>`;
+}
+
 export function galaxyPanel(
   view: PlayerView,
   busy: boolean,
@@ -560,6 +578,7 @@ export function galaxyPanel(
     <section class="panel" data-testid="galaxy-panel">
       <h2>Galaxy Navigation</h2>
       ${pirateBossGalaxyBanner(view, busy)}
+      ${galaxyEventBanner(view)}
       <div class="galaxy-system-bar${scanner.inRange ? " is-scanner-range" : ""}" data-testid="galaxy-system-bar"${scanner.inRange ? ' data-scanner-in-range="1"' : ""}>
         <div class="galaxy-nav">
           <div class="galaxy-nav-row galaxy-nav-row-system" data-testid="galaxy-nav-row-system">

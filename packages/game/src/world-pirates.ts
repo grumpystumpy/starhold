@@ -83,6 +83,10 @@ import {
 } from "./data/tuning.js";
 import { recordCombatReport } from "./combat-share.js";
 import {
+  galaxyEventDebrisMult,
+  galaxyEventShieldMods,
+} from "./world-galaxy-events.js";
+import {
   computeRaidLoot,
   debrisFromDestroyed,
   debrisFromDestroyedDefenses,
@@ -2005,10 +2009,11 @@ function battleDebris(
   defBefore: FleetShips,
   defAfter: FleetShips,
   permanentlyLost: Partial<Record<DefenseId, number>>,
+  mult = 1,
 ): Resources {
-  const atk = debrisFromDestroyed(destroyedShipResources(atkBefore, atkAfter));
-  const def = debrisFromDestroyed(destroyedShipResources(defBefore, defAfter));
-  const guns = debrisFromDestroyedDefenses(permanentlyLost);
+  const atk = debrisFromDestroyed(destroyedShipResources(atkBefore, atkAfter), mult);
+  const def = debrisFromDestroyed(destroyedShipResources(defBefore, defAfter), mult);
+  const guns = debrisFromDestroyedDefenses(permanentlyLost, mult);
   return {
     metal: atk.metal + def.metal + guns.metal,
     crystal: atk.crystal + def.crystal + guns.crystal,
@@ -2086,6 +2091,8 @@ function fightNpcRaidOnPlanet(
     : alienCombatResearchForOpponent(defenderResearch);
   const defenderBefore = { ...planet.ships };
   const defensesBefore = planet.defenses ?? emptyDefenses();
+  const eventShields = galaxyEventShieldMods(universe, planet.coords, now);
+  const debrisMult = galaxyEventDebrisMult(universe, planet.coords, now);
   const combat = resolveCombat(
     raidFleet,
     defenderBefore,
@@ -2096,6 +2103,9 @@ function fightNpcRaidOnPlanet(
       defenderUnitStatMult: isNewbieBonusActive(universe, owner, now)
         ? NEWBIE_DEFENSE_MULT
         : 1,
+      attackerShieldMult: eventShields.attackerShieldMult,
+      defenderShieldMult: eventShields.defenderShieldMult,
+      debrisMult,
     },
   );
   const rebuilt = rebuildDefenses(
@@ -2111,6 +2121,7 @@ function fightNpcRaidOnPlanet(
     defenderBefore,
     combat.defenderAfter,
     rebuilt.defensesPermanentlyLost,
+    debrisMult,
   );
   addDebris(universe, planet.coords, debrisCreated);
   let moonFormed = false;
@@ -2411,12 +2422,19 @@ export function applyNpcRaidOnNpc(
   rememberRaidTarget(base, other.id, now);
   const defenderBefore = { ...other.ships };
   const defensesBefore = other.defenses ?? emptyDefenses();
+  const npcShields = galaxyEventShieldMods(universe, other.coords, now);
+  const npcDebrisMult = galaxyEventDebrisMult(universe, other.coords, now);
   const combat = resolveCombat(
     raidFleet,
     defenderBefore,
     defensesBefore,
     pirateCombatResearch(base),
     pirateCombatResearch(other),
+    {
+      attackerShieldMult: npcShields.attackerShieldMult,
+      defenderShieldMult: npcShields.defenderShieldMult,
+      debrisMult: npcDebrisMult,
+    },
   );
   const rebuilt = rebuildDefenses(
     defensesBefore,
@@ -2431,6 +2449,7 @@ export function applyNpcRaidOnNpc(
     defenderBefore,
     combat.defenderAfter,
     rebuilt.defensesPermanentlyLost,
+    npcDebrisMult,
   );
   addDebris(universe, other.coords, debrisCreated);
   const sent = fleetShipCount(raidFleet);
@@ -2769,12 +2788,19 @@ function resolveNpcRaidArrival(
   const defenderResearch = kind === "pirate"
     ? pirateCombatResearchForOpponent(attackerResearch)
     : alienCombatResearchForOpponent(attackerResearch);
+  const baseShields = galaxyEventShieldMods(universe, base.coords, now);
+  const baseDebrisMult = galaxyEventDebrisMult(universe, base.coords, now);
   const combat = resolveCombat(
     fleet.ships,
     defenderBefore,
     defensesBefore,
     attackerResearch,
     defenderResearch,
+    {
+      attackerShieldMult: baseShields.attackerShieldMult,
+      defenderShieldMult: baseShields.defenderShieldMult,
+      debrisMult: baseDebrisMult,
+    },
   );
   const rebuilt = rebuildDefenses(
     defensesBefore,
@@ -2789,6 +2815,7 @@ function resolveNpcRaidArrival(
     defenderBefore,
     combat.defenderAfter,
     rebuilt.defensesPermanentlyLost,
+    baseDebrisMult,
   );
   const killed = resourcesCostTotal(
     destroyedShipResources(defenderBefore, combat.defenderAfter),

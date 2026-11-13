@@ -901,6 +901,11 @@ export interface UniverseState {
    */
   invites?: Record<string, InviteRecord>;
   /**
+   * The one active 24h galaxy event. Absent on older saves and between events.
+   * Not the seasonal pirate mothership.
+   */
+  galaxyEvent?: GalaxyEventState;
+  /**
    * Set on a player-scoped request. NPC raids and growth run on the
    * maintenance pass instead of the page-load tick. Not persisted.
    */
@@ -910,6 +915,25 @@ export interface UniverseState {
    * must not place new bases. Not persisted.
    */
   skipPirateTopUp?: boolean;
+}
+
+export type GalaxyEventType = "meteor_shower" | "solar_flare";
+
+/** Persisted galaxy event. One at a time. Older saves omit it. */
+export interface GalaxyEventState {
+  type: GalaxyEventType;
+  galaxy: number;
+  startsAt: number;
+  endsAt: number;
+}
+
+/** Compact poll field. No event history. */
+export interface GalaxyEventView {
+  type: GalaxyEventType;
+  galaxy: number;
+  startsAt: number;
+  endsAt: number;
+  label: string;
 }
 
 export interface PirateBasePublic {
@@ -1177,6 +1201,8 @@ export interface PlayerView {
   seasonLeaderboard: SeasonLeaderboardView;
   /** Set while a seasonal boss is up, or during the cooldown after it ends. */
   pirateBoss?: PirateBossView;
+  /** Active galaxy event, if its 24h window covers `now`. */
+  galaxyEvent?: GalaxyEventView;
   /** Active 24h item buffs. */
   activeItemBuffs: ActiveItemBuffView[];
   /** Shop items catalog for UI. */

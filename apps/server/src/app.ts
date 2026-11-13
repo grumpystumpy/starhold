@@ -1939,6 +1939,8 @@ export function createApp(): Hono {
         occupyMini?: boolean;
         occupyNonMini?: boolean;
         occupierPlayerId?: string;
+        /** Local walk only. Pins the 24h galaxy event so the banner is visible. */
+        galaxyEvent?: { type?: string; galaxy?: number };
       };
       if (!body.playerId) {
         return c.json({ error: "playerId required." }, 400);
@@ -1975,6 +1977,21 @@ export function createApp(): Hono {
         }
         if (typeof body.starshards === "number" && body.starshards >= 0) {
           player.starshards = Math.floor(body.starshards);
+        }
+        if (
+          body.galaxyEvent?.type === "meteor_shower" ||
+          body.galaxyEvent?.type === "solar_flare"
+        ) {
+          const galaxy = Math.floor(body.galaxyEvent.galaxy ?? planet.coords.galaxy);
+          if (galaxy >= 1 && galaxy <= 10) {
+            const now = Date.now();
+            universe.galaxyEvent = {
+              type: body.galaxyEvent.type,
+              galaxy,
+              startsAt: now - 60_000,
+              endsAt: now + 24 * 60 * 60 * 1000,
+            };
+          }
         }
         if (typeof body.colonySlot === "number") {
           const slot = Math.floor(body.colonySlot);

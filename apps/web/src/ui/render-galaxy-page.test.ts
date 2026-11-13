@@ -736,4 +736,64 @@ describe("system scanner range overlay", () => {
       session.scannerMoons = previousMoons;
     }
   });
+
+  it("shows a galaxy event banner here, an elsewhere indicator, or neither", () => {
+    const galaxy = { galaxy: 4, system: 2, slots: [], minis: [], asteroids: [] };
+    const now = 1_700_000_000_000;
+    const quiet = { galaxy, now, player: { id: "p1" } } as unknown as PlayerView;
+    const quietHtml = pageHtml("galaxy", quiet, false, null);
+    assert.match(quietHtml, /data-testid="galaxy-panel"/);
+    assert.doesNotMatch(quietHtml, /data-testid="galaxy-event-banner"/);
+    assert.doesNotMatch(quietHtml, /data-testid="galaxy-event-elsewhere"/);
+
+    const here = {
+      galaxy,
+      now,
+      player: { id: "p1" },
+      pirateBoss: {
+        id: "boss-9",
+        coords: { galaxy: 4, system: 12, slot: 6 },
+        shipsLeft: 10,
+        hpPct: 40,
+        activeUntil: now + 86_400_000,
+        myDamage: 1,
+        myRank: 2,
+        totalDamage: 10,
+        myTier: "participant",
+        top: [],
+      },
+      galaxyEvent: {
+        type: "meteor_shower",
+        galaxy: 4,
+        startsAt: now - 1_000,
+        endsAt: now + 2 * 3_600_000 + 15 * 60_000,
+        label: "Meteor shower",
+      },
+    } as unknown as PlayerView;
+    const hereHtml = pageHtml("galaxy", here, false, null);
+    assert.match(hereHtml, /data-testid="galaxy-boss-banner"/);
+    assert.match(hereHtml, /data-testid="galaxy-event-banner"/);
+    assert.doesNotMatch(hereHtml, /data-testid="galaxy-event-elsewhere"/);
+    assert.match(hereHtml, /Meteor shower in galaxy 4/);
+    assert.match(hereHtml, /Debris from fights in this galaxy is 50% higher/);
+    assert.match(hereHtml, /2h 15m left/);
+
+    const away = {
+      galaxy,
+      now,
+      player: { id: "p1" },
+      galaxyEvent: {
+        type: "solar_flare",
+        galaxy: 7,
+        startsAt: now - 1_000,
+        endsAt: now + 3_600_000,
+        label: "Solar flare",
+      },
+    } as unknown as PlayerView;
+    const awayHtml = pageHtml("galaxy", away, false, null);
+    assert.match(awayHtml, /data-testid="galaxy-event-elsewhere"/);
+    assert.match(awayHtml, /Solar flare is in galaxy 7/);
+    assert.doesNotMatch(awayHtml, /data-testid="galaxy-event-banner"/);
+    assert.doesNotMatch(awayHtml, /20% weaker/);
+  });
 });

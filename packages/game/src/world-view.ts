@@ -85,6 +85,7 @@ import { onboardingViewFor } from "./world-onboarding.js";
 import { inactivityMark } from "./player-activity.js";
 import { whatsNewViewFor } from "./release-notes.js";
 import { pirateBossSummary } from "./world-pirate-boss.js";
+import { galaxyEventView } from "./world-galaxy-events.js";
 import { occupationForPlanet } from "./world-occupation.js";
 import { empireDriftBeaconCount, empireRelicResearchTimeFactor, playerKnowsMini } from "./world-mini.js";
 import { seasonLeaderboardView } from "./world-seasons.js";
@@ -723,6 +724,7 @@ export function playerView(
       })),
     seasonLeaderboard: seasonLeaderboardView(universe, player, now),
     pirateBoss: pirateBossSummary(universe, playerId, now),
+    galaxyEvent: galaxyEventView(universe, now),
     activeItemBuffs,
     shopCatalog,
   };
