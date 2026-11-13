@@ -10,6 +10,7 @@ import {
   type ResearchId,
   type ShipId,
 } from "@starhold/game";
+import { browserVisitStorage, visitStamp, writeLastVisit } from "./away-recap";
 import { fmt } from "./ui/format";
 import { syncBuildCountReason } from "./ui/render-chrome-rows";
 import {
@@ -193,6 +194,28 @@ export function bindClickHandlers(): void {
 
       if (closestActionEl(target, "[data-dismiss-flash]")) {
         clearFlash();
+        schedulePaint();
+        return;
+      }
+
+      const awayDismiss = closestActionEl(target, "[data-away-recap-dismiss]");
+      if (awayDismiss) {
+        ev.preventDefault();
+        const playerId = session.view?.player.id;
+        const storage = browserVisitStorage();
+        if (playerId && storage) {
+          writeLastVisit(
+            storage,
+            playerId,
+            visitStamp(Date.now(), session.view?.now),
+          );
+        }
+        // The page morph keeps a focused control. Blur and drop the card
+        // so dismiss hides it before the deferred paint.
+        awayDismiss.closest("[data-testid='away-recap']")?.remove();
+        if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur();
+        }
         schedulePaint();
         return;
       }
