@@ -71,6 +71,12 @@ export {
   doChangeClass,
 } from "./main-actions-starshards.js";
 export {
+  doAcceptMarket,
+  doCancelMarket,
+  doPostMarket,
+  refreshMarketIfOpen,
+} from "./main-actions-market.js";
+export {
   doAcceptAllianceNap,
   doCancelAllianceRelation,
   doCreateAlliance,

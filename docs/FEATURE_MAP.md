@@ -44,6 +44,16 @@ A NAP does not block attacks. On the fleet composer's send step, a raid or occup
 
 Tags render as `Name [TAG]` on galaxy rows and `[TAG] Name` on commander highscore rows.
 
+## Player trade market
+
+Commanders post resource-for-resource offers on the Shop Market tab (`shopTab=market`, `data-testid="page-market"`). This is not the Starshard bundle on the Resources tab (`POST /api/shop/trade`, `trade-buy-resources` / `trade-sell-resources`) and it is not the unmerged B7-103 NPC merchant.
+
+An offer escrows the full offered amount from a planet the poster owns. Post, accept, and refund tick that planet to `now` before they read stock or storage, so mine income cannot be checked stale and then clamped away. Accepting pays the requested amount from a planet the buyer names. Each side loses `PLAYER_TRADE_FEE_PERCENT` (10 percent, floored) as a sink: 100k metal for 40k crystal delivers 90k metal and 36k crystal. Cancel, or expiry after 48 hours, returns the escrow. If that planet is gone or cannot hold the stack, the refund goes to the homeworld and `clampToStorage` drops what does not fit. Storage room uses the current time, not the time the offer was posted. When an expiry refund loses resources, the poster gets an event-log row titled Market refund.
+
+Either commander under `NEWBIE_PROTECTION_POINTS` (2500) cannot post or accept. A commander can have 3 open offers. The book holds 100. Accepts are capped per UTC day by metal-equivalent value (3 metal = 2 crystal = 1 deuterium). The book is optional `universe.playerTradeOffers`. The daily counter is optional `player.tradeAcceptDay` / `player.tradeAcceptValue`. Older saves omit both. `ensureUniverseShape` does not invent them.
+
+Routes, all session-owned like the Starshard trade: `GET /api/market/offers`, `POST /api/market/offers`, `POST /api/market/offers/cancel`, `POST /api/market/offers/accept`. The client fetches the book only while the Market tab is open, the same way alliance chat polls only on Alliances. The 30s `/api/state` payload does not include the book. Expiry inside `advanceUniverse` refunds at most `PLAYER_TRADE_EXPIRE_PER_TICK` offers and skips any planet that is not loaded.
+
 ## Highscores
 
 Player ranks stay on `save_highscores` id `board`. Alliance ranks are a second row, id `alliances`, written in the same maintenance rebuild and the migration scores stage. A normal page load reads both rows in one `SELECT` and never scans alliances. A missing alliances row serves `[]`.

@@ -44,8 +44,9 @@ describe("nav routes", () => {
     assert.ok(NAV_PAGES.includes("shop"));
     assert.ok(!(NAV_PAGES as readonly string[]).includes("officers"));
     assert.ok(!(NAV_PAGES as readonly string[]).includes("skills"));
-    assert.deepEqual(SHOP_TABS, ["items", "resources", "officers", "skills"]);
+    assert.deepEqual(SHOP_TABS, ["items", "resources", "officers", "skills", "market"]);
     assert.equal(shopTabFromUrl("/shop", "?shopTab=skills"), "skills");
+    assert.equal(shopTabFromUrl("/shop", "?shopTab=market"), "market");
     assert.equal(shopTabFromUrl("/officers", ""), "officers");
     assert.equal(shopTabFromUrl("/skills", ""), "skills");
     assert.equal(shopTabFromUrl("/shop", ""), "items");
@@ -58,7 +59,7 @@ describe("nav routes", () => {
     const officers = shopPageHtml(view, false, "officers");
     const skills = shopPageHtml(view, false, "skills");
     assert.match(officers, /data-testid="officers-panel"/);
-    assert.equal((officers.match(/data-shop-tab=/g) ?? []).length, 4);
+    assert.equal((officers.match(/data-shop-tab=/g) ?? []).length, 5);
     assert.match(officers, /data-shop-tab="officers"/);
     assert.match(officers, /aria-selected="true"/);
     assert.match(skills, /data-testid="skills-panel"/);

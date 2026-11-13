@@ -49,6 +49,7 @@ import { fleetDraftForFleetSave } from "./ui/render-fleets-draft";
 import { navigateTo, syncSessionUrl } from "./ui/router";
 import { captureGameEvent, identifyCommander } from "./telemetry";
 import { settleMutation } from "./recover-action";
+import { refreshMarketIfOpen } from "./main-actions-market";
 
 /** Background refresh cadence. Actions apply their own response immediately. */
 export const POLL_INTERVAL_MS = 30_000;
@@ -315,6 +316,7 @@ function pollNow(): Promise<void> {
       if (!playerId || pollPlayerId !== playerId || !pollsAllowed()) return;
       await silentRefresh(playerId);
       await refreshAllianceChatIfOpen();
+      await refreshMarketIfOpen();
     } finally {
       pollChain = null;
       if (pollPlayerId === playerId) schedulePoll(POLL_INTERVAL_MS);
@@ -446,6 +448,7 @@ export function startPolling(playerId: string): void {
   ensureActivityListeners();
   scheduleIdleCheck();
   schedulePoll(POLL_INTERVAL_MS);
+  void refreshMarketIfOpen();
 }
 
 export function stopPolling(): void {

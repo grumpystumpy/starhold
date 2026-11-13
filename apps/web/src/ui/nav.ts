@@ -17,13 +17,14 @@ export const NAV_PAGES = [
 ] as const;
 
 export type NavPage = (typeof NAV_PAGES)[number];
-export type ShopTab = "items" | "resources" | "officers" | "skills";
+export type ShopTab = "items" | "resources" | "officers" | "skills" | "market";
 
 export const SHOP_TABS: readonly ShopTab[] = [
   "items",
   "resources",
   "officers",
   "skills",
+  "market",
 ];
 
 export function isShopTab(value: string | null | undefined): value is ShopTab {

@@ -9,6 +9,7 @@ import type {
   MissionType,
   OfficerId,
   PlayerView,
+  PlayerTradeList,
   PublicCombatReport,
   ResearchId,
   Resources,
@@ -893,6 +894,63 @@ export async function tradeWithMerchant(
     body: JSON.stringify({ playerId, planetId, give, get, amount }),
   });
   return parse<PlayerView>(res);
+}
+
+export async function fetchMarketOffers(
+  playerId: string,
+  planetId: string,
+): Promise<PlayerTradeList> {
+  const params = new URLSearchParams({ playerId, planetId });
+  const res = await credFetch(`/api/market/offers?${params.toString()}`);
+  return parse<PlayerTradeList>(res);
+}
+
+export async function postMarketOffer(
+  playerId: string,
+  planetId: string,
+  offerResource: string,
+  offerAmount: number,
+  requestResource: string,
+  requestAmount: number,
+): Promise<PlayerView & { market: PlayerTradeList }> {
+  const res = await credFetch("/api/market/offers", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      playerId,
+      planetId,
+      offerResource,
+      offerAmount,
+      requestResource,
+      requestAmount,
+    }),
+  });
+  return parse<PlayerView & { market: PlayerTradeList }>(res);
+}
+
+export async function cancelMarketOffer(
+  playerId: string,
+  offerId: string,
+): Promise<PlayerView & { market: PlayerTradeList }> {
+  const res = await credFetch("/api/market/offers/cancel", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, offerId }),
+  });
+  return parse<PlayerView & { market: PlayerTradeList }>(res);
+}
+
+export async function acceptMarketOffer(
+  playerId: string,
+  offerId: string,
+  planetId: string,
+): Promise<PlayerView & { market: PlayerTradeList }> {
+  const res = await credFetch("/api/market/offers/accept", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, offerId, planetId }),
+  });
+  return parse<PlayerView & { market: PlayerTradeList }>(res);
 }
 
 export async function activateOfficerHire(

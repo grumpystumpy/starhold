@@ -16,6 +16,7 @@ import {
   type ResearchId,
   type Resources,
   type ShipId,
+  type UniverseState,
   OFFICER_DURATION_OPTIONS_HOURS,
   abandonColony,
   abandonOccupation,
@@ -100,6 +101,10 @@ import {
   swarmProduce,
   tradeStarshardsForResources,
   tradeWithResourceMerchant,
+  acceptPlayerTradeOffer,
+  cancelPlayerTradeOffer,
+  listPlayerTradeOffers,
+  postPlayerTradeOffer,
   unlockSkill,
   type AllianceJoinMode,
   type AllianceRole,
@@ -123,6 +128,40 @@ import {
   readPublicLobby,
   rollbackRowsToLegacy,
 } from "./row-store.js";
+
+async function requireOwnedPlayer(
+  c: Context,
+  playerId: string | undefined,
+): Promise<{ playerId: string } | Response> {
+  if (!playerId) return c.json({ error: "playerId required." }, 400);
+  const sessionId = readSessionId(c);
+  if (!sessionId) return c.json({ error: "Sign in required." }, 401);
+  const session = await getSession(sessionId);
+  if (!session) return c.json({ error: "Sign in required." }, 401);
+  const account = await getAccountById(session.accountId);
+  if (!account?.playerId) return c.json({ error: "Sign in required." }, 401);
+  if (account.playerId !== playerId) {
+    return c.json({ error: "You do not own this player." }, 403);
+  }
+  return { playerId };
+}
+
+function marketMutation(
+  universe: UniverseState,
+  playerId: string,
+  planetId: string | undefined,
+  note?: string,
+) {
+  const view = playerView(universe, playerId);
+  const market = listPlayerTradeOffers(
+    universe,
+    playerId,
+    Date.now(),
+    planetId || view.planet.id,
+  );
+  if (note) market.note = note;
+  return { ...view, market };
+}
 
 function allowedOrigins(): Set<string> {
   const fromEnv = (process.env.ALLOWED_ORIGINS ?? "")
@@ -1211,6 +1250,87 @@ export function createApp(): Hono {
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
     }, { playerIds: [body.playerId] });
+  });
+
+  app.get("/api/market/offers", async (c) => {
+    const playerId = c.req.query("playerId");
+    const gate = await requireOwnedPlayer(c, playerId);
+    if (gate instanceof Response) return gate;
+    const planetId = c.req.query("planetId") ?? undefined;
+    const posterIds = await withUniverseRead(
+      (universe) => Object.values(universe.playerTradeOffers ?? {}).map((offer) => offer.posterPlayerId),
+      { playerIds: [gate.playerId] },
+    );
+    const playerIds = [...new Set([gate.playerId, ...posterIds])];
+    return withUniverse((universe) => {
+      return c.json(listPlayerTradeOffers(universe, gate.playerId, Date.now(), planetId));
+    }, { playerIds });
+  });
+
+  app.post("/api/market/offers", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      planetId?: string;
+      offerResource?: unknown;
+      offerAmount?: unknown;
+      requestResource?: unknown;
+      requestAmount?: unknown;
+    };
+    const gate = await requireOwnedPlayer(c, body.playerId);
+    if (gate instanceof Response) return gate;
+    return withUniverse((universe) => {
+      const result = postPlayerTradeOffer(
+        universe,
+        gate.playerId,
+        body.planetId,
+        body.offerResource,
+        body.offerAmount,
+        body.requestResource,
+        body.requestAmount,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(marketMutation(universe, gate.playerId, body.planetId, result.note));
+    }, { playerIds: [gate.playerId] });
+  });
+
+  app.post("/api/market/offers/cancel", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      offerId?: string;
+    };
+    const gate = await requireOwnedPlayer(c, body.playerId);
+    if (gate instanceof Response) return gate;
+    return withUniverse((universe) => {
+      const result = cancelPlayerTradeOffer(universe, gate.playerId, body.offerId);
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(marketMutation(universe, gate.playerId, undefined, result.note));
+    }, { playerIds: [gate.playerId] });
+  });
+
+  app.post("/api/market/offers/accept", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      offerId?: string;
+      planetId?: string;
+    };
+    const gate = await requireOwnedPlayer(c, body.playerId);
+    if (gate instanceof Response) return gate;
+    if (!body.offerId) return c.json({ error: "offerId required." }, 400);
+    const posterId = await withUniverseRead(
+      (universe) => universe.playerTradeOffers?.[body.offerId!]?.posterPlayerId ?? null,
+      { playerIds: [gate.playerId] },
+    );
+    if (!posterId) return c.json({ error: "Offer not found." }, 400);
+    return withUniverse((universe) => {
+      const result = acceptPlayerTradeOffer(
+        universe,
+        gate.playerId,
+        body.offerId,
+        body.planetId,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(marketMutation(universe, gate.playerId, body.planetId, result.note));
+    }, { playerIds: [...new Set([gate.playerId, posterId])] });
   });
 
   // Alliances foundation (backlog #7).

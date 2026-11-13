@@ -675,6 +675,12 @@ export interface PlayerState {
   seasonArchive?: Record<string, SeasonPlayerCounters>;
   /** Active item 24h buffs or slot licenses. Missing on older saves. */
   itemBuffs?: ActiveItemBuff[];
+  /**
+   * UTC day (`YYYY-MM-DD`) of market accepts. Older saves omit it.
+   * `tradeAcceptValue` is the metal-equivalent received after the fee.
+   */
+  tradeAcceptDay?: string;
+  tradeAcceptValue?: number;
 }
 
 /** UTC period keys + per-goal counters. Rolled lazily on read. */
@@ -811,6 +817,21 @@ export interface OnboardingView {
   suggestion?: NextGoalSuggestion | null;
 }
 
+export type TradeResource = "metal" | "crystal" | "deuterium";
+
+/** Escrowed player-to-player resource offer. Not a Starshard swap. */
+export interface PlayerTradeOffer {
+  id: string;
+  posterPlayerId: string;
+  planetId: string;
+  offerResource: TradeResource;
+  offerAmount: number;
+  requestResource: TradeResource;
+  requestAmount: number;
+  createdAt: number;
+  expiresAt: number;
+}
+
 export interface UniverseSeedCursor {
   /** Next system ordinal in `[0, MAP_GALAXIES * MAP_SYSTEMS]`. */
   at: number;
@@ -915,6 +936,11 @@ export interface UniverseState {
    * must not place new bases. Not persisted.
    */
   skipPirateTopUp?: boolean;
+  /**
+   * Open player resource offers. Older saves omit the map and still load.
+   * Never copied onto the 30s player view.
+   */
+  playerTradeOffers?: Record<string, PlayerTradeOffer>;
 }
 
 export type GalaxyEventType = "meteor_shower" | "solar_flare";

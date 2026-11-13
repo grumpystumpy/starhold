@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createUniverse, joinUniverse, playerView } from "@starhold/game";
+import { createUniverse, joinUniverse, playerView, type PlayerTradeList } from "@starhold/game";
+import { setMarketBook, setMarketDraft } from "./market-panel";
 import { resourceMerchantSection, shopPageHtml } from "./render-shop";
 
 describe("render-shop items tab", () => {
@@ -117,5 +118,86 @@ describe("render-shop items tab", () => {
     assert.match(full, /You receive 900 deuterium/);
     assert.match(full, /data-testid="merchant-trade"[^>]*disabled/);
     assert.ok(fullButton >= 0 && fullError > fullButton && fullError - fullButton < 500);
+  });
+
+  it("renders the market tab without removing the Starshard bundle", () => {
+    const universe = createUniverse("Market UI", 8, 8, { lazySeed: true });
+    const joined = joinUniverse(universe, "MarketViewer", 170_000_000);
+    const planet = universe.planets[joined.planet.id]!;
+    planet.resources = { metal: 20_000, crystal: 12_000, deuterium: 4_000 };
+    const view = playerView(universe, joined.player.id, 170_000_000);
+    const book: PlayerTradeList = {
+      callerPlayerId: joined.player.id,
+      feePercent: 10,
+      minAmount: 1000,
+      maxOpenPerPlayer: 3,
+      dailyCap: 1_000_000,
+      dailyUsed: 0,
+      newbie: false,
+      openOwn: 0,
+      offers: [
+        {
+          id: "trd_ui",
+          posterPlayerId: "other",
+          posterName: "Other Commander",
+          planetId: "plnt_other",
+          offerResource: "metal",
+          offerAmount: 10_000,
+          requestResource: "crystal",
+          requestAmount: 4_000,
+          createdAt: 170_000_000,
+          expiresAt: 170_000_000 + 48 * 60 * 60 * 1000,
+          acceptorReceives: 9_000,
+          posterReceives: 3_600,
+          own: false,
+          acceptBlock: "Not enough crystal on this planet.",
+          cancelBlock: "Only the poster can cancel this offer.",
+        },
+      ],
+    };
+    setMarketBook(book);
+    const html = shopPageHtml(view, false, "market");
+    assert.match(html, /data-testid="shop-tab-market"/);
+    assert.match(html, /data-testid="page-market"/);
+    assert.match(html, /data-testid="market-post"/);
+    assert.match(html, /data-testid="market-fee-preview"/);
+    assert.match(html, /10%/);
+    assert.match(html, /data-testid="market-post-preview"/);
+    assert.match(html, /Buyer receives 9k metal\. You receive 3\.6k crystal\./);
+    assert.match(html, /data-testid="market-offer-trd_ui"/);
+    assert.match(html, /data-testid="market-offer-when-trd_ui"/);
+    assert.match(html, /Posted 0s ago\. Expires in 48h\./);
+    assert.match(html, /data-testid="market-accept-trd_ui"/);
+    assert.match(html, /data-testid="market-cancel-trd_ui"/);
+    assert.match(html, /Not enough crystal on this planet\./);
+    assert.match(html, /disabled/);
+
+    setMarketDraft({
+      offerResource: "crystal",
+      offerAmount: 15_000,
+      requestResource: "deuterium",
+      requestAmount: 2_000,
+    });
+    const short = shopPageHtml(view, false, "market");
+    assert.match(short, /Not enough crystal on this planet\./);
+    assert.match(short, /data-testid="market-post"[^>]*disabled/);
+    assert.match(short, /Buyer receives 13\.5k crystal\. You receive 1\.8k deuterium\./);
+
+    setMarketDraft({
+      offerResource: "metal",
+      offerAmount: 2_000,
+      requestResource: "metal",
+      requestAmount: 2_000,
+    });
+    const same = shopPageHtml(view, false, "market");
+    assert.match(same, /different resources/);
+    assert.match(same, /data-testid="market-post"[^>]*disabled/);
+
+    const resources = shopPageHtml(view, false, "resources");
+    assert.match(resources, /data-testid="trade-buy-resources"/);
+    assert.match(resources, /data-testid="trade-sell-resources"/);
+    assert.match(resources, /data-testid="shop-resources"/);
+    setMarketBook(null);
+    setMarketDraft(null);
   });
 });
