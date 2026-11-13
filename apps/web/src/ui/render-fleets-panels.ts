@@ -1,9 +1,14 @@
 import {
   DEFENSE_ORDER,
   DEFENSES,
+  FIELD_BAND,
+  FIELD_CENTER_BY_SLOT,
+  FIELD_MIN,
   MAP_SYSTEMS,
   SHIP_ORDER,
   SHIPS,
+  productionMultForSlot,
+  temperatureKForSlot,
   type CombatReport,
   type CombatRoundLog,
   type DefenseStock,
@@ -174,12 +179,36 @@ function pirateBossGalaxyBanner(view: PlayerView, busy: boolean): string {
   return `<div class="pirate-boss-banner" data-testid="galaxy-boss-banner"><p>Seasonal mothership${flavor}${clock} · ${fmtCoordsLink(boss.coords)} · ${fmt(boss.hpPct)}% hull · you ${rank}${next}</p><button type="button" data-galaxy-attack-pirates="${coords}" data-galaxy-pirate-base="${escapeAttr(boss.id)}" data-testid="galaxy-raid-boss" ${busy ? "disabled" : ""}>Raid boss</button></div>`;
 }
 
+/**
+ * Typical field band `rollPlanetFields` draws from this slot.
+ * Low end is floored at FIELD_MIN. The universe seed is not applied,
+ * so this is the band, not one planet's rolled cap.
+ */
+function typicalFieldBand(slot: number): { low: number; high: number } {
+  const center = FIELD_CENTER_BY_SLOT[slot] ?? FIELD_CENTER_BY_SLOT[8]!;
+  return {
+    low: Math.max(FIELD_MIN, center - FIELD_BAND),
+    high: Math.max(FIELD_MIN, center + FIELD_BAND),
+  };
+}
+
+/** Client-only colony scouting line. Numbers come from the slot, not the poll. */
+function emptySlotClimateHtml(slot: number): string {
+  const temp = temperatureKForSlot(slot);
+  const mult = productionMultForSlot(slot);
+  const band = typicalFieldBand(slot);
+  const text = `Temp ${fmt(temp)} K · metal ×${mult.metal.toFixed(2)} · crystal ×${mult.crystal.toFixed(2)} · deuterium ×${mult.deuterium.toFixed(2)} · energy ×${mult.energy.toFixed(2)} · fields ${fmt(band.low)}–${fmt(band.high)}`;
+  return `<span class="galaxy-slot-climate" data-testid="galaxy-slot-climate-${slot}">${text}</span>`;
+}
+
 export function galaxyPanel(
   view: PlayerView,
   busy: boolean,
 ): string {
   const { galaxy } = view;
   const inAlliance = Boolean(view.alliance);
+  const showSlotClimate =
+    view.player?.playerClass?.classId === "expansionist";
 
   const occupiedCount = galaxy.slots.filter((s) => s.planetId).length;
   const moonsCount = galaxy.slots.filter((s) => s.hasMoon).length;
@@ -254,7 +283,9 @@ export function galaxyPanel(
           : "galaxy-slot-empty";
 
       const slotNum = `<span class="galaxy-slot-num" data-testid="galaxy-slot-num-${s.coords.slot}">${fmt(s.coords.slot)}</span>`;
-      return `<li class="galaxy-slot ${slotTypeClass}${marker ? " galaxy-slot-marked" : ""}" data-testid="galaxy-slot-${s.coords.slot}" data-art-id="${escapeAttr(s.artId)}"><span class="galaxy-slot-main">${slotNum}${pin}${disc}${moonDisc}<span class="galaxy-slot-label">${who}${debrisText}</span></span><span class="galaxy-slot-side">${actions}${fleetActions}</span></li>`;
+      const climate =
+        showSlotClimate && !s.planetId ? emptySlotClimateHtml(s.coords.slot) : "";
+      return `<li class="galaxy-slot ${slotTypeClass}${marker ? " galaxy-slot-marked" : ""}" data-testid="galaxy-slot-${s.coords.slot}" data-art-id="${escapeAttr(s.artId)}"><span class="galaxy-slot-main">${slotNum}${pin}${disc}${moonDisc}<span class="galaxy-slot-label">${who}${debrisText}${climate}</span></span><span class="galaxy-slot-side">${actions}${fleetActions}</span></li>`;
     })
     .join("");
 
