@@ -141,6 +141,7 @@ import {
   recordBossDamage,
 } from "./world-pirate-boss.js";
 import { tryFormMoon } from "./world-moons.js";
+import { isVacationMode } from "./world-accounts.js";
 import {
   isNewbieBonusActive,
   NEWBIE_DEFENSE_MULT,
@@ -1953,9 +1954,15 @@ export function pickRaidTarget(
   faction: "pirate" | "alien",
 ): NpcRaidTarget | null {
   const roll = hashSeed(`${base.id}:target:${base.lastRaidAt}:${now}`);
-  const planets = Object.values(universe.planets).filter(
-    (p) => p.kind !== "moon" && !targetOnCooldown(base, p.id, now),
-  );
+  const planets = Object.values(universe.planets).filter((p) => {
+    if (p.kind === "moon" || targetOnCooldown(base, p.id, now)) return false;
+    // Player filter only. Pirate bases skip vacation commanders.
+    // Alien selection is unchanged. Do not page row-store here.
+    if (faction === "pirate" && isVacationMode(universe.players[p.ownerPlayerId])) {
+      return false;
+    }
+    return true;
+  });
   const vsMult =
     faction === "pirate"
       ? PIRATE_VS_PIRATE_RAID_PERIOD_MULT

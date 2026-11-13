@@ -208,6 +208,18 @@ Optional save fields (older rows omit them and still load): `account.sessionEpoc
 
 Password change and recover are rate-limited. The join screen's Forgot password? link opens the recover form. It does not replace email + password signup or login.
 
+## Vacation mode
+
+A signed-in commander turns vacation mode on or off from Security (`/security`), `data-testid="vacation-mode-toggle"`. While it is on, the shell shows `data-testid="vacation-banner"`. The fleet composer disables Next and Send and shows the same rejection beside the button.
+
+Optional save field `player.vacationMode` `{ startedAt }`. Missing means off. Turning it on records `startedAt` and does not care whether hostile fleets are already inbound. Turning it off deletes the field. A second turn-on keeps the original `startedAt`. `ensureUniverseShape` does not write it, so older saves stay absent. That commander's fleets already in flight finish and return home. New launches from that commander are rejected. Pirate target selection in `pickRaidTarget` (`packages/game/src/world-pirates.ts`) skips that commander's planets. Alien selection is unchanged. A raid, espionage, or occupy that was launched before `startedAt` still arrives and fights. A Joint Strike (`acsGroups[].createdAt`) opened before `startedAt` can still take joining fleets through `acsGroupId` on `POST /api/launch-fleet`, up to `ACS_MAX_FLEETS`. A new attack, including a new Joint Strike, is rejected. `packages/game/src/fixtures/in-flight-fleet-save.json` is a main-branch universe with one deploy still in flight and no vacation field; `migrateOrResetUniverse` keeps that fleet and leaves the field unset.
+
+| Action | Route | Who |
+| --- | --- | --- |
+| Turn on or off | `POST /api/vacation` `{ playerId, enabled }` | owning session (401 without a cookie, 403 for another commander) |
+
+The route is not called on a normal page load. The field lives on `PlayerState` in `packages/game/src/types-view.ts`. `setVacationMode`, `isVacationMode`, and `fleetPredatesVacation` are in `packages/game/src/world-accounts.ts`. The sender's own launch block is in `packages/game/src/world-launch.ts`. A new hostile launch is rejected in `packages/game/src/world-launch-target.ts`, which still allows a join to a Joint Strike opened before `startedAt`. A hostile fleet launched after `startedAt` that is not in such a group returns without combat from `packages/game/src/world-arrival-raid.ts` and `packages/game/src/world-espionage.ts`. The toggle is `apps/web/src/ui/render-security.ts`. The banner is `apps/web/src/ui/render-shell.ts`. The route is `apps/server/src/app.ts`. The send route already forwards `acsGroupId`. Tests: `packages/game/src/vacation-mode.test.ts`.
+
 ## Mini-planet occupation
 
 An occupy win on a mini planet already captures it: `ownerPlayerId` and `planetIds` move to the occupier. While that occupation is active, occupied means owned. The occupier can queue buildings, ships, and defenses there (field caps and mini-kind limits still apply), and mine income stays on the mini instead of the 30/70 split. A non-mini occupation is unchanged, including the yard blocks and the split. When the occupation ends, the capturer keeps the mini until a later capture or vacate. No new save fields.

@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 import { createUniverse, joinUniverse, levelBonuses, playerView } from "@starhold/game";
 import type { CombatReport } from "@starhold/game";
 
-const { shellHtml, levelBonusLines, syncWhatsNewPopup } = await import("./render-shell.js");
+const { shellHtml, levelBonusLines, syncWhatsNewPopup, vacationBannerHtml } = await import("./render-shell.js");
 
 describe("newbie bonus header badge", () => {
   it("shows remaining time while active and omits the badge when forfeited or expired", () => {
@@ -18,6 +18,30 @@ describe("newbie bonus header badge", () => {
     assert.doesNotMatch(html(now + 96 * 60 * 60 * 1000), /data-testid="newbie-bonus-badge"/);
     universe.players[player.id]!.newbieForfeitedAt = now + 1;
     assert.doesNotMatch(html(now + 2), /data-testid="newbie-bonus-badge"/);
+  });
+});
+
+describe("vacation banner", () => {
+  it("shows the banner only while vacation mode is on", () => {
+    const now = 100_000_000;
+    const universe = createUniverse("Vacation header", 1);
+    const { player } = joinUniverse(universe, "Away", now);
+    const html = () =>
+      shellHtml(
+        playerView(universe, player.id, now),
+        { error: null, notice: null, busy: false },
+        "overview",
+        "<div>Main</div>",
+      );
+    assert.equal(player.vacationMode, undefined);
+    assert.equal(vacationBannerHtml(playerView(universe, player.id, now)), "");
+    assert.doesNotMatch(html(), /data-testid="vacation-banner"/);
+    player.vacationMode = { startedAt: now };
+    assert.match(html(), /data-testid="vacation-banner"/);
+    assert.match(html(), /cannot send new fleets/);
+    assert.match(html(), /Attacks already on the way still arrive/);
+    delete player.vacationMode;
+    assert.doesNotMatch(html(), /data-testid="vacation-banner"/);
   });
 });
 

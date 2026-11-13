@@ -494,6 +494,11 @@ export interface SeasonLeaderboardView {
   bossSchedule?: PirateBossSeasonSchedule;
 }
 
+/** On when present. `startedAt` is the turn-on time. Absent means off. */
+export interface VacationModeState {
+  startedAt: number;
+}
+
 export interface PlayerState {
   id: string;
   name: string;
@@ -506,6 +511,11 @@ export interface PlayerState {
   createdAt: number;
   /** First launch of a PvP attack; permanently forfeits newbie protection. */
   newbieForfeitedAt?: number;
+  /**
+   * Vacation mode. Missing means off. Older saves omit it.
+   * `startedAt` is when the commander turned it on.
+   */
+  vacationMode?: VacationModeState;
   /** Last launch time when this player attacked a pirate or alien base. */
   attackedPiratesAt?: number;
   /** Player level — starts at 1, no max (Round 2). */

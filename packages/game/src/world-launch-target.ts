@@ -30,9 +30,27 @@ import {
   isUnclaimedMini,
   playerKnowsMini,
 } from "./world-mini.js";
+import {
+  acsGroupPredatesVacation,
+  isVacationMode,
+  VACATION_ATTACK_BLOCKED,
+} from "./world-accounts.js";
 import { alienBaseAtCoords, pirateBaseAtCoords } from "./world-pirates.js";
 import { isNewbieProtected } from "./world-protection.js";
 import { getDebris } from "./world-tick.js";
+
+function vacationAttackBlock(
+  universe: UniverseState,
+  attacker: PlayerState,
+  target: PlanetState,
+  acsGroupId?: string,
+): string | null {
+  if (target.ownerPlayerId === attacker.id) return null;
+  const defender = universe.players[target.ownerPlayerId];
+  if (!isVacationMode(defender)) return null;
+  if (acsGroupPredatesVacation(universe, acsGroupId, defender)) return null;
+  return VACATION_ATTACK_BLOCKED;
+}
 
 export type LaunchTargetResult =
   | {
@@ -57,6 +75,7 @@ export function resolveLaunchTarget(
   targetAsteroidIdOpt?: string,
   targetPirateBaseIdOpt?: string,
   targetAlienBaseIdOpt?: string,
+  acsGroupId?: string,
 ): LaunchTargetResult {
   let targetCoords: Coordinates;
   let targetPlanet: PlanetState | null = null;
@@ -295,10 +314,24 @@ export function resolveLaunchTarget(
           error: `Target is under newbie protection (under ${cap} points).`,
         };
       }
+      const vacation = vacationAttackBlock(
+        universe,
+        player,
+        targetPlanet,
+        acsGroupId,
+      );
+      if (vacation) return { ok: false, error: vacation };
     } else if (mission === "espionage") {
       if (targetPlanet.ownerPlayerId === player.id) {
         return { ok: false, error: "Cannot spy on yourself." };
       }
+      const vacation = vacationAttackBlock(
+        universe,
+        player,
+        targetPlanet,
+        acsGroupId,
+      );
+      if (vacation) return { ok: false, error: vacation };
       if ((ships.probe ?? 0) < 1) {
         return { ok: false, error: "Espionage requires a Spy Satellite." };
       }
@@ -339,6 +372,13 @@ export function resolveLaunchTarget(
           error: `Target is under newbie protection (under ${cap} points).`,
         };
       }
+      const vacation = vacationAttackBlock(
+        universe,
+        player,
+        targetPlanet,
+        acsGroupId,
+      );
+      if (vacation) return { ok: false, error: vacation };
     }
   }
 
