@@ -10,6 +10,7 @@ import {
   SKILLS,
   STARSHARDS_HIGHSCORE_TOP3,
 } from "./catalog.js";
+import { HIGHSCORE_RANK_HISTORY_DAYS } from "./data/tuning.js";
 import {
   astrolabeResearchTimeMult,
   classBonuses,
@@ -37,6 +38,7 @@ import type {
   GalaxyView,
   HighscoreCache,
   HighscoreEntry,
+  HighscoreRankPoint,
   PlanetArtFields,
   PlayerView,
   PublicPlayer,
@@ -170,6 +172,46 @@ export function highscoresBoard(universe: UniverseState): HighscoreEntry[] {
       a.playerId.localeCompare(b.playerId),
   );
   return rows.map((r, i) => ({ ...r, rank: i + 1 }));
+}
+
+const RANK_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** UTC calendar day for a rank snapshot. Maintenance uses this, not local time. */
+export function utcHighscoreDay(now: number): string {
+  return new Date(now).toISOString().slice(0, 10);
+}
+
+/**
+ * Append one rank for `day`. The same day replaces its point.
+ * More than `HIGHSCORE_RANK_HISTORY_DAYS` points drop the oldest day.
+ * Missing or junk history starts over. Order is oldest first.
+ * Rank math stays in `highscoresBoard`; this only stores the snapshot.
+ */
+export function appendHighscoreRankHistory(
+  history: readonly HighscoreRankPoint[] | undefined,
+  day: string,
+  rank: number,
+): HighscoreRankPoint[] {
+  const kept: HighscoreRankPoint[] = [];
+  for (const point of history ?? []) {
+    if (!point || typeof point.day !== "string" || !RANK_DAY.test(point.day)) continue;
+    if (!Number.isInteger(point.rank) || point.rank < 1) continue;
+    const existing = kept.findIndex((row) => row.day === point.day);
+    if (existing >= 0) kept.splice(existing, 1);
+    kept.push({ day: point.day, rank: point.rank });
+  }
+  kept.sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
+  if (!RANK_DAY.test(day) || !Number.isInteger(rank) || rank < 1) {
+    return kept.length > HIGHSCORE_RANK_HISTORY_DAYS
+      ? kept.slice(kept.length - HIGHSCORE_RANK_HISTORY_DAYS)
+      : kept;
+  }
+  const next = kept.filter((point) => point.day !== day);
+  next.push({ day, rank });
+  next.sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
+  return next.length > HIGHSCORE_RANK_HISTORY_DAYS
+    ? next.slice(next.length - HIGHSCORE_RANK_HISTORY_DAYS)
+    : next;
 }
 
 export function publicRoster(

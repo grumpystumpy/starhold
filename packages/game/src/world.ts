@@ -143,6 +143,8 @@ export {
   empirePoints,
   galaxyViewFor,
   highscoresBoard,
+  appendHighscoreRankHistory,
+  utcHighscoreDay,
   playerView,
   publicRoster,
   bindHighscoreSource,
@@ -154,6 +156,7 @@ export {
   stampPlayerActivity,
 } from "./player-activity.js";
 export type { InactivityMark } from "./player-activity.js";
+export { HIGHSCORE_RANK_HISTORY_DAYS } from "./data/tuning.js";
 export { ensureSystemVisited } from "./world-seed.js";
 export {
   NEWBIE_BONUS_DURATION_MS,

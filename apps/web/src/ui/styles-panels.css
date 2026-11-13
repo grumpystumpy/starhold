@@ -1107,6 +1107,8 @@ a.message-title:hover {
 .highscores li {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 0.75rem;
   padding: 0.45rem 0;
   border-bottom: 1px solid var(--line);
@@ -1122,6 +1124,28 @@ a.message-title:hover {
   min-width: 1.75rem;
   color: var(--muted);
   font-weight: 600;
+}
+
+.hs-meta {
+  min-width: 0;
+  flex: 1 1 12rem;
+  text-align: right;
+}
+
+.hs-spark {
+  flex: 0 0 auto;
+  width: 56px;
+  height: 16px;
+  color: var(--ok);
+  display: block;
+}
+
+.hs-spark polyline {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .galaxy-slots li {

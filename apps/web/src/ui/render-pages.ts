@@ -16,12 +16,14 @@ import {
   WEAKEST_FIRST_SHIPS,
   allianceClassBonuses,
   classBonuses,
+  HIGHSCORE_RANK_HISTORY_DAYS,
   levelBonuses,
   shipClassAllowed,
   fortressRelocateDeutCost,
   fortressRelocateLandingWindow,
   type BuildingId,
   type DefenseId,
+  type HighscoreRankPoint,
   type PlayerView,
   type ShipId,
 } from "@starhold/game";
@@ -429,12 +431,45 @@ export function setHighscoreTab(tab: "players" | "alliances"): void {
   highscoreTab = tab;
 }
 
+const SPARK_W = 56;
+const SPARK_H = 16;
+
+function rankSparkline(playerId: string, history: HighscoreRankPoint[] | undefined): string {
+  if (!Array.isArray(history) || history.length === 0) return "";
+  const points: HighscoreRankPoint[] = [];
+  for (const point of history) {
+    if (!point || typeof point.day !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(point.day)) continue;
+    if (!Number.isInteger(point.rank) || point.rank < 1) continue;
+    points.push({ day: point.day, rank: point.rank });
+  }
+  const shown = points.slice(-HIGHSCORE_RANK_HISTORY_DAYS);
+  if (!shown.length) return "";
+  const ranks = shown.map((point) => point.rank);
+  const min = Math.min(...ranks);
+  const max = Math.max(...ranks);
+  const span = max - min;
+  const coords = shown.map((point, index) => {
+    const x = shown.length === 1
+      ? SPARK_W / 2
+      : (index / (shown.length - 1)) * (SPARK_W - 2) + 1;
+    const y = span === 0 ? SPARK_H / 2 : ((point.rank - min) / span) * (SPARK_H - 4) + 2;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const label = `Rank over ${shown.length} UTC days, oldest first: ${shown
+    .map((point) => `${point.day} rank ${point.rank}`)
+    .join(", ")}`;
+  const mark = shown.length === 1
+    ? `<circle cx="${SPARK_W / 2}" cy="${SPARK_H / 2}" r="2" fill="currentColor" />`
+    : `<polyline points="${coords.join(" ")}" />`;
+  return `<svg class="hs-spark" data-testid="highscore-sparkline" data-player-id="${escapeAttr(playerId)}" data-days="${escapeAttr(shown.map((point) => point.day).join(","))}" viewBox="0 0 ${SPARK_W} ${SPARK_H}" width="${SPARK_W}" height="${SPARK_H}" role="img" aria-label="${escapeAttr(label)}">${mark}</svg>`;
+}
+
 function highscorePage(view: PlayerView): string {
   const playersActive = highscoreTab !== "alliances";
   const playerRows = (view.highscores ?? [])
     .map(
       (h) =>
-        `<li data-testid="highscore-${h.rank}" data-player-id="${escapeAttr(h.playerId)}" data-home-planet="${escapeAttr(h.homePlanetId)}"><span class="row-with-thumb"><span class="hs-rank">#${fmt(h.rank)}</span>${planetDiscHtml({ src: h.artThumbUrl, artId: h.artId, size: 32 })}${h.allianceTag ? `[${escapeHtml(h.allianceTag)}] ` : ""}${escapeHtml(h.name)}${h.playerId === view.player.id ? " (you)" : ""}</span><span>Home ${escapeHtml(h.planetName || "world")} · ${fmtCoordsLink(h.coords)} · ${fmtCompact(h.points)} pts · Lv ${fmt(h.level ?? 1)} · ${fmtCompact(h.xpTotal ?? 0)} XP</span></li>`,
+        `<li data-testid="highscore-${h.rank}" data-player-id="${escapeAttr(h.playerId)}" data-home-planet="${escapeAttr(h.homePlanetId)}"><span class="row-with-thumb"><span class="hs-rank">#${fmt(h.rank)}</span>${planetDiscHtml({ src: h.artThumbUrl, artId: h.artId, size: 32 })}${h.allianceTag ? `[${escapeHtml(h.allianceTag)}] ` : ""}${escapeHtml(h.name)}${h.playerId === view.player.id ? " (you)" : ""}</span>${rankSparkline(h.playerId, h.rankHistory)}<span class="hs-meta">Home ${escapeHtml(h.planetName || "world")} · ${fmtCoordsLink(h.coords)} · ${fmtCompact(h.points)} pts · Lv ${fmt(h.level ?? 1)} · ${fmtCompact(h.xpTotal ?? 0)} XP</span></li>`,
     )
     .join("");
   const allianceRows = (view.allianceHighscores ?? [])

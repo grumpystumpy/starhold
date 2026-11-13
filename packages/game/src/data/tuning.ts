@@ -41,6 +41,9 @@ export const RESOURCE_MERCHANT_FEE_PERCENT = 10;
  * balance; follow-up can migrate remaining economy constants from catalog.ts.
  */
 
+/** Daily commander-rank points kept on the highscore board. Older days drop. */
+export const HIGHSCORE_RANK_HISTORY_DAYS = 7;
+
 export const SHIPS: Record<ShipId, ShipDef> = {
   scout: {
     id: "scout",
