@@ -92,6 +92,11 @@ import {
   doUpgrade,
 } from "./main-actions";
 import { parseGalaxyCoords } from "./galaxy-coords";
+import {
+  closeCommanderDossier,
+  commanderDossierOpenId,
+  openCommanderDossier,
+} from "./ui/commander-dossier";
 import { setHighscoreTab } from "./ui/render-pages";
 import {
   closeReportWindow,
@@ -145,6 +150,13 @@ export async function submitGalaxyJump(raw: string): Promise<void> {
 }
 
 export function bindClickHandlers(): void {
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Escape" || !commanderDossierOpenId()) return;
+    ev.preventDefault();
+    closeCommanderDossier();
+    schedulePaint();
+  });
+
   root.addEventListener(
     "click",
     (ev) => {
@@ -156,6 +168,35 @@ export function bindClickHandlers(): void {
 
       const target = ev.target;
       if (!(target instanceof Element)) return;
+
+      const openCommander = closestActionEl(target, "[data-open-commander]");
+      if (openCommander) {
+        ev.preventDefault();
+        const id = openCommander.getAttribute("data-open-commander");
+        if (id) {
+          openCommanderDossier(id);
+          schedulePaint();
+        }
+        return;
+      }
+
+      if (closestActionEl(target, "[data-close-commander-dossier]")) {
+        ev.preventDefault();
+        closeCommanderDossier();
+        schedulePaint();
+        return;
+      }
+
+      const dossierBackdrop = closestActionEl(
+        target,
+        "[data-commander-dossier-backdrop]",
+      );
+      if (dossierBackdrop && target === dossierBackdrop) {
+        ev.preventDefault();
+        closeCommanderDossier();
+        schedulePaint();
+        return;
+      }
 
       const shopTab = closestActionEl(target, "[data-shop-tab]");
       if (shopTab) {

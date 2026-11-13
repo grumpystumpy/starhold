@@ -52,6 +52,81 @@
   padding: 0.25rem 0.5rem;
 }
 
+button.commander-name {
+  display: inline;
+  width: auto;
+  margin: 0;
+  padding: 0.05rem 0.1rem;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  line-height: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  box-shadow: none;
+}
+
+.commander-dossier-stats {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr);
+  gap: 0.35rem 0.75rem;
+  margin: 0 0 0.75rem;
+}
+
+.commander-dossier-stats dt {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.commander-dossier-stats dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.commander-dossier h4 {
+  margin: 0.25rem 0;
+  font-size: 1rem;
+}
+
+.commander-dossier-fights {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.commander-dossier-fights li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.45rem 0;
+  border-top: 1px solid var(--line, #2a3242);
+}
+
+@media (max-width: 640px) {
+  .commander-dossier-stats {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.1rem;
+  }
+
+  .commander-dossier-stats dt {
+    margin-top: 0.45rem;
+  }
+
+  .highscores li {
+    flex-wrap: wrap;
+  }
+
+  .highscores li > span {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+}
+
 .report-compositions {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
