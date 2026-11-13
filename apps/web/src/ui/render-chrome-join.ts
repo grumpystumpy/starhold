@@ -392,6 +392,7 @@ export function buildingRow(
   now: number,
   _busy: boolean,
   mods?: BuildingPreviewMods & { timeMult?: number },
+  energy?: { used: number; produced: number },
 ): string {
   const def = BUILDINGS[id];
   const preview = previewBuildingUpgrade(planet, player, id, now, mods);
@@ -423,6 +424,16 @@ export function buildingRow(
     id === "metalStorage" || id === "crystalStorage" || id === "deutTank"
       ? `Capacity ${fmt(storageCap(level))} now, ${fmt(storageCap(preview.current + 1))} at the next level. Each level doubles the cap.`
       : null;
+  let energyPreview: { text: string; deficit: boolean } | null = null;
+  if (def.energyUsePerLevel && energy) {
+    const nextUsed = energy.used + def.energyUsePerLevel;
+    const isDeficit = nextUsed > energy.produced;
+    const text = isDeficit
+      ? `Energy ${fmt(energy.used)} → ${fmt(nextUsed)} / ${fmt(energy.produced)}, deficit`
+      : `Energy ${fmt(energy.used)} → ${fmt(nextUsed)} / ${fmt(energy.produced)}`;
+    energyPreview = { text, deficit: isDeficit };
+  }
+  const energyLine = energyPreview ? energyPreview.text : null;
   const tip = costTooltip({
     action: `Upgrade ${def.name} → L${fmt(preview.current + 1)}`,
     cost,
@@ -431,18 +442,24 @@ export function buildingRow(
     requires: [
       `Current L${fmt(level)}`,
       ...(def.energyUsePerLevel
-        ? [`Energy use +${fmt(def.energyUsePerLevel)}/level`]
+        ? [
+            `Energy use +${fmt(def.energyUsePerLevel)}/level`,
+            ...(energyLine ? [energyLine] : []),
+          ]
         : []),
     ],
     blocked,
   });
+  const energyHtml = energyPreview
+    ? ` · <span class="building-energy-preview${energyPreview.deficit ? " deficit" : ""}" data-testid="building-energy-preview-${id}">${escapeHtml(energyPreview.text)}</span>`
+    : "";
   return `
     <article class="item item-thumb" data-building-id="${id}" data-testid="building-${id}">
       <img class="thumb" src="${BUILDING_ART[id]}" alt="${escapeAttr(def.name)}" width="48" height="48" />
       <div>
         <h3>${escapeHtml(def.name)} <span class="meta" data-testid="building-level-${id}">L${fmt(level)}</span> ${tip.html}</h3>
         <p>${escapeHtml(def.description)}</p>
-        <div class="meta">Next: ${fmtCost(cost)} · ${fmtEta(secs)}${storageLine ? ` · ${escapeHtml(storageLine)}` : ""}</div>
+        <div class="meta">Next: ${fmtCost(cost)} · ${fmtEta(secs)}${energyHtml}${storageLine ? ` · ${escapeHtml(storageLine)}` : ""}</div>
       </div>
       <div class="actions">
         <button type="button" data-upgrade="${id}" data-building-id="${id}" data-locked="${blocked ? "1" : "0"}" data-testid="upgrade-${id}" ${blocked ? "disabled" : ""} ${blocked ? `aria-describedby="blocked-upgrade-${id}"` : ""} title="${tip.title}">${label}</button>

@@ -1,3 +1,4 @@
+import "../test-dom";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
@@ -13,6 +14,7 @@ import { buildingRow, joinScreenHtml } from "./render-chrome-join";
 import { defenseRow, researchRow, shipRow } from "./render-chrome-rows";
 import { fleetComposer } from "./render-fleets-composer";
 import { messagesPageHtml } from "./render-messages";
+import { pageHtml } from "./render-pages";
 import { seasonsPage } from "./render-seasons";
 
 function player(): PlayerView["player"] {
@@ -488,6 +490,97 @@ describe("playtest fixes", () => {
     );
     const dHtml = defenseRow("laserBattery", facPlanet, false, 0.8, 1);
     assert.match(dHtml, new RegExp(`each · ${fmtEta(expectedDefSecs)} · yard`));
+  });
+
+  it("previews energy impact on building upgrade rows", () => {
+    // 1. Deficit preview when next used > produced (e.g. 152 + 20 = 172 > 160)
+    const p = planet();
+    const pl = player();
+    const deficitRow = buildingRow(
+      "metalMine",
+      p,
+      pl,
+      1,
+      1_700_000_000_000,
+      false,
+      undefined,
+      { used: 152, produced: 160 },
+    );
+    assert.match(
+      deficitRow,
+      /class="building-energy-preview deficit"[^>]*data-testid="building-energy-preview-metalMine"/,
+    );
+    assert.match(deficitRow, /Energy 152 → 172 \/ 160, deficit/);
+
+    // 2. Surplus preview when next used <= produced (e.g. 40 + 24 = 64 <= 100)
+    const surplusRow = buildingRow(
+      "crystalMine",
+      p,
+      pl,
+      1,
+      1_700_000_000_000,
+      false,
+      undefined,
+      { used: 40, produced: 100 },
+    );
+    assert.match(
+      surplusRow,
+      /class="building-energy-preview"[^>]*data-testid="building-energy-preview-crystalMine"/,
+    );
+    assert.doesNotMatch(
+      surplusRow,
+      /class="building-energy-preview deficit"/,
+    );
+    assert.match(surplusRow, /Energy 40 → 64 \/ 100/);
+    assert.doesNotMatch(surplusRow, /deficit/);
+
+    // 3. Buildings without energyUsePerLevel (e.g. solarPlant, metalStorage) omit energy preview
+    const solarRow = buildingRow(
+      "solarPlant",
+      p,
+      pl,
+      1,
+      1_700_000_000_000,
+      false,
+      undefined,
+      { used: 40, produced: 100 },
+    );
+    assert.doesNotMatch(solarRow, /building-energy-preview-solarPlant/);
+    assert.doesNotMatch(solarRow, /Energy 40 →/);
+
+    // 4. Omission when energy parameter is not provided (backwards compat)
+    const noEnergyRow = buildingRow(
+      "deutSynth",
+      p,
+      pl,
+      1,
+      1_700_000_000_000,
+      false,
+    );
+    assert.doesNotMatch(noEnergyRow, /building-energy-preview-deutSynth/);
+    assert.match(noEnergyRow, /Energy use \+40\/level/);
+  });
+
+  it("renders a deficit energy preview through the buildings page renderer", () => {
+    const p = planet();
+    p.buildings.metalMine = 1;
+    const view = {
+      now: 1_700_000_000_000,
+      universe: { speed: 1 },
+      player: player(),
+      planet: p,
+      economy: {
+        fields: { used: 3, cap: 200, remaining: 197 },
+        energy: { used: 152, produced: 160, factor: 1 },
+      },
+    } as PlayerView;
+
+    const html = pageHtml("buildings", view, false, null);
+    assert.match(
+      html,
+      /class="building-energy-preview deficit"[^>]*data-testid="building-energy-preview-metalMine"/,
+    );
+    assert.match(html, /Energy 152 → 172 \/ 160, deficit/);
   });
 
   it("drops developer copy and the auth form after signup", () => {

@@ -201,9 +201,9 @@ function buildingsPage(view: PlayerView, busy: boolean): string {
           : ""
       }
       <h3 class="subhead">Extraction &amp; storage</h3>
-      ${resourceIds.map((id) => buildingRow(id, planet, view.player, universe.speed, now, busy, buildMods)).join("")}
+      ${resourceIds.map((id) => buildingRow(id, planet, view.player, universe.speed, now, busy, buildMods, view.economy.energy)).join("")}
       <h3 class="subhead">${isMini ? "Structures &amp; anomaly specials" : "Structures"}</h3>
-      ${facilityIds.map((id) => buildingRow(id, planet, view.player, universe.speed, now, busy, buildMods)).join("")}
+      ${facilityIds.map((id) => buildingRow(id, planet, view.player, universe.speed, now, busy, buildMods, view.economy.energy)).join("")}
       ${
         buildQueueHtml(planet, now) ||
         (isMini

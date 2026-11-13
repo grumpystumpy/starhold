@@ -60,6 +60,10 @@
   font-variant-numeric: tabular-nums;
 }
 
+.building-energy-preview.deficit {
+  color: var(--bad);
+}
+
 .mission-occupy {
   color: var(--bad, #f87171);
 }
