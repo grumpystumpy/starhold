@@ -4,9 +4,18 @@ export {
   joinUniverse,
   planetAtCoords,
 } from "./world-bootstrap.js";
+export { createInvite, resolveInviteCoords } from "./world-invite.js";
+export type { InviteMintResult } from "./world-invite.js";
 export {
+  acsGroupPredatesVacation,
   claimPlayerToAccount,
+  fleetPredatesVacation,
+  isVacationMode,
   playerForAccount,
+  setVacationMode,
+  vacationStartedAt,
+  VACATION_ATTACK_BLOCKED,
+  VACATION_SEND_BLOCKED,
 } from "./world-accounts.js";
 export { advancePlanet } from "./world-tick.js";
 export {
@@ -14,6 +23,14 @@ export {
   advanceUniverse,
   playerStateTickDue,
 } from "./world-arrival.js";
+export {
+  activeGalaxyEvent,
+  galaxyEventDebrisMult,
+  galaxyEventShieldMods,
+  galaxyEventView,
+  scheduledGalaxyEvent,
+  tickGalaxyEvents,
+} from "./world-galaxy-events.js";
 export { bindTickBudget, npcJobBudget, workersTickBudget } from "./tick-budget.js";
 export type { TickBudget } from "./tick-budget.js";
 export type { ActionResult, FleetActionResult } from "./world-queues.js";
@@ -56,6 +73,7 @@ export type { ClassActionResult } from "./world-class.js";
 export type { AllianceActionResult } from "./world-alliances.js";
 export {
   allianceDirectory,
+  allianceRecruitingDirectory,
   allianceTagForPlayer,
   allianceViewFor,
   createAlliance,
@@ -75,9 +93,16 @@ export {
   normalizeAllianceName,
   normalizeAllianceTag,
   setAllianceJoinMode,
+  setAllianceRecruiting,
   setAllianceClass,
   setAllianceRole,
 } from "./world-alliances.js";
+export {
+  acceptAllianceNap,
+  cancelAllianceRelation,
+  declareAllianceWar,
+  offerAllianceNap,
+} from "./world-alliance-diplomacy.js";
 export {
   leaveAcsFleet,
   listOpenAcsForAlliance,
@@ -103,6 +128,9 @@ export {
 } from "./world-alliance-intel.js";
 export type { LaunchFleetOpts } from "./world-launch.js";
 export { launchFleet } from "./world-launch.js";
+export { recallFleet } from "./world-recall.js";
+export type { RecallFleetResult } from "./world-recall.js";
+export { fleetSaveSuggestions } from "./fleet-save.js";
 export type {
   BuiltinPresetId,
   PresetActionResult,
@@ -127,11 +155,24 @@ export {
   empirePoints,
   galaxyViewFor,
   highscoresBoard,
+  appendHighscoreRankHistory,
+  utcHighscoreDay,
+  categoryHighscoreBoards,
+  emptyCategoryHighscores,
+  HIGHSCORE_CATEGORY_IDS,
+  isHighscoreCategoryId,
   playerView,
   publicRoster,
   bindHighscoreSource,
   bindAllianceRankSource,
 } from "./world-view.js";
+export {
+  activityStampDue,
+  inactivityMark,
+  stampPlayerActivity,
+} from "./player-activity.js";
+export type { InactivityMark } from "./player-activity.js";
+export { HIGHSCORE_RANK_HISTORY_DAYS } from "./data/tuning.js";
 export { ensureSystemVisited } from "./world-seed.js";
 export {
   NEWBIE_BONUS_DURATION_MS,
@@ -169,10 +210,13 @@ export {
 } from "./world-expedition.js";
 export {
   inSensorPhalanxRange,
+  moonChanceLabel,
   moonChancePercent,
   moonRoll,
   ownedPlanetCount,
+  scannerSystemSpans,
   sensorPhalanxRange,
+  systemCoveredByScanner,
   tryFormMoon,
 } from "./world-moons.js";
 export { moonAtCoords } from "./world-bootstrap.js";
@@ -240,6 +284,16 @@ export {
   type StarshardActionResult,
 } from "./world-starshards.js";
 export {
+  assessResourceMerchant,
+  quoteResourceMerchant,
+  tradeWithResourceMerchant,
+  RESOURCE_MERCHANT_FEE_PERCENT,
+  RESOURCE_MERCHANT_VALUE,
+  type MerchantResource,
+  type ResourceMerchantQuote,
+  type ResourceMerchantTradeResult,
+} from "./world-merchant.js";
+export {
   buyShopItem,
   computeShopItemCost,
   computeShopItemPerUnitCost,
@@ -259,12 +313,28 @@ export {
   type GoalActionResult,
 } from "./world-goals.js";
 export {
+  achievementsView,
+  evaluatePlayerAchievements,
+  noteAchievementCount,
+  type AchievementBoardContext,
+  type AchievementCounter,
+} from "./world-achievements.js";
+export {
   claimOnboardingStep,
   noteOnboardingRecon,
   onboardingViewFor,
   setOnboardingDismissed,
   type OnboardingActionResult,
 } from "./world-onboarding.js";
+export {
+  midgameBriefingCards,
+  midgameBriefingFor,
+  midgameFactsFromView,
+  setMidgameBriefingDismissed,
+  type MidgameBriefingActionResult,
+  type MidgameBriefingCard,
+  type MidgameBriefingFacts,
+} from "./world-midgame.js";
 export { nextGoalSuggestionFor } from "./next-goal.js";
 export {
   CURRENT_RELEASE_ID,
@@ -303,6 +373,7 @@ export {
   pruneExpiredOccupations,
   startOccupation,
 } from "./world-occupation.js";
+export { abandonColony } from "./world-abandon-colony.js";
 export {
   maybeDestroyMoonWithTitans,
   resolveMiniPlanetChoice,
@@ -370,3 +441,24 @@ export {
   setSeasonSkin,
   setSeasonTitle,
 } from "./world-seasons.js";
+export {
+  acceptPlayerTradeOffer,
+  cancelPlayerTradeOffer,
+  expirePlayerTradeOffers,
+  listPlayerTradeOffers,
+  playerTradeMetalValue,
+  playerTradeNetAmount,
+  postPlayerTradeOffer,
+  type PlayerTradeList,
+  type PlayerTradeOfferView,
+  type PlayerTradeResult,
+} from "./world-player-trade.js";
+export {
+  PLAYER_TRADE_DAILY_ACCEPT_VALUE_CAP,
+  PLAYER_TRADE_EXPIRE_MS,
+  PLAYER_TRADE_EXPIRE_PER_TICK,
+  PLAYER_TRADE_FEE_PERCENT,
+  PLAYER_TRADE_MAX_OPEN_PER_PLAYER,
+  PLAYER_TRADE_MAX_OPEN_TOTAL,
+  PLAYER_TRADE_MIN_AMOUNT,
+} from "./data/tuning.js";

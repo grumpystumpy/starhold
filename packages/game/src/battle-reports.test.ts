@@ -274,4 +274,84 @@ describe("replayable battle reports", () => {
     const card = formatCombatShareCard(legacy);
     assert.match(card, /Unopposed landing/);
   });
+
+  it("publishes roundLog on a share link and leaves it off legacy reports", () => {
+    const base: CombatReport = {
+      id: "rpt_public_rounds",
+      at: 1,
+      missionId: "private-mission",
+      attackerPlayerId: "p1",
+      defenderPlayerId: "p2",
+      attackerName: "A",
+      defenderName: "B",
+      targetCoords: { galaxy: 1, system: 1, slot: 8 },
+      attackerBefore: normalizeFleetShips({ scout: 2 }),
+      attackerAfter: normalizeFleetShips({ scout: 1 }),
+      defenderBefore: normalizeFleetShips({ interceptor: 1 }),
+      defenderAfter: normalizeFleetShips({}),
+      defensesBefore: emptyDefenses(),
+      defensesAfter: emptyDefenses(),
+      loot: { metal: 0, crystal: 0, deuterium: 0 },
+      debrisCreated: { metal: 0, crystal: 0, deuterium: 0 },
+      outcome: "attacker_win",
+      rounds: 1,
+      summary: "Private summary",
+      shareCode: "sh_rounds",
+      roundLog: [
+        {
+          round: 1,
+          attackerLosses: { ships: { scout: 1 } },
+          defenderLosses: { ships: { interceptor: 1 } },
+          debrisThisRound: { metal: 4, crystal: 2, deuterium: 0 },
+          shieldsAbsorbed: { attacker: 15, defender: 40 },
+        },
+      ],
+    };
+    const shared = publicCombatReport(base);
+    assert.ok(shared);
+    assert.equal(shared.roundLog?.length, 1);
+    assert.equal(shared.roundLog?.[0]?.shieldsAbsorbed?.attacker, 15);
+    assert.equal(shared.roundLog?.[0]?.shieldsAbsorbed?.defender, 40);
+    assert.equal(shared.roundLog?.[0]?.attackerLosses.ships.scout, 1);
+    assert.equal("attackerPlayerId" in shared, false);
+    assert.equal("missionId" in shared, false);
+    assert.equal("summary" in shared, false);
+
+    const legacy = publicCombatReport({ ...base, roundLog: undefined, shareCode: "sh_nolog" });
+    assert.ok(legacy);
+    assert.equal("roundLog" in legacy, false);
+  });
+
+  it("puts moon chance on the debris field line at 0%, mid, and the 20% cap", () => {
+    const cardFor = (metal: number, crystal: number, deuterium: number) =>
+      formatCombatShareCard({
+        id: "rpt_moon",
+        at: 1,
+        missionId: "m1",
+        attackerPlayerId: "p1",
+        defenderPlayerId: "p2",
+        attackerName: "A",
+        defenderName: "B",
+        targetCoords: { galaxy: 1, system: 1, slot: 8 },
+        attackerBefore: normalizeFleetShips({}),
+        attackerAfter: normalizeFleetShips({}),
+        defenderBefore: normalizeFleetShips({}),
+        defenderAfter: normalizeFleetShips({}),
+        defensesBefore: emptyDefenses(),
+        defensesAfter: emptyDefenses(),
+        loot: { metal: 0, crystal: 0, deuterium: 0 },
+        debrisCreated: { metal, crystal, deuterium },
+        outcome: "attacker_win",
+        rounds: 1,
+        summary: "Field",
+      });
+
+    assert.match(cardFor(249_999, 0, 8_000_000), /Debris field: 249,999\/0 · moon chance 0%/);
+    assert.doesNotMatch(cardFor(249_999, 0, 8_000_000), /moon chance 32%/);
+    assert.match(cardFor(750_000, 250_000, 0), /Debris field: 750,000\/250,000 · moon chance 4%/);
+    const capped = cardFor(6_000_000, 2_500_000, 0);
+    assert.match(capped, /Debris field: 6,000,000\/2,500,000 · moon chance 20%/);
+    assert.doesNotMatch(capped, /moon chance 3[0-9]%/);
+    assert.doesNotMatch(cardFor(0, 0, 0), /Debris field:/);
+  });
 });

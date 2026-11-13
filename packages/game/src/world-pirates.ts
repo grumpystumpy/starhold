@@ -83,6 +83,10 @@ import {
 } from "./data/tuning.js";
 import { recordCombatReport } from "./combat-share.js";
 import {
+  galaxyEventDebrisMult,
+  galaxyEventShieldMods,
+} from "./world-galaxy-events.js";
+import {
   computeRaidLoot,
   debrisFromDestroyed,
   debrisFromDestroyedDefenses,
@@ -133,6 +137,7 @@ import {
   grantPirateFleetKillStarshards,
   utcDayKey,
 } from "./world-boosts.js";
+import { noteAchievementCount } from "./world-achievements.js";
 import { noteGoalMetric } from "./world-goals.js";
 import { emptyCargo, planetAtCoords } from "./world-bootstrap.js";
 import { consumeTickBudget, syncPlanetForTick, tickBudget } from "./tick-budget.js";
@@ -141,6 +146,7 @@ import {
   recordBossDamage,
 } from "./world-pirate-boss.js";
 import { tryFormMoon } from "./world-moons.js";
+import { isVacationMode } from "./world-accounts.js";
 import {
   isNewbieBonusActive,
   NEWBIE_DEFENSE_MULT,
@@ -1953,9 +1959,15 @@ export function pickRaidTarget(
   faction: "pirate" | "alien",
 ): NpcRaidTarget | null {
   const roll = hashSeed(`${base.id}:target:${base.lastRaidAt}:${now}`);
-  const planets = Object.values(universe.planets).filter(
-    (p) => p.kind !== "moon" && !targetOnCooldown(base, p.id, now),
-  );
+  const planets = Object.values(universe.planets).filter((p) => {
+    if (p.kind === "moon" || targetOnCooldown(base, p.id, now)) return false;
+    // Player filter only. Pirate bases skip vacation commanders.
+    // Alien selection is unchanged. Do not page row-store here.
+    if (faction === "pirate" && isVacationMode(universe.players[p.ownerPlayerId])) {
+      return false;
+    }
+    return true;
+  });
   const vsMult =
     faction === "pirate"
       ? PIRATE_VS_PIRATE_RAID_PERIOD_MULT
@@ -1997,10 +2009,11 @@ function battleDebris(
   defBefore: FleetShips,
   defAfter: FleetShips,
   permanentlyLost: Partial<Record<DefenseId, number>>,
+  mult = 1,
 ): Resources {
-  const atk = debrisFromDestroyed(destroyedShipResources(atkBefore, atkAfter));
-  const def = debrisFromDestroyed(destroyedShipResources(defBefore, defAfter));
-  const guns = debrisFromDestroyedDefenses(permanentlyLost);
+  const atk = debrisFromDestroyed(destroyedShipResources(atkBefore, atkAfter), mult);
+  const def = debrisFromDestroyed(destroyedShipResources(defBefore, defAfter), mult);
+  const guns = debrisFromDestroyedDefenses(permanentlyLost, mult);
   return {
     metal: atk.metal + def.metal + guns.metal,
     crystal: atk.crystal + def.crystal + guns.crystal,
@@ -2078,6 +2091,8 @@ function fightNpcRaidOnPlanet(
     : alienCombatResearchForOpponent(defenderResearch);
   const defenderBefore = { ...planet.ships };
   const defensesBefore = planet.defenses ?? emptyDefenses();
+  const eventShields = galaxyEventShieldMods(universe, planet.coords, now);
+  const debrisMult = galaxyEventDebrisMult(universe, planet.coords, now);
   const combat = resolveCombat(
     raidFleet,
     defenderBefore,
@@ -2088,6 +2103,9 @@ function fightNpcRaidOnPlanet(
       defenderUnitStatMult: isNewbieBonusActive(universe, owner, now)
         ? NEWBIE_DEFENSE_MULT
         : 1,
+      attackerShieldMult: eventShields.attackerShieldMult,
+      defenderShieldMult: eventShields.defenderShieldMult,
+      debrisMult,
     },
   );
   const rebuilt = rebuildDefenses(
@@ -2103,6 +2121,7 @@ function fightNpcRaidOnPlanet(
     defenderBefore,
     combat.defenderAfter,
     rebuilt.defensesPermanentlyLost,
+    debrisMult,
   );
   addDebris(universe, planet.coords, debrisCreated);
   let moonFormed = false;
@@ -2403,12 +2422,19 @@ export function applyNpcRaidOnNpc(
   rememberRaidTarget(base, other.id, now);
   const defenderBefore = { ...other.ships };
   const defensesBefore = other.defenses ?? emptyDefenses();
+  const npcShields = galaxyEventShieldMods(universe, other.coords, now);
+  const npcDebrisMult = galaxyEventDebrisMult(universe, other.coords, now);
   const combat = resolveCombat(
     raidFleet,
     defenderBefore,
     defensesBefore,
     pirateCombatResearch(base),
     pirateCombatResearch(other),
+    {
+      attackerShieldMult: npcShields.attackerShieldMult,
+      defenderShieldMult: npcShields.defenderShieldMult,
+      debrisMult: npcDebrisMult,
+    },
   );
   const rebuilt = rebuildDefenses(
     defensesBefore,
@@ -2423,6 +2449,7 @@ export function applyNpcRaidOnNpc(
     defenderBefore,
     combat.defenderAfter,
     rebuilt.defensesPermanentlyLost,
+    npcDebrisMult,
   );
   addDebris(universe, other.coords, debrisCreated);
   const sent = fleetShipCount(raidFleet);
@@ -2761,12 +2788,19 @@ function resolveNpcRaidArrival(
   const defenderResearch = kind === "pirate"
     ? pirateCombatResearchForOpponent(attackerResearch)
     : alienCombatResearchForOpponent(attackerResearch);
+  const baseShields = galaxyEventShieldMods(universe, base.coords, now);
+  const baseDebrisMult = galaxyEventDebrisMult(universe, base.coords, now);
   const combat = resolveCombat(
     fleet.ships,
     defenderBefore,
     defensesBefore,
     attackerResearch,
     defenderResearch,
+    {
+      attackerShieldMult: baseShields.attackerShieldMult,
+      defenderShieldMult: baseShields.defenderShieldMult,
+      debrisMult: baseDebrisMult,
+    },
   );
   const rebuilt = rebuildDefenses(
     defensesBefore,
@@ -2781,6 +2815,7 @@ function resolveNpcRaidArrival(
     defenderBefore,
     combat.defenderAfter,
     rebuilt.defensesPermanentlyLost,
+    baseDebrisMult,
   );
   const killed = resourcesCostTotal(
     destroyedShipResources(defenderBefore, combat.defenderAfter),
@@ -2824,7 +2859,10 @@ function resolveNpcRaidArrival(
           ? PIRATE_BOSS_STARSHARD_REWARD_MULT
           : 1,
       );
-      if (kind === "pirate") noteGoalMetric(owner, "pirateWin", 1, now);
+      if (kind === "pirate") {
+        noteGoalMetric(owner, "pirateWin", 1, now);
+        noteAchievementCount(owner, "pirateBasesDestroyed", 1);
+      }
       attackerXp =
         xpForCombatWin(killed) +
         xpForPirateBaseDestroy(tierAtFight) +

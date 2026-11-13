@@ -2,11 +2,17 @@
 
 This file covers the alliance and highscore surfaces touched by B7-31. The rest of the game map lives in `AGENTS.md` and `docs/`. A full-game feature map was not in the repo; this section was added rather than invented.
 
+## Overview
+
+The Overview page shows a read-only empire resources strip for commanders with multiple owned bodies. It totals metal, crystal, and deuterium from the current `ownedPlanets` view, lists each body's stocks and the head item of its build, ship, and defense queues, and reuses the existing planet selector navigation. Single-body empires omit the strip; empty queues have no placeholder row. `PlayerView.ownedPlanets` carries these derived read-only values; no save fields, endpoints, or production formulas change.
+
 ## Alliances
 
 Records live on the universe document (`alliances`). Membership is `player.allianceId`. Role id stays `founder`; the UI label is Leader. Join modes: `open` (anyone joins), `invite` (invited only), `request` (one pending ask, Leader or Officer approves). New alliances still default to `open`.
 
 Optional save fields (no schema bump, no migration): `alliance.pendingRequests[]` `{ playerId, requestedAt }` capped at 20, and `player.pendingAllianceId` (one outstanding request). Older saves omit both and still load.
+
+Optional recruitment fields on the alliance record (no schema bump): `recruitmentBlurb` (max 160), `recruiting`, and `applicationNote` (max 400). Older saves omit them and still load. The Leader edits them on the Alliances page (`POST /api/alliance/set-recruiting`). The public blurb and Recruiting flag render on each directory row and on the alliance summary. The application note is shown when a commander opens a request-mode apply. Those fields are not on `GET /api/state`. The Alliances page loads them from `GET /api/alliance/list`.
 
 | Action | Route | Who |
 | --- | --- | --- |
@@ -16,6 +22,8 @@ Optional save fields (no schema bump, no migration): `alliance.pendingRequests[]
 | Reject | `POST /api/alliance/request/reject` | Leader or Officer |
 | Cancel | `POST /api/alliance/request/cancel` | the requester |
 | Leave / kick / role / join mode / class / disband | existing `/api/alliance/*` routes | unchanged permissions |
+| Set recruiting | `POST /api/alliance/set-recruiting` | Leader only |
+| Page directory | `GET /api/alliance/list` | any player; includes blurb, Recruiting flag, and application note |
 | Chat | `GET /api/alliance/chat?since=<ts>` and `POST /api/alliance/chat` | members, session cookie |
 
 Leader can promote and demote Officers and kick anyone except themselves. Officers can invite, approve or reject requests, and kick Members. Officers cannot change join mode or disband. A Leader who leaves hands the role to the oldest Officer (earliest `joinedAt`, then `playerId`), else the oldest Member, else the alliance disbands.
@@ -26,7 +34,25 @@ The 30s `/api/state` poll sets `X-Starhold-State-Tick` to `skipped` or `advanced
 
 Kick, leave, and disband detach that player's Joint Strike (ACS) fleets: outbound and holding both return home, `acsGroupId` clears, and the group cancels if it drops below `ACS_MIN_FLEETS_TO_RESOLVE`. Combat math is unchanged.
 
+## Alliance diplomacy
+
+The Leader (founder) can offer a non-aggression pact or declare war. Officers and members cannot. Relations are optional `alliance.relations[]` (`allianceId`, `kind` `nap` or `war`, `status` `pending` or `active`, `initiatedBy`, `since`), capped at `ALLIANCE_RELATION_CAP` (20) in `packages/game/src/data/tuning.ts`. Older saves omit the array and still load. One relation per other alliance: cancel it before offering or declaring another. A pact is stored on both alliances as `pending` until the other Leader accepts (`POST /api/alliance/diplomacy/nap`, then `POST /api/alliance/diplomacy/nap/accept`). The offering Leader cannot accept their own pact. War is one-sided and immediate (`POST /api/alliance/diplomacy/war`) and is active on both records. Either Leader can cancel a pact, including a pending offer (`POST /api/alliance/diplomacy/cancel`). Only the Leader of the alliance that declared a war can end it. Kick and an ordinary leave do not change relations. Disband, including the last member leaving, removes that alliance's relations from both records.
+
+The alliance page lists relations (`data-testid="alliance-relations"`). The Leader gets Offer NAP and Declare war (`data-testid="alliance-diplomacy-form"`). A pending pact shows Accept for the other Leader. Galaxy rows and mini planets show a small `NAP` or `WAR` tag (`data-testid="galaxy-diplomacy-<slot>"`) only for an active relation with the viewer's alliance. A pending pact has no tag.
+
+A NAP does not block attacks. On the fleet composer's send step, a raid or occupy against an active NAP partner shows `data-testid="fleet-nap-warning"` and asks the player to confirm. Dismissing the confirm leaves the fleet unsent. Confirming sends it. The server does not reject that attack, and the pact stays in place. Spy, deploy, and the other missions do not warn. War does not warn. This note lives in `docs/FEATURE_MAP.md`.
+
 Tags render as `Name [TAG]` on galaxy rows and `[TAG] Name` on commander highscore rows.
+
+## Player trade market
+
+Commanders post resource-for-resource offers on the Shop Market tab (`shopTab=market`, `data-testid="page-market"`). This is not the Starshard bundle on the Resources tab (`POST /api/shop/trade`, `trade-buy-resources` / `trade-sell-resources`) and it is not the unmerged B7-103 NPC merchant.
+
+An offer escrows the full offered amount from a planet the poster owns. Post, accept, and refund tick that planet to `now` before they read stock or storage, so mine income cannot be checked stale and then clamped away. Accepting pays the requested amount from a planet the buyer names. Each side loses `PLAYER_TRADE_FEE_PERCENT` (10 percent, floored) as a sink: 100k metal for 40k crystal delivers 90k metal and 36k crystal. Cancel, or expiry after 48 hours, returns the escrow. If that planet is gone or cannot hold the stack, the refund goes to the homeworld and `clampToStorage` drops what does not fit. Storage room uses the current time, not the time the offer was posted. When an expiry refund loses resources, the poster gets an event-log row titled Market refund.
+
+Either commander under `NEWBIE_PROTECTION_POINTS` (2500) cannot post or accept. A commander can have 3 open offers. The book holds 100. Accepts are capped per UTC day by metal-equivalent value (3 metal = 2 crystal = 1 deuterium). The book is optional `universe.playerTradeOffers`. The daily counter is optional `player.tradeAcceptDay` / `player.tradeAcceptValue`. Older saves omit both. `ensureUniverseShape` does not invent them.
+
+Routes, all session-owned like the Starshard trade: `GET /api/market/offers`, `POST /api/market/offers`, `POST /api/market/offers/cancel`, `POST /api/market/offers/accept`. The client fetches the book only while the Market tab is open, the same way alliance chat polls only on Alliances. The 30s `/api/state` payload does not include the book. Expiry inside `advanceUniverse` refunds at most `PLAYER_TRADE_EXPIRE_PER_TICK` offers and skips any planet that is not loaded.
 
 ## Highscores
 
@@ -36,7 +62,17 @@ The */30 maintenance cron always fully rebuilds the commander board for every pl
 
 The highscore page has Commanders and Alliances tabs. The Alliances tab shows rank, `[TAG] name`, members, total points, and average points, top 100, sorted by total member points then tag. Each alliance contributes at most `ALLIANCE_MAX_MEMBERS` (16) members to that total.
 
+Each commander row may show a rank sparkline (`data-testid="highscore-sparkline"` in `apps/web/src/ui/render-pages.ts`). The */30 maintenance rebuild appends one UTC day (`YYYY-MM-DD` from `utcHighscoreDay`) onto optional `HighscoreEntry.rankHistory` (`{ day, rank }`, oldest first) inside `buildHighscoreCache`. The same UTC day updates in place. An 8th day drops the oldest. The cap is `HIGHSCORE_RANK_HISTORY_DAYS` (7) in `packages/game/src/data/tuning.ts`. A page load only reads the cached board and does not append a day. A normal save that rewrites a few rows keeps the history it already stored. A board with no `rankHistory`, including the older array-shaped board, still loads, and the sparkline is omitted. `highscoresBoard` in `packages/game/src/world-view.ts` still computes the current rank the same way.
+
+Buildings, Fleet, Research, and Defense are four more cached boards on that page. They are `save_highscores` rows with ids `buildings`, `fleet`, `research`, and `defense`, written only when the */30 maintenance rebuild runs (`maintenance: true`, so `scoresDue` in `saveWorkingSet`). A page load and the 30s `/api/state` poll do not rebuild them and do not carry them. `GET /api/highscores/categories` reads those rows in one query and does not scan players. A missing row is an empty list. The highscore page requests that route when the page is opened, not on each poll. Points reuse the cost/1000 loops: `buildingPoints` (the building loop from `planetPoints`), `shipStockPoints` for docked ships plus in-flight fleets, `researchPoints` once per commander, and `defenseStockPoints` (the defense loop from `planetPoints`). Each board keeps the top 100 commanders. Older caches omit the new ids and still load.
+
 Hall of Fame and Hall of Shame render on that same page (`data-testid="hall-of-fame"` and `data-testid="hall-of-shame"` in `apps/web/src/ui/render-pages.ts`). Fame lists the biggest fights by the value of ships and defenses destroyed (`combatHallOfFame` in `packages/game/src/combat-share.ts`), at most 20, and links the public battle report when the fight has a share code. Shame ranks commanders by lifetime ship value lost (`player.combatStats.lostValue` via `combatHallOfShame`), at most 20. Both lists live on the `save_highscores` id `board` row. The */30 maintenance rebuild in `apps/server/src/row-store.ts` passes `includeCombatLists` and rewrites both lists for every player on the server. A normal or NPC save does not load every report: it keeps other players' fame fights and refreshes shame from every loaded commander, so one write cannot blank the halls. The migration scores stage writes the same lists from the universe already in memory. A view with no cached board (`packages/game/src/world-view.ts`) builds the same two lists from the universe. `scripts/quality-gate-battle-reports.mjs` checks the copied card, the public report page, and both halls.
+
+## Join lobby
+
+Before sign-in, the join screen can show a public teaser (`data-testid="lobby-teaser"` in `apps/web/src/ui/render-chrome-join.ts`). `GET /api/lobby` reads only the cached `save_highscores` id `board` row (`readPublicLobby` in `apps/server/src/row-store.ts`). It does not rescore, load players, read `save_world`, or add fields to the 30s `/api/state` poll. The body is `{ commanders, top }` with at most five `{ rank, name, points }` rows, and a 200 response sets `Cache-Control: public, max-age=60`. Names are escaped in `lobbyTeaserHtml`. A failed response, or a board with no commanders, leaves the join screen as it is today. Local memory mode has no board row and returns that empty teaser. The seasonal mothership is not on that board row. A `save_world` read would parse the world document, so the teaser omits up or down. This entry is in `docs/FEATURE_MAP.md`.
+
+Tapping a commander name on the Commanders tab or a Galaxy row opens a public dossier (`data-testid="commander-dossier"` in `apps/web/src/ui/commander-dossier.ts`). It is built in the client from that `HighscoreEntry`, matched by `playerId`, and from `hallOfFame` already on the view. Fame rows have no player id, so a fight is listed only when this commander's name is the only one on the board and it matches the attacker or defender. A shared name hides fights instead of guessing. The card shows rank, points, level, alliance tag, home coordinates, planet count, and the public battle-report link. Names are escaped. Esc or a tap on the backdrop closes it. It does not read another commander's resources, fleets, or buildings, and it adds nothing to the 30s `/api/state` poll.
 
 ## Events / seasonal boss
 
@@ -60,23 +96,68 @@ A pirate raid on a player planet launches an outbound `FleetMission` instead of 
 
 `PIRATE_STRENGTH_MULT` is `0.5` in `packages/game/src/data/tuning.ts`. `scaleOrdinaryPirateShips` in `packages/game/src/world-pirates.ts` is the one place that applies it, to ordinary hangar templates (`pirateShipsForTier`) and free-spawn ship counts (`pirateFreeSpawnShips`). Raid detachments are taken from that hangar, so they inherit the cut. The seasonal boss hangar, built from the unscaled tier template plus `PIRATE_BOSS_MOTHERSHIPS`, does not use this multiplier. `PIRATE_BOSS_TIERS` payout amounts are unchanged. This note lives in `docs/FEATURE_MAP.md`.
 
+## Galaxy events
+
+A few times a week, exactly one galaxy hosts a 24-hour event. `tickGalaxyEvents` in `packages/game/src/world-galaxy-events.ts` runs from `advanceUniverse`, which the existing `*/30` maintenance cron already calls. There is no new cron. At most one event is active, and the windows do not overlap. Cadence and multipliers live only in `packages/game/src/data/tuning.ts`: `GALAXY_EVENTS_PER_WEEK` (3), `GALAXY_EVENT_DURATION_MS` (24h), `GALAXY_EVENT_METEOR_DEBRIS_MULT` (1.5), and `GALAXY_EVENT_SOLAR_FLARE_SHIELD_MULT` (0.8). The same `universe.seed` (or `universe.id` when seed is missing), week index, and event index always pick the same galaxy (`1..MAP_GALAXIES`) and type via `hashSeed`. Optional `UniverseState.galaxyEvent` stores `{ type, galaxy, startsAt, endsAt }`. Older saves omit it. `ensureUniverseShape` does not invent it. `meteor_shower` multiplies debris from fights in that galaxy through `debrisFromDestroyed`, `debrisFromDestroyedDefenses`, and the round-log debris at the combat boundary, once. `solar_flare` multiplies both sides' existing shield mods by 0.8 in that galaxy only. A fight outside the event galaxy, including a deep-space expedition there, is unchanged. The player view adds a compact `galaxyEvent` (type, galaxy, window, label) and no event history on the 30s poll. On the galaxy page, `data-testid="galaxy-event-banner"` shows the name, the effect, and the time left while you are viewing that galaxy. `data-testid="galaxy-event-elsewhere"` names the event galaxy from any other galaxy. Both stay hidden when no event is active. This is not the seasonal pirate mothership and not the fleet events banner.
+
 ## Open questions
 
 - Join requests do not expire.
+- Diplomacy relations do not expire.
 - Officer cap does not limit who may approve a request. Approval is independent of `ALLIANCE_MAX_OFFICERS`.
 - A pending request is kept when the alliance switches back to open. It is not auto-accepted. Approve still works. Switching to open still clears invites only.
 
 ## Messages
 
-Messages in the inbox display category badges matching their filter bucket (`Combat`, `Spy`, `Alerts`) alongside the specific kind badge (`message-kind`), allowing players to identify message categories at a glance. After combat resolves, each attacker (including a Joint Strike participant) and the defender receive that combat report, and no extra raid alert is written. A saved post-resolution `raidAlert` stays hidden, including from the unread badge, only when its matching combat report is visible. Unrelated alerts and pre-attack hostile-fleet warnings remain. The combat report, in the inbox details and the report subwindow, compares each side's ships before, survivors, and losses from that report's before/after counts, and shows loot and debris as separate figures. Attacker and defender viewpoints, Before/After tables, share links, and inbox filters stay. Copy share (`data-copy-battle-share` in `apps/web/src/ui/render-messages.ts`, handled in `apps/web/src/main-handlers-click.ts`) writes the plaintext card from `formatCombatShareCard` plus the public URL from `battleShareUrl` in `apps/web/src/ui/shared-report.ts`. The card names both sides' ship counts before and after. The public page shows the same before/after ship tables. The paths are `world-arrival-raid.ts` (planet, occupy, and moon fights), `world-pirates.ts` (pirate and alien raids), `world-view.ts` (who receives the report), `render-messages.ts` and `styles.css` (inbox and subwindow), and `render-shell.ts` with `patch-chrome.ts` (unread badge).
+Messages in the inbox display category badges matching their filter bucket (`Combat`, `Spy`, `Alerts`) alongside the specific kind badge (`message-kind`), allowing players to identify message categories at a glance. After combat resolves, each attacker (including a Joint Strike participant) and the defender receive that combat report, and no extra raid alert is written. A saved post-resolution `raidAlert` stays hidden, including from the unread badge, only when its matching combat report is visible. Unrelated alerts and pre-attack hostile-fleet warnings remain. The combat report, in the inbox details and the report subwindow, compares each side's ships before, survivors, and losses from that report's before/after counts, and shows loot and debris as separate figures. Replay rounds stays that details block. When the saved report has a `roundLog`, Play, Pause, and Restart (`data-testid="battle-replay-play"`, `battle-replay-pause`, `battle-replay-restart`) step the visible round about every 800ms. The active round shows ships firing, shield absorption from `shieldsAbsorbed` (a missing field counts as zero), and that round's losses. A round tab still selects a round and pauses playback. `prefers-reduced-motion: reduce` does not autoplay and does not animate; the tabs and static panes stay usable. Open or closed, the current round, and play or pause survive a 30s `/api/state` remount and do not jump back to round 1. Reports with no `roundLog` stay on `data-testid="battle-replay-legacy"` ("Summary only — older reports have no round replay."). The public share page renders the same replay when `publicCombatReport` includes `roundLog`. A legacy public link without the log still loads and stays summary-only. No schema bump and no extra fields on the 30s poll. Attacker and defender viewpoints, Before/After tables, share links, and inbox filters stay. An espionage report that has an earlier scan of the same coordinates shows Compare with previous (`data-testid="compare-spy-<id>"` on the inbox row and `data-testid="compare-spy-window-<id>"` in the report subwindow, both `data-compare-spy`, rendered in `apps/web/src/ui/render-messages.ts` and handled in `apps/web/src/main-handlers-click.ts`). The panel (`data-testid="spy-compare-<id>"` and `data-testid="spy-compare-window-<id>"`) places that report beside the immediately older scan of the same galaxy, system, and slot. It lists resources, fleet, defense, buildings, and research when that layer is present on either scan, and highlights the change. Scans of other targets are ignored. A target with only one report has no button. Nothing is stored; the pair is chosen from the spy reports already on the view. Copy share (`data-copy-battle-share` via `combatBattleExtrasHtml` in the inbox and report subwindow, handled in `apps/web/src/main-handlers-click.ts`) writes the plaintext card from `formatCombatShareCard` plus the public URL from `battleShareUrl` in `apps/web/src/ui/shared-report.ts`. The card names both sides' ship counts before and after. The public page shows the same before/after ship tables. The paths are `world-arrival-raid.ts` (planet, occupy, and moon fights), `world-pirates.ts` (pirate and alien raids), `world-view.ts` (who receives the report), `render-messages.ts` and `styles.css` (inbox and subwindow), and `render-shell.ts` with `patch-chrome.ts` (unread badge).
+
+## While you were away
+
+Overview shows `data-testid="away-recap"` when the signed-in commander has `fleetReturn`, `raidAlert`, or `miniNearby` rows in `eventLog` with `createdAt` after the device's last visit, or combat, spy, or expedition reports with `at` after that visit. The line counts those three kinds and the unread report count (reports have no read flag; newer than the last visit is the unread set). `buildComplete` is left out. Dismiss (`data-testid="away-recap-dismiss"`) removes the card and, together with hiding the page, writes `starhold-last-visit:<playerId>` in `localStorage` (`apps/web/src/away-recap.ts`, the same device storage pattern as `apps/web/src/pwa.ts`). A missing key counts as no prior visit, so existing rows show until dismiss or hide. Nothing is written to the save, the tick, or the 30s `/api/state` poll. An empty recap is omitted. This entry is in `docs/FEATURE_MAP.md`.
+
+The combat debris section (`combat-debris` from `combatReadoutHtml`), the inbox combat-mail debris line, the public report page, and the plaintext share card (`formatCombatShareCard`) show the moon-formation chance beside the debris already on that report. The chance is `moonChanceLabel`, which calls `moonChancePercent` in `packages/game/src/world-moons.ts`: 1% per 250,000 metal+crystal (`MOON_DEBRIS_PER_PERCENT`), capped at 20% (`MOON_CHANCE_CAP`). Deuterium does not count. The client computes it from `debrisCreated`. `tryFormMoon` still decides whether a moon forms.
+
+## Galaxy
+
+A galaxy slot that already has metal or crystal debris keeps the `galaxy-debris-<slot>` badge and adds the same moon-formation chance (`moonChancePercent` on that slot's debris). Empty slots stay unlabeled. Nothing is added to the 30s `/api/state` payload.
+
+Private commander mail is a Mail tab on that page (`data-testid="messages-tab-mail"`). It is not part of the universe document and not part of the 30s `/api/state` poll. `GET /api/mail?since=` and `POST /api/mail` `{ to, body }` use the session cookie, same as alliance chat. `DELETE /api/mail/:id` removes one message for its recipient. Bodies are at most 500 characters. Each recipient keeps at most 100, and the oldest is dropped. A sender is limited to 20 messages a minute. The client fetches mail only while Messages is open. Compose addresses a commander name. Reply fills that name. Delete removes the row. Names and bodies are escaped. Rows live in `save_commander_mail` (`CREATE TABLE IF NOT EXISTS` in `apps/server/src/row-store.ts` and `migrations/0003_commander_mail.sql`). With no D1 binding, the same routes use an in-memory table so local play still works. Older universes have no mail field and still load.
 
 ## Fleet tab
 
 The Fleet tab shows the composer, hostile inbound fleets, sensor contacts, and a link to Messages. In-flight fleets are in the top fleet events banner; combat, spy, and expedition reports are in Messages.
 
+An outbound fleet you own can be recalled from that banner (`data-testid="recall-fleet"`). `POST /api/fleet/recall` `{ playerId, fleetId }` uses the session ownership check (401 without a cookie, 403 for another commander). `recallFleet` in `packages/game/src/world-recall.ts` switches the fleet to `returning`. It arrives home after the time it had already flown. Fuel is not refunded. Fleets that are not the caller's, not outbound, NPC or pirate, or already resolved are rejected. A Joint Strike fleet leaves through `leaveAcsFleet`, so the group cancels if it drops below `ACS_MIN_FLEETS_TO_RESOLVE`. There is no vacation mode. The route is not part of the 30s `/api/state` poll.
+
 A blocked build or fleet send shows the existing rejection next to that button (`blocked-reason` in `render-chrome-rows.ts`, `render-chrome-join.ts`, and `render-fleets-composer.ts`). Ship and defense counts update the resource reason as the number changes, and the note is removed when the action is allowed again. Server checks stay in place. This entry is in `FEATURE_MAP.md`.
 
-Step 2 of the fleet composer ends with one review (`data-testid="fleet-send-review"`) before Send. It restates the mission, destination coordinates, target type, and target name, then separates flight duration from a clock time labeled with the timezone. Launch fuel is the full-cruise one-way cost. The speed control stays a preview and is not sent. Returning harvest, deploy-to-foreign, and spy missions show an estimated return. Station, transport, Moon Bridge, colonize, expedition, occupy, and combat missions do not promise a guaranteed return. Expedition has no separate hold; Joint Strike explains the 15-minute join window and 30-minute hold cap; occupation explains the two-day cap. Officers, class, and route bonuses are named as missing from the estimate. Changing ships, target, mission, speed, or the Joint Strike controls repaints the review. Ship counts, presets, and send-max are unchanged.
+A galaxy slot with metal or crystal debris shows a harvest button (`data-testid="galaxy-debris-<slot>"`, `data-galaxy-harvest` in `apps/web/src/ui/render-fleets-panels.ts`, styled in `apps/web/src/ui/styles-panels.css`). One tap runs `doGalaxyHarvest` (`apps/web/src/main-actions-fleet.ts`, exported from `apps/web/src/main-actions.ts`, clicked from `apps/web/src/main-handlers-click.ts`). It prefills the existing `harvest` mission with every Recovery Vessel (`recycler`) on the home planet, or every Mothership when that is the only hull `canCollectDebris` accepts. The fleet page opens on the existing review (`data-testid="fleet-send-review"`). Send still posts that harvest mission through `doLaunchFleet`. Empty debris slots have no harvest control. No Recovery Vessel or Mothership on the home planet flashes "Harvest requires a Recovery Vessel or Mothership on the home planet." and does not launch. A selected colony that is not the home planet flashes "Harvest sends from the home planet. Switch to it first." and does not launch. Mini-planet debris stays a label.
+
+## Galaxy inactivity
+
+Galaxy rows mark a commander by the last time they loaded the game. Optional `player.lastActiveAt` is that time, in milliseconds. Older saves omit it and still load. A missing or invalid value is not treated as inactive. Account `lastLoginAt` is not used: a session can stay signed in for days without a new login, and reading other accounts on a galaxy view would add queries. The field is written only on `GET /api/state` when the session cookie belongs to that commander, and only when the stored time is absent or at least `PLAYER_ACTIVITY_STAMP_MS` (one hour) old. A poll inside that hour does not write. `galaxyViewFor` copies the mark onto the existing galaxy payload (`GalaxySlot.inactivity` and `GalaxyMiniBody.inactivity`) with no extra per-system query: `i` at `PLAYER_INACTIVE_MS` (7 days), `I` at `PLAYER_LONG_INACTIVE_MS` (28 days). The galaxy page shows the letter beside the name (`data-testid="galaxy-inactive-<slot>"`, and `galaxy-mini-inactive-<planetId>` on minis) with a title tooltip, plus a legend (`data-testid="galaxy-inactive-legend"`). Vacation mode (`player.vacationMode`) does not add a `v` mark to galaxy rows. Tuning lives in `packages/game/src/data/tuning.ts`. Rules are `packages/game/src/player-activity.ts` and `packages/game/src/world-view.ts`. The stamp is `stampAuthenticatedActivity` in `apps/server/src/app.ts`. The letters render in `apps/web/src/ui/render-fleets-panels.ts`. Tests are `packages/game/src/player-activity.test.ts`, `apps/server/src/player-activity-routes.test.ts`, and `apps/web/src/ui/render-galaxy-page.test.ts`. This note lives in `docs/FEATURE_MAP.md`.
+
+Step 2 of the fleet composer ends with one review (`data-testid="fleet-send-review"`) before Send. It restates the mission, destination coordinates, target type, and target name, then separates flight duration from a clock time labeled with the timezone. Launch fuel is the full-cruise one-way cost. The speed control stays a preview and is not sent. Returning harvest, deploy-to-foreign, and spy missions show an estimated return. Station, transport, Moon Bridge, colonize, expedition, occupy, and combat missions do not promise a guaranteed return. Expedition has no separate hold; Joint Strike explains the 15-minute join window and 30-minute hold cap; occupation explains the two-day cap. Officers, class, and route bonuses are named as missing from the estimate. Changing ships, target, mission, speed, cargo, or the Joint Strike controls repaints the review. Ship counts, presets, and send-max are unchanged.
+
+Transport, the transfer mission, shows cargo used versus capacity on that review before Send (`data-testid="fleet-transfer-cargo"` in `apps/web/src/ui/fleet-send-review.ts`). `apps/web/src/ui/render-fleets-composer.ts` passes the floored metal, crystal, and deuterium on the draft, and the capacity from `fleetCargoCapacity` in `packages/game/src/formulas-travel.ts` (cargo-hold research included). Arrival (`data-testid="fleet-transfer-eta"`) is the full-cruise one-way time from `flightSecondsOneWay`, as a clock in the player timezone. Return time (`data-testid="fleet-transfer-return"`) stays "No return flight": ships and cargo dock, and no return clock is shown. Deuterium (`data-testid="fleet-transfer-fuel"`) is the full-cruise one-way cost from `fuelCostOneWay`. The speed control remains a preview and is not sent. Cargo over that capacity shows `data-testid="fleet-cargo-over-capacity"`. The send request is unchanged. Typing cargo repaints the review from `apps/web/src/main-handlers-click.ts`, the same way ship counts do. Cargo fields in `apps/web/src/ui/styles-panels.css` shrink and stack at phone width. The cargo line sits under the review list in `apps/web/src/ui/styles-base.css`. The Fleet tab still does not list in-flight fleets or combat reports.
+
+## Buildings / energy preview
+
+On building upgrade rows, buildings that declare `energyUsePerLevel` (Ore Mine `metalMine`, Crystalizer `crystalMine`, Deuterium Extractor `deutSynth`, Land Reclamation `mantleLoom`, Manufacture Line `rigFoundry`, Rift Siphon `riftSiphon`, and Anomaly Lab `anomalyForge`) display the next-level energy use and whether the upgrade will put the active planet into energy deficit. The values are computed client-side using `view.economy.energy.used`, `view.economy.energy.produced`, and `BUILDINGS[id].energyUsePerLevel`. Next energy used is current used plus `energyUsePerLevel`. If next used exceeds produced, the row marks a deficit (for example `Energy 152 → 172 / 160, deficit`). If energy stays in surplus, the next-use preview still appears (for example `Energy 40 → 60 / 100`). Buildings without `energyUsePerLevel` omit the energy preview. No server changes, extra `/api/state` poll payloads, or save fields are added.
+
+A hostile raid from another commander or a pirate base shows **Send fleet away** on that row of the fleet-events strip (`data-testid="fleet-save-<fleetId>"` in `apps/web/src/ui/render-events.ts`) when the targeted world has a mobile ship docked and arrival is more than `FLEET_SAVE_MIN_LEAD_MS` (one minute) away. Spy flights do not. Dismiss hides that one attack in the browser (`starhold-fleet-save-dismissed`). The button opens the fleet page with every docked non-stationary ship filled in and the review step showing. The mission is deploy to the nearest other planet or moon (`coordDistance`, then planet id). A mini planet is not a haven. With no other planet or moon, the mission is an expedition to that world's deep-space slot, and the row says expeditions can meet ambushes. The button is hidden when that expedition would be rejected, including when the expedition slot is already full and Stellar Cartography has not opened another. Nothing launches until Send. `fleetSaveSuggestions` in `packages/game/src/fleet-save.ts` fills optional `fleetSave` on the player view. It is not stored on the save. Stationary hulls stay behind. This entry is in `docs/FEATURE_MAP.md`.
+
+## Resource merchant
+
+Players swap metal, crystal, and deuterium on the planet they have open. The Shop resources tab shows the merchant (`data-testid="resource-merchant"`) beside the Starshard bundle trade. The rate is `RESOURCE_MERCHANT_VALUE` in `packages/game/src/data/tuning.ts`: 3 metal = 2 crystal = 1 deuterium. `RESOURCE_MERCHANT_FEE_PERCENT` is 10. The fee is that percent of the converted output, floored, and the player receives the rest. There is no Starshard cost. No save fields were added.
+
+The player picks the resource to give, the resource to receive, and a whole amount. `data-testid="resource-merchant-preview"` shows the exact amount they will receive before Trade. A short stockpile (`Not enough metal.`) or a full vault (`deuterium storage is too full for this trade.`) is a `blocked-reason` in `data-testid="resource-merchant-error"`, next to the Trade button. The same checks run again on the server.
+
+| Action | Route | Who |
+| --- | --- | --- |
+| Trade | `POST /api/shop/merchant` `{ playerId, planetId, give, get, amount }` | owning session (401 without a cookie, 403 for another commander) |
+
+`planetId` is required. The trade changes that planet only and does not fall back to the home planet. Quotes live in `quoteResourceMerchant` and `assessResourceMerchant` (`packages/game/src/world-merchant.ts`). `tradeWithResourceMerchant` applies the swap. The page is `apps/web/src/ui/render-shop.ts`. Tests: `packages/game/src/merchant.test.ts`, `apps/server/src/merchant-route.test.ts`, and `apps/web/src/ui/render-shop.test.ts`.
 
 ## Onboarding & Fleet Presets
 
@@ -114,9 +195,61 @@ The same surfaces show one optional next step (`data-testid="next-goal"`) when a
 
 Distance is the smallest unmet level on a gate. A gate the commander can start now (distance 0) wins. Ties break by the total missing levels, then research in `RESEARCH_ORDER`, then gated buildings (System Scanner, Moon Bridge, Manufacture Line, Land Reclamation, Nano Production), then hulls in `SHIP_ORDER` that declare `researchReq`. The line names the catalog step and why, and links to Buildings or Research. Moon-only gates are omitted when the commander has no moon. When nothing is gated, the element is omitted.
 
-Dismissing the briefing hides the suggestion. Restore shows it again. When every tutorial step is claimed, Overview stays clear and the Goals page keeps the suggestion until Hide suggestion, which uses the same dismiss flag. Restore then reads Show next step.
+Dismissing the briefing hides the suggestion. Restore shows it again. When every tutorial step is claimed, the commander briefing leaves Overview. The Goals page keeps the suggestion until Hide suggestion, which uses the same dismiss flag. Restore then reads Show next step.
+
+Once every `ONBOARDING_STEPS` step is claimed, or the commander briefing is dismissed, Overview shows `data-testid="midgame-briefing"` until `player.midgameBriefingDismissed` is set. The field is optional. Older saves omit it and still load. Reading a view does not create it. There is no reward. Dismiss is `POST /api/midgame/dismiss` `{ playerId, dismissed }` with the same session ownership check as onboarding dismiss, and it is not called on a page load. Card copy lives in `MIDGAME_BRIEFING_CARDS` and is not added to the `/api/state` poll. Completion is computed on read from planet count (worlds that are not moons), moon ownership, and building levels.
+
+| Id | Done when | Page |
+| --- | --- | --- |
+| `extraColony` | At least two owned worlds that are not moons | Galaxy |
+| `firstMoon` | Any owned moon | Fleet |
+| `systemScanner` | System Scanner ≥ 1 on any owned world | Buildings |
+| `moonBridge` | Moon Bridge ≥ 1 on any owned world | Buildings |
+| `jointStrike` | Info only. No completion | Fleet |
+
+`ownedPlanets` already carries Moon Bridge level (`jumpGateLevel`). System Scanner level is `sensorArrayLevel` on that same list, and only when the level is at least 1, so a scanner on a moon you are not viewing still counts and a quiet poll stays the same size.
 
 Fleet composer hides built-in `moonDestruction` and `miniPlanetDestruction` until the player owns that hull or meets its research and shipyard level. `expedition`, `raid`, `miniPlanetCapture`, and custom presets stay visible. The presets remain on the save, and the galaxy preset buttons are unchanged.
+
+## Newbie protection
+
+`NEWBIE_PROTECTION_POINTS` in `packages/game/src/data/tuning.ts` is 2,500 empire points. `isNewbieProtected` blocks player raid and occupation launches against a protected player's planet or mini planet; this also applies to an occupation target owned by a player. A successful raid or occupation launch against a real player permanently sets optional `player.newbieForfeitedAt`, including ACS raids. Spying and pirate/alien attacks do not forfeit protection. Pirate raid target weights are zero below 2,500 points via `pirateRaidPickWeight`; the separate 48-hour newcomer rule and pirate fairness weighting remain. Saves without `newbieForfeitedAt` still load without reset. Regression coverage is in `packages/game/src/protection.test.ts`.
+
+## Weekly goals
+
+Daily and weekly goals share `player.goals` on the universe document (`dailyKey`, optional `weeklyKey`, `progress`, `claimed`). No new table and no extra query on a page load. Older saves omit `weeklyKey` and any weekly progress keys. `migrateOrResetUniverse` leaves them in place (`didReset` stays false, in-flight fleets stay). The next read in `ensureGoalBoard` (`packages/game/src/world-goals.ts`) stamps the open ISO week (`YYYY-Www`, Monday 00:00 UTC) and starts weekly progress at zero. A matching `dailyKey` keeps that day's progress and claims.
+
+The same `noteGoalMetric` calls that advance daily missions also advance the weekly row for that metric. A claim pays once per id per open period. Rolling the day clears only daily ids. Rolling the week clears only weekly ids. Unclaimed rewards from a closed period are dropped. Resource rewards still have to fit in storage on the active world.
+
+Tuning lives in `packages/game/src/data/tuning.ts` (`GOALS`).
+
+| Id | Counts | Target | Reward |
+| --- | --- | --- | --- |
+| `weeklyPirateWins` | pirate wins | 12 | 100 Starshards |
+| `weeklyExpeditions` | expedition arrivals | 20 | 12,000 metal, 6,000 crystal, 3,000 deuterium |
+| `weeklyBuildingUpgrades` | finished building upgrades | 12 | 9,000 metal, 4,500 crystal, 1,500 deuterium |
+| `weeklyResearch` | finished research | 4 | 60 Starshards |
+| `weeklyShips` | ships built | 40 | 15,000 metal, 7,500 crystal, 3,000 deuterium |
+
+| Surface | Selector | Route |
+| --- | --- | --- |
+| Overview daily ready count | `data-testid="overview-daily-missions-ready"` | link to the Goals page |
+| Overview weekly ready count | `data-testid="overview-weekly-missions-ready"` | same Goals link (`overview-weekly-goals-link`) |
+| Week board | `data-testid="goals-weekly"` | rendered by `render-goals.ts` from `render-pages.ts` |
+| One row | `data-testid="goal-<id>"` | progress `goal-progress-<id>`, claim `claim-goal-<id>` |
+| Claim | button `data-claim-goal` | `POST /api/claim-goal` `{ playerId, goalId }` |
+
+`POST /api/claim-goal` is the existing goal claim. It is not called on a normal page load.
+
+## Achievements
+
+One-time achievements pay a small Starshard reward once each. Definitions and amounts live in `ACHIEVEMENTS` in `packages/game/src/data/tuning.ts` (12 rows). Optional `player.achievements` stores `{ unlocked: [{ id, at }], shipsDestroyed?, expeditions?, pirateBasesDestroyed? }`. Older saves omit it and still load. There is no claim route and no new query on a page load.
+
+`evaluatePlayerAchievements` in `packages/game/src/world-achievements.ts` runs from `playerView` after the tick, using the commander board that view already loaded. A met row is appended to `unlocked` and `grantStarshards` runs once. A later view does not pay it again.
+
+Counts that the save did not already keep are added only at the event: enemy hulls in `recordCombatReport` (ships, split across a Joint Strike, defenses ignored), finished expeditions beside the expedition goal credit, and a pirate base the player destroys in `resolveNpcRaidArrival`. Those counters are not rebuilt from old reports. Moons, colonies (a non-home planet that is not a moon), combat wins, research levels, `allianceId`, officer hire or renewal, commander level, and board rank are read from the player's own loaded record on that view. Rank uses the board already in hand and needs at least one other commander, so a solo rank of 1 does not pay Top 10. The existing top-3 Starshard grant is unchanged.
+
+The Goals page links to the board (`data-testid="goals-achievements-link"`, `data-testid="achievements-board"` in `apps/web/src/ui/render-goals.ts`). Locked rows use `achievement-locked`. Progress is shown where the count is cheap. Rank shows the current place and no meter. This entry is in `docs/FEATURE_MAP.md`.
 
 ## OAuth sign-in
 
@@ -162,9 +295,37 @@ Optional save fields (older rows omit them and still load): `account.sessionEpoc
 
 Password change and recover are rate-limited. The join screen's Forgot password? link opens the recover form. It does not replace email + password signup or login.
 
+## Vacation mode
+
+A signed-in commander turns vacation mode on or off from Security (`/security`), `data-testid="vacation-mode-toggle"`. While it is on, the shell shows `data-testid="vacation-banner"`. The fleet composer disables Next and Send and shows the same rejection beside the button.
+
+Optional save field `player.vacationMode` `{ startedAt }`. Missing means off. Turning it on records `startedAt` and does not care whether hostile fleets are already inbound. Turning it off deletes the field. A second turn-on keeps the original `startedAt`. `ensureUniverseShape` does not write it, so older saves stay absent. That commander's fleets already in flight finish and return home. New launches from that commander are rejected. Pirate target selection in `pickRaidTarget` (`packages/game/src/world-pirates.ts`) skips that commander's planets. Alien selection is unchanged. A raid, espionage, or occupy that was launched before `startedAt` still arrives and fights. A Joint Strike (`acsGroups[].createdAt`) opened before `startedAt` can still take joining fleets through `acsGroupId` on `POST /api/launch-fleet`, up to `ACS_MAX_FLEETS`. A new attack, including a new Joint Strike, is rejected. `packages/game/src/fixtures/in-flight-fleet-save.json` is a main-branch universe with one deploy still in flight and no vacation field; `migrateOrResetUniverse` keeps that fleet and leaves the field unset.
+
+| Action | Route | Who |
+| --- | --- | --- |
+| Turn on or off | `POST /api/vacation` `{ playerId, enabled }` | owning session (401 without a cookie, 403 for another commander) |
+
+The route is not called on a normal page load. The field lives on `PlayerState` in `packages/game/src/types-view.ts`. `setVacationMode`, `isVacationMode`, and `fleetPredatesVacation` are in `packages/game/src/world-accounts.ts`. The sender's own launch block is in `packages/game/src/world-launch.ts`. A new hostile launch is rejected in `packages/game/src/world-launch-target.ts`, which still allows a join to a Joint Strike opened before `startedAt`. A hostile fleet launched after `startedAt` that is not in such a group returns without combat from `packages/game/src/world-arrival-raid.ts` and `packages/game/src/world-espionage.ts`. The toggle is `apps/web/src/ui/render-security.ts`. The banner is `apps/web/src/ui/render-shell.ts`. The route is `apps/server/src/app.ts`. The send route already forwards `acsGroupId`. Tests: `packages/game/src/vacation-mode.test.ts`.
+
 ## Mini-planet occupation
 
 An occupy win on a mini planet already captures it: `ownerPlayerId` and `planetIds` move to the occupier. While that occupation is active, occupied means owned. The occupier can queue buildings, ships, and defenses there (field caps and mini-kind limits still apply), and mine income stays on the mini instead of the 30/70 split. A non-mini occupation is unchanged, including the yard blocks and the split. When the occupation ends, the capturer keeps the mini until a later capture or vacate. No new save fields.
+
+## Queue reorder
+
+Pending build, ship, defense, and research items can move up or down. The running front item stays first. This uses the existing `reorderQueue` helper and `POST /api/queue/reorder`. The route checks that the session owns `playerId`. A queue of one or two items has no move buttons. On a longer queue, Up and Down appear only on the pending tail. Up is omitted on the first pending item, and Down is omitted on the last. The client sends the full id list with the front id still first.
+
+## Abandon colony
+
+A commander can abandon an owned colony that is not the homeworld. `abandonColony` in `packages/game/src/world-abandon-colony.ts` removes that planet and its moon from `universe.planets` and from `player.planetIds`. Buildings, docked ships, defenses, and resources on both bodies are lost. Debris at those coordinates stays. If `activePlanetId` was the colony or its moon, it switches to `homePlanetId`. `ownedPlanetCount` drops by one, so `empireColonyCap` has a free slot and those coordinates can be colonized again.
+
+The homeworld cannot be abandoned. A moon cannot be abandoned by itself. If the commander has any fleet in flight whose origin or target is that planet or its moon, abandon is rejected and they are told to wait for the fleet to return. Other players' fleets already flying at the colony stay in `fleets`. Arrival still follows `packages/game/src/world-arrival.ts` when the target is missing. This is not occupation and does not call `abandonOccupation`.
+
+| Action | Route | Who |
+| --- | --- | --- |
+| Abandon colony | `POST /api/abandon-colony` `{ playerId, planetId }` | owning session (401 without a cookie, 403 for another commander) |
+
+Overview shows Abandon colony only on a non-home owned planet, next to Rename colony. The confirm dialog names the colony and warns that buildings, docked ships, defenses, resources, and any moon are lost. The route is not called on a normal page load and adds nothing to the 30s `/api/state` poll. No new save fields. This entry is in `docs/FEATURE_MAP.md`.
 
 ## Test safety nets
 
@@ -226,6 +387,12 @@ Playwright e2e, smoke, and quality-gate scripts dismiss that dialog before they 
 
 The route is not called on a normal page load. `playerView` fills optional `whatsNew` (`releaseId`, `title`, `items`) or `null`. `apps/web/src/ui/render-shell.ts` paints the dialog inside `shellHtml` and `syncWhatsNewPopup` removes it when a patched shell's view is already dismissed. `apps/web/src/ui/render-app.ts` calls that sync on the patch path. The Got it button is handled in `apps/web/src/main-handlers-click.ts` via `apps/web/src/main-actions.ts` and `apps/web/src/main-actions-starshards.ts`, which post through `apps/web/src/api.ts`. The server route is in `apps/server/src/app.ts`. The player field lives on `packages/game/src/types-view.ts` and is copied through `packages/game/src/world-view.ts` and `packages/game/src/world.ts`. Dialog layout is in `apps/web/src/ui/styles-shell.css`. Test file lists that include the new suites are `packages/game/package.json` and `apps/server/package.json`. This entry is in `docs/FEATURE_MAP.md`.
 
+## Galaxy / System Scanner overlay
+
+A moon with a System Scanner (`BUILDINGS.sensorArray`) highlights systems on the Galaxy page. Range is `sensorPhalanxRange(level)`: level N covers ±N systems in that moon's galaxy, including the moon's own system. Level 0 draws nothing. `inSensorPhalanxRange` is the same-galaxy and |Δsystem| check. Several scanner moons union. The system bar shows `Scanner: systems A–B` (`data-testid="galaxy-scanner-range"`) for the galaxy on screen, and a mark (`data-testid="galaxy-scanner-mark"`, class `is-scanner-range`) when that system is inside the union.
+
+Optional `PlayerView.scannerMoons` (`planetId`, `coords`, `sensorArray`, `range`) is added only when `GET /api/state` is called with `scanners=1`. Local Playwright (`STARHOLD_E2E=1`) can seed that moon with `POST /api/e2e/grant` `{ scannerMoonLevel }`. `scripts/scanner-overlay-e2e.mjs` checks the hint and the in-range mark at 1280px and 390px, one system outside, and again after the scanner upgrades from 2 to 3. The 30s poll does not send that flag and does not carry the list. Opening Galaxy, moving between systems, and a queue completion while Galaxy is open use that page's state read. The list is built from the commander's own moons already loaded for the view. It does not read other commanders or other systems. `ownedPlanets` still has no `sensorArray`. The overlay uses the current building level, including the active moon's `planet.buildings.sensorArray` already present on every state body, so a finished upgrade is not stuck at the level from when the scanner was first built. No new save field. This entry is in `docs/FEATURE_MAP.md`.
+
 ## Credits and art pass
 
 The Credits page is an account route, `/credits`, linked from the side nav (`data-testid="nav-credits"`) and from the join screen (`data-testid="join-credits"`). It is not a game-nav page. Guests can open it. Security stays signed-in only.
@@ -233,5 +400,44 @@ The Credits page is an account route, `/credits`, linked from the side nav (`dat
 Plates are mapped in `apps/web/src/ui/assets.ts` (`BUILDING_ART`, `SHIP_ART`, `DEFENSE_ART`, `RESOURCE_ART`, `PLANET_ART`, `planetArtFor`, `UI_ART`, `RESEARCH_ART`, `BACKGROUND_ART`). Research rows use `RESEARCH_ART`. Ship, defense, building, and hangar thumbs use the existing img slots. The galaxy page uses the Kenney sky file as a full-bleed backdrop. The join screen uses the NASA photograph as a full-bleed backdrop. Galaxy slot discs stay on `/planet-art/`.
 
 Every referenced file is listed in `docs/ART_CREDITS.md`. game-icons.net lines on the Credits page use the required CC BY 3.0 credit. Capital hulls, shield-style defenses, Jump Gate, Chrono Lathe, Mantle Loom, the deuterium chip, and officer portraits stay on the original plates. No save fields were added.
+
+## Research tree map
+
+The Research tab includes a visual prerequisite tree map (`data-testid="research-tree-map"`) rendered directly above the research project rows via `researchTreeMapHtml` in `apps/web/src/ui/render-research-tree.ts`. The tree maps all 17 technologies in `RESEARCH_ORDER` across progression tiers, displaying current research levels, research art thumbs, lab level requirements, and prerequisite status pills (met vs unmet).
+
+Each node is interactive and wired to the client's research action handlers via `data-research` and `data-locked`. Clicking or tapping an available node triggers the existing research action (`doResearch`), while clicking a locked node provides user feedback indicating missing prerequisites and lab level requirements. The layout fits the dark UI styling in `apps/web/src/ui/styles-panels.css` across mobile (390px) and desktop (1280px) viewports without horizontal overflow. All existing research rows remain intact. No new techs, balance changes, save fields, or server routes are added.
+## Sound
+
+A fleet arriving home and a new combat report can each play one short tone. Sound is off until the commander turns it on. The switch sits in the side nav under Settings (`data-testid="sound-settings"`, button `data-testid="sound-toggle"`). It is stored in localStorage under `starhold-sound` (`1` on, any other value or a missing key off). It is not a save field. Older saves are unchanged. No route and no table were added.
+
+`apps/web/src/settings.ts` compares the last signed-in view with the next one. A fleet return is an own fleet that was `returning` and is now gone. A combat report is a report id that was not in the previous view. The first view after sign-in only records that baseline. Nothing plays before a click or key press, and the tone player is not called while the switch is off. The tones are WebAudio oscillators. There is no audio file and no new dependency.
+
+`apps/web/src/ui/sound-settings.ts` paints the switch. `apps/web/src/ui/render-shell.ts` places it in the side nav. `apps/web/src/ui/styles-shell.css` gives the on state the accent color and puts the row on its own line on a narrow screen. `apps/web/src/ui/render-app.ts` runs the comparison on each signed-in paint and clears the baseline on the join screen. `apps/web/src/main-handlers-click.ts` toggles the switch. `apps/web/src/main.ts` arms playback on a later click or key once the switch is on. `apps/web/package.json` runs `apps/web/src/settings.test.ts`. This entry is in `docs/FEATURE_MAP.md`.
+
+## Combat simulator
+
+The Simulator page is a game-nav route, `/simulator` (`data-testid="nav-simulator"`, `data-testid="page-simulator"`, panel `data-testid="combat-sim"`). It is rendered by `combatSimHtml` in `apps/web/src/ui/render-combat-sim.ts` and switched from `pageHtml` in `apps/web/src/ui/render-pages.ts`.
+
+Attacker counts start from the open colony (`data-testid="combat-sim-attacker-<shipId>"`). Defender ships (`combat-sim-defender-<shipId>`) and defenses (`combat-sim-defense-<defenseId>`) are editable. A spy report chosen in `data-testid="combat-sim-spy"` fills the defender from that report's ships, defenses, and research. Pasting spy-report lines into `data-testid="combat-sim-paste"` and pressing `data-testid="combat-sim-apply-paste"` does the same. `Use orbit counts` is `data-testid="combat-sim-reset-orbit"`. The seed field is `data-testid="combat-sim-seed"` (default `starhold-sim`). `data-testid="combat-sim-run"` calls `runCombatSandbox` in `packages/game/src/combat-sim.ts`, which calls `resolveCombat` with the attacker's level research and class attack. The readout reuses the combat report tables (`data-testid="combat-sim-result"`).
+
+There is no API route, no save field, and no D1 table. The run reads the open view and writes nothing back: fleets stay in flight, resources stay put, and the planet stock stays put. Pirate and planet fights keep the same combat engine; this page does not launch either one.
+
+## Catalog tooltips
+
+Buildings, Research, Shipyard, and Defense rows each carry one `costTooltip` (`data-testid="cost-tip"`) from `apps/web/src/ui/render-chrome-join.ts` and `apps/web/src/ui/render-chrome-rows.ts`. The bubble names the catalog effect (`description`), the next cost, the build or research time, and the requirements: current level, energy use, building gates (Lunar Habitat, Shipyard, Solar Array, Research Lab, Manufacture Line), shipyard level, class, and research levels with the commander's current level. Hover, keyboard focus, and a tap (`aria-expanded` through `toggleTip` in `apps/web/src/main-handlers-pointer.ts`) open and close it. The ? control sits outside the Upgrade, Build, and Research button, and a pointer down on it does not arm that action. Resource, fleet, officer, and hangar tips are unchanged. No save fields were added.
+
+## Invite a friend nearby
+
+A signed-in commander copies an invite link from the side nav (`data-testid="copy-invite"`). The link is `/?invite=<code>`. The code is 8 characters from an unambiguous alphabet. It is not a player id and not an email. If the clipboard fails, the same URL sits in a text box under the button.
+
+`POST /api/invite` requires a session and a commander. A live code is reused, so copying again does not mint another one. A new code is refused with 429 until 60 seconds after the last mint. Codes last 7 days. The map holds at most 64 codes and is pruned only when a code is minted, not on `GET /api/state`.
+
+`POST /api/join` and `POST /api/auth/join` take an optional `invite` string. A valid code places the new home on the nearest open slot in the inviter's galaxy, within 12 systems, using the usual home-slot order. A full neighborhood, or any invalid or expired code, uses `nextCoords` and still joins. An account that already has a commander is not moved. The join screen shows a short hint when `?invite=` is present. It does not warn that a code is bad.
+
+Optional save field `universe.invites` stores `{ code, playerId, createdAt, expiresAt }`. Older saves omit it. The field is not part of the 30s player view. No rewards.
+
+## Galaxy
+
+Expansionist commanders (`playerClass.classId` `"expansionist"`, the colonizing class in `PLAYER_CLASS_BONUSES`) see a colony preview on each empty galaxy slot (no planet). The line is `data-testid="galaxy-slot-climate-<slot>"` inside the slot label in `apps/web/src/ui/render-fleets-panels.ts`. It shows temperature from `temperatureKForSlot(slot)`, production multipliers from `productionMultForSlot(slot)` (metal, crystal, deuterium, energy), and the typical field band `FIELD_CENTER_BY_SLOT[slot] ± FIELD_BAND` floored at `FIELD_MIN`. That is the same band `rollPlanetFields` uses. The universe seed is not applied, so the line is the band, not one planet's rolled cap. Miner, Explorer, Fleeter, and a commander with no class see the empty slot unchanged. Occupied slots stay unchanged for every class. The numbers are computed in the client from `GalaxySlot.coords.slot` when the galaxy panel renders. They are not added to the 30s `/api/state` poll, and `galaxyViewFor` is unchanged. No save fields. This entry lives in `docs/FEATURE_MAP.md`.
 
 

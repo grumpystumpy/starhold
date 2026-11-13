@@ -191,11 +191,55 @@
   color: var(--accent);
 }
 
-.side-nav .nav-link.active {
+.side-nav .nav-link.active,
+.side-nav .nav-link[aria-pressed="true"] {
   border-left-color: var(--accent);
   background: color-mix(in srgb, var(--bg2) 90%, transparent);
   color: var(--accent);
   font-weight: 600;
+}
+
+.side-nav button.nav-link {
+  font: inherit;
+  cursor: pointer;
+}
+
+.nav-settings {
+  margin-top: 0.35rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--line);
+}
+
+.nav-settings-kicker {
+  display: block;
+  padding: 0.15rem 0.75rem 0;
+  color: var(--text);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.side-nav button.nav-link {
+  font: inherit;
+  font-weight: 500;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  border-left: 3px solid transparent;
+  border-radius: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.side-nav input.invite-link-fallback {
+  display: block;
+  width: calc(100% - 0.8rem);
+  min-width: 0;
+  max-width: calc(100% - 0.8rem);
+  margin: 0.35rem 0.4rem 0.5rem;
+  box-sizing: border-box;
+  font-size: 16px;
 }
 
 .nav-badge {
@@ -341,6 +385,37 @@
   gap: 0.75rem;
   align-items: center;
   margin-bottom: 0.75rem;
+}
+
+.away-recap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0.75rem 0;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  background: color-mix(in srgb, var(--bg1) 82%, var(--accent));
+}
+
+.away-recap-copy {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.away-recap-title {
+  margin: 0 0 0.2rem;
+  font-weight: 700;
+}
+
+.away-recap-line {
+  margin: 0;
+}
+
+.away-recap button {
+  min-height: 2.75rem;
 }
 
 .overview-name {
@@ -506,9 +581,26 @@
     height: 128px;
   }
 
-  .side-nav .nav-link.active {
+  .side-nav .nav-link.active,
+  .side-nav .nav-link[aria-pressed="true"] {
     border-left-color: transparent;
     border-bottom-color: var(--accent);
+  }
+
+  .nav-settings {
+    flex: 1 0 100%;
+    margin-top: 0.2rem;
+  }
+
+  .nav-settings-kicker {
+    padding: 0.15rem 0.65rem 0;
+  }
+
+  .side-nav button.nav-link {
+    border-left: none;
+    border-bottom: 2px solid transparent;
+    width: auto;
+    min-height: 2.75rem;
   }
 
   .resource-bar {

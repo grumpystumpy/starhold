@@ -3,6 +3,7 @@ import type { Context, Next } from "hono";
 import { compress } from "hono/compress";
 import {
   type BuildingId,
+  type PlayerState,
   type Coordinates,
   type DefenseId,
   type FleetShips,
@@ -15,14 +16,18 @@ import {
   type ResearchId,
   type Resources,
   type ShipId,
+  type UniverseState,
   OFFICER_DURATION_OPTIONS_HOURS,
+  abandonColony,
   abandonOccupation,
   activateOfficer,
   buyShopItem,
   deletePlayerMessages,
   isMessageCategory,
+  activityStampDue,
   advanceUniverse,
   playerStateTickDue,
+  stampPlayerActivity,
   batchScanSystem,
   cancelQueueItem,
   changePlayerClass,
@@ -32,10 +37,15 @@ import {
   claimPlayerGoal,
   classCatalog,
   createAlliance,
+  acceptAllianceNap,
+  cancelAllianceRelation,
+  declareAllianceWar,
+  offerAllianceNap,
   deleteFleetPreset,
   discoverMiniPlanet,
   disbandAlliance,
   empirePoints,
+  emptyCategoryHighscores,
   emptyDefenses,
   emptyFleetShips,
   ensureUniverseShape,
@@ -50,9 +60,11 @@ import {
   rejectJoinRequest,
   cancelJoinRequest,
   joinUniverse,
+  resolveInviteCoords,
   kickFromAlliance,
   launchFleet,
   launchMaxExpeditions,
+  recallFleet,
   leaveAlliance,
   markEventsRead,
   OCCUPATION_DURATION_MS,
@@ -74,16 +86,26 @@ import {
   rollSeasons,
   saveFleetPreset,
   setActivePlanet,
+  tryFormMoon,
+  allianceRecruitingDirectory,
   setAllianceJoinMode,
+  setAllianceRecruiting,
   setAllianceClass,
   setAllianceRole,
   dismissWhatsNew,
+  setVacationMode,
+  setMidgameBriefingDismissed,
   setOnboardingDismissed,
   setSeasonSkin,
   setSeasonTitle,
   startOccupation,
   swarmProduce,
   tradeStarshardsForResources,
+  tradeWithResourceMerchant,
+  acceptPlayerTradeOffer,
+  cancelPlayerTradeOffer,
+  listPlayerTradeOffers,
+  postPlayerTradeOffer,
   unlockSkill,
   type AllianceJoinMode,
   type AllianceRole,
@@ -95,6 +117,7 @@ import {
 } from "./accounts.js";
 import { readSessionId } from "./cookies.js";
 import { mountAllianceIntelRoutes } from "./alliance-intel-routes.js";
+import { mountCommanderMailRoutes } from "./commander-mail-routes.js";
 import { mountAuthRoutes } from "./auth-routes.js";
 import { mountOAuthRoutes } from "./oauth-routes.js";
 import { mountCpuRoutes } from "./cpu-routes.js";
@@ -103,9 +126,45 @@ import { respondWithPlayerView } from "./state-response.js";
 import { staticCacheControl } from "./static-cache.js";
 import { storageMode, isUniverseBusy, withUniverse, withUniverseRead } from "./store.js";
 import {
+  readCategoryHighscores,
   readCombatReportByShareCode,
+  readPublicLobby,
   rollbackRowsToLegacy,
 } from "./row-store.js";
+
+async function requireOwnedPlayer(
+  c: Context,
+  playerId: string | undefined,
+): Promise<{ playerId: string } | Response> {
+  if (!playerId) return c.json({ error: "playerId required." }, 400);
+  const sessionId = readSessionId(c);
+  if (!sessionId) return c.json({ error: "Sign in required." }, 401);
+  const session = await getSession(sessionId);
+  if (!session) return c.json({ error: "Sign in required." }, 401);
+  const account = await getAccountById(session.accountId);
+  if (!account?.playerId) return c.json({ error: "Sign in required." }, 401);
+  if (account.playerId !== playerId) {
+    return c.json({ error: "You do not own this player." }, 403);
+  }
+  return { playerId };
+}
+
+function marketMutation(
+  universe: UniverseState,
+  playerId: string,
+  planetId: string | undefined,
+  note?: string,
+) {
+  const view = playerView(universe, playerId);
+  const market = listPlayerTradeOffers(
+    universe,
+    playerId,
+    Date.now(),
+    planetId || view.planet.id,
+  );
+  if (note) market.note = note;
+  return { ...view, market };
+}
 
 function allowedOrigins(): Set<string> {
   const fromEnv = (process.env.ALLOWED_ORIGINS ?? "")
@@ -155,6 +214,25 @@ async function simpleCors(c: Context, next: Next): Promise<Response | void> {
   }
 }
 
+/**
+ * Records that this commander loaded state. Only their own session counts,
+ * and only when the previous stamp is missing or at least an hour old.
+ */
+async function stampAuthenticatedActivity(
+  c: Context,
+  player: PlayerState,
+  now: number,
+): Promise<void> {
+  if (!activityStampDue(player.lastActiveAt, now)) return;
+  const sessionId = readSessionId(c);
+  if (!sessionId) return;
+  const session = await getSession(sessionId);
+  if (!session) return;
+  const account = await getAccountById(session.accountId);
+  if (account?.playerId !== player.id) return;
+  stampPlayerActivity(player, now);
+}
+
 /** Shared Hono app — used by local Node server and Vercel serverless. */
 export function createApp(): Hono {
   const app = new Hono();
@@ -186,7 +264,14 @@ export function createApp(): Hono {
   app.use("*", async (c, next) => {
     await next();
     if (!c.req.path.startsWith("/api")) return;
-    c.header("Cache-Control", staticCacheControl(c.req.path) ?? "private, no-store");
+    const lobbyCache =
+      c.req.path === "/api/lobby" && c.res.status === 200
+        ? "public, max-age=60"
+        : null;
+    c.header(
+      "Cache-Control",
+      lobbyCache ?? staticCacheControl(c.req.path) ?? "private, no-store",
+    );
     if (
       process.env.STARHOLD_RUNTIME === "workers" ||
       process.env.STARHOLD_CPU_PROFILE === "1"
@@ -230,6 +315,19 @@ export function createApp(): Hono {
         passwordAuth: true,
       },
     });
+  });
+
+  // Public join-page teaser. One cached board row. No rescore, no player scan.
+  app.get("/api/lobby", async (c) => {
+    const db = currentScope()?.db;
+    if (!db) return c.json({ commanders: 0, top: [] });
+    try {
+      return c.json(await readPublicLobby(db));
+    } catch (err) {
+      console.error("[starhold-api]", err);
+      reportServerError(err);
+      return c.json({ error: "unavailable" }, 500);
+    }
   });
 
   app.get("/api/reports/:shareCode", async (c) => {
@@ -301,10 +399,19 @@ export function createApp(): Hono {
   });
 
   app.post("/api/join", async (c) => {
-    const body = (await c.req.json().catch(() => ({}))) as { name?: string };
+    const body = (await c.req.json().catch(() => ({}))) as {
+      name?: string;
+      invite?: string;
+    };
     try {
       return await withUniverse((universe) => {
-        const { player } = joinUniverse(universe, body.name ?? "");
+        const now = Date.now();
+        const coords = resolveInviteCoords(
+          universe,
+          typeof body.invite === "string" ? body.invite : "",
+          now,
+        );
+        const { player } = joinUniverse(universe, body.name ?? "", now, coords);
         return c.json(playerView(universe, player.id));
       }, { catalog: true });
     } catch (err) {
@@ -326,15 +433,19 @@ export function createApp(): Hono {
     try {
       const galaxy = Number(c.req.query("galaxy") || 0) || undefined;
       const system = Number(c.req.query("system") || 0) || undefined;
+      const includeScannerMoons = c.req.query("scanners") === "1";
       return await withUniverseRead(
-        (universe) => {
+        async (universe) => {
           const now = Date.now();
+          const player = universe.players[playerId];
+          if (player) await stampAuthenticatedActivity(c, player, now);
           const tickDue = playerStateTickDue(universe, playerId, now);
           c.header("X-Starhold-State-Tick", tickDue ? "advanced" : "skipped");
           return respondWithPlayerView(
             c,
             playerView(universe, playerId, now, galaxy, system, {
               skipUniverseTick: !tickDue,
+              includeScannerMoons,
             }),
           );
         },
@@ -352,6 +463,13 @@ export function createApp(): Hono {
       reportServerError(err);
       return c.json({ error: message }, 500);
     }
+  });
+
+  // Cached category boards. Not part of the /api/state poll. A missing row is [].
+  app.get("/api/highscores/categories", async (c) => {
+    const db = currentScope()?.db;
+    if (!db || storageMode() !== "d1") return c.json(emptyCategoryHighscores());
+    return c.json(await readCategoryHighscores(db));
   });
 
   app.post("/api/upgrade", async (c) => {
@@ -589,6 +707,15 @@ export function createApp(): Hono {
         400,
       );
     }
+    const sessionId = readSessionId(c);
+    if (!sessionId) return c.json({ error: "Sign in required." }, 401);
+    const session = await getSession(sessionId);
+    if (!session) return c.json({ error: "Sign in required." }, 401);
+    const account = await getAccountById(session.accountId);
+    if (!account?.playerId) return c.json({ error: "Sign in required." }, 401);
+    if (account.playerId !== body.playerId) {
+      return c.json({ error: "You do not own this player." }, 403);
+    }
     return withUniverse((universe) => {
       const result = reorderQueue(universe, body.playerId!, {
         kind: body.kind!,
@@ -685,6 +812,35 @@ export function createApp(): Hono {
       system: body.targetCoords?.system,
       slot: body.targetCoords?.slot,
     });
+  });
+
+  app.post("/api/fleet/recall", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      fleetId?: string;
+    };
+    if (!body.playerId || !body.fleetId) {
+      return c.json({ error: "playerId and fleetId required." }, 400);
+    }
+    const sessionId = readSessionId(c);
+    if (!sessionId) return c.json({ error: "Sign in required." }, 401);
+    const session = await getSession(sessionId);
+    if (!session) return c.json({ error: "Sign in required." }, 401);
+    const account = await getAccountById(session.accountId);
+    if (!account?.playerId) return c.json({ error: "Sign in required." }, 401);
+    if (account.playerId !== body.playerId) {
+      return c.json({ error: "You do not own this player." }, 403);
+    }
+    return withUniverse((universe) => {
+      const result = recallFleet(
+        universe,
+        body.playerId!,
+        body.fleetId!,
+        Date.now(),
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    }, { playerIds: [body.playerId] });
   });
 
   app.post("/api/fleet-preset", async (c) => {
@@ -851,6 +1007,34 @@ export function createApp(): Hono {
     }, { playerIds: [body.playerId] });
   });
 
+  app.post("/api/midgame/dismiss", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      dismissed?: boolean;
+    };
+    if (!body.playerId || typeof body.dismissed !== "boolean") {
+      return c.json({ error: "playerId and dismissed required." }, 400);
+    }
+    const sessionId = readSessionId(c);
+    if (!sessionId) return c.json({ error: "Sign in required." }, 401);
+    const session = await getSession(sessionId);
+    if (!session) return c.json({ error: "Sign in required." }, 401);
+    const account = await getAccountById(session.accountId);
+    if (!account?.playerId) return c.json({ error: "Sign in required." }, 401);
+    if (account.playerId !== body.playerId) {
+      return c.json({ error: "You do not own this player." }, 403);
+    }
+    return withUniverse((universe) => {
+      const result = setMidgameBriefingDismissed(
+        universe,
+        body.playerId!,
+        body.dismissed!,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    }, { playerIds: [body.playerId] });
+  });
+
   app.post("/api/whats-new/dismiss", async (c) => {
     const body = (await c.req.json().catch(() => ({}))) as {
       playerId?: string;
@@ -869,6 +1053,30 @@ export function createApp(): Hono {
     }
     return withUniverse((universe) => {
       const result = dismissWhatsNew(universe, body.playerId!);
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    }, { playerIds: [body.playerId] });
+  });
+
+  app.post("/api/vacation", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      enabled?: boolean;
+    };
+    if (!body.playerId || typeof body.enabled !== "boolean") {
+      return c.json({ error: "playerId and enabled required." }, 400);
+    }
+    const sessionId = readSessionId(c);
+    if (!sessionId) return c.json({ error: "Sign in required." }, 401);
+    const session = await getSession(sessionId);
+    if (!session) return c.json({ error: "Sign in required." }, 401);
+    const account = await getAccountById(session.accountId);
+    if (!account?.playerId) return c.json({ error: "Sign in required." }, 401);
+    if (account.playerId !== body.playerId) {
+      return c.json({ error: "You do not own this player." }, 403);
+    }
+    return withUniverse((universe) => {
+      const result = setVacationMode(universe, body.playerId!, body.enabled!);
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
     }, { playerIds: [body.playerId] });
@@ -1003,6 +1211,138 @@ export function createApp(): Hono {
     }, { playerIds: [body.playerId] });
   });
 
+  app.post("/api/shop/merchant", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      planetId?: string;
+      give?: string;
+      get?: string;
+      amount?: unknown;
+    };
+    if (
+      !body.playerId ||
+      !body.planetId ||
+      !body.give ||
+      !body.get ||
+      body.amount === undefined ||
+      body.amount === null ||
+      body.amount === ""
+    ) {
+      return c.json(
+        { error: "playerId, planetId, give, get, and amount required." },
+        400,
+      );
+    }
+    const sessionId = readSessionId(c);
+    if (!sessionId) return c.json({ error: "Sign in required." }, 401);
+    const session = await getSession(sessionId);
+    if (!session) return c.json({ error: "Sign in required." }, 401);
+    const account = await getAccountById(session.accountId);
+    if (!account?.playerId) return c.json({ error: "Sign in required." }, 401);
+    if (account.playerId !== body.playerId) {
+      return c.json({ error: "You do not own this player." }, 403);
+    }
+    const amount =
+      typeof body.amount === "number"
+        ? body.amount
+        : typeof body.amount === "string" && /^[0-9]+$/.test(body.amount)
+          ? Number(body.amount)
+          : Number.NaN;
+    return withUniverse((universe) => {
+      const result = tradeWithResourceMerchant(
+        universe,
+        body.playerId!,
+        body.planetId!,
+        body.give!,
+        body.get!,
+        amount,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    }, { playerIds: [body.playerId] });
+  });
+
+  app.get("/api/market/offers", async (c) => {
+    const playerId = c.req.query("playerId");
+    const gate = await requireOwnedPlayer(c, playerId);
+    if (gate instanceof Response) return gate;
+    const planetId = c.req.query("planetId") ?? undefined;
+    const posterIds = await withUniverseRead(
+      (universe) => Object.values(universe.playerTradeOffers ?? {}).map((offer) => offer.posterPlayerId),
+      { playerIds: [gate.playerId] },
+    );
+    const playerIds = [...new Set([gate.playerId, ...posterIds])];
+    return withUniverse((universe) => {
+      return c.json(listPlayerTradeOffers(universe, gate.playerId, Date.now(), planetId));
+    }, { playerIds });
+  });
+
+  app.post("/api/market/offers", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      planetId?: string;
+      offerResource?: unknown;
+      offerAmount?: unknown;
+      requestResource?: unknown;
+      requestAmount?: unknown;
+    };
+    const gate = await requireOwnedPlayer(c, body.playerId);
+    if (gate instanceof Response) return gate;
+    return withUniverse((universe) => {
+      const result = postPlayerTradeOffer(
+        universe,
+        gate.playerId,
+        body.planetId,
+        body.offerResource,
+        body.offerAmount,
+        body.requestResource,
+        body.requestAmount,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(marketMutation(universe, gate.playerId, body.planetId, result.note));
+    }, { playerIds: [gate.playerId] });
+  });
+
+  app.post("/api/market/offers/cancel", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      offerId?: string;
+    };
+    const gate = await requireOwnedPlayer(c, body.playerId);
+    if (gate instanceof Response) return gate;
+    return withUniverse((universe) => {
+      const result = cancelPlayerTradeOffer(universe, gate.playerId, body.offerId);
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(marketMutation(universe, gate.playerId, undefined, result.note));
+    }, { playerIds: [gate.playerId] });
+  });
+
+  app.post("/api/market/offers/accept", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      offerId?: string;
+      planetId?: string;
+    };
+    const gate = await requireOwnedPlayer(c, body.playerId);
+    if (gate instanceof Response) return gate;
+    if (!body.offerId) return c.json({ error: "offerId required." }, 400);
+    const posterId = await withUniverseRead(
+      (universe) => universe.playerTradeOffers?.[body.offerId!]?.posterPlayerId ?? null,
+      { playerIds: [gate.playerId] },
+    );
+    if (!posterId) return c.json({ error: "Offer not found." }, 400);
+    return withUniverse((universe) => {
+      const result = acceptPlayerTradeOffer(
+        universe,
+        gate.playerId,
+        body.offerId,
+        body.planetId,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(marketMutation(universe, gate.playerId, body.planetId, result.note));
+    }, { playerIds: [...new Set([gate.playerId, posterId])] });
+  });
+
   // Alliances foundation (backlog #7).
   app.get("/api/alliance", async (c) => {
     const playerId = c.req.query("playerId");
@@ -1016,8 +1356,10 @@ export function createApp(): Hono {
     const playerId = c.req.query("playerId");
     if (!playerId) return c.json({ error: "playerId required." }, 400);
     return withUniverse((universe) => {
-      const view = playerView(universe, playerId);
-      return c.json({ alliances: view.allianceDirectory });
+      if (!universe.players[playerId]) {
+        return c.json({ error: "Unknown player." }, 400);
+      }
+      return c.json({ alliances: allianceRecruitingDirectory(universe) });
     }, { playerIds: [playerId] });
   });
 
@@ -1219,6 +1561,38 @@ export function createApp(): Hono {
     }, { playerIds: [body.playerId] });
   });
 
+  app.post("/api/alliance/set-recruiting", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      recruitmentBlurb?: string;
+      recruiting?: boolean;
+      applicationNote?: string;
+    };
+    if (
+      !body.playerId ||
+      typeof body.recruitmentBlurb !== "string" ||
+      typeof body.applicationNote !== "string" ||
+      typeof body.recruiting !== "boolean"
+    ) {
+      return c.json(
+        {
+          error:
+            "playerId, recruitmentBlurb, recruiting, and applicationNote required.",
+        },
+        400,
+      );
+    }
+    return withUniverse((universe) => {
+      const result = setAllianceRecruiting(universe, body.playerId!, {
+        recruitmentBlurb: body.recruitmentBlurb!,
+        recruiting: body.recruiting!,
+        applicationNote: body.applicationNote!,
+      });
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    }, { playerIds: [body.playerId] });
+  });
+
   app.post("/api/alliance/set-class", async (c) => {
     const body = (await c.req.json().catch(() => ({}))) as {
       playerId?: string;
@@ -1241,6 +1615,71 @@ export function createApp(): Hono {
   });
 
   mountAllianceIntelRoutes(app);
+  mountCommanderMailRoutes(app);
+
+  app.post("/api/alliance/diplomacy/nap", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      allianceId?: string;
+    };
+    if (!body.playerId || !body.allianceId) {
+      return c.json({ error: "playerId and allianceId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = offerAllianceNap(universe, body.playerId!, body.allianceId!);
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    }, { playerIds: [body.playerId] });
+  });
+
+  app.post("/api/alliance/diplomacy/nap/accept", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      allianceId?: string;
+    };
+    if (!body.playerId || !body.allianceId) {
+      return c.json({ error: "playerId and allianceId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = acceptAllianceNap(universe, body.playerId!, body.allianceId!);
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    }, { playerIds: [body.playerId] });
+  });
+
+  app.post("/api/alliance/diplomacy/war", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      allianceId?: string;
+    };
+    if (!body.playerId || !body.allianceId) {
+      return c.json({ error: "playerId and allianceId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = declareAllianceWar(universe, body.playerId!, body.allianceId!);
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    }, { playerIds: [body.playerId] });
+  });
+
+  app.post("/api/alliance/diplomacy/cancel", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      allianceId?: string;
+    };
+    if (!body.playerId || !body.allianceId) {
+      return c.json({ error: "playerId and allianceId required." }, 400);
+    }
+    return withUniverse((universe) => {
+      const result = cancelAllianceRelation(
+        universe,
+        body.playerId!,
+        body.allianceId!,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    }, { playerIds: [body.playerId] });
+  });
 
   app.post("/api/alliance/disband", async (c) => {
     const body = (await c.req.json().catch(() => ({}))) as {
@@ -1322,6 +1761,35 @@ export function createApp(): Hono {
       if (!result.ok) return c.json({ error: result.error }, 400);
       return c.json(playerView(universe, body.playerId!));
     }, { playerIds: [body.playerId] });
+  });
+
+  app.post("/api/abandon-colony", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      playerId?: string;
+      planetId?: string;
+    };
+    if (!body.playerId || !body.planetId) {
+      return c.json({ error: "playerId and planetId required." }, 400);
+    }
+    const sessionId = readSessionId(c);
+    if (!sessionId) return c.json({ error: "Sign in required." }, 401);
+    const session = await getSession(sessionId);
+    if (!session) return c.json({ error: "Sign in required." }, 401);
+    const account = await getAccountById(session.accountId);
+    if (!account?.playerId) return c.json({ error: "Sign in required." }, 401);
+    if (account.playerId !== body.playerId) {
+      return c.json({ error: "You do not own this player." }, 403);
+    }
+    return withUniverse((universe) => {
+      advanceUniverse(universe);
+      const result = abandonColony(
+        universe,
+        body.playerId!,
+        body.planetId!,
+      );
+      if (!result.ok) return c.json({ error: result.error }, 400);
+      return c.json(playerView(universe, body.playerId!));
+    }, { playerIds: [body.playerId], planetIds: [body.planetId] });
   });
 
   app.post("/api/abandon-occupation", async (c) => {
@@ -1594,9 +2062,16 @@ export function createApp(): Hono {
         inbox?: boolean;
         /** Remember the current release key. Same write as Got it. */
         dismissWhatsNew?: boolean;
+        /**
+         * Form this commander's moon (if needed) and set System Scanner to
+         * this level. Local Playwright only. Does not touch other players.
+         */
+        scannerMoonLevel?: number;
         occupyMini?: boolean;
         occupyNonMini?: boolean;
         occupierPlayerId?: string;
+        /** Local walk only. Pins the 24h galaxy event so the banner is visible. */
+        galaxyEvent?: { type?: string; galaxy?: number };
       };
       if (!body.playerId) {
         return c.json({ error: "playerId required." }, 400);
@@ -1633,6 +2108,21 @@ export function createApp(): Hono {
         }
         if (typeof body.starshards === "number" && body.starshards >= 0) {
           player.starshards = Math.floor(body.starshards);
+        }
+        if (
+          body.galaxyEvent?.type === "meteor_shower" ||
+          body.galaxyEvent?.type === "solar_flare"
+        ) {
+          const galaxy = Math.floor(body.galaxyEvent.galaxy ?? planet.coords.galaxy);
+          if (galaxy >= 1 && galaxy <= 10) {
+            const now = Date.now();
+            universe.galaxyEvent = {
+              type: body.galaxyEvent.type,
+              galaxy,
+              startsAt: now - 60_000,
+              endsAt: now + 24 * 60 * 60 * 1000,
+            };
+          }
         }
         if (typeof body.colonySlot === "number") {
           const slot = Math.floor(body.colonySlot);
@@ -1769,6 +2259,39 @@ export function createApp(): Hono {
         if (body.dismissWhatsNew === true) {
           const dismissed = dismissWhatsNew(universe, player.id);
           if (!dismissed.ok) return c.json({ error: dismissed.error }, 400);
+        }
+        if (typeof body.scannerMoonLevel === "number" && Number.isFinite(body.scannerMoonLevel)) {
+          const level = Math.max(0, Math.floor(body.scannerMoonLevel));
+          const parent =
+            planet.kind === "moon"
+              ? universe.planets[planet.parentPlanetId ?? ""]
+              : planet;
+          if (!parent || parent.kind === "moon") {
+            return c.json({ error: "No planet for a scanner moon." }, 400);
+          }
+          let moon =
+            parent.moonId && universe.planets[parent.moonId]?.kind === "moon"
+              ? universe.planets[parent.moonId]
+              : undefined;
+          if (!moon) {
+            const debris = { metal: 5_000_000, crystal: 0, deuterium: 0 };
+            for (let i = 0; i < 80 && !moon; i++) {
+              const formed = tryFormMoon(
+                universe,
+                parent,
+                debris,
+                `e2e_scanner_${player.id}_${i}`,
+                Date.now() + i,
+              );
+              if (formed) moon = formed;
+            }
+          }
+          if (!moon) return c.json({ error: "Could not form a scanner moon." }, 500);
+          moon.buildings.sensorArray = level;
+          if (level >= 1 && (moon.buildings.lunarBase ?? 0) < 1) {
+            moon.buildings.lunarBase = 1;
+          }
+          universe.planets[moon.id] = moon;
         }
         return c.json(playerView(universe, body.playerId!));
       });

@@ -1,4 +1,5 @@
 import {
+  MAP_SYSTEMS,
   MOON_CHANCE_CAP,
   MOON_DEBRIS_PER_PERCENT,
   MOON_FIELDS_BASE,
@@ -27,6 +28,17 @@ export function moonChancePercent(debris: Resources): number {
   return Math.min(MOON_CHANCE_CAP, Math.floor(total / MOON_DEBRIS_PER_PERCENT));
 }
 
+/** Display text for debris already in hand. Does not roll or form a moon. */
+export function moonChanceLabel(
+  debris: { metal?: number; crystal?: number } | null | undefined,
+): string {
+  return `moon chance ${moonChancePercent({
+    metal: debris?.metal ?? 0,
+    crystal: debris?.crystal ?? 0,
+    deuterium: 0,
+  })}%`;
+}
+
 /**
  * Horizon Scanner (`sensorArray`) range in systems (same galaxy).
  * Level 0 → none; level N → ±N systems inclusive of own system.
@@ -45,6 +57,59 @@ export function inSensorPhalanxRange(
   if (range < 1) return false;
   if (moonCoords.galaxy !== targetCoords.galaxy) return false;
   return Math.abs(moonCoords.system - targetCoords.system) <= range;
+}
+
+export interface ScannerMoonLevel {
+  coords: Coordinates;
+  sensorArray: number;
+}
+
+export interface ScannerSystemSpan {
+  from: number;
+  to: number;
+}
+
+/**
+ * Inclusive system spans in one galaxy covered by the commander's scanners.
+ * Level 0 adds nothing. Overlapping and adjacent spans merge.
+ */
+export function scannerSystemSpans(
+  moons: readonly ScannerMoonLevel[],
+  galaxy: number,
+): ScannerSystemSpan[] {
+  const raw: ScannerSystemSpan[] = [];
+  for (const moon of moons) {
+    const range = sensorPhalanxRange(moon.sensorArray);
+    if (range < 1) continue;
+    if (moon.coords.galaxy !== galaxy) continue;
+    const from = Math.max(1, moon.coords.system - range);
+    const to = Math.min(MAP_SYSTEMS, moon.coords.system + range);
+    if (from <= to) raw.push({ from, to });
+  }
+  raw.sort((a, b) => a.from - b.from || a.to - b.to);
+  const merged: ScannerSystemSpan[] = [];
+  for (const span of raw) {
+    const last = merged[merged.length - 1];
+    if (!last || span.from > last.to + 1) {
+      merged.push({ from: span.from, to: span.to });
+    } else if (span.to > last.to) {
+      last.to = span.to;
+    }
+  }
+  return merged;
+}
+
+/** True when this system is inside any owned scanner. Uses `inSensorPhalanxRange`. */
+export function systemCoveredByScanner(
+  moons: readonly ScannerMoonLevel[],
+  galaxy: number,
+  system: number,
+): boolean {
+  const target: Coordinates = { galaxy, system, slot: 1 };
+  for (const moon of moons) {
+    if (inSensorPhalanxRange(moon.coords, target, moon.sensorArray)) return true;
+  }
+  return false;
 }
 
 /** Count planets (not moons) toward Stellar Cartography colony cap. */

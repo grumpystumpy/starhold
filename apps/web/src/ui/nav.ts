@@ -7,6 +7,7 @@ export const NAV_PAGES = [
   "shipyard",
   "research",
   "fleet",
+  "simulator",
   "galaxy",
   "shop",
   "highscore",
@@ -16,13 +17,14 @@ export const NAV_PAGES = [
 ] as const;
 
 export type NavPage = (typeof NAV_PAGES)[number];
-export type ShopTab = "items" | "resources" | "officers" | "skills";
+export type ShopTab = "items" | "resources" | "officers" | "skills" | "market";
 
 export const SHOP_TABS: readonly ShopTab[] = [
   "items",
   "resources",
   "officers",
   "skills",
+  "market",
 ];
 
 export function isShopTab(value: string | null | undefined): value is ShopTab {
@@ -47,6 +49,7 @@ export const NAV_LABELS: Record<NavPage, string> = {
   shipyard: "Shipyard",
   research: "Research",
   fleet: "Fleet",
+  simulator: "Simulator",
   galaxy: "Galaxy",
   shop: "Shop",
   highscore: "Highscore",
@@ -64,6 +67,7 @@ export const NAV_PATHS: Record<NavPage, string> = {
   shipyard: "/shipyard",
   research: "/research",
   fleet: "/fleet",
+  simulator: "/simulator",
   galaxy: "/galaxy",
   shop: "/shop",
   highscore: "/highscore",

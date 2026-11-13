@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   ALIEN_RAID_DETERRENCE_PENALTY,
   ALIEN_RAID_DETERRENCE_STEP_UNITS,
+  EXPEDITION_SLOT,
   NEWBIE_BONUS_DURATION_MS,
   NEWBIE_DEFENSE_MULT,
   NEWBIE_PRODUCTION_MULT,
@@ -33,6 +34,8 @@ import {
   utcDayKey,
 } from "./world.js";
 import { resolveCombat } from "./formulas-combat.js";
+import { createMiniPlanet } from "./world-mini.js";
+import { migrateOrResetUniverse } from "./world-migrate.js";
 
 describe("Newbie bonus", () => {
   it("keeps the bonus active and advances with an unknown ship id", () => {
@@ -130,6 +133,31 @@ describe("CHANGE #15 newbie protection", () => {
     }
   });
 
+  it("blocks occupation of a protected player's mini planet", () => {
+    const now = 490_000_000;
+    const universe = createUniverse("Protected occupation target", 8);
+    const attacker = joinUniverse(universe, "Attacker", now);
+    const defender = joinUniverse(universe, "Newbie", now + 1);
+    const mini = createMiniPlanet(universe.seed ?? universe.id, 1, 1, 20, now, "standard");
+    mini.ownerPlayerId = defender.player.id;
+    defender.player.planetIds.push(mini.id);
+    universe.planets[mini.id] = mini;
+    universe.miniPlanetIds = [mini.id];
+    universe.planets[attacker.planet.id]!.ships.swarmMothership = 1;
+    universe.planets[attacker.planet.id]!.resources.deuterium = 10_000_000;
+
+    assert.ok(empirePoints(universe, defender.player) < NEWBIE_PROTECTION_POINTS);
+    const result = launchFleet(universe, {
+      playerId: attacker.player.id,
+      mission: "occupy",
+      ships: { swarmMothership: 1 },
+      targetPlanetId: mini.id,
+      now: now + 100,
+    });
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.match(result.error, /newbie protection/i);
+  });
+
   it("forfeits protection on player attacks, ACS attacks, and occupation fleets", () => {
     for (const kind of ["attack", "ACS", "occupation"] as const) {
       const universe = createUniverse(`Forfeit ${kind}`, 8);
@@ -138,11 +166,20 @@ describe("CHANGE #15 newbie protection", () => {
       const defender = joinUniverse(universe, "Defender", now + 1);
       const player = universe.players[attacker.player.id]!;
       const origin = universe.planets[attacker.planet.id]!;
-      const target = universe.planets[defender.planet.id]!;
+      const target = kind === "occupation"
+        ? createMiniPlanet(universe.seed ?? universe.id, 1, 1, 20, now, "standard")
+        : universe.planets[defender.planet.id]!;
+      if (kind === "occupation") {
+        target.ownerPlayerId = defender.player.id;
+        defender.player.planetIds.push(target.id);
+        universe.planets[target.id] = target;
+        universe.miniPlanetIds = [target.id];
+      }
       origin.ships.interceptor = 1;
       origin.ships.swarmMothership = kind === "occupation" ? 1 : 0;
       origin.resources.deuterium = 10_000_000;
       target.ships.hauler = 10_000;
+      universe.planets[defender.planet.id]!.ships.hauler = 10_000;
       if (kind !== "occupation") {
         assert.equal(isNewbieProtected(universe, player), true, kind);
       }
@@ -152,7 +189,7 @@ describe("CHANGE #15 newbie protection", () => {
         : null;
       const result = launchFleet(universe, {
         playerId: player.id,
-        mission: "raid",
+        mission: kind === "occupation" ? "occupy" : "raid",
         ships: {
           interceptor: 1,
           ...(kind === "occupation" ? { swarmMothership: 1 as const } : {}),
@@ -164,14 +201,17 @@ describe("CHANGE #15 newbie protection", () => {
 
       assert.equal(result.ok, true, !result.ok ? result.error : "");
       assert.equal(player.newbieForfeitedAt, now + 100);
-      if (kind !== "occupation") {
-        assert.ok(empirePoints(universe, player) < NEWBIE_PROTECTION_POINTS);
-      }
       assert.equal(isNewbieProtected(universe, player), false);
+      universe.planets[attacker.planet.id]!.ships.hauler = 10_000;
+      assert.ok(empirePoints(universe, player) >= NEWBIE_PROTECTION_POINTS);
+      assert.equal(isNewbieProtected(universe, player), false);
+      delete universe.planets[attacker.planet.id]!.ships.hauler;
+      assert.equal(isNewbieProtected(universe, player), false);
+      assert.equal(player.newbieForfeitedAt, now + 100);
     }
   });
 
-  it("does not forfeit on spying or attacks against pirates and aliens", () => {
+  it("does not forfeit on spying, expeditions, or attacks against pirates and aliens", () => {
     const now = 510_000_000;
     const universe = createUniverse("No forfeits", 8);
     const { player, planet } = joinUniverse(universe, "Player", now);
@@ -180,6 +220,7 @@ describe("CHANGE #15 newbie protection", () => {
     const target = universe.planets[targetPlayer.planet.id]!;
     origin.ships.probe = 1;
     origin.ships.interceptor = 2;
+    origin.ships.hauler = 1;
     player.research.computerTech = 3;
     origin.resources.deuterium = 10_000_000;
     target.ships.hauler = 10_000;
@@ -192,6 +233,16 @@ describe("CHANGE #15 newbie protection", () => {
       now: now + 10,
     });
     assert.equal(spy.ok, true, !spy.ok ? spy.error : "");
+    assert.equal(player.newbieForfeitedAt, undefined);
+
+    const expedition = launchFleet(universe, {
+      playerId: player.id,
+      mission: "expedition",
+      ships: { hauler: 1 },
+      targetCoords: { ...origin.coords, slot: EXPEDITION_SLOT },
+      now: now + 15,
+    });
+    assert.equal(expedition.ok, true, !expedition.ok ? expedition.error : "");
     assert.equal(player.newbieForfeitedAt, undefined);
 
     const pirateBase = Object.values(universe.pirateBases ?? {})[0]!;
@@ -265,13 +316,19 @@ describe("CHANGE #15 newbie protection", () => {
     delete oldSave.players[player.id]!.newbieForfeitedAt;
     const oldPlayer = oldSave.players[player.id]!;
     assert.equal(oldPlayer.newbieForfeitedAt, undefined);
-    assert.equal(isNewbieProtected(oldSave, oldPlayer), true);
-    assert.deepEqual(oldSave.players[player.id]!.planetIds, player.planetIds);
+    const loaded = migrateOrResetUniverse(oldSave);
+    assert.equal(loaded.didReset, false);
+    assert.equal(loaded.universe.players[player.id]!.newbieForfeitedAt, undefined);
+    assert.equal(isNewbieProtected(loaded.universe, loaded.universe.players[player.id]!), true);
+    assert.deepEqual(loaded.universe.players[player.id]!.planetIds, player.planetIds);
     assert.deepEqual(
-      oldSave.planets[player.homePlanetId]!.resources,
+      loaded.universe.planets[player.homePlanetId]!.resources,
       universe.planets[player.homePlanetId]!.resources,
     );
-    assert.equal(oldSave.fleets[Object.keys(oldSave.fleets)[0]!]!.ownerPlayerId, player.id);
+    assert.equal(
+      loaded.universe.fleets[Object.keys(universe.fleets)[0]!]!.ownerPlayerId,
+      player.id,
+    );
   });
 });
 
@@ -285,6 +342,8 @@ describe("CHANGE #18 pirate raid fairness", () => {
     const universe = createUniverse("Fairness", 8);
     const { player } = joinUniverse(universe, "Target", 410_000_000);
     const now = player.createdAt + 48 * 60 * 60 * 1000 + 100;
+    assert.ok(empirePoints(universe, player) < NEWBIE_PROTECTION_POINTS);
+    assert.equal(isNewbieProtected(universe, player), true);
     assert.equal(pirateRaidPickWeight(universe, player, now), 0);
 
     // Inflate points into fairness band (under 100k, over 2500).

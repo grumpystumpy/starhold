@@ -9,9 +9,13 @@ import {
   applyNpcRaidOnNpc,
   applyNpcRaidOnPlanet,
   createPirateBase,
+  categoryHighscoreBoards,
   createUniverse,
+  emptyCategoryHighscores,
   empirePoints,
+  type CategoryHighscores,
   graduateNewbieProtection,
+  HIGHSCORE_RANK_HISTORY_DAYS,
   joinUniverse,
   launchFleet,
   migrateOrResetUniverse,
@@ -21,12 +25,14 @@ import {
   NEWBIE_PROTECTION_POINTS,
   PIRATE_TARGET_BASE_COUNT,
   pickRaidTarget,
+  abandonColony,
   playerView,
   queueBuildingUpgrade,
   queueResearch,
   queueShipBuild,
   resolvePirateRaidArrival,
   tickPirates,
+  utcHighscoreDay,
   UNIVERSE_SCHEMA_VERSION,
   emptyDefenses,
   emptyFleetShips,
@@ -822,6 +828,105 @@ describe("row save migration", () => {
     );
     assert.equal(board.rows.find((row) => row.playerId === offline.id)?.points, expectedPoints);
     assert.ok(db.count() <= 40, `maintenance used ${db.count()} D1 queries`);
+  });
+
+  it("writes category boards only during maintenance and serves them from cache", async () => {
+    resetMemoryUniverse();
+    const { db, raw } = sqliteD1();
+    const source = fixture();
+    const alpha = Object.values(source.players).find((player) => player.name === "OldHand")!;
+    const home = source.planets[alpha.homePlanetId]!;
+    home.ships.scout = 5;
+    home.defenses = { ...home.defenses, laserBattery: 3 };
+    await migrateAll(db, source);
+    const ids = ["buildings", "fleet", "research", "defense"] as const;
+    const countRows = () =>
+      (
+        raw
+          .prepare(
+            "SELECT COUNT(*) AS n FROM save_highscores WHERE id IN ('buildings', 'fleet', 'research', 'defense')",
+          )
+          .get() as { n: number }
+      ).n;
+    assert.equal(countRows(), 0);
+
+    const store = createD1Store(db);
+    const app = createApp();
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "GET", cpuMs: 0 },
+      () => withUniverseRead(() => undefined, { playerIds: [alpha.id] }),
+    );
+    assert.equal(countRows(), 0);
+
+    const request = (method: string, path: string) =>
+      runWithScope({ kv: store, db, mode: "d1", method, cpuMs: 0 }, () => app.request(path, { method }));
+    const missing = await request("GET", "/api/highscores/categories");
+    assert.equal(missing.status, 200);
+    const missingBody = (await missing.json()) as CategoryHighscores;
+    assert.deepEqual(missingBody, emptyCategoryHighscores());
+
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "POST", cpuMs: 0 },
+      () => withUniverse((universe) => {
+        advanceUniverse(universe);
+      }, { maintenance: true }),
+    );
+    assert.equal(countRows(), 4);
+    const loaded = await loadWorkingSet(db, { maintenance: true });
+    const expected = categoryHighscoreBoards(loaded.universe);
+    for (const id of ids) {
+      const row = raw.prepare("SELECT doc FROM save_highscores WHERE id = ?").get(id) as { doc: string };
+      assert.equal(row.doc, JSON.stringify(expected[id]));
+    }
+
+    const cached = await request("GET", "/api/highscores/categories");
+    assert.equal(cached.status, 200);
+    const cachedBody = (await cached.json()) as CategoryHighscores;
+    assert.deepEqual(cachedBody.buildings, expected.buildings);
+    assert.equal(cachedBody.fleet[0]?.playerId, alpha.id);
+    assert.equal(cachedBody.research[0]?.playerId, alpha.id);
+    assert.equal(cachedBody.defense[0]?.playerId, alpha.id);
+
+    const state = await request("GET", `/api/state?playerId=${encodeURIComponent(alpha.id)}`);
+    assert.equal(state.status, 200);
+    const view = (await state.json()) as {
+      categoryHighscores?: unknown;
+      highscores: Array<Record<string, unknown>>;
+    };
+    assert.equal(view.categoryHighscores, undefined);
+    const score = view.highscores[0];
+    assert.ok(score);
+    assert.equal("buildings" in score, false);
+    assert.equal("fleet" in score, false);
+    assert.equal("research" in score, false);
+    assert.equal("defense" in score, false);
+
+    const before = ids.map(
+      (id) => (raw.prepare("SELECT doc FROM save_highscores WHERE id = ?").get(id) as { doc: string }).doc,
+    );
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "POST", cpuMs: 0 },
+      () => withUniverse((universe) => {
+        const player = universe.players[alpha.id];
+        if (player) player.starshards = (player.starshards ?? 0) + 1;
+      }, { playerIds: [alpha.id] }),
+    );
+    const after = ids.map(
+      (id) => (raw.prepare("SELECT doc FROM save_highscores WHERE id = ?").get(id) as { doc: string }).doc,
+    );
+    assert.deepEqual(after, before);
+
+    const counted = subrequestD1(db, 20);
+    counted.reset();
+    await runWithScope(
+      { kv: createD1Store(counted), db: counted, mode: "d1", method: "GET", cpuMs: 0 },
+      () => app.request("/api/highscores/categories"),
+    );
+    assert.ok(counted.count() <= 2, `category read used ${counted.count()} queries`);
+
+    const memory = await createApp().request("/api/highscores/categories");
+    assert.equal(memory.status, 200);
+    assert.deepEqual(await memory.json(), emptyCategoryHighscores());
   });
 
   it("locks per player and rejects a stale row", async () => {
@@ -2899,5 +3004,237 @@ describe("row save review fixes", () => {
     assert.equal(done, true);
     assert.ok(totalPlayers >= 115);
     assert.ok(maxQueries <= 50);
+  });
+});
+
+describe("highscore 7-day rank snapshots", () => {
+  function boardDoc(raw: DatabaseSync): {
+    rows: Array<{ playerId: string; rank: number; rankHistory?: Array<{ day: string; rank: number }> }>;
+  } {
+    const row = raw.prepare("SELECT doc FROM save_highscores WHERE id = 'board'").get() as { doc: string };
+    return JSON.parse(row.doc) as {
+      rows: Array<{ playerId: string; rank: number; rankHistory?: Array<{ day: string; rank: number }> }>;
+    };
+  }
+
+  function shiftUtcDay(day: string, delta: number): string {
+    const [year, month, date] = day.split("-").map(Number);
+    const next = new Date(Date.UTC(year!, (month ?? 1) - 1, date ?? 1));
+    next.setUTCDate(next.getUTCDate() + delta);
+    return next.toISOString().slice(0, 10);
+  }
+
+  async function maintain(db: D1Like): Promise<void> {
+    const store = createD1Store(db);
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "POST", cpuMs: 0 },
+      () => withUniverse(() => undefined, { maintenance: true }),
+    );
+  }
+
+  it("writes one UTC day on maintenance and does not duplicate that day", async () => {
+    resetMemoryUniverse();
+    const { db, raw } = sqliteD1();
+    const source = fixture();
+    await migrateAll(db, source);
+    const migrated = boardDoc(raw);
+    const stripped = {
+      ...migrated,
+      rows: migrated.rows.map(({ rankHistory: _history, ...row }) => row),
+    };
+    raw.prepare("UPDATE save_highscores SET doc = ? WHERE id = 'board'").run(JSON.stringify(stripped));
+
+    const day = utcHighscoreDay(Date.now());
+    await maintain(db);
+    const first = boardDoc(raw);
+    assert.ok(first.rows.length >= 2);
+    for (const row of first.rows) {
+      assert.deepEqual(row.rankHistory, [{ day, rank: row.rank }]);
+    }
+
+    const alpha = Object.values(source.players).find((player) => player.name === "OldHand")!;
+    const stored = raw.prepare("SELECT doc FROM save_highscores WHERE id = 'board'").get() as { doc: string };
+    await runWithScope(
+      { kv: createD1Store(db), db, mode: "d1", method: "GET", cpuMs: 0 },
+      () => withUniverseRead(() => undefined, { playerIds: [alpha.id], galaxy: 1, system: 1 }),
+    );
+    const afterRead = raw.prepare("SELECT doc FROM save_highscores WHERE id = 'board'").get() as { doc: string };
+    assert.equal(afterRead.doc, stored.doc);
+
+    await maintain(db);
+    const second = boardDoc(raw);
+    for (const row of second.rows) {
+      assert.equal(row.rankHistory?.length, 1);
+      assert.equal(row.rankHistory?.[0]?.day, day);
+      assert.equal(row.rankHistory?.[0]?.rank, row.rank);
+      assert.equal(new Set(row.rankHistory?.map((point) => point.day)).size, 1);
+    }
+  });
+
+  it("drops the oldest day so each commander keeps at most 7 points", async () => {
+    assert.equal(HIGHSCORE_RANK_HISTORY_DAYS, 7);
+    resetMemoryUniverse();
+    const { db, raw } = sqliteD1();
+    const source = fixture();
+    await migrateAll(db, source);
+    const today = utcHighscoreDay(Date.now());
+    const seeded = Array.from({ length: HIGHSCORE_RANK_HISTORY_DAYS }, (_, index) => ({
+      day: shiftUtcDay(today, index - HIGHSCORE_RANK_HISTORY_DAYS),
+      rank: index + 1,
+    }));
+    const current = boardDoc(raw);
+    raw.prepare("UPDATE save_highscores SET doc = ? WHERE id = 'board'").run(JSON.stringify({
+      ...current,
+      rows: current.rows.map((row) => ({ ...row, rankHistory: seeded })),
+    }));
+
+    await maintain(db);
+    const after = boardDoc(raw);
+    const expectedDays = [...seeded.slice(1).map((point) => point.day), today];
+    assert.equal(expectedDays.length, 7);
+    for (const row of after.rows) {
+      assert.equal(row.rankHistory?.length, 7);
+      assert.deepEqual(row.rankHistory?.map((point) => point.day), expectedDays);
+      assert.equal(row.rankHistory?.[0]?.day, shiftUtcDay(today, -6));
+      assert.equal(row.rankHistory?.[0]?.rank, seeded[1]?.rank);
+      assert.equal(row.rankHistory?.[6]?.day, today);
+      assert.equal(row.rankHistory?.[6]?.rank, row.rank);
+      assert.equal(new Set(row.rankHistory?.map((point) => point.day)).size, 7);
+    }
+  });
+
+  it("loads a legacy board with no history and does not invent a sparkline on read", async () => {
+    resetMemoryUniverse();
+    const { db, raw } = sqliteD1();
+    const source = fixture();
+    await migrateAll(db, source);
+    const current = boardDoc(raw);
+    const legacyRows = current.rows.map(({ rankHistory: _history, ...row }) => row);
+    const legacyDoc = JSON.stringify(legacyRows);
+    const builtAt = Date.now();
+    raw.prepare("UPDATE save_highscores SET doc = ?, built_at = ? WHERE id = 'board'").run(legacyDoc, builtAt);
+    const alpha = Object.values(source.players).find((player) => player.name === "OldHand")!;
+    await runWithScope(
+      { kv: createD1Store(db), db, mode: "d1", method: "GET", cpuMs: 0 },
+      () => withUniverseRead((universe) => {
+        const view = playerView(universe, alpha.id, Date.now(), 1, 1, { skipUniverseTick: true });
+        assert.ok(view.highscores.length >= 2);
+        for (const row of view.highscores) assert.equal(row.rankHistory, undefined);
+        assert.ok(view.highscores.some((row) => row.playerId === alpha.id));
+      }, { playerIds: [alpha.id], galaxy: 1, system: 1 }),
+    );
+    const afterRead = raw.prepare("SELECT doc FROM save_highscores WHERE id = 'board'").get() as { doc: string };
+    assert.equal(afterRead.doc.includes("rankHistory"), false);
+
+    const objectDoc = JSON.stringify({ rows: legacyRows, hallOfFame: [], hallOfShame: [] });
+    raw.prepare("UPDATE save_highscores SET doc = ?, built_at = ? WHERE id = 'board'").run(objectDoc, builtAt);
+    await runWithScope(
+      { kv: createD1Store(db), db, mode: "d1", method: "GET", cpuMs: 0 },
+      () => withUniverseRead((universe) => {
+        const view = playerView(universe, alpha.id, Date.now(), 1, 1, { skipUniverseTick: true });
+        assert.ok(view.highscores.every((row) => row.rankHistory === undefined));
+      }, { playerIds: [alpha.id], galaxy: 1, system: 1 }),
+    );
+    const afterObject = raw.prepare("SELECT doc FROM save_highscores WHERE id = 'board'").get() as { doc: string };
+    assert.equal(afterObject.doc.includes("rankHistory"), false);
+  });
+
+  it("keeps stored rank history when a normal save rewrites a commander row", async () => {
+    resetMemoryUniverse();
+    const { db, raw } = sqliteD1();
+    const source = fixture();
+    await migrateAll(db, source);
+    const today = utcHighscoreDay(Date.now());
+    const current = boardDoc(raw);
+    const legacyRows = current.rows.map(({ rankHistory: _history, ...row }) => row);
+    raw.prepare("UPDATE save_highscores SET doc = ? WHERE id = 'board'").run(JSON.stringify({
+      ...current,
+      rows: legacyRows,
+    }));
+    await maintain(db);
+    const before = boardDoc(raw);
+    const alpha = Object.values(source.players).find((player) => player.name === "OldHand")!;
+    await runWithScope(
+      { kv: createD1Store(db), db, mode: "d1", method: "POST", cpuMs: 0 },
+      () => withUniverse((universe) => {
+        const player = universe.players[alpha.id]!;
+        player.starshards = (player.starshards ?? 0) + 1;
+      }, { playerIds: [alpha.id] }),
+    );
+    const after = boardDoc(raw);
+    for (const row of after.rows) {
+      const previous = before.rows.find((item) => item.playerId === row.playerId);
+      assert.deepEqual(row.rankHistory, previous?.rankHistory);
+      assert.equal(row.rankHistory?.length, 1);
+      assert.equal(row.rankHistory?.[0]?.day, today);
+    }
+  });
+});
+
+describe("abandon colony row save", () => {
+  it("deletes the colony and its moon row and keeps debris", async () => {
+    const { db } = sqliteD1();
+    const source = fixture();
+    const alpha = Object.values(source.players).find((player) => player.name === "OldHand")!;
+    const home = source.planets[alpha.homePlanetId]!;
+    let coords: { galaxy: number; system: number; slot: number } | null = null;
+    for (let system = 1; system <= 40 && !coords; system++) {
+      const taken = new Set(
+        Object.values(source.planets)
+          .filter((planet) => planet.kind !== "moon" && planet.coords.galaxy === 1 && planet.coords.system === system)
+          .map((planet) => planet.coords.slot),
+      );
+      for (let slot = 1; slot <= 15; slot++) {
+        if (!taken.has(slot)) {
+          coords = { galaxy: 1, system, slot };
+          break;
+        }
+      }
+    }
+    assert.ok(coords);
+    const colonyId = "colony-row";
+    const moonId = "colony-row-moon";
+    const colony: PlanetState = {
+      ...structuredClone(home),
+      id: colonyId,
+      name: "Far Reach",
+      coords,
+      kind: "planet",
+      parentPlanetId: null,
+      moonId,
+      resources: { metal: 111, crystal: 222, deuterium: 333 },
+    };
+    const moon: PlanetState = {
+      ...structuredClone(colony),
+      id: moonId,
+      name: "Far Reach Moon",
+      kind: "moon",
+      parentPlanetId: colonyId,
+      moonId: null,
+      resources: { metal: 9, crystal: 8, deuterium: 7 },
+    };
+    source.planets[colonyId] = colony;
+    source.planets[moonId] = moon;
+    alpha.planetIds = [...alpha.planetIds, colonyId, moonId];
+    const debrisKey = `${coords.galaxy}:${coords.system}:${coords.slot}`;
+    source.debris[debrisKey] = { coords, metal: 50, crystal: 25 };
+    await migrateAll(db, source);
+    const store = createD1Store(db);
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "POST", cpuMs: 0 },
+      () =>
+        withUniverse((universe) => {
+          const result = abandonColony(universe, alpha.id, colonyId);
+          assert.equal(result.ok, true);
+        }, { playerIds: [alpha.id], planetIds: [colonyId, moonId] }),
+    );
+    const loaded = await loadWorkingSet(db, { full: true });
+    assert.equal(loaded.universe.planets[colonyId], undefined);
+    assert.equal(loaded.universe.planets[moonId], undefined);
+    assert.equal(loaded.universe.players[alpha.id]?.planetIds.includes(colonyId), false);
+    assert.equal(loaded.universe.players[alpha.id]?.planetIds.includes(moonId), false);
+    assert.ok(loaded.universe.planets[alpha.homePlanetId]);
+    assert.equal(loaded.universe.debris[debrisKey]?.metal, 50);
+    assert.equal(loaded.universe.debris[debrisKey]?.crystal, 25);
   });
 });

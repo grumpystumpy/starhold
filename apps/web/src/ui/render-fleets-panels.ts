@@ -1,9 +1,17 @@
 import {
   DEFENSE_ORDER,
   DEFENSES,
+  FIELD_BAND,
+  FIELD_CENTER_BY_SLOT,
+  FIELD_MIN,
   MAP_SYSTEMS,
+  moonChanceLabel,
   SHIP_ORDER,
   SHIPS,
+  productionMultForSlot,
+  temperatureKForSlot,
+  scannerSystemSpans,
+  systemCoveredByScanner,
   type CombatReport,
   type CombatRoundLog,
   type DefenseStock,
@@ -13,8 +21,28 @@ import {
 import { fmt, fmtCompact, fmtCoords, fmtCoordsLink, fmtEta, remainingSeconds } from "./format";
 import { planetDiscHtml } from "./planet-disc";
 import { escapeAttr, escapeHtml } from "./render-escape";
+import { commanderNameButton, uniqueCommanderId } from "./commander-dossier";
 import { formatBossCountdown } from "./render-seasons";
 import { infoTooltip } from "./render-tooltips";
+
+function inactivityTitle(mark: "i" | "I"): string {
+  switch (mark) {
+    case "i":
+      return "Inactive for 7 days or more";
+    case "I":
+      return "Inactive for 28 days or more";
+    default: {
+      const unexpected: never = mark;
+      return unexpected;
+    }
+  }
+}
+
+function galaxyInactivityBadge(mark: "i" | "I" | undefined, testId: string): string {
+  if (mark !== "i" && mark !== "I") return "";
+  const title = inactivityTitle(mark);
+  return `<abbr class="galaxy-inactive" data-testid="${escapeAttr(testId)}" title="${escapeAttr(title)}" aria-label="${escapeAttr(title)}">${mark}</abbr>`;
+}
 
 function unitLossLine(
   ships: Partial<FleetShips> | undefined,
@@ -34,30 +62,162 @@ function unitLossLine(
   return parts.length ? parts.join(", ") : "none";
 }
 
-/** Report id → visible round. Survives a background poll remount. */
-const openReplayRound = new Map<string, number>();
+/** One playback step. Named so the inbox and the public page stay in sync. */
+export const BATTLE_REPLAY_STEP_MS = 800;
+
+type ReplayState = { round: number; playing: boolean };
+
+/** Report id → open round and play/pause. Survives a background poll remount. */
+const openReplay = new Map<string, ReplayState>();
+const replayRounds = new Map<string, number[]>();
+let reducedMotionOverride: boolean | null = null;
+let replayPaint: () => void = () => {};
+let replayClock: ReturnType<typeof setInterval> | null = null;
+
+export function bindBattleReplayPaint(fn: () => void): void {
+  replayPaint = fn;
+}
+
+export function notifyBattleReplayPaint(): void {
+  replayPaint();
+}
+
+export function setBattleReplayReducedMotionForTests(next: boolean | null): void {
+  reducedMotionOverride = next;
+}
+
+export function battleReplayReducedMotion(): boolean {
+  if (reducedMotionOverride != null) return reducedMotionOverride;
+  if (typeof matchMedia !== "function") return false;
+  return matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function rememberRounds(reportId: string, rounds: number[]): void {
+  replayRounds.set(reportId, rounds);
+}
+
+function stopClockIfIdle(): void {
+  if ([...openReplay.values()].some((state) => state.playing)) return;
+  if (replayClock != null) {
+    clearInterval(replayClock);
+    replayClock = null;
+  }
+}
+
+function ensureClock(): void {
+  if (replayClock != null || typeof window === "undefined") return;
+  replayClock = setInterval(() => {
+    if (!advancePlayingReplays()) {
+      stopClockIfIdle();
+      return;
+    }
+    notifyBattleReplayPaint();
+  }, BATTLE_REPLAY_STEP_MS);
+}
 
 export function battleReplayRound(reportId: string): number | null {
-  return openReplayRound.has(reportId) ? openReplayRound.get(reportId)! : null;
+  const state = openReplay.get(reportId);
+  return state ? state.round : null;
+}
+
+export function battleReplayPlaying(reportId: string): boolean {
+  return openReplay.get(reportId)?.playing ?? false;
 }
 
 export function toggleBattleReplay(reportId: string, firstRound: number): void {
-  if (openReplayRound.has(reportId)) openReplayRound.delete(reportId);
-  else openReplayRound.set(reportId, firstRound);
+  if (openReplay.has(reportId)) openReplay.delete(reportId);
+  else openReplay.set(reportId, { round: firstRound, playing: false });
+  stopClockIfIdle();
 }
 
+/** Manual round pick. Pauses so a tab click does not keep autoplay running. */
 export function setBattleReplayRound(reportId: string, round: number): void {
-  openReplayRound.set(reportId, round);
+  openReplay.set(reportId, { round, playing: false });
+  stopClockIfIdle();
+}
+
+export function playBattleReplay(reportId: string): void {
+  const rounds = replayRounds.get(reportId) ?? [];
+  const current = openReplay.get(reportId);
+  const round = current?.round ?? rounds[0] ?? 1;
+  if (battleReplayReducedMotion()) {
+    openReplay.set(reportId, { round, playing: false });
+    stopClockIfIdle();
+    return;
+  }
+  const playing = rounds.length > 1;
+  openReplay.set(reportId, { round, playing });
+  if (playing) ensureClock();
+  else stopClockIfIdle();
+}
+
+export function pauseBattleReplay(reportId: string): void {
+  const current = openReplay.get(reportId);
+  if (!current) return;
+  openReplay.set(reportId, { round: current.round, playing: false });
+  stopClockIfIdle();
+}
+
+export function restartBattleReplay(reportId: string): void {
+  const current = openReplay.get(reportId);
+  const first = replayRounds.get(reportId)?.[0] ?? current?.round ?? 1;
+  openReplay.set(reportId, {
+    round: first,
+    playing: current?.playing ?? false,
+  });
+}
+
+/** Advance every playing report by one stored round. Returns whether any moved. */
+export function advancePlayingReplays(): boolean {
+  let changed = false;
+  for (const [id, state] of openReplay) {
+    if (!state.playing) continue;
+    const rounds = replayRounds.get(id);
+    if (!rounds || rounds.length < 2) continue;
+    const index = rounds.indexOf(state.round);
+    const next = rounds[(index < 0 ? 0 : index + 1) % rounds.length]!;
+    if (next === state.round) continue;
+    openReplay.set(id, { round: next, playing: true });
+    changed = true;
+  }
+  return changed;
+}
+
+export function resetBattleReplayForTests(): void {
+  openReplay.clear();
+  replayRounds.clear();
+  reducedMotionOverride = null;
+  if (replayClock != null) {
+    clearInterval(replayClock);
+    replayClock = null;
+  }
+}
+
+function shieldValue(
+  round: CombatRoundLog,
+  side: "attacker" | "defender",
+): number {
+  const value = round.shieldsAbsorbed?.[side];
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
 function roundPaneHtml(round: CombatRoundLog, active: boolean): string {
   const debris =
     (round.debrisThisRound?.metal ?? 0) + (round.debrisThisRound?.crystal ?? 0);
+  const attackerShield = shieldValue(round, "attacker");
+  const defenderShield = shieldValue(round, "defender");
+  const absorbed = attackerShield + defenderShield > 0;
   return `
-    <div class="battle-round" data-battle-round="${round.round}" ${active ? "" : "hidden"} data-testid="battle-round-${round.round}">
+    <div class="battle-round${active ? " is-active" : ""}" data-battle-round="${round.round}" ${active ? "" : "hidden"} data-testid="battle-round-${round.round}">
       <p class="meta"><strong>Round ${fmt(round.round)}</strong></p>
-      <p class="meta">Attacker losses: ${unitLossLine(round.attackerLosses.ships)}</p>
-      <p class="meta">Defender losses: ${unitLossLine(round.defenderLosses.ships, round.defenderLosses.defenses)}</p>
+      <div class="battle-stage" data-testid="battle-fire-${round.round}" aria-hidden="true">
+        <span class="battle-wing">Attack</span>
+        <span class="battle-bolt"></span>
+        <span class="battle-wing">Defense</span>
+      </div>
+      <p class="meta battle-shield${absorbed ? " has-absorb" : ""}" data-testid="battle-shields-${round.round}">Shields absorbed: attacker ${fmt(attackerShield)}, defender ${fmt(defenderShield)}</p>
+      <p class="meta battle-loss">Attacker losses: ${unitLossLine(round.attackerLosses.ships)}</p>
+      <p class="meta battle-loss">Defender losses: ${unitLossLine(round.defenderLosses.ships, round.defenderLosses.defenses)}</p>
       ${
         debris > 0
           ? `<p class="meta">Round debris: ${fmt(round.debrisThisRound.metal)}/${fmt(round.debrisThisRound.crystal)}</p>`
@@ -67,12 +227,20 @@ function roundPaneHtml(round: CombatRoundLog, active: boolean): string {
   `;
 }
 
-function battleReplayHtml(report: CombatReport): string {
+export function battleReplayHtml(report: {
+  id: string;
+  roundLog?: CombatRoundLog[];
+}): string {
   const log = report.roundLog ?? [];
   if (!log.length) {
     return `<p class="hint" data-testid="battle-replay-legacy">Summary only — older reports have no round replay.</p>`;
   }
-  const selected = openReplayRound.get(report.id) ?? log[0]!.round;
+  const rounds = log.map((round) => round.round);
+  rememberRounds(report.id, rounds);
+  const stored = openReplay.get(report.id)?.round;
+  const selected = stored != null && rounds.includes(stored) ? stored : rounds[0]!;
+  const playing = openReplay.get(report.id)?.playing ?? false;
+  const reduced = battleReplayReducedMotion();
   const tabs = log
     .map(
       (round) =>
@@ -83,7 +251,13 @@ function battleReplayHtml(report: CombatReport): string {
     .map((round) => roundPaneHtml(round, round.round === selected))
     .join("");
   return `
-    <div class="battle-replay" data-testid="battle-replay">
+    <div class="battle-replay" data-testid="battle-replay" data-battle-report="${escapeAttr(report.id)}" data-playing="${playing ? "1" : "0"}"${reduced ? ` data-reduced-motion="1"` : ""}>
+      <div class="battle-replay-controls">
+        <button type="button" data-battle-replay-play="${escapeAttr(report.id)}" data-testid="battle-replay-play" aria-pressed="${playing ? "true" : "false"}">Play</button>
+        <button type="button" data-battle-replay-pause="${escapeAttr(report.id)}" data-testid="battle-replay-pause">Pause</button>
+        <button type="button" data-battle-replay-restart="${escapeAttr(report.id)}" data-testid="battle-replay-restart">Restart</button>
+      </div>
+      ${reduced ? `<p class="hint" data-testid="battle-replay-reduced">Motion reduced. Use the round tabs.</p>` : ""}
       <div class="battle-round-tabs" role="tablist">${tabs}</div>
       ${panes}
     </div>
@@ -93,7 +267,7 @@ function battleReplayHtml(report: CombatReport): string {
 /** Share + round replay controls (Fleet list and Messages inbox). */
 export function combatBattleExtrasHtml(report: CombatReport): string {
   const firstRound = report.roundLog?.[0]?.round ?? 1;
-  const open = openReplayRound.has(report.id);
+  const open = openReplay.has(report.id);
   return `
     <div class="battle-report-actions">
       ${report.shareCode ? `<button type="button" class="ghost" data-copy-battle-share="${escapeAttr(report.id)}" data-testid="copy-battle-share-${escapeAttr(report.id)}">Copy share</button>` : ""}
@@ -174,12 +348,92 @@ function pirateBossGalaxyBanner(view: PlayerView, busy: boolean): string {
   return `<div class="pirate-boss-banner" data-testid="galaxy-boss-banner"><p>Seasonal mothership${flavor}${clock} · ${fmtCoordsLink(boss.coords)} · ${fmt(boss.hpPct)}% hull · you ${rank}${next}</p><button type="button" data-galaxy-attack-pirates="${coords}" data-galaxy-pirate-base="${escapeAttr(boss.id)}" data-testid="galaxy-raid-boss" ${busy ? "disabled" : ""}>Raid boss</button></div>`;
 }
 
+/** Harvest control for a slot that actually holds metal or crystal debris. */
+function galaxyDebrisControl(
+  slot: number,
+  debris: { metal: number; crystal: number } | null,
+  busy: boolean,
+): string {
+  if (!debris || (debris.metal <= 0 && debris.crystal <= 0)) return "";
+  return ` · <button type="button" class="galaxy-debris-badge" data-galaxy-harvest="${slot}" data-testid="galaxy-debris-${slot}" title="Harvest debris" aria-label="Harvest debris" ${busy ? "disabled" : ""}>debris ${fmt(debris.metal)}/${fmt(debris.crystal)} · ${escapeHtml(moonChanceLabel(debris))}</button>`;
+}
+
+/**
+ * Typical field band `rollPlanetFields` draws from this slot.
+ * Low end is floored at FIELD_MIN. The universe seed is not applied,
+ * so this is the band, not one planet's rolled cap.
+ */
+function typicalFieldBand(slot: number): { low: number; high: number } {
+  const center = FIELD_CENTER_BY_SLOT[slot] ?? FIELD_CENTER_BY_SLOT[8]!;
+  return {
+    low: Math.max(FIELD_MIN, center - FIELD_BAND),
+    high: Math.max(FIELD_MIN, center + FIELD_BAND),
+  };
+}
+
+/** Client-only colony scouting line. Numbers come from the slot, not the poll. */
+function emptySlotClimateHtml(slot: number): string {
+  const temp = temperatureKForSlot(slot);
+  const mult = productionMultForSlot(slot);
+  const band = typicalFieldBand(slot);
+  const text = `Temp ${fmt(temp)} K · metal ×${mult.metal.toFixed(2)} · crystal ×${mult.crystal.toFixed(2)} · deuterium ×${mult.deuterium.toFixed(2)} · energy ×${mult.energy.toFixed(2)} · fields ${fmt(band.low)}–${fmt(band.high)}`;
+  return `<span class="galaxy-slot-climate" data-testid="galaxy-slot-climate-${slot}">${text}</span>`;
+}
+
+function scannerOverlayHtml(view: PlayerView): {
+  hint: string;
+  mark: string;
+  inRange: boolean;
+} {
+  const moons = view.scannerMoons ?? [];
+  const spans = scannerSystemSpans(moons, view.galaxy.galaxy);
+  const inRange = systemCoveredByScanner(
+    moons,
+    view.galaxy.galaxy,
+    view.galaxy.system,
+  );
+  if (spans.length === 0) return { hint: "", mark: "", inRange: false };
+  const parts = spans.map((span) =>
+    span.from === span.to ? String(span.from) : `${span.from}–${span.to}`,
+  );
+  const label =
+    spans.length === 1 && spans[0]!.from === spans[0]!.to
+      ? `Scanner: system ${parts[0]}`
+      : `Scanner: systems ${parts.join(", ")}`;
+  const hint = `<p class="hint galaxy-scanner-range" data-testid="galaxy-scanner-range">${escapeHtml(label)}</p>`;
+  const mark = inRange
+    ? `<span class="chip chip-scanner" data-testid="galaxy-scanner-mark">In scanner range</span>`
+    : "";
+  return { hint, mark, inRange };
+}
+
+function galaxyEventBanner(view: PlayerView): string {
+  const event = view.galaxyEvent;
+  if (!event) return "";
+  const viewing = view.galaxy?.galaxy;
+  if (viewing === event.galaxy) {
+    const effect =
+      event.type === "meteor_shower"
+        ? "Debris from fights in this galaxy is 50% higher."
+        : "Ship shields in this galaxy are 20% weaker.";
+    const left =
+      typeof view.now === "number" && Number.isFinite(view.now)
+        ? ` ${formatBossCountdown(event.endsAt, view.now)} left.`
+        : "";
+    return `<div class="galaxy-event-banner" data-testid="galaxy-event-banner"><p>${escapeHtml(event.label)} in galaxy ${fmt(event.galaxy)}. ${escapeHtml(effect)}${left}</p></div>`;
+  }
+  return `<p class="hint galaxy-event-elsewhere" data-testid="galaxy-event-elsewhere">${escapeHtml(event.label)} is in galaxy ${fmt(event.galaxy)}.</p>`;
+}
+
 export function galaxyPanel(
   view: PlayerView,
   busy: boolean,
 ): string {
   const { galaxy } = view;
+  const scanner = scannerOverlayHtml(view);
   const inAlliance = Boolean(view.alliance);
+  const showSlotClimate =
+    view.player?.playerClass?.classId === "expansionist";
 
   const occupiedCount = galaxy.slots.filter((s) => s.planetId).length;
   const moonsCount = galaxy.slots.filter((s) => s.hasMoon).length;
@@ -189,20 +443,30 @@ export function galaxyPanel(
 
   const rows = galaxy.slots
     .map((s) => {
-      const hasDebris = Boolean(
-        s.debris && (s.debris.metal > 0 || s.debris.crystal > 0),
-      );
-      const debrisText = hasDebris
-        ? ` · <span class="galaxy-debris-badge" data-testid="galaxy-debris-${s.coords.slot}">debris ${fmt(s.debris!.metal)}/${fmt(s.debris!.crystal)}</span>`
-        : "";
+      const debrisText = galaxyDebrisControl(s.coords.slot, s.debris, busy);
       const moon = s.hasMoon ? " · Moon" : "";
       const tag = s.allianceTag ? ` [${escapeHtml(s.allianceTag)}]` : "";
+      const stance =
+        s.diplomacy === "nap" || s.diplomacy === "war"
+          ? ` <span class="diplomacy-tag" data-diplomacy="${s.diplomacy}" data-testid="galaxy-diplomacy-${s.coords.slot}">${s.diplomacy === "nap" ? "NAP" : "WAR"}</span>`
+          : "";
       const points =
         s.playerId && typeof s.empirePoints === "number"
           ? ` · ${fmtCompact(s.empirePoints)} pts`
           : "";
+      const inactive = galaxyInactivityBadge(s.inactivity, `galaxy-inactive-${s.coords.slot}`);
+      const nameHtml =
+        s.playerId && s.playerName
+          ? commanderNameButton(
+              s.playerId,
+              s.playerName,
+              `galaxy-commander-${s.coords.slot}`,
+            )
+          : s.playerName
+            ? escapeHtml(s.playerName)
+            : "";
       const who = s.playerName
-        ? `${escapeHtml(s.playerName)}${tag}${s.isOwn ? " (you)" : ""}${s.isMini ? " · Mini" : ""}${points}${moon}`
+        ? `${nameHtml}${inactive}${tag}${stance}${s.isOwn ? " (you)" : ""}${s.isMini ? " · Mini" : ""}${points}${moon}`
         : "Empty";
       const marker = s.allianceMarker;
       const tip = marker
@@ -254,7 +518,9 @@ export function galaxyPanel(
           : "galaxy-slot-empty";
 
       const slotNum = `<span class="galaxy-slot-num" data-testid="galaxy-slot-num-${s.coords.slot}">${fmt(s.coords.slot)}</span>`;
-      return `<li class="galaxy-slot ${slotTypeClass}${marker ? " galaxy-slot-marked" : ""}" data-testid="galaxy-slot-${s.coords.slot}" data-art-id="${escapeAttr(s.artId)}"><span class="galaxy-slot-main">${slotNum}${pin}${disc}${moonDisc}<span class="galaxy-slot-label">${who}${debrisText}</span></span><span class="galaxy-slot-side">${actions}${fleetActions}</span></li>`;
+      const climate =
+        showSlotClimate && !s.planetId ? emptySlotClimateHtml(s.coords.slot) : "";
+      return `<li class="galaxy-slot ${slotTypeClass}${marker ? " galaxy-slot-marked" : ""}" data-testid="galaxy-slot-${s.coords.slot}" data-art-id="${escapeAttr(s.artId)}"><span class="galaxy-slot-main">${slotNum}${pin}${disc}${moonDisc}<span class="galaxy-slot-label">${who}${debrisText}${climate}</span></span><span class="galaxy-slot-side">${actions}${fleetActions}</span></li>`;
     })
     .join("");
 
@@ -312,7 +578,8 @@ export function galaxyPanel(
     <section class="panel" data-testid="galaxy-panel">
       <h2>Galaxy Navigation</h2>
       ${pirateBossGalaxyBanner(view, busy)}
-      <div class="galaxy-system-bar" data-testid="galaxy-system-bar">
+      ${galaxyEventBanner(view)}
+      <div class="galaxy-system-bar${scanner.inRange ? " is-scanner-range" : ""}" data-testid="galaxy-system-bar"${scanner.inRange ? ' data-scanner-in-range="1"' : ""}>
         <div class="galaxy-nav">
           <div class="galaxy-nav-row galaxy-nav-row-system" data-testid="galaxy-nav-row-system">
             <button type="button" data-galaxy-nav="prev" data-testid="galaxy-prev" ${busy ? "disabled" : ""}>◀ System</button>
@@ -333,7 +600,9 @@ export function galaxyPanel(
           <span class="chip chip-debris">${fmt(debrisCount)} Debris</span>
           <span class="chip chip-pirate${galaxy.pirateBase ? " is-active" : ""}">${galaxy.pirateBase ? "Pirate Base" : "Clear Sector"}</span>
           <span class="chip chip-alien${galaxy.alienBase ? " is-active" : ""}">${galaxy.alienBase ? "Alien Threat" : "No Aliens"}</span>
+          ${scanner.mark}
         </div>
+        ${scanner.hint}
         <div class="galaxy-actions" data-testid="galaxy-actions">
           <span class="galaxy-action">
             <button type="button" data-galaxy-max-expeditions data-testid="galaxy-max-expeditions" ${busy ? "disabled" : ""} title="${maxTip.title}">Send max expeditions</button>
@@ -357,6 +626,7 @@ export function galaxyPanel(
       </div>
       <p class="hint">Send max uses the Expedition preset and fills free expedition slots from ships in orbit on the selected colony. Scan probes every foreign-owned planet and mini planet in this system.</p>
       ${markerTools}
+      <p class="hint galaxy-inactive-legend" data-testid="galaxy-inactive-legend">${galaxyInactivityBadge("i", "galaxy-inactive-legend-i")} inactive 7+ days · ${galaxyInactivityBadge("I", "galaxy-inactive-legend-I")} inactive 28+ days</p>
       <ul class="roster galaxy-slots" data-testid="galaxy-slots">${rows}</ul>
       ${
         galaxy.minis.length > 0
@@ -369,8 +639,20 @@ export function galaxyPanel(
           const debris = hasDebris
             ? ` · debris ${fmt(mini.debris!.metal)}/${fmt(mini.debris!.crystal)}`
             : "";
+          const inactive = galaxyInactivityBadge(
+            mini.inactivity,
+            `galaxy-mini-inactive-${mini.planetId}`,
+          );
+          const miniStance =
+            mini.diplomacy === "nap" || mini.diplomacy === "war"
+              ? ` <span class="diplomacy-tag" data-diplomacy="${mini.diplomacy}" data-testid="galaxy-diplomacy-mini-${escapeAttr(mini.planetId)}">${mini.diplomacy === "nap" ? "NAP" : "WAR"}</span>`
+              : "";
+          const miniCommanderId = uniqueCommanderId(
+            view.highscores,
+            mini.playerName,
+          );
           const who = mini.playerName
-            ? `${escapeHtml(mini.playerName)}${mini.isOwn ? " (you)" : ""}`
+            ? `${miniCommanderId ? commanderNameButton(miniCommanderId, mini.playerName, `galaxy-mini-commander-${mini.planetId}`) : escapeHtml(mini.playerName)}${inactive}${miniStance}${mini.isOwn ? " (you)" : ""}`
             : escapeHtml(mini.name);
           const slotNum = `<span class="galaxy-slot-num" data-testid="galaxy-mini-slot-num-${mini.coords.slot}">${fmt(mini.coords.slot)}</span>`;
           let miniActions = "";

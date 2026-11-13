@@ -8,11 +8,13 @@ describe("in-flight fleet save from main", () => {
   it("keeps the flying fleet, its owner, and the home stockpile", () => {
     const path = fileURLToPath(new URL("./fixtures/in-flight-fleet-save.json", import.meta.url));
     const before = JSON.parse(readFileSync(path, "utf8")) as UniverseState;
+    assert.equal(before.invites, undefined);
     const fleetId = Object.keys(before.fleets)[0];
     assert.ok(fleetId);
     const saved = before.fleets[fleetId]!;
     const loaded = migrateOrResetUniverse(structuredClone(before));
     assert.equal(loaded.didReset, false);
+    assert.equal(loaded.universe.invites, undefined);
     const fleet = loaded.universe.fleets[fleetId];
     assert.ok(fleet);
     assert.equal(fleet.mission, "deploy");

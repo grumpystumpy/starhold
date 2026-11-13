@@ -1,6 +1,8 @@
 import "../test-dom";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { after, describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   SHIP_ORDER,
   flightSecondsOneWay,
@@ -20,6 +22,7 @@ import {
   doApplyFleetPreset,
   doGalaxyFleetAction,
   doGalaxyFleetPreset,
+  doGalaxyHarvest,
   doGalaxySpy,
   doLaunchFleet,
   GALAXY_SPY_PROBES,
@@ -173,6 +176,14 @@ describe("fleet send two-step", () => {
     const hiddenInput = { type: "hidden", value: "1" };
     syncChangedInputTypeValue(numberInput, hiddenInput);
     assert.equal(numberInput.value, "1");
+  });
+
+  it("blocks the fleet composer while vacation mode is on", () => {
+    const base = view();
+    base.player.vacationMode = { startedAt: 1 };
+    const html = fleetComposer(base, false, draft({ step: 1, counts: { scout: 1 } }));
+    assert.match(html, /Vacation mode is on\. New fleets cannot launch\./);
+    assert.match(buttonTag(html, "fleet-next"), /disabled/);
   });
 
   it("step 1 renders ship inputs and no coords or mission inputs", () => {
@@ -1021,5 +1032,232 @@ describe("galaxy fleet actions", () => {
 
     session.activePage = originalPage;
     session.pendingGalaxyFleetDraft = null;
+  });
+
+  function stubFleetNavigation(): void {
+    Object.assign(window, {
+      location: {
+        href: "http://starhold.local/galaxy",
+        pathname: "/galaxy",
+        search: "",
+        hash: "",
+      },
+      history: { pushState() {}, replaceState() {} },
+    });
+  }
+
+  function harvestReadyView(ships: Record<string, number>): PlayerView {
+    const base = view();
+    return {
+      ...base,
+      player: { ...base.player, homePlanetId: "pl1" },
+      planet: {
+        ...base.planet,
+        id: "pl1",
+        ships,
+        resources: { metal: 5000, crystal: 2000, deuterium: 1_000_000 },
+      },
+      galaxy: {
+        ...base.galaxy,
+        slots: [
+          {
+            coords: { galaxy: 1, system: 1, slot: 4 },
+            planetId: "pl2",
+            playerId: "p2",
+            playerName: "Veteran",
+            isOwn: false,
+            debris: { metal: 800, crystal: 120 },
+          },
+          {
+            coords: { galaxy: 1, system: 1, slot: 5 },
+            planetId: null,
+            playerId: null,
+            playerName: null,
+            isOwn: false,
+            debris: null,
+          },
+        ],
+      },
+    } as unknown as PlayerView;
+  }
+
+  it("prefills home-planet recyclers into the harvest review and does not launch", () => {
+    const originalView = session.view;
+    const originalPage = session.activePage;
+    const originalFetch = globalThis.fetch;
+    let fetches = 0;
+    session.view = harvestReadyView({
+      recycler: 4,
+      scout: 2,
+      swarmMothership: 1,
+    });
+    session.activePage = "galaxy";
+    session.pendingGalaxyFleetDraft = null;
+    session.busy = false;
+    clearFlash();
+    setPaintImpl(() => {});
+    stubFleetNavigation();
+    globalThis.fetch = async () => {
+      fetches += 1;
+      return new Response("{}", { status: 200 });
+    };
+
+    try {
+      doGalaxyHarvest({ galaxy: 1, system: 1, slot: 4 });
+      assert.equal(fetches, 0);
+      assert.equal(session.error, null);
+      assert.equal(session.activePage, "fleet");
+      assert.equal(session.pendingGalaxyFleetDraft?.mission, "harvest");
+      assert.equal(session.pendingGalaxyFleetDraft?.step, 2);
+      assert.deepEqual(session.pendingGalaxyFleetDraft?.counts, { recycler: 4 });
+      assert.deepEqual(session.pendingGalaxyFleetDraft?.targetCoords, {
+        galaxy: 1,
+        system: 1,
+        slot: 4,
+      });
+      const draft = fleetDraftForPage(
+        make({ tag: "div" }) as unknown as HTMLElement,
+        "fleet",
+      );
+      assert.equal(session.pendingGalaxyFleetDraft, null);
+      const html = fleetComposer(session.view, false, draft);
+      assert.match(html, /data-testid="fleet-send-review"/);
+      assert.match(html, /data-testid="mission-harvest"[^>]*selected/);
+      assert.match(html, /value="4" data-fleet-count="recycler"/);
+      assert.match(html, /value="coords:1:1:4" selected/);
+      assert.match(html, /data-fleet-action="send"/);
+      assert.match(html, /data-testid="launch-fleet"/);
+      assert.match(html, /value="0" data-fleet-count="scout"/);
+      assert.match(html, /value="0" data-fleet-count="swarmMothership"/);
+    } finally {
+      globalThis.fetch = originalFetch;
+      session.view = originalView;
+      session.activePage = originalPage;
+      session.pendingGalaxyFleetDraft = null;
+      session.busy = false;
+      clearFlash();
+      rememberFleetDraft(null);
+    }
+  });
+
+  it("prefills a Mothership when it is the only legal harvest hull", () => {
+    const originalView = session.view;
+    const originalPage = session.activePage;
+    session.view = harvestReadyView({ swarmMothership: 2 });
+    session.activePage = "galaxy";
+    session.pendingGalaxyFleetDraft = null;
+    clearFlash();
+    setPaintImpl(() => {});
+    stubFleetNavigation();
+
+    try {
+      doGalaxyHarvest({ galaxy: 1, system: 1, slot: 4 });
+      assert.equal(session.error, null);
+      assert.equal(session.pendingGalaxyFleetDraft?.mission, "harvest");
+      assert.deepEqual(session.pendingGalaxyFleetDraft?.counts, {
+        swarmMothership: 2,
+      });
+      const draft = fleetDraftForPage(
+        make({ tag: "div" }) as unknown as HTMLElement,
+        "fleet",
+      );
+      const html = fleetComposer(session.view, false, draft);
+      assert.match(html, /data-testid="fleet-send-review"/);
+      assert.match(html, /value="2" data-fleet-count="swarmMothership"/);
+      assert.doesNotMatch(html, /data-fleet-count="recycler"/);
+    } finally {
+      session.view = originalView;
+      session.activePage = originalPage;
+      session.pendingGalaxyFleetDraft = null;
+      clearFlash();
+      rememberFleetDraft(null);
+    }
+  });
+
+  it("blocks harvest when the home planet has no legal harvest hull and does not launch", () => {
+    const originalView = session.view;
+    const originalPage = session.activePage;
+    const originalFetch = globalThis.fetch;
+    let fetches = 0;
+    session.view = harvestReadyView({ scout: 3, worldEater: 2 });
+    session.activePage = "galaxy";
+    session.pendingGalaxyFleetDraft = null;
+    clearFlash();
+    setPaintImpl(() => {});
+    stubFleetNavigation();
+    globalThis.fetch = async () => {
+      fetches += 1;
+      return new Response("{}", { status: 200 });
+    };
+
+    try {
+      doGalaxyHarvest({ galaxy: 1, system: 1, slot: 4 });
+      assert.equal(fetches, 0);
+      assert.equal(
+        session.error,
+        "Harvest requires a Recovery Vessel or Mothership on the home planet.",
+      );
+      assert.equal(session.pendingGalaxyFleetDraft, null);
+      assert.equal(session.activePage, "galaxy");
+    } finally {
+      globalThis.fetch = originalFetch;
+      session.view = originalView;
+      session.activePage = originalPage;
+      session.pendingGalaxyFleetDraft = null;
+      clearFlash();
+    }
+  });
+
+  it("does not harvest from a colony that is not the home planet", () => {
+    const originalView = session.view;
+    const originalPage = session.activePage;
+    const colony = harvestReadyView({ recycler: 6 });
+    colony.player.homePlanetId = "home-world";
+    session.view = colony;
+    session.activePage = "galaxy";
+    session.pendingGalaxyFleetDraft = null;
+    clearFlash();
+    setPaintImpl(() => {});
+    stubFleetNavigation();
+
+    try {
+      doGalaxyHarvest({ galaxy: 1, system: 1, slot: 4 });
+      assert.equal(
+        session.error,
+        "Harvest sends from the home planet. Switch to it first.",
+      );
+      assert.equal(session.pendingGalaxyFleetDraft, null);
+      assert.equal(session.activePage, "galaxy");
+    } finally {
+      session.view = originalView;
+      session.activePage = originalPage;
+      session.pendingGalaxyFleetDraft = null;
+      clearFlash();
+    }
+  });
+
+  it("keeps harvest confirm on the existing launch path", () => {
+    const handler = readFileSync(
+      fileURLToPath(new URL("../main-handlers-click.ts", import.meta.url)),
+      "utf8",
+    );
+    const harvest = handler.slice(
+      handler.indexOf('"[data-galaxy-harvest]"'),
+      handler.indexOf('"[data-galaxy-moon-destroy]"'),
+    );
+    assert.ok(harvest.includes("doGalaxyHarvest("));
+    assert.equal(harvest.includes("doLaunchFleet"), false);
+    assert.match(handler, /void doLaunchFleet\(draft\)/);
+    const action = readFileSync(
+      fileURLToPath(new URL("../main-actions-fleet.ts", import.meta.url)),
+      "utf8",
+    );
+    const fn = action.slice(
+      action.indexOf("export function doGalaxyHarvest"),
+      action.indexOf("export function doGalaxyFleetPreset"),
+    );
+    assert.match(fn, /canCollectDebris/);
+    assert.match(fn, /"harvest"/);
+    assert.equal(/doLaunchFleet|launchFleetMission/.test(fn), false);
   });
 });

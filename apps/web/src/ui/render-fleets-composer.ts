@@ -1,5 +1,6 @@
 import {
   EXPEDITION_SLOT,
+  isVacationMode,
   NEWBIE_PROTECTION_POINTS,
   SHIP_ORDER,
   SHIPS,
@@ -31,6 +32,7 @@ import {
   type FleetStep,
 } from "./render-fleets-draft.js";
 import { blockedActionNote, infoTooltip } from "./render-tooltips";
+import { napAttackWarning } from "./nap-attack";
 
 export function fleetComposer(
   view: PlayerView,
@@ -371,6 +373,8 @@ export function fleetComposer(
     sampleTarget,
     sampleShips,
   );
+  const vacationOn = isVacationMode(view.player);
+  const vacationReason = "Vacation mode is on. New fleets cannot launch.";
   const step: FleetStep = draft?.step === 2 ? 2 : 1;
   const speedPercent = clampFleetSpeed(draft?.speedPercent ?? 100);
   const selectedShips = orbitShipIds.reduce((sum, id) => {
@@ -379,10 +383,16 @@ export function fleetComposer(
     return sum + Math.min(have, Math.max(0, Math.floor(raw)));
   }, 0);
   const nextDisabled =
-    busy || orbitShipIds.length === 0 || selectedShips < 1 || !swarmCheck.ok;
+    busy ||
+    vacationOn ||
+    orbitShipIds.length === 0 ||
+    selectedShips < 1 ||
+    !swarmCheck.ok;
   const nextReason = busy
     ? null
-    : orbitShipIds.length === 0
+    : vacationOn
+      ? vacationReason
+      : orbitShipIds.length === 0
       ? "No ships in orbit on this colony."
       : selectedShips < 1
         ? "Select at least one ship."
@@ -551,7 +561,9 @@ export function fleetComposer(
   const slotsFull = fleetActive >= fleetCap;
   const sendReason = busy
     ? null
-    : selectedShips < 1
+    : vacationOn
+      ? vacationReason
+      : selectedShips < 1
       ? "Select at least one ship."
       : !swarmCheck.ok
         ? swarmCheck.error
@@ -563,7 +575,7 @@ export function fleetComposer(
               ? `Not enough deuterium for fuel (need ${preview.fuel}).`
               : null;
   const sendDisabled =
-    busy || launchBlocked || selectedShips < 1 || slotsFull || fuelShort;
+    busy || vacationOn || launchBlocked || selectedShips < 1 || slotsFull || fuelShort;
   const ownTarget =
     (selectedPlanetId != null &&
       view.ownedPlanets.some((p) => p.id === selectedPlanetId)) ||
@@ -574,6 +586,11 @@ export function fleetComposer(
           p.coords.system === destination.system &&
           p.coords.slot === destination.slot,
       ));
+  const napWarning = napAttackWarning(view, {
+    mission,
+    planetId: selectedPlanetId,
+    coords: destination,
+  });
   const review = renderFleetSendReview(
     buildFleetSendReview({
       mission,
@@ -587,6 +604,7 @@ export function fleetComposer(
       cruiseSeconds: cruise.eta,
       cruiseFuel: cruise.fuel,
       cargo: cruise.cap,
+      cargoLoaded: mission === "transport" ? transportCargoLoaded(held.cargo) : undefined,
       speedPercent,
       previewSeconds: preview.eta,
       previewFuel: preview.fuel,
@@ -656,6 +674,11 @@ export function fleetComposer(
           ? `<p class="hint" data-testid="fleet-newbie-protection-warning">Launching this attack ends your newbie protection.</p>`
           : ""
       }
+      ${
+        napWarning
+          ? `<p class="hint" data-testid="fleet-nap-warning">${escapeHtml(napWarning)}</p>`
+          : ""
+      }
       ${acsBlock(view, mission, busy, draft)}
       <div class="fleet-actions">
         <button type="button" data-fleet-back data-testid="fleet-back" ${busy ? "disabled" : ""}>Back</button>
@@ -669,6 +692,11 @@ export function fleetComposer(
       }
     </form>
   `;
+}
+
+function transportCargoLoaded(cargo: FleetDraft["cargo"] | undefined): number {
+  const part = (n: number | undefined): number => Math.max(0, Math.floor(n ?? 0));
+  return part(cargo?.metal) + part(cargo?.crystal) + part(cargo?.deuterium);
 }
 
 function coordsFromTarget(view: PlayerView, selected: string): Coordinates | null {

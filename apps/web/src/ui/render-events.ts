@@ -1,6 +1,12 @@
-import type { FleetMission, PlayerView } from "@starhold/game";
+import {
+  FLEET_SAVE_MIN_LEAD_MS,
+  type FleetMission,
+  type FleetSaveSuggestion,
+  type PlayerView,
+} from "@starhold/game";
 import { fmt, fmtCompact, fmtCoords, fmtCoordsLink, fmtEta, remainingSeconds } from "./format";
-import { escapeHtml } from "./render-escape";
+import { isFleetSaveDismissed } from "./fleet-save-dismiss";
+import { escapeAttr, escapeHtml } from "./render-escape";
 import { bossDamageCallout, formatBossCountdown } from "./render-seasons";
 
 export interface EventPresentation {
@@ -56,6 +62,40 @@ function originCoords(
   return "—";
 }
 
+function fleetSaveFor(
+  view: PlayerView,
+  fleet: FleetMission,
+  hostile: boolean,
+  now: number,
+): FleetSaveSuggestion | null {
+  if (!hostile) return null;
+  const suggestion = (view.fleetSave ?? []).find((row) => row.attackId === fleet.id);
+  if (!suggestion) return null;
+  if (suggestion.arrivesAt - now <= FLEET_SAVE_MIN_LEAD_MS) return null;
+  if (isFleetSaveDismissed(suggestion.attackId)) return null;
+  return suggestion;
+}
+
+function fleetSaveNote(suggestion: FleetSaveSuggestion): string {
+  const id = escapeAttr(suggestion.attackId);
+  switch (suggestion.mission) {
+    case "expedition":
+      return `<span class="hint" data-testid="fleet-save-note-${id}">Expedition. Expeditions can meet ambushes.</span>`;
+    case "deploy":
+      return "";
+    default: {
+      const unexpected: never = suggestion.mission;
+      return unexpected;
+    }
+  }
+}
+
+function fleetSaveControls(suggestion: FleetSaveSuggestion | null): string {
+  if (!suggestion) return "";
+  const id = escapeAttr(suggestion.attackId);
+  return `<span class="event-fleet-save"><button type="button" data-fleet-save="${id}" data-testid="fleet-save-${id}">Send fleet away</button>${fleetSaveNote(suggestion)}<button type="button" class="ghost" data-fleet-save-dismiss="${id}" data-testid="fleet-save-dismiss-${id}" aria-label="Dismiss send fleet away">Dismiss</button></span>`;
+}
+
 function renderCoordLink(c: { galaxy: number; system: number; slot: number } | string): string {
   if (typeof c === "string") return escapeHtml(c);
   const formatted = fmtCoords(c);
@@ -108,8 +148,13 @@ export function eventsBannerHtml(view: PlayerView, now = Date.now()): string {
     const testid = isSoonest ? ' data-testid="event-soonest"' : "";
     const tag = isSoonest ? "div" : "li";
     const missionCls = fleet.mission === "occupy" ? " mission-occupy" : "";
+    const recall =
+      !hostile && fleet.phase === "outbound"
+        ? `<button type="button" class="event-recall" data-recall-fleet="${escapeAttr(fleet.id)}" data-testid="recall-fleet">Recall</button>`
+        : "";
+    const save = fleetSaveControls(fleetSaveFor(view, fleet, hostile, now));
 
-    return `<${tag} class="event-row ${presentation.className}${missionCls}" data-event-id="${id}" data-event-arrives-at="${fleet.arrivesAt}"${testid}><span class="event-kind">${presentation.label}</span><span class="event-route"><span class="${fleet.mission === "occupy" ? "mission-occupy" : ""}">${escapeHtml(missionLabel(fleet.mission))}</span> · ${routeFrom} → ${routeTo}</span><span class="event-arrival"><time>${escapeHtml(arrival)}</time> · <span data-event-countdown>${formatEventCountdown(fleet.arrivesAt, now)}</span></span></${tag}>`;
+    return `<${tag} class="event-row ${presentation.className}${missionCls}" data-event-id="${id}" data-event-arrives-at="${fleet.arrivesAt}"${testid}><span class="event-kind">${presentation.label}</span><span class="event-route"><span class="${fleet.mission === "occupy" ? "mission-occupy" : ""}">${escapeHtml(missionLabel(fleet.mission))}</span> · ${routeFrom} → ${routeTo}</span><span class="event-arrival"><time>${escapeHtml(arrival)}</time> · <span data-event-countdown>${formatEventCountdown(fleet.arrivesAt, now)}</span></span>${recall}${save}</${tag}>`;
   };
 
   const soonestHtml = renderRow(rows[0]!, true);

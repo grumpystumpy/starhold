@@ -5,6 +5,7 @@ import type {
   FleetShips,
   MissionType,
   PlayerView,
+  PublicCombatReport,
   ResearchId,
   ShipId,
 } from "@starhold/game";
@@ -44,11 +45,16 @@ import {
   POLL_INTERVAL_MS,
   silentRefresh,
   refreshAllianceChatIfOpen,
+  ensureAllianceRecruitingDirectory,
+  refreshMarketIfOpen,
+  refreshCommanderMailIfOpen,
   startPolling,
 } from "./main-actions";
 import { wireJointStrikeForm } from "./main-actions-alliances";
 import { ensureDelegatedHandlers } from "./main-handlers";
 import { initTelemetry } from "./telemetry";
+import { installSoundGestureArm } from "./settings";
+import { bindAwayRecapHide, browserVisitStorage, visitStamp } from "./away-recap";
 import { startPwa } from "./pwa";
 import {
   sharedReportCodeFromSearch,
@@ -62,8 +68,11 @@ import {
   syncSessionUrl,
 } from "./ui/router";
 import { peekEmailReset } from "./ui/render-chrome-join";
+import { bindBattleReplayPaint } from "./ui/render-fleets-panels";
+import { syncCategoryBoards } from "./highscore-categories";
 
 function paint(): void {
+  if (session.view) syncCategoryBoards(session.activePage);
   renderApp(
     root,
     {
@@ -78,6 +87,7 @@ function paint(): void {
       claimablePlayerId: session.claimablePlayerId,
       emailReset: peekEmailReset(),
       passwordResetToken: session.passwordResetToken,
+      inviteCode: session.inviteCode,
       activePage: session.activePage,
       onEventsRefresh: () => {
         if (session.view) void silentRefresh(session.view.player.id);
@@ -103,6 +113,7 @@ function paint(): void {
     },
   );
   ensureDelegatedHandlers();
+  ensureAllianceRecruitingDirectory();
   if (session.pendingAcsPrefill && session.activePage === "fleet") {
     const formUp = Boolean(root.querySelector("#fleet-form"));
     if (wireJointStrikeForm(session.pendingAcsPrefill) || formUp) {
@@ -112,6 +123,19 @@ function paint(): void {
 }
 
 setPaintImpl(paint);
+installSoundGestureArm(typeof document === "undefined" ? null : document);
+
+let sharedReportView: PublicCombatReport | null = null;
+
+function paintBattleReplay(): void {
+  if (sharedReportView && sharedReportCodeFromSearch(window.location.search)) {
+    root.innerHTML = sharedCombatReportPage(sharedReportView);
+    return;
+  }
+  schedulePaint();
+}
+
+bindBattleReplayPaint(paintBattleReplay);
 
 async function resumePlayer(
   playerId: string,
@@ -120,7 +144,9 @@ async function resumePlayer(
   session.busy = true;
   schedulePaint();
   try {
-    session.view = await fetchState(playerId);
+    session.view = await fetchState(playerId, undefined, undefined, {
+      scanners: session.activePage === "galaxy",
+    });
     session.galaxySystem = session.view.planet.coords.system;
     session.galaxyGalaxy = null;
     localStorage.setItem(SESSION_KEY, playerId);
@@ -159,21 +185,33 @@ async function resumePlayer(
 
 async function boot(): Promise<void> {
   startPwa();
+  bindAwayRecapHide(
+    document,
+    {
+      getItem: (key) => browserVisitStorage()?.getItem(key) ?? null,
+      setItem: (key, value) => {
+        browserVisitStorage()?.setItem(key, value);
+      },
+    },
+    () => session.view?.player.id ?? null,
+    () => visitStamp(Date.now(), session.view?.now),
+  );
   void initTelemetry();
   ensureDelegatedHandlers();
   ensurePopstateHandler();
   session.activePage = pageFromLocation();
   session.accountMenu = accountMenuFromPath(window.location.pathname);
   const bootParams = new URLSearchParams(window.location.search);
+  const inviteParam = bootParams.get("invite")?.trim() ?? "";
+  if (inviteParam) session.inviteCode = inviteParam.slice(0, 32);
   const resetParam = bootParams.get("reset")?.trim() ?? "";
   if (resetParam) session.passwordResetToken = resetParam;
   const reportCode = sharedReportCodeFromSearch(window.location.search);
   if (reportCode) {
     root.innerHTML = `<main class="panel" data-testid="shared-combat-report-loading">Loading battle report…</main>`;
     try {
-      root.innerHTML = sharedCombatReportPage(
-        await fetchPublicCombatReport(reportCode),
-      );
+      sharedReportView = await fetchPublicCombatReport(reportCode);
+      root.innerHTML = sharedCombatReportPage(sharedReportView);
     } catch (err) {
       root.innerHTML = sharedCombatReportError(
         err instanceof Error ? err.message : "Could not load this battle report.",
@@ -329,6 +367,8 @@ window.starhold = {
     if (!session.view) return;
     await silentRefresh(session.view.player.id);
     await refreshAllianceChatIfOpen();
+    await refreshMarketIfOpen();
+    await refreshCommanderMailIfOpen();
   },
   pollIntervalMs: POLL_INTERVAL_MS,
   idlePauseMs: IDLE_PAUSE_MS,

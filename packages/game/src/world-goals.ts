@@ -95,6 +95,8 @@ function rollCadence(board: PlayerGoalState, cadence: GoalCadence): void {
 /**
  * Align the player's board with the UTC day and week.
  * Stale cadence counters are cleared. Other cadence progress is kept.
+ * A save with no weekly key starts the open week at zero and does not
+ * clear the daily board.
  */
 export function ensureGoalBoard(
   player: PlayerState,
@@ -113,7 +115,10 @@ export function ensureGoalBoard(
     rollCadence(board, "daily");
     board.dailyKey = dailyKey;
   }
-  if (board.weeklyKey !== weeklyKey) {
+  if (!board.weeklyKey) {
+    rollCadence(board, "weekly");
+    board.weeklyKey = weeklyKey;
+  } else if (board.weeklyKey !== weeklyKey) {
     rollCadence(board, "weekly");
     board.weeklyKey = weeklyKey;
   }

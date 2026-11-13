@@ -3,6 +3,7 @@ import {
   BUILDINGS,
   DEFENSE_ORDER,
   DEFENSES,
+  moonChanceLabel,
   RESEARCH,
   RESEARCH_ORDER,
   SHIP_ORDER,
@@ -22,6 +23,19 @@ export type OpenReportState = {
 } | null;
 
 let openReport: OpenReportState = null;
+let compareSpyId: string | null = null;
+
+export function toggleCompareSpy(id: string): void {
+  compareSpyId = compareSpyId === id ? null : id;
+}
+
+export function setCompareSpy(id: string | null): void {
+  compareSpyId = id;
+}
+
+export function currentCompareSpy(): string | null {
+  return compareSpyId;
+}
 
 export function openReportWindow(
   kind: "combat" | "spy" | "expedition",
@@ -72,6 +86,17 @@ export interface InboxItem {
 
 let inboxFilter: InboxFilter = "all";
 let confirmDelete: InboxFilter | null = null;
+let messagesTab: "inbox" | "mail" = "inbox";
+let mailReplyTo = "";
+
+export interface CommanderMailView {
+  id: string;
+  fromName: string;
+  body: string;
+  createdAt: number;
+}
+
+let commanderMailRows: CommanderMailView[] = [];
 
 export function setInboxFilter(next: InboxFilter): void {
   inboxFilter = next;
@@ -79,6 +104,27 @@ export function setInboxFilter(next: InboxFilter): void {
 
 export function currentInboxFilter(): InboxFilter {
   return inboxFilter;
+}
+
+export function setMessagesTab(next: "inbox" | "mail"): void {
+  messagesTab = next;
+}
+
+export function currentMessagesTab(): "inbox" | "mail" {
+  return messagesTab;
+}
+
+export function setMailReplyTo(name: string): void {
+  mailReplyTo = name;
+  messagesTab = "mail";
+}
+
+export function setCommanderMail(rows: CommanderMailView[]): void {
+  commanderMailRows = rows;
+}
+
+export function commanderMailRowsForView(): CommanderMailView[] {
+  return commanderMailRows;
 }
 
 export function setConfirmDelete(next: InboxFilter | null): void {
@@ -187,7 +233,7 @@ function resourceNames(
 function combatMailBody(report: CombatReport): string {
   const bits = [report.summary];
   const debris = resourceNames(report.debrisCreated);
-  if (debris) bits.push(`Debris: ${debris}`);
+  if (debris) bits.push(`Debris: ${debris} · ${moonChanceLabel(report.debrisCreated)}`);
   const destroyed = namedCounts(DEFENSE_ORDER, DEFENSES, report.defensesDestroyed);
   if (destroyed) {
     const rebuilt = namedCounts(DEFENSE_ORDER, DEFENSES, report.defensesRebuilt) || "none";
@@ -262,7 +308,7 @@ function combatSideHtml(
 /** Losses, survivors, loot, and debris from the report's own counts. */
 export function combatReadoutHtml(report: CombatReport, selfId: string): string {
   const loss = combatLossSummary(report);
-  return `<div class="combat-side-compare" data-testid="combat-side-compare">${combatSideHtml("Attacker", report, selfId, loss)}${combatSideHtml("Defender", report, selfId, loss)}</div><div class="combat-spoils" data-testid="combat-spoils"><section class="combat-loot" data-testid="combat-loot"><h4>Loot</h4><p>${fullResourceLine(report.loot)}</p></section><section class="combat-debris" data-testid="combat-debris"><h4>Debris</h4><p>${fullResourceLine(report.debrisCreated)}</p></section></div>`;
+  return `<div class="combat-side-compare" data-testid="combat-side-compare">${combatSideHtml("Attacker", report, selfId, loss)}${combatSideHtml("Defender", report, selfId, loss)}</div><div class="combat-spoils" data-testid="combat-spoils"><section class="combat-loot" data-testid="combat-loot"><h4>Loot</h4><p>${fullResourceLine(report.loot)}</p></section><section class="combat-debris" data-testid="combat-debris"><h4>Debris</h4><p>${fullResourceLine(report.debrisCreated)}</p><p class="meta" data-testid="combat-moon-chance">${escapeHtml(moonChanceLabel(report.debrisCreated))}</p></section></div>`;
 }
 
 export function combatLossSummary(report: CombatReport): {
@@ -370,9 +416,7 @@ function renderReportSubwindow(view: PlayerView): string {
             ${shipTotalsTable("Defender", report.defenderBefore, report.defenderAfter)}
             ${defenseSummaryHtml}
             ${report.summary ? `<p class="meta"><strong>Summary:</strong> ${escapeHtml(report.summary)}</p>` : ""}
-            <div class="battle-report-actions">
-              ${report.shareCode ? `<button type="button" class="ghost" data-copy-battle-share="${escapeAttr(report.id)}" data-testid="copy-battle-share-${escapeAttr(report.id)}">Copy share</button>` : ""}
-            </div>
+            ${combatBattleExtrasHtml(report)}
           </div>
         </div>
       </div>`;
@@ -407,6 +451,12 @@ function renderReportSubwindow(view: PlayerView): string {
             <p class="meta"><strong>Defenses:</strong> ${defenses}</p>
             <p class="meta"><strong>Buildings:</strong> ${buildings}</p>
             <p class="meta"><strong>Research:</strong> ${research}</p>
+            ${
+              previousSpyReport(view.spyReports ?? [], report.id)
+                ? spyCompareButton(report.id, "window")
+                : ""
+            }
+            ${spyComparePanel(view.spyReports ?? [], report.id, "window")}
           </div>
         </div>
       </div>`;
@@ -468,6 +518,256 @@ export function spyReportDetailsHtml(report: EspionageReport): string {
       ? lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("")
       : `<p>No further detail in this scan.</p>`;
   return `<details class="message-detail" data-testid="spy-detail-${escapeAttr(report.id)}"><summary>Full report</summary>${body}</details>`;
+}
+
+export type SpyCompareSectionId =
+  | "resources"
+  | "fleet"
+  | "defense"
+  | "buildings"
+  | "research";
+
+export type SpyCompareTone = "up" | "down" | "same" | "unknown";
+
+export interface SpyCompareRow {
+  key: string;
+  label: string;
+  previous: string;
+  current: string;
+  change: string;
+  tone: SpyCompareTone;
+  /** Current minus previous when both scans include the row. */
+  delta: number | null;
+}
+
+export interface SpyCompareSection {
+  id: SpyCompareSectionId;
+  title: string;
+  rows: SpyCompareRow[];
+}
+
+function sameTargetCoords(
+  a: EspionageReport["targetCoords"],
+  b: EspionageReport["targetCoords"],
+): boolean {
+  return a.galaxy === b.galaxy && a.system === b.system && a.slot === b.slot;
+}
+
+/** Newest first, then id, matching the inbox order. */
+function newestSpyFirst(a: EspionageReport, b: EspionageReport): number {
+  return b.at - a.at || a.id.localeCompare(b.id);
+}
+
+/**
+ * The scan immediately before `currentId` on the same coordinates.
+ * Reports on any other target are ignored.
+ */
+export function previousSpyReport(
+  reports: readonly EspionageReport[] | null | undefined,
+  currentId: string,
+): EspionageReport | null {
+  const list = reports ?? [];
+  const current = list.find((report) => report.id === currentId);
+  if (!current) return null;
+  const same = list
+    .filter((report) => sameTargetCoords(report.targetCoords, current.targetCoords))
+    .sort(newestSpyFirst);
+  const index = same.findIndex((report) => report.id === current.id);
+  if (index < 0 || index + 1 >= same.length) return null;
+  return same[index + 1] ?? null;
+}
+
+function toneForDelta(delta: number): SpyCompareTone {
+  if (delta > 0) return "up";
+  if (delta < 0) return "down";
+  return "same";
+}
+
+function changeText(delta: number): string {
+  if (delta > 0) return `+${fmt(delta)}`;
+  return fmt(delta);
+}
+
+function compareRows(
+  order: readonly { key: string; label: string }[],
+  previous: object | null,
+  current: object | null,
+  includeZeros: boolean,
+): SpyCompareRow[] | null {
+  if (previous == null && current == null) return null;
+  const prevBag = previous as Record<string, number | undefined> | null;
+  const curBag = current as Record<string, number | undefined> | null;
+  const keys = includeZeros
+    ? order
+    : order.filter(
+        (row) => (prevBag?.[row.key] ?? 0) > 0 || (curBag?.[row.key] ?? 0) > 0,
+      );
+  if (keys.length === 0) {
+    const both = prevBag != null && curBag != null;
+    return [
+      {
+        key: "none",
+        label: "None",
+        previous: prevBag == null ? "—" : "0",
+        current: curBag == null ? "—" : "0",
+        change: both ? "0" : "not scanned",
+        tone: both ? "same" : "unknown",
+        delta: both ? 0 : null,
+      },
+    ];
+  }
+  return keys.map((row) => {
+    const prevN = prevBag == null ? null : Math.floor(prevBag[row.key] ?? 0);
+    const curN = curBag == null ? null : Math.floor(curBag[row.key] ?? 0);
+    if (prevN != null && curN != null) {
+      const delta = curN - prevN;
+      return {
+        key: row.key,
+        label: row.label,
+        previous: fmt(prevN),
+        current: fmt(curN),
+        change: changeText(delta),
+        tone: toneForDelta(delta),
+        delta,
+      };
+    }
+    return {
+      key: row.key,
+      label: row.label,
+      previous: prevN == null ? "—" : fmt(prevN),
+      current: curN == null ? "—" : fmt(curN),
+      change: "not scanned",
+      tone: "unknown" as const,
+      delta: null,
+    };
+  });
+}
+
+function namedOrder(
+  order: readonly string[],
+  names: { [id: string]: { name: string } | undefined },
+): { key: string; label: string }[] {
+  return order
+    .filter((id) => names[id])
+    .map((id) => ({ key: id, label: names[id]!.name }));
+}
+
+/** Side-by-side layers for the current scan and the previous scan of that target. */
+export function spyCompareSections(
+  previous: EspionageReport,
+  current: EspionageReport,
+): SpyCompareSection[] {
+  const specs: Array<{
+    id: SpyCompareSectionId;
+    title: string;
+    order: readonly { key: string; label: string }[];
+    previous: object | null;
+    current: object | null;
+    includeZeros: boolean;
+  }> = [
+    {
+      id: "resources",
+      title: "Resources",
+      order: [
+        { key: "metal", label: "Metal" },
+        { key: "crystal", label: "Crystal" },
+        { key: "deuterium", label: "Deuterium" },
+      ],
+      previous: previous.resources,
+      current: current.resources,
+      includeZeros: true,
+    },
+    {
+      id: "fleet",
+      title: "Fleet",
+      order: namedOrder(SHIP_ORDER, SHIPS),
+      previous: previous.ships,
+      current: current.ships,
+      includeZeros: false,
+    },
+    {
+      id: "defense",
+      title: "Defense",
+      order: namedOrder(DEFENSE_ORDER, DEFENSES),
+      previous: previous.defenses,
+      current: current.defenses,
+      includeZeros: false,
+    },
+    {
+      id: "buildings",
+      title: "Buildings",
+      order: namedOrder(BUILDING_ORDER, BUILDINGS),
+      previous: previous.buildings,
+      current: current.buildings,
+      includeZeros: false,
+    },
+    {
+      id: "research",
+      title: "Research",
+      order: namedOrder(RESEARCH_ORDER, RESEARCH),
+      previous: previous.research,
+      current: current.research,
+      includeZeros: false,
+    },
+  ];
+  const sections: SpyCompareSection[] = [];
+  for (const spec of specs) {
+    const rows = compareRows(spec.order, spec.previous, spec.current, spec.includeZeros);
+    if (!rows) continue;
+    sections.push({ id: spec.id, title: spec.title, rows });
+  }
+  return sections;
+}
+
+function spyCompareButton(reportId: string, place: "inbox" | "window"): string {
+  const open = compareSpyId === reportId;
+  const testId =
+    place === "inbox" ? `compare-spy-${reportId}` : `compare-spy-window-${reportId}`;
+  return `<button type="button" class="ghost" data-compare-spy="${escapeAttr(reportId)}" data-testid="${escapeAttr(testId)}" aria-expanded="${open ? "true" : "false"}">Compare with previous</button>`;
+}
+
+function spyCompareColumn(
+  side: "previous" | "current",
+  report: EspionageReport,
+  sections: SpyCompareSection[],
+  place: "inbox" | "window",
+): string {
+  const heading = side === "previous" ? "Previous" : "This scan";
+  const body =
+    sections.length === 0
+      ? `<p>No scanned layers to compare.</p>`
+      : sections
+          .map((section) => {
+            const items = section.rows
+              .map((row) => {
+                const value = side === "previous" ? row.previous : row.current;
+                const delta =
+                  side === "current"
+                    ? `<span class="spy-delta spy-delta-${row.tone}" data-testid="${escapeAttr(`spy-delta-${place}-${report.id}-${section.id}-${row.key}`)}"${row.delta == null ? "" : ` data-delta="${row.delta}"`}>${escapeHtml(row.change)}</span>`
+                    : "";
+                const tone = side === "current" ? ` class="spy-line-${row.tone}"` : "";
+                return `<li${tone}>${escapeHtml(row.label)} ${escapeHtml(value)} ${delta}</li>`;
+              })
+              .join("");
+            return `<h5>${escapeHtml(section.title)}</h5><ul data-testid="${escapeAttr(`spy-compare-${place}-${side}-${section.id}`)}">${items}</ul>`;
+          })
+          .join("");
+  return `<article class="spy-compare-col" data-testid="${escapeAttr(`spy-compare-${place}-${side}`)}"><h4>${heading}</h4><p class="meta">${escapeHtml(report.targetName)} · ${escapeHtml(fmtWhen(report.at))}</p>${body}</article>`;
+}
+
+function spyComparePanel(
+  reports: readonly EspionageReport[] | null | undefined,
+  reportId: string,
+  place: "inbox" | "window",
+): string {
+  if (compareSpyId !== reportId) return "";
+  const list = reports ?? [];
+  const current = list.find((report) => report.id === reportId);
+  const previous = previousSpyReport(list, reportId);
+  if (!current || !previous) return "";
+  const sections = spyCompareSections(previous, current);
+  const testId = place === "inbox" ? `spy-compare-${reportId}` : `spy-compare-window-${reportId}`;
+  return `<div class="spy-compare" data-testid="${escapeAttr(testId)}"><p class="meta">Same target ${escapeHtml(fmtCoords(current.targetCoords))}</p><div class="spy-compare-columns">${spyCompareColumn("previous", previous, sections, place)}${spyCompareColumn("current", current, sections, place)}</div></div>`;
 }
 
 function safeHref(href: string | undefined): string | null {
@@ -627,6 +927,27 @@ function deleteControl(
   return `<button type="button" class="ghost" data-delete-messages="${id}" data-testid="delete-all-${id}" ${disabled ? "disabled" : ""}>Delete all</button>`;
 }
 
+function commanderMailPanel(busy: boolean): string {
+  const rows = [...commanderMailRows].sort((a, b) => a.createdAt - b.createdAt);
+  const list = rows.length
+    ? `<ul class="reports commander-mail-list" data-testid="commander-mail-list">${rows
+        .map(
+          (row) => `<li class="message-row" data-testid="commander-mail-${escapeAttr(row.id)}">
+            <div class="message-head"><strong>${escapeHtml(row.fromName)}</strong><time class="meta">${escapeHtml(fmtWhen(row.createdAt))}</time></div>
+            <span class="meta message-body">${escapeHtml(row.body)}</span>
+            <button type="button" class="ghost" data-mail-reply="${escapeAttr(row.fromName)}" data-testid="commander-mail-reply">Reply</button>
+            <button type="button" class="ghost" data-mail-delete="${escapeAttr(row.id)}" data-testid="commander-mail-delete">Delete</button>
+          </li>`,
+        )
+        .join("")}</ul>`
+    : `<p class="hint" data-testid="commander-mail-empty">No commander mail yet.</p>`;
+  return `<form class="commander-mail-compose" data-testid="commander-mail-compose">
+      <label>To <input type="text" maxlength="24" data-mail-to data-testid="commander-mail-to" value="${escapeAttr(mailReplyTo)}" ${busy ? "disabled" : ""} /></label>
+      <label>Message <textarea maxlength="500" data-mail-body data-testid="commander-mail-body" ${busy ? "disabled" : ""}></textarea></label>
+      <button type="button" data-mail-send data-testid="commander-mail-send" ${busy ? "disabled" : ""}>Send</button>
+    </form>${list}`;
+}
+
 export function messagesPageHtml(
   view: PlayerView,
   opts?: { busy?: boolean; filter?: InboxFilter },
@@ -670,9 +991,7 @@ export function messagesPageHtml(
               const pres = resultPresentation(res);
               combatClasses = ` ${pres.className}`;
               combatAttr = ` data-combat-result="${pres.resultAttr}"`;
-              shareBtn = report.shareCode
-                ? `<div class="battle-report-actions"><button type="button" class="ghost" data-copy-battle-share="${escapeAttr(report.id)}" data-testid="copy-battle-share-${escapeAttr(report.id)}">Copy share</button></div>`
-                : "";
+              shareBtn = combatBattleExtrasHtml(report);
               combatDetails = `<details class="inbox-combat-details" data-testid="inbox-combat-details-${escapeAttr(report.id)}"><summary>Battle details</summary>${combatReadoutHtml(report, view.player.id)}${shipTotalsTable("Attacker", report.attackerBefore, report.attackerAfter)}${shipTotalsTable("Defender", report.defenderBefore, report.defenderAfter)}</details>`;
             }
             const spy =
@@ -680,6 +999,13 @@ export function messagesPageHtml(
                 ? (view.spyReports ?? []).find((r) => r.id === item.id)
                 : undefined;
             const spyDetail = spy ? spyReportDetailsHtml(spy) : "";
+            const previousSpy = spy
+              ? previousSpyReport(view.spyReports ?? [], spy.id)
+              : null;
+            const compareBtn = spy && previousSpy ? spyCompareButton(spy.id, "inbox") : "";
+            const comparePanel = spy
+              ? spyComparePanel(view.spyReports ?? [], spy.id, "inbox")
+              : "";
             const spyShareBtn =
               spy && view.alliance
                 ? `<span class="spy-share">&nbsp;<button type="button" data-share-intel="${escapeAttr(spy.id)}" data-testid="share-intel-${escapeAttr(spy.id)}">Share with alliance</button></span>`
@@ -702,8 +1028,10 @@ export function messagesPageHtml(
               ${openReportBtn}
               ${shareBtn}
               ${spyShareBtn}
+              ${compareBtn}
               ${combatDetails}
               ${spyDetail}
+              ${comparePanel}
               ${readBtn}
             </li>`;
           })
@@ -724,9 +1052,15 @@ export function messagesPageHtml(
           : alertCount;
 
   return `
-    <section class="panel" data-testid="messages-panel" data-inbox-filter="${filter}">
+    <section class="panel" data-testid="messages-panel" data-inbox-filter="${filter}" data-messages-tab="${messagesTab}">
       <h2>Messages</h2>
-      <p class="hint" data-testid="messages-summary">All · Combat · Spy · Alerts — ${fmt(items.length)} item${items.length === 1 ? "" : "s"} (${fmt(combatCount)} combat · ${fmt(spyCount)} spy · ${fmt(alertCount)} alerts${unread > 0 ? ` · ${fmt(unread)} unread` : ""}).</p>
+      <div class="inbox-filters" role="tablist" aria-label="Messages sections">
+        <button type="button" class="ghost inbox-filter${messagesTab === "inbox" ? " active" : ""}" data-messages-tab="inbox" data-testid="messages-tab-inbox" aria-pressed="${messagesTab === "inbox" ? "true" : "false"}">Inbox</button>
+        <button type="button" class="ghost inbox-filter${messagesTab === "mail" ? " active" : ""}" data-messages-tab="mail" data-testid="messages-tab-mail" aria-pressed="${messagesTab === "mail" ? "true" : "false"}">Mail</button>
+      </div>
+      ${messagesTab === "mail"
+        ? commanderMailPanel(busy)
+        : `<p class="hint" data-testid="messages-summary">All · Combat · Spy · Alerts — ${fmt(items.length)} item${items.length === 1 ? "" : "s"} (${fmt(combatCount)} combat · ${fmt(spyCount)} spy · ${fmt(alertCount)} alerts${unread > 0 ? ` · ${fmt(unread)} unread` : ""}).</p>
       <div class="inbox-filters" role="tablist" aria-label="Message filters">
         ${filterButton("all", "All", filter)}
         ${filterButton("combat", "Combat", filter)}
@@ -737,7 +1071,7 @@ export function messagesPageHtml(
       <div class="inbox-filters" aria-label="Delete messages">
         ${deleteControl(filter, deleteCount, busy)}
       </div>
-      ${list}
+      ${list}`}
       ${renderReportSubwindow(view)}
     </section>`;
 }

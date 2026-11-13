@@ -175,17 +175,16 @@ export function destroyedShipResources(
   return { metal, crystal, deuterium: 0 };
 }
 
-export function debrisFromDestroyed(destroyed: Resources): Resources {
-  return {
-    metal: Math.floor(destroyed.metal * DEBRIS_FROM_SHIPS),
-    crystal: Math.floor(destroyed.crystal * DEBRIS_FROM_SHIPS),
-    deuterium: 0,
-  };
+export function debrisFromDestroyed(destroyed: Resources, mult = 1): Resources {
+  const metal = Math.floor(destroyed.metal * DEBRIS_FROM_SHIPS);
+  const crystal = Math.floor(destroyed.crystal * DEBRIS_FROM_SHIPS);
+  return scaleDebris({ metal, crystal, deuterium: 0 }, mult);
 }
 
 /** 5% of metal/crystal on defenses that stay destroyed after rebuild. */
 export function debrisFromDestroyedDefenses(
   permanentlyLost: Partial<Record<DefenseId, number>>,
+  mult = 1,
 ): Resources {
   let metal = 0;
   let crystal = 0;
@@ -196,11 +195,14 @@ export function debrisFromDestroyedDefenses(
     metal += cost.metal * n;
     crystal += cost.crystal * n;
   }
-  return {
-    metal: Math.floor(metal * DEBRIS_FROM_DEFENSES),
-    crystal: Math.floor(crystal * DEBRIS_FROM_DEFENSES),
-    deuterium: 0,
-  };
+  return scaleDebris(
+    {
+      metal: Math.floor(metal * DEBRIS_FROM_DEFENSES),
+      crystal: Math.floor(crystal * DEBRIS_FROM_DEFENSES),
+      deuterium: 0,
+    },
+    mult,
+  );
 }
 
 export function defenseRebuildRate(classId: string | null | undefined): number {
@@ -306,6 +308,15 @@ export function debrisFromShipLosses(
     }
   }
   return debrisFromDestroyed(destroyedShipResources(before, emptyFleetShips()));
+}
+
+function scaleDebris(debris: Resources, mult: number): Resources {
+  if (mult === 1) return debris;
+  return {
+    metal: Math.floor(debris.metal * mult),
+    crystal: Math.floor(debris.crystal * mult),
+    deuterium: 0,
+  };
 }
 
 export interface CombatResolution {
@@ -1082,6 +1093,11 @@ export interface CombatMods {
   /** Alliance defense hull, armor, and shields. */
   defenderDefenseStatMult?: number;
   defenderUnitStatMult?: number;
+  /**
+   * Galaxy-event debris multiplier. Applied once to each round's debris.
+   * Field debris is scaled at the fight boundary, not here.
+   */
+  debrisMult?: number;
 }
 
 function createRng(seedStr?: string) {
@@ -1502,9 +1518,9 @@ export function resolveCombat(
       round: r,
       attackerLosses,
       defenderLosses,
-      debrisThisRound: debrisFromShipLosses(
-        attackerLosses.ships,
-        defenderLosses.ships,
+      debrisThisRound: scaleDebris(
+        debrisFromShipLosses(attackerLosses.ships, defenderLosses.ships),
+        mods?.debrisMult ?? 1,
       ),
       shieldsAbsorbed: {
         attacker: Math.max(0, atkInitialShieldPool - (atkSide.shieldPool ?? 0)),

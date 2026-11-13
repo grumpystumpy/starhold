@@ -1,4 +1,11 @@
-import { MAP_GALAXIES, MAP_SYSTEMS, type PlayerView } from "@starhold/game";
+import {
+  FLEET_SAVE_MIN_LEAD_MS,
+  MAP_GALAXIES,
+  MAP_SYSTEMS,
+  sensorPhalanxRange,
+  type FleetSaveSuggestion,
+  type PlayerView,
+} from "@starhold/game";
 import {
   ApiError,
   OVERLOAD_MESSAGE,
@@ -6,15 +13,18 @@ import {
   claimAnonymousPlayer,
   fetchAuthMe,
   fetchAllianceChat,
+  fetchCommanderMail,
   fetchSecurity,
   fetchState,
   changeAccountPassword,
   generateRecoveryCodes,
   invalidateCachedState,
   joinGame,
+  createInviteLink,
   loginAccount,
   recoverAccount,
   relocateMiniFortress,
+  abandonColony,
   renamePlanet,
   requestPasswordReset,
   confirmPasswordReset,
@@ -36,9 +46,15 @@ import {
   setFlash,
   stripJoinParams,
 } from "./session";
-import { syncSessionUrl } from "./ui/router";
+import { fleetDraftForFleetSave } from "./ui/render-fleets-draft";
+import { navigateTo, syncSessionUrl } from "./ui/router";
+import {
+  commanderMailRowsForView,
+  setCommanderMail,
+} from "./ui/render-messages";
 import { captureGameEvent, identifyCommander } from "./telemetry";
 import { settleMutation } from "./recover-action";
+import { refreshMarketIfOpen } from "./main-actions-market";
 
 /** Background refresh cadence. Actions apply their own response immediately. */
 export const POLL_INTERVAL_MS = 30_000;
@@ -201,11 +217,87 @@ function scheduleQueueCompletionRefresh(): void {
     if (session.view?.player.id !== playerId) return;
     completedQueueTimes.add(completionKey);
     invalidateCachedState();
-    void silentRefresh(playerId);
+    void silentRefresh(playerId, "Server unreachable", true, {
+      scanners: session.activePage === "galaxy",
+    });
   }, Math.max(0, finishAt - now + QUEUE_COMPLETION_REFRESH_DELAY_MS));
 }
 
-setBeforePaintImpl(scheduleQueueCompletionRefresh);
+/**
+ * Keep the active moon's scanner level on the overlay. The level is already
+ * on `planet.buildings` in every state body, including the 30s poll.
+ * Other moons stay on the last Galaxy-page list until that page reads again.
+ */
+function scannerMoonEntry(planet: NonNullable<PlayerView["planet"]>, level: number) {
+  return {
+    planetId: planet.id,
+    coords: planet.coords,
+    sensorArray: level,
+    range: sensorPhalanxRange(level),
+  };
+}
+
+function sameScannerList(
+  previous: NonNullable<PlayerView["scannerMoons"]>,
+  next: NonNullable<PlayerView["scannerMoons"]>,
+): boolean {
+  return (
+    previous.length === next.length &&
+    previous.every((moon, index) => {
+      const other = next[index];
+      return (
+        other !== undefined &&
+        moon.planetId === other.planetId &&
+        moon.sensorArray === other.sensorArray &&
+        moon.range === other.range &&
+        moon.coords.galaxy === other.coords.galaxy &&
+        moon.coords.system === other.coords.system &&
+        moon.coords.slot === other.coords.slot
+      );
+    })
+  );
+}
+
+export function syncScannerOverlayFromPlanet(): void {
+  const view = session.view;
+  if (!view) return;
+  const stored = view.scannerMoons ?? session.scannerMoons;
+  const planet = view.planet;
+  const liveLevel =
+    planet?.kind === "moon" ? (planet.buildings.sensorArray ?? 0) : 0;
+  if (!stored) {
+    if (planet?.kind !== "moon" || liveLevel < 1) return;
+    const next = [scannerMoonEntry(planet, liveLevel)];
+    session.scannerMoons = next;
+    session.view = { ...view, scannerMoons: next };
+    return;
+  }
+  let next = stored.slice();
+  if (planet?.kind === "moon") {
+    next = next.filter((moon) => moon.planetId !== planet.id);
+    if (liveLevel >= 1) next.push(scannerMoonEntry(planet, liveLevel));
+  }
+  session.scannerMoons = next;
+  const previous = view.scannerMoons ?? [];
+  if (!sameScannerList(previous, next)) {
+    session.view = { ...view, scannerMoons: next };
+  }
+}
+
+setBeforePaintImpl(() => {
+  scheduleQueueCompletionRefresh();
+  syncScannerOverlayFromPlanet();
+  if (
+    session.galaxyScannersDue &&
+    session.activePage === "galaxy" &&
+    session.view
+  ) {
+    session.galaxyScannersDue = false;
+    void silentRefresh(session.view.player.id, "Galaxy scan failed.", false, {
+      scanners: true,
+    });
+  }
+});
 
 /** Push the next background poll out. Does not send a request. */
 export function deferBackgroundPoll(): void {
@@ -229,6 +321,8 @@ function pollNow(): Promise<void> {
       if (!playerId || pollPlayerId !== playerId || !pollsAllowed()) return;
       await silentRefresh(playerId);
       await refreshAllianceChatIfOpen();
+      await refreshMarketIfOpen();
+      await refreshCommanderMailIfOpen();
     } finally {
       pollChain = null;
       if (pollPlayerId === playerId) schedulePoll(POLL_INTERVAL_MS);
@@ -270,6 +364,34 @@ export async function refreshAllianceChatIfOpen(): Promise<void> {
   } catch {
     /* a chat poll must not fail the state refresh */
   }
+}
+
+/** Private commander mail. Only while the Messages page is open. */
+export async function refreshCommanderMailIfOpen(): Promise<void> {
+  if (session.activePage !== "messages") return;
+  if (!session.view) return;
+  const since = commanderMailRowsForView().reduce(
+    (max, message) => Math.max(max, message.createdAt),
+    0,
+  );
+  try {
+    const payload = await fetchCommanderMail(since > 0 ? since : undefined);
+    const incoming = payload.messages ?? [];
+    if (since > 0 && incoming.length === 0) return;
+    const byId = new Map(commanderMailRowsForView().map((message) => [message.id, message]));
+    for (const message of incoming) byId.set(message.id, message);
+    setCommanderMail(
+      [...byId.values()].sort((a, b) => a.createdAt - b.createdAt).slice(-100),
+    );
+    schedulePaint();
+  } catch {
+    /* a mail poll must not fail the state refresh */
+  }
+}
+
+export async function reloadCommanderMail(): Promise<void> {
+  const payload = await fetchCommanderMail();
+  setCommanderMail(payload.messages ?? []);
 }
 
 function clearIdleTimer(): void {
@@ -360,6 +482,7 @@ export function startPolling(playerId: string): void {
   ensureActivityListeners();
   scheduleIdleCheck();
   schedulePoll(POLL_INTERVAL_MS);
+  void refreshMarketIfOpen();
 }
 
 export function stopPolling(): void {
@@ -375,20 +498,22 @@ export function bumpInFlightRefresh(): void {
   refreshGen += 1;
 }
 
-function refreshKey(playerId: string): string {
+function refreshKey(playerId: string, scanners: boolean): string {
   const g = session.galaxyGalaxy ?? session.view?.galaxy.galaxy ?? "";
   const s = session.galaxySystem ?? session.view?.galaxy.system ?? "";
-  return `${playerId}:${g}:${s}`;
+  return `${playerId}:${g}:${s}:${scanners ? "scanners" : ""}`;
 }
 
 export function silentRefresh(
   playerId: string,
   errorLabel = "Server unreachable",
   prefixLabel = true,
+  opts?: { scanners?: boolean },
 ): Promise<void> {
-  const key = refreshKey(playerId);
+  const scanners = opts?.scanners === true;
+  const key = refreshKey(playerId, scanners);
   if (refreshInFlight?.key === key) return refreshInFlight.promise;
-  const promise = refreshOnce(playerId, errorLabel, prefixLabel).finally(() => {
+  const promise = refreshOnce(playerId, errorLabel, prefixLabel, scanners).finally(() => {
     if (refreshInFlight?.promise === promise) refreshInFlight = null;
   });
   refreshInFlight = { key, promise };
@@ -399,14 +524,35 @@ async function refreshOnce(
   playerId: string,
   errorLabel: string,
   prefixLabel: boolean,
+  scanners = false,
 ): Promise<void> {
   const gen = ++refreshGen;
   try {
     const g = session.galaxyGalaxy ?? session.view?.galaxy.galaxy;
     const s = session.galaxySystem ?? session.view?.galaxy.system;
-    const view = await fetchState(playerId, g, s);
-    if (gen !== refreshGen) return;
+    const view = await fetchState(playerId, g, s, { scanners });
+    if (gen !== refreshGen) {
+      if (
+        scanners &&
+        session.view?.player.id === playerId &&
+        session.scannerMoons == null
+      ) {
+        session.scannerMoons = view.scannerMoons ?? [];
+        session.view = {
+          ...session.view,
+          scannerMoons: session.scannerMoons,
+        };
+        syncScannerOverlayFromPlanet();
+        schedulePaint();
+      }
+      return;
+    }
+    if (scanners) {
+      session.scannerMoons = view.scannerMoons ?? [];
+      if (view.scannerMoons === undefined) view.scannerMoons = [];
+    }
     session.view = view;
+    syncScannerOverlayFromPlanet();
     schedulePaint();
   } catch (err) {
     if (gen !== refreshGen) return;
@@ -443,8 +589,8 @@ export async function doJoin(name: string): Promise<void> {
   schedulePaint();
   try {
     session.view = session.account
-      ? await authJoin(trimmed)
-      : await joinGame(trimmed);
+      ? await authJoin(trimmed, session.inviteCode)
+      : await joinGame(trimmed, session.inviteCode);
     session.galaxySystem = session.view.planet.coords.system;
     session.galaxyGalaxy = null;
     session.joinDraft = session.view.player.name;
@@ -477,6 +623,40 @@ export async function doJoin(name: string): Promise<void> {
   }
 }
 
+export async function doCopyInvite(): Promise<void> {
+  if (!session.account?.playerId || !session.view) {
+    setFlash("error", "Sign in before inviting a friend.");
+    schedulePaint();
+    return;
+  }
+  if (session.busy) return;
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    const minted = await createInviteLink();
+    const path = minted.path.startsWith("/") ? minted.path : `/?invite=${minted.code}`;
+    const url = new URL(path, window.location.origin).href;
+    session.inviteShareUrl = url;
+    let copied = false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+        copied = true;
+      }
+    } catch {
+      copied = false;
+    }
+    if (copied) setFlash("notice", "Invite link copied.");
+    else setFlash("notice", "Invite link is in the box. Copy it from there.");
+  } catch (err) {
+    setFlash("error", authFlashMessage(err, "Could not create an invite link."));
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
 async function applyAuthSuccess(opts: {
   account: { id: string; email: string; playerId: string | null };
   view?: Awaited<ReturnType<typeof fetchState>> | null;
@@ -487,7 +667,9 @@ async function applyAuthSuccess(opts: {
   let view = opts.view ?? null;
   if (!view?.player?.id && opts.account.playerId) {
     try {
-      view = await fetchState(opts.account.playerId);
+      view = await fetchState(opts.account.playerId, undefined, undefined, {
+        scanners: session.activePage === "galaxy",
+      });
     } catch (err) {
       const status = err instanceof ApiError ? err.status : 0;
       if (status === 404) {
@@ -870,7 +1052,9 @@ export async function doRefresh(): Promise<void> {
   session.busy = true;
   schedulePaint();
   try {
-    await silentRefresh(session.view.player.id, "Refresh failed.", false);
+    await silentRefresh(session.view.player.id, "Refresh failed.", false, {
+      scanners: session.activePage === "galaxy",
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -893,7 +1077,9 @@ export async function doGalaxyNav(dir: "prev" | "next"): Promise<void> {
   session.busy = true;
   schedulePaint();
   try {
-    await silentRefresh(session.view.player.id, "Galaxy nav failed.", false);
+    await silentRefresh(session.view.player.id, "Galaxy nav failed.", false, {
+      scanners: true,
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -909,7 +1095,9 @@ export async function doGalaxyJump(galaxy: number, system: number): Promise<void
   session.busy = true;
   schedulePaint();
   try {
-    await silentRefresh(session.view.player.id, "Galaxy nav failed.", false);
+    await silentRefresh(session.view.player.id, "Galaxy nav failed.", false, {
+      scanners: true,
+    });
   } finally {
     session.busy = false;
     schedulePaint();
@@ -924,6 +1112,48 @@ export async function doGalaxyGalaxyNav(dir: "prev" | "next"): Promise<void> {
     ? current >= MAP_GALAXIES ? 1 : current + 1
     : current <= 1 ? MAP_GALAXIES : current - 1;
   return doGalaxyJump(next, session.galaxySystem ?? session.view.galaxy.system);
+}
+
+/** Opens the fleet page prefilled. Does not launch. */
+export async function doOpenFleetSave(attackId: string): Promise<void> {
+  const view = session.view;
+  if (!view) return;
+  if (session.busy) {
+    setFlash("error", "Still applying the last action — try again in a moment.");
+    schedulePaint();
+    return;
+  }
+  const suggestion = fleetSaveSuggestion(view.fleetSave, attackId, view.now);
+  if (!suggestion) return;
+  session.pendingFleetSaveDraft = fleetDraftForFleetSave(suggestion);
+  if (view.planet.id !== suggestion.originPlanetId) {
+    await doSelectPlanet(suggestion.originPlanetId);
+    if (session.view?.planet.id !== suggestion.originPlanetId) {
+      session.pendingFleetSaveDraft = null;
+      return;
+    }
+  }
+  if (session.activePage !== "fleet") navigateTo("fleet");
+  else if (session.pendingFleetSaveDraft) schedulePaint();
+  const name = session.view?.planet.name;
+  setFlash(
+    "notice",
+    name
+      ? `Review the save from ${name}, then send.`
+      : "Review the save, then send.",
+  );
+  schedulePaint();
+}
+
+function fleetSaveSuggestion(
+  rows: FleetSaveSuggestion[] | undefined,
+  attackId: string,
+  now: number,
+): FleetSaveSuggestion | null {
+  const suggestion = rows?.find((row) => row.attackId === attackId) ?? null;
+  if (!suggestion) return null;
+  if (suggestion.arrivesAt - now <= FLEET_SAVE_MIN_LEAD_MS) return null;
+  return suggestion;
 }
 
 export async function doSelectPlanet(planetId: string): Promise<void> {
@@ -978,6 +1208,38 @@ export async function doRenamePlanet(name: string): Promise<void> {
       failureFallback: "Rename failed.",
       applied: (view) => view.planet.name === name,
       successNotice: (view) => `Colony renamed to ${view.planet.name}.`,
+    });
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doAbandonColony(): Promise<void> {
+  if (!session.view) return;
+  const planetId = session.view.planet.id;
+  const name = session.view.planet.name;
+  if (session.busy) {
+    setFlash("error", "Still applying the last action — try again in a moment.");
+    schedulePaint();
+    return;
+  }
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    session.view = await abandonColony(session.view.player.id, planetId);
+    session.galaxySystem = session.view.planet.coords.system;
+    syncSessionUrl({ replace: true });
+    setFlash("notice", `${name} abandoned.`);
+  } catch (err) {
+    await settleMutation({
+      err,
+      failureFallback: "Abandon failed.",
+      applied: (view) =>
+        view.planet.id !== planetId &&
+        !view.ownedPlanets.some((planet) => planet.id === planetId),
+      successNotice: () => `${name} abandoned.`,
     });
   } finally {
     session.busy = false;

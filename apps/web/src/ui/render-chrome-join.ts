@@ -1,5 +1,10 @@
 import {
   BUILDINGS,
+  CHRONO_LATHE_RIG_FOUNDRY_REQ,
+  CHRONO_LATHE_SHIPYARD_REQ,
+  MANTLE_LOOM_LAB_REQ,
+  MANTLE_LOOM_SOLAR_REQ,
+  RIG_FOUNDRY_SHIPYARD_REQ,
   buildingUpgradeSeconds,
   levelBonuses,
   previewBuildingUpgrade,
@@ -29,6 +34,8 @@ export type JoinScreenState = {
   emailReset?: boolean;
   /** `?reset=` token. Renders the one-time password form. */
   passwordResetToken?: string | null;
+  /** `?invite=` code. Hint only — a bad code still joins as usual. */
+  inviteCode?: string | null;
 };
 
 /** Join / sign-in markup. Auth fields stay off once an account exists. */
@@ -54,6 +61,107 @@ export function peekOAuthProviders(): string[] | null {
 
 export function peekEmailReset(): boolean {
   return emailResetCache;
+}
+
+/** Cached public board slice. `null` means the lobby route failed. */
+export type LobbyTeaser = {
+  commanders: number;
+  top: Array<{ rank: number; name: string; points: number }>;
+};
+
+const LOBBY_TOP = 5;
+let lobbyCache: LobbyTeaser | null | undefined;
+let lobbyPromise: Promise<LobbyTeaser | null> | null = null;
+
+export function resetLobbyTeaserCacheForTests(): void {
+  lobbyCache = undefined;
+  lobbyPromise = null;
+}
+
+/** Commander count and the top names. Omits the mothership (not on the board row). */
+export function lobbyTeaserHtml(lobby: LobbyTeaser): string {
+  const rows = lobby.top.slice(0, LOBBY_TOP);
+  const list = rows.length
+    ? `<ol class="lobby-top" data-testid="lobby-top">${rows
+        .map(
+          (row) =>
+            `<li data-testid="lobby-commander"><span class="lobby-rank">${fmt(row.rank)}</span><span class="lobby-name">${escapeHtml(row.name)}</span><span class="lobby-points">${fmt(row.points)}</span></li>`,
+        )
+        .join("")}</ol>`
+    : "";
+  const label = lobby.commanders === 1 ? "commander" : "commanders";
+  return `<aside class="lobby-teaser" data-testid="lobby-teaser">
+      <p data-testid="lobby-commander-count">${fmt(lobby.commanders)} ${label}</p>
+      ${list}
+    </aside>`;
+}
+
+function lobbyFromBody(body: unknown): LobbyTeaser | null {
+  if (!body || typeof body !== "object") return null;
+  const record = body as { commanders?: unknown; top?: unknown };
+  if (typeof record.commanders !== "number" || !Number.isFinite(record.commanders)) {
+    return null;
+  }
+  if (!Array.isArray(record.top)) return null;
+  const top: LobbyTeaser["top"] = [];
+  for (const item of record.top) {
+    if (top.length >= LOBBY_TOP) break;
+    if (!item || typeof item !== "object") continue;
+    const row = item as { rank?: unknown; name?: unknown; points?: unknown };
+    if (typeof row.name !== "string") continue;
+    if (typeof row.points !== "number" || !Number.isFinite(row.points)) continue;
+    top.push({
+      rank:
+        typeof row.rank === "number" && Number.isFinite(row.rank)
+          ? row.rank
+          : top.length + 1,
+      name: row.name,
+      points: row.points,
+    });
+  }
+  return { commanders: record.commanders, top };
+}
+
+/** One fetch per page load. A failure leaves the join screen unchanged. */
+export function loadLobbyTeaser(): Promise<LobbyTeaser | null> {
+  if (lobbyCache !== undefined) return Promise.resolve(lobbyCache);
+  if (!lobbyPromise) {
+    lobbyPromise = fetch("/api/lobby", { credentials: "same-origin" })
+      .then(async (res) => {
+        if (!res.ok) return null;
+        return lobbyFromBody(await res.json());
+      })
+      .catch(() => null)
+      .then((value) => {
+        lobbyCache = value;
+        return value;
+      });
+  }
+  return lobbyPromise;
+}
+
+function paintLobbyTeaser(root: HTMLElement, lobby: LobbyTeaser): void {
+  if (root.querySelector("[data-testid='lobby-teaser']")) return;
+  const panel = root.querySelector(".join-panel");
+  if (!panel) return;
+  panel.insertAdjacentHTML("afterbegin", lobbyTeaserHtml(lobby));
+}
+
+function lobbyHasCommanders(lobby: LobbyTeaser): boolean {
+  return lobby.commanders > 0 || lobby.top.length > 0;
+}
+
+function queueLobbyTeaser(root: HTMLElement): void {
+  if (lobbyCache && lobbyHasCommanders(lobbyCache)) {
+    paintLobbyTeaser(root, lobbyCache);
+    return;
+  }
+  if (lobbyCache !== undefined) return;
+  void loadLobbyTeaser().then((lobby) => {
+    if (!lobby || !lobbyHasCommanders(lobby)) return;
+    if (!root.querySelector("#join-form")) return;
+    paintLobbyTeaser(root, lobby);
+  });
 }
 
 /** Buttons for configured providers only. An empty list renders nothing. */
@@ -174,6 +282,9 @@ export function joinScreenHtml(state: JoinScreenState): string {
   const resetBlock = state.passwordResetToken
     ? passwordResetFormHtml(state.passwordResetToken)
     : "";
+  const inviteHint = state.inviteCode
+    ? `<p class="hint" data-testid="invite-join-hint">A friend invited you. If that code is still good, your new home starts near theirs. Otherwise you join as usual.</p>`
+    : "";
   const authBlock = signedIn
     ? ""
     : `<hr style="margin:1.25rem 0;border:none;border-top:1px solid rgba(255,255,255,0.12)" />
@@ -206,6 +317,7 @@ export function joinScreenHtml(state: JoinScreenState): string {
     <div data-flash-slot>${flashHtml(state.error, state.notice)}</div>
     <section class="join-panel">
       ${accountLine}
+      ${inviteHint}
       ${resetBlock}
       <form id="join-form" data-testid="join-form">
         <label for="commander">${joinLabel}</label>
@@ -256,13 +368,18 @@ export function renderJoin(root: HTMLElement, state: JoinScreenState): void {
   const wantAuth = !state.accountEmail;
   const hasReset = Boolean(root.querySelector("#password-reset-form"));
   const wantReset = Boolean(state.passwordResetToken);
+  const hasInviteHint = Boolean(
+    root.querySelector("[data-testid='invite-join-hint']"),
+  );
+  const wantInviteHint = Boolean(state.inviteCode);
   const structureOk =
     existingForm &&
     existingInput &&
     hasAuthForm === wantAuth &&
     Boolean(state.accountEmail) === hasAccountLine &&
     wantClaim === hasClaimBtn &&
-    hasReset === wantReset;
+    hasReset === wantReset &&
+    hasInviteHint === wantInviteHint;
 
   if (structureOk) {
     patchFlash(root, state.error, state.notice);
@@ -298,6 +415,7 @@ export function renderJoin(root: HTMLElement, state: JoinScreenState): void {
       passwordInput.value = state.passwordDraft ?? "";
     }
     queueOAuthButtons(root, state);
+    queueLobbyTeaser(root);
     return;
   }
 
@@ -306,6 +424,7 @@ export function renderJoin(root: HTMLElement, state: JoinScreenState): void {
     oauthProviders: state.oauthProviders ?? peekOAuthProviders() ?? [],
   });
   queueOAuthButtons(root, state);
+  queueLobbyTeaser(root);
 
   const input = root.querySelector<HTMLInputElement>("#commander");
   input?.focus();
@@ -374,6 +493,36 @@ function isRequirementLock(error: string): boolean {
   );
 }
 
+/** Standing catalog gates. Shown even when the next upgrade is allowed. */
+function buildingGateLines(
+  id: BuildingId,
+  planet: PlayerView["planet"],
+): string[] {
+  const have = (buildingId: BuildingId): number =>
+    planet.buildings[buildingId] ?? 0;
+  const need = (buildingId: BuildingId, required: number): string =>
+    `${BUILDINGS[buildingId].name} L${fmt(required)}+ (current L${fmt(have(buildingId))})`;
+  if (id === "sensorArray" || id === "jumpGate") {
+    return [need("lunarBase", 1)];
+  }
+  if (id === "rigFoundry") {
+    return [need("shipyard", RIG_FOUNDRY_SHIPYARD_REQ)];
+  }
+  if (id === "mantleLoom") {
+    return [
+      need("solarPlant", MANTLE_LOOM_SOLAR_REQ),
+      need("researchLab", MANTLE_LOOM_LAB_REQ),
+    ];
+  }
+  if (id === "chronoLathe") {
+    return [
+      need("shipyard", CHRONO_LATHE_SHIPYARD_REQ),
+      need("rigFoundry", CHRONO_LATHE_RIG_FOUNDRY_REQ),
+    ];
+  }
+  return [];
+}
+
 function upgradeButtonLabel(error: string | null): string {
   if (!error) return "Upgrade";
   if (isRequirementLock(error)) return "Locked";
@@ -392,6 +541,7 @@ export function buildingRow(
   now: number,
   _busy: boolean,
   mods?: BuildingPreviewMods & { timeMult?: number },
+  energy?: { used: number; produced: number },
 ): string {
   const def = BUILDINGS[id];
   const preview = previewBuildingUpgrade(planet, player, id, now, mods);
@@ -423,6 +573,16 @@ export function buildingRow(
     id === "metalStorage" || id === "crystalStorage" || id === "deutTank"
       ? `Capacity ${fmt(storageCap(level))} now, ${fmt(storageCap(preview.current + 1))} at the next level. Each level doubles the cap.`
       : null;
+  let energyPreview: { text: string; deficit: boolean } | null = null;
+  if (def.energyUsePerLevel && energy) {
+    const nextUsed = energy.used + def.energyUsePerLevel;
+    const isDeficit = nextUsed > energy.produced;
+    const text = isDeficit
+      ? `Energy ${fmt(energy.used)} → ${fmt(nextUsed)} / ${fmt(energy.produced)}, deficit`
+      : `Energy ${fmt(energy.used)} → ${fmt(nextUsed)} / ${fmt(energy.produced)}`;
+    energyPreview = { text, deficit: isDeficit };
+  }
+  const energyLine = energyPreview ? energyPreview.text : null;
   const tip = costTooltip({
     action: `Upgrade ${def.name} → L${fmt(preview.current + 1)}`,
     cost,
@@ -430,19 +590,26 @@ export function buildingRow(
     detail: [def.description, storageLine].filter(Boolean).join(" "),
     requires: [
       `Current L${fmt(level)}`,
+      ...buildingGateLines(id, planet),
       ...(def.energyUsePerLevel
-        ? [`Energy use +${fmt(def.energyUsePerLevel)}/level`]
+        ? [
+            `Energy use +${fmt(def.energyUsePerLevel)}/level`,
+            ...(energyLine ? [energyLine] : []),
+          ]
         : []),
     ],
     blocked,
   });
+  const energyHtml = energyPreview
+    ? ` · <span class="building-energy-preview${energyPreview.deficit ? " deficit" : ""}" data-testid="building-energy-preview-${id}">${escapeHtml(energyPreview.text)}</span>`
+    : "";
   return `
     <article class="item item-thumb" data-building-id="${id}" data-testid="building-${id}">
       <img class="thumb" src="${BUILDING_ART[id]}" alt="${escapeAttr(def.name)}" width="48" height="48" />
       <div>
         <h3>${escapeHtml(def.name)} <span class="meta" data-testid="building-level-${id}">L${fmt(level)}</span> ${tip.html}</h3>
         <p>${escapeHtml(def.description)}</p>
-        <div class="meta">Next: ${fmtCost(cost)} · ${fmtEta(secs)}${storageLine ? ` · ${escapeHtml(storageLine)}` : ""}</div>
+        <div class="meta">Next: ${fmtCost(cost)} · ${fmtEta(secs)}${energyHtml}${storageLine ? ` · ${escapeHtml(storageLine)}` : ""}</div>
       </div>
       <div class="actions">
         <button type="button" data-upgrade="${id}" data-building-id="${id}" data-locked="${blocked ? "1" : "0"}" data-testid="upgrade-${id}" ${blocked ? "disabled" : ""} ${blocked ? `aria-describedby="blocked-upgrade-${id}"` : ""} title="${tip.title}">${label}</button>

@@ -33,6 +33,7 @@ import {
   seedUniversePirates,
 } from "./world-pirates.js";
 import { rollSeasons } from "./world-seasons.js";
+import { inviteSlotOpen } from "./world-invite.js";
 
 export function emptyBuildings(): PlanetState["buildings"] {
   return {
@@ -284,6 +285,7 @@ export function joinUniverse(
   universe: UniverseState,
   playerName: string,
   now = Date.now(),
+  preferred?: Coordinates | null,
 ): { player: PlayerState; planet: PlanetState } {
   ensureUniverseShape(universe);
   const trimmed = playerName.trim().slice(0, 24);
@@ -303,7 +305,9 @@ export function joinUniverse(
 
   const playerId = `plyr_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
   const planetId = `plnt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
-  const coords = nextCoords(universe);
+  const coords = inviteSlotOpen(universe, preferred)
+    ? preferred
+    : nextCoords(universe);
   const seed = universe.seed ?? universe.id;
   const fieldsCap = rollPlanetFields(
     coords.slot,

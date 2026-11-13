@@ -126,4 +126,253 @@ describe("alliance request routes", () => {
     };
     assert.equal(cancelledBody.pendingAllianceRequest ?? null, null);
   });
+
+  it("offers a NAP, accepts it, declares a one-sided war, and clears relations on disband", async () => {
+    const app = createApp();
+    const missing = await app.request("/api/alliance/diplomacy/nap", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId: "missing" }),
+    });
+    assert.equal(missing.status, 400);
+
+    const alpha = await join("DipAlpha");
+    const beta = await join("DipBeta");
+    const recruit = await join("DipRecruit");
+    const createdA = await app.request("/api/alliance/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId: alpha, name: "Alpha Pact", tag: "alp" }),
+    });
+    const createdB = await app.request("/api/alliance/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId: beta, name: "Beta Pact", tag: "bet" }),
+    });
+    assert.equal(createdA.status, 200);
+    assert.equal(createdB.status, 200);
+    const alphaId = ((await createdA.json()) as { alliance: { id: string } }).alliance.id;
+    const betaId = ((await createdB.json()) as { alliance: { id: string } }).alliance.id;
+    assert.equal(
+      (await app.request("/api/alliance/join", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerId: recruit, allianceId: betaId }),
+      })).status,
+      200,
+    );
+
+    const offered = await app.request("/api/alliance/diplomacy/nap", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId: alpha, allianceId: betaId }),
+    });
+    assert.equal(offered.status, 200);
+    const offeredBody = (await offered.json()) as {
+      alliance: { relations: Array<{ kind: string; status: string; tag: string }> };
+    };
+    assert.equal(offeredBody.alliance.relations[0]?.kind, "nap");
+    assert.equal(offeredBody.alliance.relations[0]?.status, "pending");
+    assert.equal(offeredBody.alliance.relations[0]?.tag, "BET");
+
+    const memberOffer = await app.request("/api/alliance/diplomacy/nap", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId: recruit, allianceId: alphaId }),
+    });
+    assert.equal(memberOffer.status, 400);
+
+    const selfAccept = await app.request("/api/alliance/diplomacy/nap/accept", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId: alpha, allianceId: betaId }),
+    });
+    assert.equal(selfAccept.status, 400);
+
+    const accepted = await app.request("/api/alliance/diplomacy/nap/accept", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId: beta, allianceId: alphaId }),
+    });
+    assert.equal(accepted.status, 200);
+    const acceptedBody = (await accepted.json()) as {
+      alliance: { relations: Array<{ status: string; kind: string }> };
+    };
+    assert.equal(acceptedBody.alliance.relations[0]?.status, "active");
+    assert.equal(acceptedBody.alliance.relations[0]?.kind, "nap");
+
+    const blockedWar = await app.request("/api/alliance/diplomacy/war", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId: alpha, allianceId: betaId }),
+    });
+    assert.equal(blockedWar.status, 400);
+
+    assert.equal(
+      (await app.request("/api/alliance/diplomacy/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerId: alpha, allianceId: betaId }),
+      })).status,
+      200,
+    );
+    const war = await app.request("/api/alliance/diplomacy/war", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId: alpha, allianceId: betaId }),
+    });
+    assert.equal(war.status, 200);
+    const targetCancel = await app.request("/api/alliance/diplomacy/cancel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId: beta, allianceId: alphaId }),
+    });
+    assert.equal(targetCancel.status, 400);
+    assert.equal(
+      (await app.request("/api/alliance/diplomacy/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerId: alpha, allianceId: betaId }),
+      })).status,
+      200,
+    );
+
+    assert.equal(
+      (await app.request("/api/alliance/diplomacy/nap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerId: alpha, allianceId: betaId }),
+      })).status,
+      200,
+    );
+    assert.equal(
+      (await app.request("/api/alliance/diplomacy/nap/accept", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerId: beta, allianceId: alphaId }),
+      })).status,
+      200,
+    );
+    const disbanded = await app.request("/api/alliance/disband", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId: alpha }),
+    });
+    assert.equal(disbanded.status, 200);
+    const betaView = await app.request(`/api/alliance?playerId=${beta}`);
+    const betaBody = (await betaView.json()) as {
+      alliance: { relations?: unknown[] } | null;
+    };
+    assert.deepEqual(betaBody.alliance?.relations ?? [], []);
+  });
+
+  it("lets only the Leader set recruiting and keeps it off /api/state", async () => {
+    const app = createApp();
+    const leader = await join("RecruitLead");
+    const officer = await join("RecruitOfficer");
+    const member = await join("RecruitMember");
+    const created = await app.request("/api/alliance/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        playerId: leader,
+        name: "Recruit Gate",
+        tag: "rgat",
+      }),
+    });
+    assert.equal(created.status, 200);
+    const createdBody = (await created.json()) as { alliance: { id: string } };
+    const allianceId = createdBody.alliance.id;
+    assert.equal(
+      (
+        await app.request("/api/alliance/join", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ playerId: officer, allianceId }),
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
+        await app.request("/api/alliance/join", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ playerId: member, allianceId }),
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
+        await app.request("/api/alliance/set-role", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            playerId: leader,
+            targetPlayerId: officer,
+            role: "officer",
+          }),
+        })
+      ).status,
+      200,
+    );
+
+    const payload = {
+      recruitmentBlurb: "Come fly",
+      recruiting: true,
+      applicationNote: "Say hi",
+    };
+    const officerDenied = await app.request("/api/alliance/set-recruiting", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId: officer, ...payload }),
+    });
+    assert.equal(officerDenied.status, 400);
+    const memberDenied = await app.request("/api/alliance/set-recruiting", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId: member, ...payload }),
+    });
+    assert.equal(memberDenied.status, 400);
+
+    const saved = await app.request("/api/alliance/set-recruiting", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId: leader, ...payload }),
+    });
+    assert.equal(saved.status, 200);
+    const state = await app.request(
+      `/api/state?playerId=${encodeURIComponent(leader)}`,
+    );
+    assert.equal(state.status, 200);
+    const stateBody = (await state.json()) as {
+      alliance: Record<string, unknown> | null;
+      allianceDirectory: Array<Record<string, unknown>>;
+    };
+    const row = stateBody.allianceDirectory.find((entry) => entry.id === allianceId);
+    assert.ok(row);
+    assert.equal("recruitmentBlurb" in row!, false);
+    assert.equal("recruiting" in row!, false);
+    assert.equal("applicationNote" in row!, false);
+    assert.equal("recruitmentBlurb" in (stateBody.alliance ?? {}), false);
+    assert.equal("applicationNote" in (stateBody.alliance ?? {}), false);
+
+    const list = await app.request(
+      `/api/alliance/list?playerId=${encodeURIComponent(leader)}`,
+    );
+    assert.equal(list.status, 200);
+    const listed = (await list.json()) as {
+      alliances: Array<{
+        id: string;
+        recruitmentBlurb: string;
+        recruiting: boolean;
+        applicationNote: string;
+      }>;
+    };
+    const pageRow = listed.alliances.find((entry) => entry.id === allianceId);
+    assert.equal(pageRow?.recruitmentBlurb, "Come fly");
+    assert.equal(pageRow?.recruiting, true);
+    assert.equal(pageRow?.applicationNote, "Say hi");
+  });
 });

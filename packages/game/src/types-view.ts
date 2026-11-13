@@ -130,6 +130,8 @@ export interface PublicCombatReport {
   debrisCreated: Resources;
   outcome: CombatOutcome;
   rounds: number;
+  /** Per-round losses, debris, and shields. Absent on legacy share links. */
+  roundLog?: CombatRoundLog[];
 }
 
 export interface HallOfFameEntry {
@@ -248,6 +250,19 @@ export interface PlanetState {
 
 export type AllianceRole = "founder" | "officer" | "member";
 export type AllianceJoinMode = "open" | "invite" | "request";
+export type AllianceDiplomacyKind = "nap" | "war";
+export type AllianceRelationStatus = "pending" | "active";
+
+/** One diplomacy link with another alliance. Missing on older saves. */
+export interface AllianceRelation {
+  allianceId: string;
+  kind: AllianceDiplomacyKind;
+  /** Pending is a NAP offer. War is stored as active. */
+  status: AllianceRelationStatus;
+  /** Alliance id that offered the pact or declared the war. */
+  initiatedBy: string;
+  since: number;
+}
 
 export interface AllianceMember {
   playerId: string;
@@ -332,6 +347,23 @@ export interface AllianceRecord {
    * Missing on older saves — no class, no bonus. Never required.
    */
   allianceClass?: AllianceClassId | null;
+  /**
+   * NAP and war links. Missing on older saves — no relations.
+   * Capped at ALLIANCE_RELATION_CAP.
+   */
+  relations?: AllianceRelation[];
+  /**
+   * Short public recruitment line. Missing on older saves.
+   * Not copied onto the 30s state poll.
+   */
+  recruitmentBlurb?: string;
+  /** Public Recruiting flag. Missing on older saves — treat as false. */
+  recruiting?: boolean;
+  /**
+   * Shown when a commander opens a request-mode apply.
+   * Missing on older saves. Not copied onto the 30s state poll.
+   */
+  applicationNote?: string;
 }
 
 export interface AllianceMemberView {
@@ -365,6 +397,20 @@ export interface AllianceView {
   markers: AllianceGalaxyMarker[];
   /** Null when the alliance has not chosen a class. */
   allianceClass: AllianceClassId | null;
+  /** Current diplomacy. Empty when the alliance has none. Older clients may omit it. */
+  relations?: AllianceRelationView[];
+}
+
+export interface AllianceRelationView {
+  allianceId: string;
+  name: string;
+  tag: string;
+  kind: AllianceDiplomacyKind;
+  status: AllianceRelationStatus;
+  initiatedBy: string;
+  since: number;
+  canAccept: boolean;
+  canCancel: boolean;
 }
 
 export interface AllianceListEntry {
@@ -374,6 +420,26 @@ export interface AllianceListEntry {
   joinMode: AllianceJoinMode;
   memberCount: number;
   maxMembers: number;
+}
+
+/**
+ * Alliances-page directory row. Loaded from `GET /api/alliance/list` only.
+ * The state poll keeps using `AllianceListEntry` without these fields.
+ */
+export interface AllianceRecruitingEntry extends AllianceListEntry {
+  recruitmentBlurb: string;
+  recruiting: boolean;
+  applicationNote: string;
+}
+
+export type HighscoreCategoryId = "buildings" | "fleet" | "research" | "defense";
+
+/** Cached category boards. Missing rows are empty lists. */
+export interface CategoryHighscores {
+  buildings: HighscoreEntry[];
+  fleet: HighscoreEntry[];
+  research: HighscoreEntry[];
+  defense: HighscoreEntry[];
 }
 
 /** Cached alliance rank row. Rebuilt with the player highscore board. */
@@ -492,6 +558,11 @@ export interface SeasonLeaderboardView {
   bossSchedule?: PirateBossSeasonSchedule;
 }
 
+/** On when present. `startedAt` is the turn-on time. Absent means off. */
+export interface VacationModeState {
+  startedAt: number;
+}
+
 export interface PlayerState {
   id: string;
   name: string;
@@ -504,6 +575,11 @@ export interface PlayerState {
   createdAt: number;
   /** First launch of a PvP attack; permanently forfeits newbie protection. */
   newbieForfeitedAt?: number;
+  /**
+   * Vacation mode. Missing means off. Older saves omit it.
+   * `startedAt` is when the commander turned it on.
+   */
+  vacationMode?: VacationModeState;
   /** Last launch time when this player attacked a pirate or alien base. */
   attackedPiratesAt?: number;
   /** Player level — starts at 1, no max (Round 2). */
@@ -565,6 +641,12 @@ export interface PlayerState {
   /** Lifetime combat counters; missing on old saves means zero. */
   combatStats?: PlayerCombatStats;
   /**
+   * One-time achievements. Missing on older saves.
+   * `unlocked` is the id and the time it was paid. Counters cover events
+   * the save did not already store (enemy hulls, expeditions, pirate bases).
+   */
+  achievements?: PlayerAchievementsState;
+  /**
    * Daily / weekly goal counters for the current UTC periods.
    * Lives on the player inside the universe document (no extra KV keys).
    */
@@ -575,10 +657,21 @@ export interface PlayerState {
    */
   onboarding?: PlayerOnboardingState;
   /**
+   * Mid-game milestone guide hidden. Missing on older saves.
+   * A read does not create this field.
+   */
+  midgameBriefingDismissed?: boolean;
+  /**
    * Release id of the last "what's new" popup this commander dismissed.
    * Missing on older saves. A newer catalog id shows the popup again.
    */
   whatsNewDismissedReleaseId?: string;
+  /**
+   * Last authenticated `/api/state` read, in ms.
+   * Missing on older saves. Written at most once per hour.
+   * Galaxy inactivity reads this; a missing value is not inactive.
+   */
+  lastActiveAt?: number;
   /** Synthetic empire alerts. Missing on old saves — migrate to []. */
   eventLog?: EventLogEntry[];
   /** Open monthly season counters. Missing on older saves until the next read. */
@@ -592,16 +685,42 @@ export interface PlayerState {
   seasonArchive?: Record<string, SeasonPlayerCounters>;
   /** Active item 24h buffs or slot licenses. Missing on older saves. */
   itemBuffs?: ActiveItemBuff[];
+  /**
+   * UTC day (`YYYY-MM-DD`) of market accepts. Older saves omit it.
+   * `tradeAcceptValue` is the metal-equivalent received after the fee.
+   */
+  tradeAcceptDay?: string;
+  tradeAcceptValue?: number;
 }
 
 /** UTC period keys + per-goal counters. Rolled lazily on read. */
 export interface PlayerGoalState {
   /** UTC day key `YYYY-MM-DD`. */
   dailyKey: string;
-  /** ISO week key `YYYY-Www` (UTC, Monday start). */
-  weeklyKey: string;
+  /**
+   * ISO week key `YYYY-Www` (UTC, Monday start).
+   * Older saves omit it. The next read stamps the open week.
+   */
+  weeklyKey?: string;
   progress: Record<string, number>;
   claimed: string[];
+}
+
+/** One paid achievement. `at` is the universe clock used when it unlocked. */
+export interface PlayerAchievementUnlock {
+  id: string;
+  at: number;
+}
+
+/**
+ * Optional player field. Absent means the commander has not been checked yet.
+ * Counters start at 0 when missing and are not backfilled from old reports.
+ */
+export interface PlayerAchievementsState {
+  unlocked: PlayerAchievementUnlock[];
+  shipsDestroyed?: number;
+  expeditions?: number;
+  pirateBasesDestroyed?: number;
 }
 
 export type GoalCadence = "daily" | "weekly";
@@ -622,6 +741,21 @@ export interface GoalView {
   target: number;
   claimed: boolean;
   reward: GoalRewardView;
+}
+
+/** One row on the achievements board. Locked rows stay visible. */
+export interface AchievementView {
+  id: string;
+  title: string;
+  detail: string;
+  progress: number;
+  target: number;
+  unlocked: boolean;
+  unlockedAt?: number;
+  starshards: number;
+  /** False when a live meter would be misleading (commander rank). */
+  showProgress: boolean;
+  note?: string;
 }
 
 /**
@@ -693,6 +827,21 @@ export interface OnboardingView {
   suggestion?: NextGoalSuggestion | null;
 }
 
+export type TradeResource = "metal" | "crystal" | "deuterium";
+
+/** Escrowed player-to-player resource offer. Not a Starshard swap. */
+export interface PlayerTradeOffer {
+  id: string;
+  posterPlayerId: string;
+  planetId: string;
+  offerResource: TradeResource;
+  offerAmount: number;
+  requestResource: TradeResource;
+  requestAmount: number;
+  createdAt: number;
+  expiresAt: number;
+}
+
 export interface UniverseSeedCursor {
   /** Next system ordinal in `[0, MAP_GALAXIES * MAP_SYSTEMS]`. */
   at: number;
@@ -711,6 +860,14 @@ export interface UniverseSeedCursor {
    * cursor arrived. The cursor skips these so they are not created twice.
    */
   visited?: Record<string, 1>;
+}
+
+/** Short code that places a new home near the inviter. Not a player id. */
+export interface InviteRecord {
+  code: string;
+  playerId: string;
+  createdAt: number;
+  expiresAt: number;
 }
 
 export interface UniverseState {
@@ -770,6 +927,16 @@ export interface UniverseState {
   /** Earliest wall-clock time at which the next boss may spawn. */
   pirateBossNextSpawnAt?: number;
   /**
+   * Friend-home codes. Absent on older saves. Not copied into the 30s
+   * player view. Pruned only when a code is minted.
+   */
+  invites?: Record<string, InviteRecord>;
+  /**
+   * The one active 24h galaxy event. Absent on older saves and between events.
+   * Not the seasonal pirate mothership.
+   */
+  galaxyEvent?: GalaxyEventState;
+  /**
    * Set on a player-scoped request. NPC raids and growth run on the
    * maintenance pass instead of the page-load tick. Not persisted.
    */
@@ -779,6 +946,30 @@ export interface UniverseState {
    * must not place new bases. Not persisted.
    */
   skipPirateTopUp?: boolean;
+  /**
+   * Open player resource offers. Older saves omit the map and still load.
+   * Never copied onto the 30s player view.
+   */
+  playerTradeOffers?: Record<string, PlayerTradeOffer>;
+}
+
+export type GalaxyEventType = "meteor_shower" | "solar_flare";
+
+/** Persisted galaxy event. One at a time. Older saves omit it. */
+export interface GalaxyEventState {
+  type: GalaxyEventType;
+  galaxy: number;
+  startsAt: number;
+  endsAt: number;
+}
+
+/** Compact poll field. No event history. */
+export interface GalaxyEventView {
+  type: GalaxyEventType;
+  galaxy: number;
+  startsAt: number;
+  endsAt: number;
+  label: string;
 }
 
 export interface PirateBasePublic {
@@ -815,6 +1006,16 @@ export interface GalaxySlot extends PlanetArtFields {
   playerId: string | null;
   playerName: string | null;
   allianceTag: string | null;
+  /**
+   * `i` after 7 days without an authenticated state read, `I` after 28.
+   * Omitted when `player.lastActiveAt` is missing or more recent.
+   */
+  inactivity?: "i" | "I";
+  /**
+   * Active NAP or war between the viewer's alliance and this slot's alliance.
+   * Missing when there is none. Not saved.
+   */
+  diplomacy?: AllianceDiplomacyKind;
   pointsHint: number;
   empirePoints?: number;
   debris: { metal: number; crystal: number } | null;
@@ -839,6 +1040,10 @@ export interface GalaxyMiniBody extends PlanetArtFields {
   coords: Coordinates;
   isOwn: boolean;
   playerName: string | null;
+  /** Same marks as `GalaxySlot.inactivity`. Omitted when unknown or recent. */
+  inactivity?: "i" | "I";
+  /** Active NAP or war with the viewer's alliance. Missing when there is none. */
+  diplomacy?: AllianceDiplomacyKind;
   debris: { metal: number; crystal: number } | null;
 }
 
@@ -884,6 +1089,21 @@ export interface PirateBossView {
   projectedSpawnAt?: number;
 }
 
+/** View-only prefill for the fleet-save reminder. Absent on the save. */
+export interface FleetSaveSuggestion {
+  /** Incoming hostile fleet id. Dismissal is per this attack. */
+  attackId: string;
+  originPlanetId: string;
+  mission: "deploy" | "expedition";
+  /** Docked non-stationary ships. Stationary hulls are left out. */
+  ships: Partial<FleetShips>;
+  /** Nearest other planet or moon. Null when the save is an expedition. */
+  targetPlanetId: string | null;
+  /** Deep-space coordinates for an expedition. Null on deploy. */
+  targetCoords: Coordinates | null;
+  arrivesAt: number;
+}
+
 export interface PlayerView {
   now: number;
   newbieBonusEndsAt?: number | null;
@@ -907,8 +1127,17 @@ export interface PlayerView {
       isMoon: boolean;
       isMini: boolean;
       jumpGateLevel: number;
+      /**
+       * System Scanner level. Omitted at 0 so a quiet poll stays the same size.
+       * Moon Bridge level is `jumpGateLevel` above.
+       */
+      sensorArrayLevel?: number;
       /** Research Lab level on this body (empire research uses the best). */
       researchLab: number;
+      resources: Resources;
+      buildQueueHead: Pick<BuildQueueItem, "buildingId" | "targetLevel"> | null;
+      shipQueueHead: Pick<ShipQueueItem, "shipId" | "count"> | null;
+      defenseQueueHead: Pick<DefenseQueueItem, "defenseId" | "count"> | null;
     }
   >;
   economy: EconomySnapshot;
@@ -919,6 +1148,18 @@ export interface PlayerView {
   hallOfFame?: HallOfFameEntry[];
   hallOfShame?: HallOfShameEntry[];
   galaxy: GalaxyView;
+  /**
+   * This commander's scanner moons. Set only on a Galaxy page state read.
+   * The 30s poll omits it. Older responses omit it too.
+   */
+  scannerMoons?: Array<{
+    planetId: string;
+    coords: Coordinates;
+    /** Current System Scanner level. 0 is omitted by the server. */
+    sensorArray: number;
+    /** `sensorPhalanxRange(sensorArray)`. */
+    range: number;
+  }>;
   fleets: FleetMission[];
   /** Server-derived slot limits, including active bonuses and owned beacons. */
   fleetSlotCap: number;
@@ -929,6 +1170,11 @@ export interface PlayerView {
   sensorContacts: FleetMission[];
   /** Hostile outbound fleets targeting this player (not Moving Fortress). */
   hostileInbound: FleetMission[];
+  /**
+   * One-tap fleet-save prefills for hostile raids more than a minute out.
+   * Omitted when nothing qualifies. Not written to the save.
+   */
+  fleetSave?: FleetSaveSuggestion[];
   /** Premium currency echo. */
   starshards: number;
   /** Active (non-expired) officers. */
@@ -968,6 +1214,10 @@ export interface PlayerView {
   openAcsGroups: AcsGroup[];
   /** Daily and weekly goals for the current UTC periods. */
   goals: GoalView[];
+  /**
+   * One-time achievements. Filled by playerView. Older responses may omit it.
+   */
+  achievements?: AchievementView[];
   /** Commander tutorial. Always filled by playerView; older clients may omit it. */
   onboarding?: OnboardingView;
   /**
@@ -987,6 +1237,8 @@ export interface PlayerView {
   seasonLeaderboard: SeasonLeaderboardView;
   /** Set while a seasonal boss is up, or during the cooldown after it ends. */
   pirateBoss?: PirateBossView;
+  /** Active galaxy event, if its 24h window covers `now`. */
+  galaxyEvent?: GalaxyEventView;
   /** Active 24h item buffs. */
   activeItemBuffs: ActiveItemBuffView[];
   /** Shop items catalog for UI. */
@@ -1015,6 +1267,12 @@ export interface PublicPlayer extends PlanetArtFields {
   allianceTag?: string | null;
 }
 
+/** One UTC day's rank on the commander board. Days are `YYYY-MM-DD`, oldest first. */
+export interface HighscoreRankPoint {
+  day: string;
+  rank: number;
+}
+
 export interface HighscoreEntry extends PlanetArtFields {
   rank: number;
   playerId: string;
@@ -1030,6 +1288,11 @@ export interface HighscoreEntry extends PlanetArtFields {
   /** Lifetime XP (Round 2). */
   xpTotal: number;
   allianceTag?: string | null;
+  /**
+   * Daily rank snapshots, oldest first, capped at `HIGHSCORE_RANK_HISTORY_DAYS`.
+   * The maintenance rebuild writes this. Older boards omit it.
+   */
+  rankHistory?: HighscoreRankPoint[];
 }
 
 export interface EconomySnapshot {

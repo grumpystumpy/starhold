@@ -10,6 +10,7 @@ import {
   launchFleet,
   migrateOrResetUniverse,
   moonAtCoords,
+  moonChanceLabel,
   moonChancePercent,
   moonRoll,
   ownedPlanetCount,
@@ -30,6 +31,10 @@ describe("Thread C moons", () => {
     assert.equal(moonChancePercent({ metal: 1_000_000, crystal: 0, deuterium: 0 }), 4);
     assert.equal(moonChancePercent({ metal: 5_000_000, crystal: 0, deuterium: 0 }), 20);
     assert.equal(moonChancePercent({ metal: 9_000_000, crystal: 0, deuterium: 0 }), 20);
+    assert.equal(moonChanceLabel({ metal: 249_999, crystal: 0, deuterium: 0 }), "moon chance 0%");
+    assert.equal(moonChanceLabel({ metal: 1_000_000, crystal: 0, deuterium: 0 }), "moon chance 4%");
+    assert.equal(moonChanceLabel({ metal: 9_000_000, crystal: 0, deuterium: 5_000 }), "moon chance 20%");
+    assert.equal(moonChanceLabel({ metal: 0, crystal: 0, deuterium: 9_000_000 }), "moon chance 0%");
     assert.equal(sensorPhalanxRange(0), 0);
     assert.equal(sensorPhalanxRange(3), 3);
     assert.equal(

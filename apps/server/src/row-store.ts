@@ -11,8 +11,16 @@ import {
   ensureSystemVisited,
   ensureUniverseShape,
   highscoresBoard,
+  appendHighscoreRankHistory,
+  utcHighscoreDay,
   allianceRankBoard,
+  categoryHighscoreBoards,
+  emptyCategoryHighscores,
+  HIGHSCORE_CATEGORY_IDS,
+  isHighscoreCategoryId,
   type AllianceRankEntry,
+  type CategoryHighscores,
+  type HighscoreCategoryId,
   type AsteroidField,
   type CombatReport,
   type DebrisField,
@@ -167,6 +175,10 @@ const TABLE_SQL = [
     asteroids TEXT NOT NULL, debris TEXT NOT NULL, PRIMARY KEY (galaxy, system))`,
   `CREATE TABLE IF NOT EXISTS save_highscores (
     id TEXT PRIMARY KEY, built_at INTEGER NOT NULL, doc TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS save_commander_mail (
+    id TEXT PRIMARY KEY, to_player_id TEXT NOT NULL, from_player_id TEXT NOT NULL,
+    created_at INTEGER NOT NULL, doc TEXT NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS save_commander_mail_to ON save_commander_mail (to_player_id, created_at)`,
   `CREATE TABLE IF NOT EXISTS save_assert (ok INTEGER NOT NULL CHECK (ok = 1))`,
 ];
 
@@ -744,9 +756,18 @@ async function writeHighscoreCache(
 function buildHighscoreCache(
   universe: UniverseState,
   includeCombatLists: boolean,
+  previousRows?: readonly HighscoreEntry[],
+  now = Date.now(),
 ): HighscoreCache {
+  const day = utcHighscoreDay(now);
+  const prior = new Map(
+    (previousRows ?? []).map((row) => [row.playerId, row.rankHistory] as const),
+  );
   return {
-    rows: highscoresBoard(universe),
+    rows: highscoresBoard(universe).map((row) => ({
+      ...row,
+      rankHistory: appendHighscoreRankHistory(prior.get(row.playerId), day, row.rank),
+    })),
     hallOfFame: includeCombatLists ? combatHallOfFame(universe) : [],
     hallOfShame: includeCombatLists ? combatHallOfShame(universe) : [],
   };
@@ -1920,6 +1941,15 @@ async function commitRows(db: D1Like, stmts: D1Stmt[]): Promise<void> {
   }
 }
 
+function withKeptRankHistory(
+  row: HighscoreEntry,
+  historyByPlayer: ReadonlyMap<string, NonNullable<HighscoreEntry["rankHistory"]>>,
+): HighscoreEntry {
+  const rankHistory = historyByPlayer.get(row.playerId);
+  if (!rankHistory?.length) return row;
+  return { ...row, rankHistory };
+}
+
 function rerank(rows: HighscoreEntry[]): HighscoreEntry[] {
   const sorted = [...rows].sort(
     (a, b) =>
@@ -2029,6 +2059,23 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
     ["id"],
     planetUpdates,
   );
+
+  const livePlanets = new Set(Object.keys(universe.planets));
+  const planetDeletes: unknown[][] = [];
+  for (const [id, version] of loaded.planetVersions) {
+    if (livePlanets.has(id)) continue;
+    planetDeletes.push([id, version]);
+  }
+  for (const group of chunkRows(planetDeletes, SQL_ROWS)) {
+    const clause = group.map(() => "(id = ? AND version = ?)").join(" OR ");
+    stmts.push(bind(db, `DELETE FROM save_planets WHERE ${clause}`, group.flat()));
+    stmts.push(
+      bind(db, "INSERT INTO save_assert (ok) SELECT CASE WHEN changes() = ? THEN 1 ELSE 0 END", [
+        group.length,
+      ]),
+    );
+    guards += 1;
+  }
 
   const liveFleets = new Set(Object.keys(universe.fleets ?? {}));
   const fleetDeletes: unknown[][] = [];
@@ -2169,11 +2216,15 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
 
   let boardJson: string | null = null;
   let allianceJson: string | null = null;
+  let categoryDocs: CategoryHighscores | null = null;
   let boardAt = 0;
   if (rebuildScores) {
-    boardJson = timedStringify(buildHighscoreCache(universe, true));
+    const now = Date.now();
+    const previousRows = currentScope()?.priorHighscoreRows;
+    boardJson = timedStringify(buildHighscoreCache(universe, true, previousRows, now));
     allianceJson = timedStringify(allianceRankBoard(universe));
-    boardAt = Date.now();
+    categoryDocs = categoryHighscoreBoards(universe);
+    boardAt = now;
   } else {
     // Keep the board in step with every player this save scored correctly:
     // new joiners plus changed players whose planets were all fully loaded.
@@ -2187,7 +2238,14 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
     }
     if (scoredIds.size) {
       const cached = currentScope()?.highscores ?? [];
-      const mine = highscoresBoard(universe).filter((row) => scoredIds.has(row.playerId));
+      const historyByPlayer = new Map(
+        cached.flatMap((row) =>
+          row.rankHistory?.length ? [[row.playerId, row.rankHistory] as const] : [],
+        ),
+      );
+      const mine = highscoresBoard(universe)
+        .filter((row) => scoredIds.has(row.playerId))
+        .map((row) => withKeptRankHistory(row, historyByPlayer));
       if (mine.length) {
         const kept = cached.filter((row) => !scoredIds.has(row.playerId));
         const halls = await combatHallsForPartialSave(db, universe);
@@ -2229,6 +2287,18 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
       ),
     );
   }
+  if (categoryDocs) {
+    for (const id of HIGHSCORE_CATEGORY_IDS) {
+      stmts.push(
+        bind(
+          db,
+          `INSERT INTO save_highscores (id, built_at, doc) VALUES (?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET built_at = excluded.built_at, doc = excluded.doc`,
+          [id, boardAt, timedStringify(categoryDocs[id])],
+        ),
+      );
+    }
+  }
 
   if (guards) stmts.push(bind(db, "DELETE FROM save_assert", []));
   await commitRows(db, stmts);
@@ -2265,6 +2335,30 @@ async function readScoreCache(db: D1Like): Promise<{
 
 async function readBoard(db: D1Like): Promise<{ builtAt: number; cache: HighscoreCache } | null> {
   return (await readScoreCache(db)).board;
+}
+
+/** Cached category boards. A missing row is an empty list. Does not scan players. */
+export async function readCategoryHighscores(db: D1Like): Promise<CategoryHighscores> {
+  await ensureRowTables(db);
+  const rows = await all<{ id: string; doc: string }>(
+    db,
+    "SELECT id, doc FROM save_highscores WHERE id IN ('buildings', 'fleet', 'research', 'defense')",
+  );
+  const out = emptyCategoryHighscores();
+  for (const row of rows) {
+    if (!isHighscoreCategoryId(row.id)) continue;
+    out[row.id] = categoryRows(row.doc);
+  }
+  return out;
+}
+
+function categoryRows(doc: string): CategoryHighscores[HighscoreCategoryId] {
+  try {
+    const parsed = timedParse(doc);
+    return Array.isArray(parsed) ? (parsed as CategoryHighscores[HighscoreCategoryId]) : [];
+  } catch {
+    return [];
+  }
 }
 
 async function resolvePlayerIds(db: D1Like, work: UniverseWork | undefined): Promise<string[]> {
@@ -2391,6 +2485,9 @@ function changed(loaded: LoadedRows): boolean {
     if (loaded.stubPlanetIds.has(planet.id) && !loaded.fullPlanetIds.has(planet.id)) continue;
     if (planetChanged(loaded, planet, stable(planet))) return true;
   }
+  for (const id of loaded.planetVersions.keys()) {
+    if (!universe.planets[id]) return true;
+  }
   for (const fleet of Object.values(universe.fleets ?? {})) {
     if (stable(fleet) !== loaded.fingerprints.get(`fleet:${fleet.id}`)) return true;
   }
@@ -2412,11 +2509,13 @@ async function attachBoard(db: D1Like, work: UniverseWork | undefined): Promise<
   if (!scope) return;
   scope.allianceHighscores = cached.alliances;
   if (work?.maintenance) {
+    scope.priorHighscoreRows = board?.cache.rows ?? [];
     scope.highscores = undefined;
     scope.hallOfFame = undefined;
     scope.hallOfShame = undefined;
     return;
   }
+  scope.priorHighscoreRows = undefined;
   scope.highscores = board?.cache.rows ?? [];
   scope.hallOfFame = board?.cache.hallOfFame ?? [];
   scope.hallOfShame = board?.cache.hallOfShame ?? [];
@@ -2697,6 +2796,62 @@ export async function readHighscoreMeta(
   const board = await readBoard(db);
   if (!board) return null;
   return { builtAt: board.builtAt, rows: board.cache.rows.length };
+}
+
+/** Names shown on the join page. The cached board is already ranked. */
+const LOBBY_TOP = 5;
+
+export interface PublicLobbyTeaser {
+  commanders: number;
+  top: Array<{ rank: number; name: string; points: number }>;
+}
+
+/**
+ * Join-page teaser. One SELECT of the cached `board` row.
+ * Does not rescore, read players, or load the world document.
+ * Mothership status is not on this row.
+ */
+export async function readPublicLobby(db: D1Like): Promise<PublicLobbyTeaser> {
+  const row = await first<{ doc: string }>(
+    db,
+    "SELECT doc FROM save_highscores WHERE id = 'board'",
+  );
+  if (!row) return { commanders: 0, top: [] };
+  const list = lobbyBoardRows(timedParse(row.doc));
+  const top: PublicLobbyTeaser["top"] = [];
+  for (const item of list) {
+    if (top.length >= LOBBY_TOP) break;
+    const entry = lobbyEntry(item, top.length + 1);
+    if (entry) top.push(entry);
+  }
+  return { commanders: list.length, top };
+}
+
+function lobbyBoardRows(parsed: unknown): unknown[] {
+  if (Array.isArray(parsed)) return parsed;
+  if (
+    parsed &&
+    typeof parsed === "object" &&
+    Array.isArray((parsed as HighscoreCache).rows)
+  ) {
+    return (parsed as HighscoreCache).rows;
+  }
+  return [];
+}
+
+function lobbyEntry(
+  item: unknown,
+  fallbackRank: number,
+): PublicLobbyTeaser["top"][number] | null {
+  if (!item || typeof item !== "object") return null;
+  const row = item as Partial<HighscoreEntry>;
+  if (typeof row.name !== "string") return null;
+  if (typeof row.points !== "number" || !Number.isFinite(row.points)) return null;
+  const rank =
+    typeof row.rank === "number" && Number.isFinite(row.rank)
+      ? row.rank
+      : fallbackRank;
+  return { rank, name: row.name, points: row.points };
 }
 
 export { STAGES };
