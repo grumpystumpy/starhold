@@ -341,6 +341,66 @@ function requestsHtml(view: PlayerView, busy: boolean): string {
     </ul>`;
 }
 
+function relationLabel(kind: "nap" | "war", status: "pending" | "active"): string {
+  switch (kind) {
+    case "nap":
+      return status === "pending" ? "NAP · pending" : "NAP";
+    case "war":
+      return "War";
+    default: {
+      const _exhaustive: never = kind;
+      return _exhaustive;
+    }
+  }
+}
+
+function relationsHtml(view: PlayerView, busy: boolean): string {
+  const alliance = view.alliance;
+  if (!alliance) return "";
+  const rows = alliance.relations ?? [];
+  const list =
+    rows.length === 0
+      ? `<p class="hint" data-testid="alliance-relations-empty">No relations.</p>`
+      : `<ul class="alliance-roster" data-testid="alliance-relations">
+      ${rows
+        .map((row) => {
+          const accept = row.canAccept
+            ? `<button type="button" data-diplomacy-accept="${escapeAttr(row.allianceId)}" data-testid="alliance-diplomacy-accept-${escapeAttr(row.allianceId)}" ${busy ? "disabled" : ""}>Accept</button>`
+            : "";
+          const cancel = row.canCancel
+            ? `<button type="button" data-diplomacy-cancel="${escapeAttr(row.allianceId)}" data-testid="alliance-diplomacy-cancel-${escapeAttr(row.allianceId)}" ${busy ? "disabled" : ""}>Cancel</button>`
+            : "";
+          return `<li data-testid="alliance-relation-${escapeAttr(row.allianceId)}">
+            <span>[${escapeHtml(row.tag)}] ${escapeHtml(row.name)} · ${escapeHtml(relationLabel(row.kind, row.status))}</span>
+            ${accept || cancel ? `<span class="alliance-member-actions">${accept}${cancel}</span>` : ""}
+          </li>`;
+        })
+        .join("")}
+    </ul>`;
+  const others = (view.allianceDirectory ?? []).filter((entry) => entry.id !== alliance.id);
+  const form =
+    alliance.myRole !== "founder"
+      ? ""
+      : others.length === 0
+        ? `<p class="hint" data-testid="alliance-diplomacy-none">No other alliance to contact.</p>`
+        : `<div class="alliance-form" data-testid="alliance-diplomacy-form">
+      <label>Alliance
+        <select data-testid="alliance-diplomacy-target" ${busy ? "disabled" : ""}>
+          ${others
+            .map(
+              (entry) =>
+                `<option value="${escapeAttr(entry.id)}">[${escapeHtml(entry.tag)}] ${escapeHtml(entry.name)}</option>`,
+            )
+            .join("")}
+        </select>
+      </label>
+      <button type="button" data-diplomacy-offer="nap" data-testid="alliance-diplomacy-nap" ${busy ? "disabled" : ""}>Offer NAP</button>
+      <button type="button" data-diplomacy-offer="war" data-testid="alliance-diplomacy-war" ${busy ? "disabled" : ""}>Declare war</button>
+      <p class="hint" data-testid="alliance-diplomacy-hint">A pact starts when the other leader accepts. War starts immediately. Neither one blocks an attack.</p>
+    </div>`;
+  return `<h3>Relations</h3>${list}${form}`;
+}
+
 export function alliancesPageHtml(view: PlayerView, busy: boolean): string {
   const alliance = view.alliance;
   if (!alliance) {
@@ -397,6 +457,7 @@ export function alliancesPageHtml(view: PlayerView, busy: boolean): string {
       </p>
       ${rosterHtml(view, busy)}
       ${requestsHtml(view, busy)}
+      ${relationsHtml(view, busy)}
       ${allianceClassSection(alliance, busy)}
       ${chatSection(view, busy)}
       ${intelSection(view, busy)}

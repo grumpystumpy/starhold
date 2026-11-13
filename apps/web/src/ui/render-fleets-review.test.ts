@@ -20,6 +20,7 @@ import {
   renderFleetSendReview,
   type FleetSendReviewInput,
 } from "./fleet-send-review";
+import { napAttackDecision, napAttackWarning } from "./nap-attack";
 import { fleetComposer } from "./render-fleets-composer";
 import {
   blankFleetDraft,
@@ -329,6 +330,61 @@ describe("fleet send review", () => {
     assert.match(joined, /value="acs_join_1" selected/);
     assert.match(joined, /15 minutes/);
     assert.match(joined, /No guaranteed return/);
+  });
+
+  it("warns on a NAP attack and still leaves Send enabled", () => {
+    const base = view();
+    const pact = {
+      ...base,
+      roster: [{ ...base.roster[0], allianceTag: "FOE" }],
+      alliance: {
+        id: "ally_1",
+        tag: "SOL",
+        relations: [
+          {
+            allianceId: "ally_foe",
+            name: "Foes",
+            tag: "FOE",
+            kind: "nap",
+            status: "active",
+            initiatedBy: "ally_1",
+            since: 1,
+            canAccept: false,
+            canCancel: true,
+          },
+        ],
+      },
+    } as unknown as PlayerView;
+    const warning = napAttackWarning(pact, { mission: "raid", planetId: "pl2" });
+    assert.match(warning ?? "", /Non-aggression pact with \[FOE\]/);
+    assert.match(warning ?? "", /This attack is allowed/);
+    assert.equal(napAttackDecision(warning, () => false), "stop");
+    assert.equal(napAttackDecision(warning, () => true), "send");
+    assert.equal(napAttackDecision(null, () => false), "send");
+    assert.equal(napAttackDecision(warning, undefined), "send");
+    assert.equal(napAttackWarning(pact, { mission: "espionage", planetId: "pl2" }), null);
+    assert.equal(
+      napAttackWarning(
+        {
+          ...pact,
+          alliance: {
+            ...pact.alliance!,
+            relations: [{ ...pact.alliance!.relations![0]!, kind: "war", status: "active" }],
+          },
+        } as PlayerView,
+        { mission: "raid", planetId: "pl2" },
+      ),
+      null,
+    );
+    const html = fleetComposer(
+      pact,
+      false,
+      draft({ mission: "raid", targetPlanetId: "pl2", counts: { scout: 1 } }),
+    );
+    assert.match(html, /data-testid="fleet-nap-warning"/);
+    assert.match(html, /This attack is allowed/);
+    const button = html.match(/<button[^>]*data-testid="launch-fleet"[^>]*>/)?.[0] ?? "";
+    assert.doesNotMatch(button, /disabled/);
   });
 
   it("stacks the review on a phone width without a hover-only fact", () => {

@@ -250,6 +250,19 @@ export interface PlanetState {
 
 export type AllianceRole = "founder" | "officer" | "member";
 export type AllianceJoinMode = "open" | "invite" | "request";
+export type AllianceDiplomacyKind = "nap" | "war";
+export type AllianceRelationStatus = "pending" | "active";
+
+/** One diplomacy link with another alliance. Missing on older saves. */
+export interface AllianceRelation {
+  allianceId: string;
+  kind: AllianceDiplomacyKind;
+  /** Pending is a NAP offer. War is stored as active. */
+  status: AllianceRelationStatus;
+  /** Alliance id that offered the pact or declared the war. */
+  initiatedBy: string;
+  since: number;
+}
 
 export interface AllianceMember {
   playerId: string;
@@ -334,6 +347,11 @@ export interface AllianceRecord {
    * Missing on older saves — no class, no bonus. Never required.
    */
   allianceClass?: AllianceClassId | null;
+  /**
+   * NAP and war links. Missing on older saves — no relations.
+   * Capped at ALLIANCE_RELATION_CAP.
+   */
+  relations?: AllianceRelation[];
 }
 
 export interface AllianceMemberView {
@@ -367,6 +385,20 @@ export interface AllianceView {
   markers: AllianceGalaxyMarker[];
   /** Null when the alliance has not chosen a class. */
   allianceClass: AllianceClassId | null;
+  /** Current diplomacy. Empty when the alliance has none. Older clients may omit it. */
+  relations?: AllianceRelationView[];
+}
+
+export interface AllianceRelationView {
+  allianceId: string;
+  name: string;
+  tag: string;
+  kind: AllianceDiplomacyKind;
+  status: AllianceRelationStatus;
+  initiatedBy: string;
+  since: number;
+  canAccept: boolean;
+  canCancel: boolean;
 }
 
 export interface AllianceListEntry {
@@ -879,6 +911,11 @@ export interface GalaxySlot extends PlanetArtFields {
    * Omitted when `player.lastActiveAt` is missing or more recent.
    */
   inactivity?: "i" | "I";
+  /**
+   * Active NAP or war between the viewer's alliance and this slot's alliance.
+   * Missing when there is none. Not saved.
+   */
+  diplomacy?: AllianceDiplomacyKind;
   pointsHint: number;
   empirePoints?: number;
   debris: { metal: number; crystal: number } | null;
@@ -905,6 +942,8 @@ export interface GalaxyMiniBody extends PlanetArtFields {
   playerName: string | null;
   /** Same marks as `GalaxySlot.inactivity`. Omitted when unknown or recent. */
   inactivity?: "i" | "I";
+  /** Active NAP or war with the viewer's alliance. Missing when there is none. */
+  diplomacy?: AllianceDiplomacyKind;
   debris: { metal: number; crystal: number } | null;
 }
 

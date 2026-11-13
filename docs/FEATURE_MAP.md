@@ -30,6 +30,14 @@ The 30s `/api/state` poll sets `X-Starhold-State-Tick` to `skipped` or `advanced
 
 Kick, leave, and disband detach that player's Joint Strike (ACS) fleets: outbound and holding both return home, `acsGroupId` clears, and the group cancels if it drops below `ACS_MIN_FLEETS_TO_RESOLVE`. Combat math is unchanged.
 
+## Alliance diplomacy
+
+The Leader (founder) can offer a non-aggression pact or declare war. Officers and members cannot. Relations are optional `alliance.relations[]` (`allianceId`, `kind` `nap` or `war`, `status` `pending` or `active`, `initiatedBy`, `since`), capped at `ALLIANCE_RELATION_CAP` (20) in `packages/game/src/data/tuning.ts`. Older saves omit the array and still load. One relation per other alliance: cancel it before offering or declaring another. A pact is stored on both alliances as `pending` until the other Leader accepts (`POST /api/alliance/diplomacy/nap`, then `POST /api/alliance/diplomacy/nap/accept`). The offering Leader cannot accept their own pact. War is one-sided and immediate (`POST /api/alliance/diplomacy/war`) and is active on both records. Either Leader can cancel a pact, including a pending offer (`POST /api/alliance/diplomacy/cancel`). Only the Leader of the alliance that declared a war can end it. Kick and an ordinary leave do not change relations. Disband, including the last member leaving, removes that alliance's relations from both records.
+
+The alliance page lists relations (`data-testid="alliance-relations"`). The Leader gets Offer NAP and Declare war (`data-testid="alliance-diplomacy-form"`). A pending pact shows Accept for the other Leader. Galaxy rows and mini planets show a small `NAP` or `WAR` tag (`data-testid="galaxy-diplomacy-<slot>"`) only for an active relation with the viewer's alliance. A pending pact has no tag.
+
+A NAP does not block attacks. On the fleet composer's send step, a raid or occupy against an active NAP partner shows `data-testid="fleet-nap-warning"` and asks the player to confirm. Dismissing the confirm leaves the fleet unsent. Confirming sends it. The server does not reject that attack, and the pact stays in place. Spy, deploy, and the other missions do not warn. War does not warn. This note lives in `docs/FEATURE_MAP.md`.
+
 Tags render as `Name [TAG]` on galaxy rows and `[TAG] Name` on commander highscore rows.
 
 ## Highscores
@@ -71,6 +79,7 @@ A pirate raid on a player planet launches an outbound `FleetMission` instead of 
 ## Open questions
 
 - Join requests do not expire.
+- Diplomacy relations do not expire.
 - Officer cap does not limit who may approve a request. Approval is independent of `ALLIANCE_MAX_OFFICERS`.
 - A pending request is kept when the alliance switches back to open. It is not auto-accepted. Approve still works. Switching to open still clears invites only.
 

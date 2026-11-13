@@ -1,12 +1,19 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   ALLIANCE_MAX_MEMBERS,
   ALLIANCE_PENDING_REQUEST_CAP,
+  ALLIANCE_RELATION_CAP,
+  acceptAllianceNap,
   approveJoinRequest,
+  cancelAllianceRelation,
   cancelJoinRequest,
   createAlliance,
   createUniverse,
+  allianceViewFor,
+  declareAllianceWar,
   disbandAlliance,
   galaxyViewFor,
   inviteToAlliance,
@@ -14,6 +21,8 @@ import {
   joinUniverse,
   kickFromAlliance,
   leaveAlliance,
+  migrateOrResetUniverse,
+  offerAllianceNap,
   playerView,
   rejectJoinRequest,
   setAllianceJoinMode,
@@ -355,5 +364,185 @@ describe("alliance join requests and leader handoff", () => {
     const expected = [a.player.id, b.player.id].sort((x, y) => x.localeCompare(y))[0];
     assert.equal(leaveAlliance(universe, leader.player.id, 30).ok, true);
     assert.equal(universe.alliances?.[id]?.founderPlayerId, expected);
+  });
+});
+
+function pair() {
+  const universe = createUniverse("Diplomacy", 1);
+  const alpha = joinUniverse(universe, "Alpha");
+  const beta = joinUniverse(universe, "Beta");
+  assert.equal(createAlliance(universe, alpha.player.id, "Alpha Pact", "alp").ok, true);
+  assert.equal(createAlliance(universe, beta.player.id, "Beta Pact", "bet").ok, true);
+  const alphaId = playerView(universe, alpha.player.id).alliance!.id;
+  const betaId = playerView(universe, beta.player.id).alliance!.id;
+  return { universe, alpha, beta, alphaId, betaId };
+}
+
+describe("alliance diplomacy", () => {
+  it("requires the other leader to accept a NAP and shows it on the galaxy", () => {
+    const { universe, alpha, beta, alphaId, betaId } = pair();
+    const recruit = joinUniverse(universe, "Recruit");
+    assert.equal(joinAlliance(universe, recruit.player.id, { allianceId: betaId }).ok, true);
+
+    const offered = offerAllianceNap(universe, alpha.player.id, betaId, 50);
+    assert.equal(offered.ok, true);
+    assert.equal(universe.alliances?.[alphaId]?.relations?.[0]?.status, "pending");
+    assert.equal(universe.alliances?.[betaId]?.relations?.[0]?.initiatedBy, alphaId);
+    assert.equal(
+      offerAllianceNap(universe, recruit.player.id, alphaId, 51).ok,
+      false,
+    );
+    const selfAccept = acceptAllianceNap(universe, alpha.player.id, betaId, 52);
+    assert.equal(selfAccept.ok, false);
+    const memberAccept = acceptAllianceNap(universe, recruit.player.id, alphaId, 53);
+    assert.equal(memberAccept.ok, false);
+
+    const home = universe.planets[beta.player.homePlanetId]!;
+    const pendingGalaxy = galaxyViewFor(
+      universe,
+      alpha.player.id,
+      home.coords.galaxy,
+      home.coords.system,
+    );
+    assert.equal(
+      pendingGalaxy.slots.find((slot) => slot.playerId === beta.player.id)?.diplomacy,
+      undefined,
+    );
+
+    assert.equal(acceptAllianceNap(universe, beta.player.id, alphaId, 54).ok, true);
+    const active = playerView(universe, alpha.player.id).alliance?.relations ?? [];
+    assert.equal(active.length, 1);
+    assert.equal(active[0]?.kind, "nap");
+    assert.equal(active[0]?.status, "active");
+    assert.equal(active[0]?.tag, "BET");
+    const galaxy = galaxyViewFor(
+      universe,
+      alpha.player.id,
+      home.coords.galaxy,
+      home.coords.system,
+    );
+    assert.equal(
+      galaxy.slots.find((slot) => slot.playerId === beta.player.id)?.diplomacy,
+      "nap",
+    );
+    assert.equal(
+      galaxy.slots.find((slot) => slot.playerId === alpha.player.id)?.diplomacy,
+      undefined,
+    );
+
+    assert.equal(declareAllianceWar(universe, alpha.player.id, betaId, 55).ok, false);
+    assert.equal(cancelAllianceRelation(universe, alpha.player.id, betaId, 56).ok, true);
+    assert.equal(universe.alliances?.[alphaId]?.relations, undefined);
+    assert.equal(universe.alliances?.[betaId]?.relations, undefined);
+  });
+
+  it("declares war immediately and lets only the declaring leader end it", () => {
+    const { universe, alpha, beta, alphaId, betaId } = pair();
+    assert.equal(declareAllianceWar(universe, alpha.player.id, betaId, 60).ok, true);
+    const war = playerView(universe, beta.player.id).alliance?.relations?.[0];
+    assert.equal(war?.kind, "war");
+    assert.equal(war?.status, "active");
+    assert.equal(war?.canCancel, false);
+    assert.equal(cancelAllianceRelation(universe, beta.player.id, alphaId, 61).ok, false);
+    assert.equal(universe.alliances?.[betaId]?.relations?.length, 1);
+    assert.equal(cancelAllianceRelation(universe, alpha.player.id, betaId, 62).ok, true);
+    assert.equal(universe.alliances?.[alphaId]?.relations, undefined);
+    assert.equal(universe.alliances?.[betaId]?.relations, undefined);
+
+    const home = universe.planets[beta.player.homePlanetId]!;
+    assert.equal(declareAllianceWar(universe, beta.player.id, alphaId, 63).ok, true);
+    const galaxy = galaxyViewFor(
+      universe,
+      alpha.player.id,
+      home.coords.galaxy,
+      home.coords.system,
+    );
+    assert.equal(
+      galaxy.slots.find((slot) => slot.playerId === beta.player.id)?.diplomacy,
+      "war",
+    );
+  });
+
+  it("clears both sides when an alliance disbands and keeps relations when a member is kicked", () => {
+    const { universe, alpha, beta, alphaId, betaId } = pair();
+    const gamma = joinUniverse(universe, "Gamma");
+    assert.equal(createAlliance(universe, gamma.player.id, "Gamma Pact", "gam").ok, true);
+    const gammaId = playerView(universe, gamma.player.id).alliance!.id;
+    const recruit = joinUniverse(universe, "Recruit");
+    assert.equal(joinAlliance(universe, recruit.player.id, { allianceId: alphaId }).ok, true);
+    assert.equal(offerAllianceNap(universe, alpha.player.id, betaId, 70).ok, true);
+    assert.equal(acceptAllianceNap(universe, beta.player.id, alphaId, 71).ok, true);
+    assert.equal(declareAllianceWar(universe, alpha.player.id, gammaId, 72).ok, true);
+    assert.equal(kickFromAlliance(universe, alpha.player.id, recruit.player.id, 73).ok, true);
+    assert.equal(universe.alliances?.[alphaId]?.relations?.length, 2);
+    assert.equal(disbandAlliance(universe, beta.player.id, 74).ok, true);
+    assert.equal(universe.alliances?.[betaId], undefined);
+    assert.deepEqual(
+      universe.alliances?.[alphaId]?.relations?.map((row) => row.allianceId),
+      [gammaId],
+    );
+    assert.equal(leaveAlliance(universe, gamma.player.id, 75).ok, true);
+    assert.equal(universe.alliances?.[gammaId], undefined);
+    assert.equal(universe.alliances?.[alphaId]?.relations, undefined);
+  });
+
+  it("caps relations and leaves an older alliance without the field", () => {
+    const universe = createUniverse("Diplomacy Cap", 1);
+    const leader = joinUniverse(universe, "CapLead");
+    assert.equal(createAlliance(universe, leader.player.id, "Cap Home", "cap").ok, true);
+    const homeId = playerView(universe, leader.player.id).alliance!.id;
+    assert.equal(universe.alliances?.[homeId]?.relations, undefined);
+    assert.deepEqual(playerView(universe, leader.player.id).alliance?.relations, []);
+    for (let i = 0; i < ALLIANCE_RELATION_CAP; i++) {
+      const other = joinUniverse(universe, `Cap${i}`);
+      assert.equal(
+        createAlliance(universe, other.player.id, `Cap Name ${i}`, `c${i}`).ok,
+        true,
+      );
+      const otherId = playerView(universe, other.player.id).alliance!.id;
+      assert.equal(declareAllianceWar(universe, leader.player.id, otherId, 80 + i).ok, true);
+    }
+    const extra = joinUniverse(universe, "CapExtra");
+    assert.equal(createAlliance(universe, extra.player.id, "Cap Extra", "cxx").ok, true);
+    const extraId = playerView(universe, extra.player.id).alliance!.id;
+    const overflow = declareAllianceWar(universe, leader.player.id, extraId, 200);
+    assert.equal(overflow.ok, false);
+    assert.equal(universe.alliances?.[homeId]?.relations?.length, ALLIANCE_RELATION_CAP);
+    assert.equal(universe.alliances?.[extraId]?.relations, undefined);
+  });
+
+  it("loads a main-branch in-flight save with didReset false and keeps the fleet", () => {
+    const path = fileURLToPath(new URL("./fixtures/in-flight-fleet-save.json", import.meta.url));
+    const raw = JSON.parse(readFileSync(path, "utf8")) as {
+      fleets: Record<string, { ownerPlayerId: string; phase: string; ships: { scout: number } }>;
+      players: Record<string, { allianceId?: string | null }>;
+    };
+    const fleetId = "flt_loyw3v50_wp8zo";
+    assert.equal(raw.fleets[fleetId]?.ships.scout, 1);
+    const loaded = migrateOrResetUniverse(structuredClone(raw) as never);
+    assert.equal(loaded.didReset, false);
+    assert.equal(loaded.universe.fleets[fleetId]?.phase, "outbound");
+    assert.equal(loaded.universe.fleets[fleetId]?.ships.scout, 1);
+    const ownerId = loaded.universe.fleets[fleetId]!.ownerPlayerId;
+    loaded.universe.alliances = {
+      ally_old: {
+        id: "ally_old",
+        name: "Old Guard",
+        tag: "OLD",
+        joinMode: "open",
+        createdAt: 1,
+        founderPlayerId: ownerId,
+        members: {
+          [ownerId]: { playerId: ownerId, role: "founder", joinedAt: 1 },
+        },
+      },
+    };
+    loaded.universe.players[ownerId]!.allianceId = "ally_old";
+    const view = allianceViewFor(loaded.universe, ownerId);
+    assert.equal(loaded.didReset, false);
+    assert.deepEqual(view?.relations, []);
+    assert.equal(loaded.universe.alliances?.ally_old?.relations, undefined);
+    assert.equal(loaded.universe.fleets[fleetId]?.phase, "outbound");
+    assert.equal(loaded.universe.fleets[fleetId]?.ships.scout, 1);
   });
 });

@@ -86,6 +86,12 @@ export {
   setAllianceRole,
 } from "./world-alliances.js";
 export {
+  acceptAllianceNap,
+  cancelAllianceRelation,
+  declareAllianceWar,
+  offerAllianceNap,
+} from "./world-alliance-diplomacy.js";
+export {
   leaveAcsFleet,
   listOpenAcsForAlliance,
   lockAcsEarly,

@@ -1051,6 +1051,55 @@ export async function setAllianceClassRequest(
   return parse<PlayerView>(res);
 }
 
+async function allianceDiplomacyRequest(
+  path: string,
+  playerId: string,
+  allianceId: string,
+): Promise<PlayerView> {
+  const res = await credFetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, allianceId }),
+  });
+  return parse<PlayerView>(res);
+}
+
+export function offerAllianceNapRequest(
+  playerId: string,
+  allianceId: string,
+): Promise<PlayerView> {
+  return allianceDiplomacyRequest("/api/alliance/diplomacy/nap", playerId, allianceId);
+}
+
+export function acceptAllianceNapRequest(
+  playerId: string,
+  allianceId: string,
+): Promise<PlayerView> {
+  return allianceDiplomacyRequest(
+    "/api/alliance/diplomacy/nap/accept",
+    playerId,
+    allianceId,
+  );
+}
+
+export function declareAllianceWarRequest(
+  playerId: string,
+  allianceId: string,
+): Promise<PlayerView> {
+  return allianceDiplomacyRequest("/api/alliance/diplomacy/war", playerId, allianceId);
+}
+
+export function cancelAllianceRelationRequest(
+  playerId: string,
+  allianceId: string,
+): Promise<PlayerView> {
+  return allianceDiplomacyRequest(
+    "/api/alliance/diplomacy/cancel",
+    playerId,
+    allianceId,
+  );
+}
+
 export async function disbandAllianceRequest(
   playerId: string,
 ): Promise<PlayerView> {

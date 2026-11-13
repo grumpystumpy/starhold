@@ -768,6 +768,28 @@ a.message-title:hover {
   margin-left: 0;
 }
 
+.diplomacy-tag {
+  display: inline-block;
+  margin-left: 0.3rem;
+  padding: 0 0.28rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.3;
+  border-radius: 3px;
+  vertical-align: 0.08em;
+}
+
+.diplomacy-tag[data-diplomacy="nap"] {
+  color: var(--ok);
+  border: 1px solid color-mix(in srgb, var(--ok) 55%, transparent);
+}
+
+.diplomacy-tag[data-diplomacy="war"] {
+  color: var(--bad);
+  border: 1px solid color-mix(in srgb, var(--bad) 55%, transparent);
+}
+
 .galaxy-debris-badge {
   font-size: 0.75rem;
   font-weight: 600;

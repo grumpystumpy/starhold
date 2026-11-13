@@ -49,6 +49,7 @@ import {
   allianceViewFor,
   pendingAllianceRequestFor,
 } from "./world-alliances.js";
+import { activeDiplomacyFor } from "./world-alliance-diplomacy.js";
 import { galaxyMarkerOverlay } from "./world-alliance-intel.js";
 import { listOpenAcsForAlliance } from "./world-acs.js";
 import { advancePlanetNow, advanceUniverse } from "./world-arrival.js";
@@ -202,6 +203,7 @@ export function galaxyViewFor(
   const g = Math.min(MAP_GALAXIES, Math.max(1, Math.floor(galaxy)));
   const s = Math.min(MAP_SYSTEMS, Math.max(1, Math.floor(system)));
   const artCtx = createPlanetArtContext(universe);
+  const diplomacy = activeDiplomacyFor(universe, playerId);
   const slots: GalaxySlot[] = [];
   const empirePointsByPlayer = new Map<string, number>();
   for (let slot = 1; slot <= MAP_SLOTS; slot++) {
@@ -224,6 +226,7 @@ export function galaxyViewFor(
       ? artForBody(universe, planet, artCtx)
       : normalArtAt(coords);
     const inactivity = inactivityMark(owner?.lastActiveAt, now);
+    const stance = owner?.allianceId ? diplomacy.get(owner.allianceId) : undefined;
     slots.push({
       coords,
       planetId: planet?.id ?? null,
@@ -231,6 +234,7 @@ export function galaxyViewFor(
       playerName: owner?.name ?? null,
       allianceTag: allianceTagForPlayer(universe, owner),
       ...(inactivity ? { inactivity } : {}),
+      ...(stance ? { diplomacy: stance } : {}),
       pointsHint: planet ? Math.floor(planetPoints(planet)) : 0,
       ...(ownerPoints === undefined ? {} : { empirePoints: ownerPoints }),
       debris: debris
@@ -257,6 +261,7 @@ export function galaxyViewFor(
     const debris = getDebris(universe, planet.coords);
     const art = artForBody(universe, planet, artCtx);
     const inactivity = inactivityMark(owner?.lastActiveAt, now);
+    const stance = owner?.allianceId ? diplomacy.get(owner.allianceId) : undefined;
     minis.push({
       planetId: planet.id,
       name: planet.name,
@@ -264,6 +269,7 @@ export function galaxyViewFor(
       isOwn: planet.ownerPlayerId === playerId,
       playerName: owner?.name ?? (planet.ownerPlayerId ? null : "Unclaimed"),
       ...(inactivity ? { inactivity } : {}),
+      ...(stance ? { diplomacy: stance } : {}),
       debris: debris
         ? { metal: debris.metal, crystal: debris.crystal }
         : null,
