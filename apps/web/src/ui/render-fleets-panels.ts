@@ -2,6 +2,7 @@ import {
   DEFENSE_ORDER,
   DEFENSES,
   MAP_SYSTEMS,
+  moonChanceLabel,
   SHIP_ORDER,
   SHIPS,
   type CombatReport,
@@ -193,7 +194,7 @@ export function galaxyPanel(
         s.debris && (s.debris.metal > 0 || s.debris.crystal > 0),
       );
       const debrisText = hasDebris
-        ? ` · <span class="galaxy-debris-badge" data-testid="galaxy-debris-${s.coords.slot}">debris ${fmt(s.debris!.metal)}/${fmt(s.debris!.crystal)}</span>`
+        ? ` · <span class="galaxy-debris-badge" data-testid="galaxy-debris-${s.coords.slot}">debris ${fmt(s.debris!.metal)}/${fmt(s.debris!.crystal)} · ${escapeHtml(moonChanceLabel(s.debris))}</span>`
         : "";
       const moon = s.hasMoon ? " · Moon" : "";
       const tag = s.allianceTag ? ` [${escapeHtml(s.allianceTag)}]` : "";
