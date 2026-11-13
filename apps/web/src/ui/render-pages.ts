@@ -41,6 +41,7 @@ import {
   shipRow,
 } from "./render-chrome";
 import { escapeAttr, escapeHtml } from "./render-escape";
+import { commanderNameButton } from "./commander-dossier";
 import {
   fleetComposer,
   galaxyPanel,
@@ -494,7 +495,7 @@ function highscorePage(view: PlayerView): string {
   const playerRows = (view.highscores ?? [])
     .map(
       (h) =>
-        `<li data-testid="highscore-${h.rank}" data-player-id="${escapeAttr(h.playerId)}" data-home-planet="${escapeAttr(h.homePlanetId)}"><span class="row-with-thumb"><span class="hs-rank">#${fmt(h.rank)}</span>${planetDiscHtml({ src: h.artThumbUrl, artId: h.artId, size: 32 })}${h.allianceTag ? `[${escapeHtml(h.allianceTag)}] ` : ""}${escapeHtml(h.name)}${h.playerId === view.player.id ? " (you)" : ""}</span>${rankSparkline(h.playerId, h.rankHistory)}<span class="hs-meta">Home ${escapeHtml(h.planetName || "world")} · ${fmtCoordsLink(h.coords)} · ${fmtCompact(h.points)} pts · Lv ${fmt(h.level ?? 1)} · ${fmtCompact(h.xpTotal ?? 0)} XP</span></li>`,
+        `<li data-testid="highscore-${h.rank}" data-player-id="${escapeAttr(h.playerId)}" data-home-planet="${escapeAttr(h.homePlanetId)}"><span class="row-with-thumb"><span class="hs-rank">#${fmt(h.rank)}</span>${planetDiscHtml({ src: h.artThumbUrl, artId: h.artId, size: 32 })}${h.allianceTag ? `[${escapeHtml(h.allianceTag)}] ` : ""}${commanderNameButton(h.playerId, h.name, `open-commander-${h.playerId}`)}${h.playerId === view.player.id ? " (you)" : ""}</span>${rankSparkline(h.playerId, h.rankHistory)}<span class="hs-meta">Home ${escapeHtml(h.planetName || "world")} · ${fmtCoordsLink(h.coords)} · ${fmtCompact(h.points)} pts · Lv ${fmt(h.level ?? 1)} · ${fmtCompact(h.xpTotal ?? 0)} XP</span></li>`,
     )
     .join("");
   const allianceRows = (view.allianceHighscores ?? [])

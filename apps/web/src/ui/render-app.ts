@@ -5,6 +5,10 @@ import { startCountdownTick } from "./countdown";
 import type { NavPage } from "./nav";
 import { morphHtml } from "./morph-dom";
 import { canPatchShell, patchLiveChrome } from "./patch-chrome";
+import {
+  closeCommanderDossier,
+  syncCommanderDossier,
+} from "./commander-dossier";
 import { syncVacationBanner, syncWhatsNewPopup } from "./render-shell";
 import { renderJoin, reconnectScreenHtml } from "./render-chrome";
 import { creditsPageHtml } from "./render-credits";
@@ -63,6 +67,7 @@ export function renderApp(
 ): void {
   if (!state.view) {
     forgetSoundBaseline();
+    closeCommanderDossier();
     stopEventsCountdown();
     syncBackdrop(false, state.activePage);
     if (session.accountMenu === "credits") {
@@ -121,6 +126,7 @@ export function renderApp(
       } else morphHtml(main, column);
     }
     startCountdownTick();
+    syncCommanderDossier(root, state.view);
     return;
   }
 
@@ -136,6 +142,7 @@ export function renderApp(
       ?.insertAdjacentHTML("afterbegin", eventsBannerHtml(state.view));
   }
   startCountdownTick();
+  syncCommanderDossier(root, state.view);
 }
 
 export function fleetDraftForPage(
