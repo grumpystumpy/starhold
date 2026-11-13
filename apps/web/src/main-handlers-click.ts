@@ -103,6 +103,7 @@ import {
   openReportWindow,
   setConfirmDelete,
   setInboxFilter,
+  toggleCompareSpy,
 } from "./ui/render-messages";
 import {
   notifyBattleReplayPaint,
@@ -254,6 +255,17 @@ export function bindClickHandlers(): void {
         ev.preventDefault();
         closeReportWindow();
         schedulePaint();
+        return;
+      }
+
+      const compareSpyBtn = closestActionEl(target, "[data-compare-spy]");
+      if (compareSpyBtn) {
+        ev.preventDefault();
+        const id = compareSpyBtn.getAttribute("data-compare-spy");
+        if (id) {
+          toggleCompareSpy(id);
+          schedulePaint();
+        }
         return;
       }
 
