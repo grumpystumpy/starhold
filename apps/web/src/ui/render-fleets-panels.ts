@@ -174,6 +174,24 @@ function pirateBossGalaxyBanner(view: PlayerView, busy: boolean): string {
   return `<div class="pirate-boss-banner" data-testid="galaxy-boss-banner"><p>Seasonal mothership${flavor}${clock} · ${fmtCoordsLink(boss.coords)} · ${fmt(boss.hpPct)}% hull · you ${rank}${next}</p><button type="button" data-galaxy-attack-pirates="${coords}" data-galaxy-pirate-base="${escapeAttr(boss.id)}" data-testid="galaxy-raid-boss" ${busy ? "disabled" : ""}>Raid boss</button></div>`;
 }
 
+function galaxyEventBanner(view: PlayerView): string {
+  const event = view.galaxyEvent;
+  if (!event) return "";
+  const viewing = view.galaxy?.galaxy;
+  if (viewing === event.galaxy) {
+    const effect =
+      event.type === "meteor_shower"
+        ? "Debris from fights in this galaxy is 50% higher."
+        : "Ship shields in this galaxy are 20% weaker.";
+    const left =
+      typeof view.now === "number" && Number.isFinite(view.now)
+        ? ` ${formatBossCountdown(event.endsAt, view.now)} left.`
+        : "";
+    return `<div class="galaxy-event-banner" data-testid="galaxy-event-banner"><p>${escapeHtml(event.label)} in galaxy ${fmt(event.galaxy)}. ${escapeHtml(effect)}${left}</p></div>`;
+  }
+  return `<p class="hint galaxy-event-elsewhere" data-testid="galaxy-event-elsewhere">${escapeHtml(event.label)} is in galaxy ${fmt(event.galaxy)}.</p>`;
+}
+
 export function galaxyPanel(
   view: PlayerView,
   busy: boolean,
@@ -312,6 +330,7 @@ export function galaxyPanel(
     <section class="panel" data-testid="galaxy-panel">
       <h2>Galaxy Navigation</h2>
       ${pirateBossGalaxyBanner(view, busy)}
+      ${galaxyEventBanner(view)}
       <div class="galaxy-system-bar" data-testid="galaxy-system-bar">
         <div class="galaxy-nav">
           <div class="galaxy-nav-row galaxy-nav-row-system" data-testid="galaxy-nav-row-system">
