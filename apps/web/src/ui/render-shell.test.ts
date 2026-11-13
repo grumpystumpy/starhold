@@ -30,6 +30,10 @@ describe("planet dropdown and coords link", () => {
     const html = shellHtml(view, { error: null, notice: null, busy: false }, "overview", "<div>Main</div>");
     assert.match(html, /data-testid="planet-dropdown-wrap"/);
     assert.match(html, /data-testid="planet-dropdown"/);
+    assert.match(html, /data-testid="sound-settings"/);
+    assert.match(html, /data-testid="sound-toggle"/);
+    assert.match(html, />Sound off</);
+    assert.match(html, /aria-pressed="false"/);
     assert.match(html, /class="coord-link"/);
     assert.match(html, /Claim daily \+15 \+res/);
     assert.match(html, /Daily login reward: \+15 Starshards, \+2k metal, \+1k crystal, \+500 deut/);

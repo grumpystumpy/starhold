@@ -1,4 +1,5 @@
 import type { PlayerView } from "@starhold/game";
+import { forgetSoundBaseline, observeViewSounds } from "../settings";
 import { session } from "../session";
 import { startCountdownTick } from "./countdown";
 import type { NavPage } from "./nav";
@@ -59,6 +60,7 @@ export function renderApp(
   _handlers: UiHandlers,
 ): void {
   if (!state.view) {
+    forgetSoundBaseline();
     stopEventsCountdown();
     syncBackdrop(false, state.activePage);
     if (session.accountMenu === "credits") {
@@ -77,6 +79,7 @@ export function renderApp(
 
   const fleetDraft = fleetDraftForPage(root, state.activePage);
   watchFleetLaunches(state.view, state.onEventsRefresh);
+  observeViewSounds(state.view);
   startEventsCountdown(state.view, state.onEventsRefresh);
 
   if (
