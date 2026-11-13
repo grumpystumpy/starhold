@@ -51,6 +51,7 @@ import { wireJointStrikeForm } from "./main-actions-alliances";
 import { ensureDelegatedHandlers } from "./main-handlers";
 import { initTelemetry } from "./telemetry";
 import { installSoundGestureArm } from "./settings";
+import { bindAwayRecapHide, browserVisitStorage, visitStamp } from "./away-recap";
 import { startPwa } from "./pwa";
 import {
   sharedReportCodeFromSearch,
@@ -175,6 +176,17 @@ async function resumePlayer(
 
 async function boot(): Promise<void> {
   startPwa();
+  bindAwayRecapHide(
+    document,
+    {
+      getItem: (key) => browserVisitStorage()?.getItem(key) ?? null,
+      setItem: (key, value) => {
+        browserVisitStorage()?.setItem(key, value);
+      },
+    },
+    () => session.view?.player.id ?? null,
+    () => visitStamp(Date.now(), session.view?.now),
+  );
   void initTelemetry();
   ensureDelegatedHandlers();
   ensurePopstateHandler();
