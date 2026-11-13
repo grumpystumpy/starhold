@@ -103,6 +103,8 @@ export {
 } from "./world-alliance-intel.js";
 export type { LaunchFleetOpts } from "./world-launch.js";
 export { launchFleet } from "./world-launch.js";
+export { recallFleet } from "./world-recall.js";
+export type { RecallFleetResult } from "./world-recall.js";
 export type {
   BuiltinPresetId,
   PresetActionResult,

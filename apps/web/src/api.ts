@@ -685,6 +685,18 @@ export async function launchFleetMission(
   return parse<PlayerView>(res);
 }
 
+export async function recallFleetRequest(
+  playerId: string,
+  fleetId: string,
+): Promise<PlayerView> {
+  const res = await credFetch("/api/fleet/recall", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, fleetId }),
+  });
+  return parse<PlayerView>(res);
+}
+
 export async function saveFleetPresetRequest(
   playerId: string,
   opts: { id?: string; name: string; ships: Partial<FleetShips> },
