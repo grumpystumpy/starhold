@@ -43,6 +43,10 @@ import {
   doConfirmEmailReset,
   doRevokeOtherSessions,
   doTradeResources,
+  doAcceptMarket,
+  doCancelMarket,
+  doPostMarket,
+  refreshMarketIfOpen,
   doCreateAlliance,
   doDeleteAllianceIntel,
   doDeleteAllianceMarker,
@@ -161,8 +165,9 @@ export function bindClickHandlers(): void {
       if (shopTab) {
         ev.preventDefault();
         const tab = shopTab.getAttribute("data-shop-tab");
-        if (tab === "resources" || tab === "officers" || tab === "skills") {
+        if (tab === "resources" || tab === "officers" || tab === "skills" || tab === "market") {
           navigateShopTab(tab);
+          if (tab === "market") void refreshMarketIfOpen();
         }
         return;
       }
@@ -188,6 +193,39 @@ export function bindClickHandlers(): void {
         if (direction === "buy" || direction === "sell") {
           void doTradeResources(direction);
         }
+        return;
+      }
+
+      const marketPost = closestActionEl(target, "[data-market-post]");
+      if (marketPost) {
+        ev.preventDefault();
+        const form = marketPost.closest("form");
+        const read = (name: string) =>
+          form?.querySelector<HTMLInputElement | HTMLSelectElement>(
+            `[data-market-field="${name}"]`,
+          )?.value ?? "";
+        void doPostMarket({
+          offerResource: read("offerResource"),
+          offerAmount: Number(read("offerAmount")),
+          requestResource: read("requestResource"),
+          requestAmount: Number(read("requestAmount")),
+        });
+        return;
+      }
+
+      const marketAccept = closestActionEl(target, "[data-market-accept]");
+      if (marketAccept) {
+        ev.preventDefault();
+        const offerId = marketAccept.getAttribute("data-market-accept");
+        if (offerId) void doAcceptMarket(offerId);
+        return;
+      }
+
+      const marketCancel = closestActionEl(target, "[data-market-cancel]");
+      if (marketCancel) {
+        ev.preventDefault();
+        const offerId = marketCancel.getAttribute("data-market-cancel");
+        if (offerId) void doCancelMarket(offerId);
         return;
       }
 
