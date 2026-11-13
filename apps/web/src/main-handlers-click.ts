@@ -98,6 +98,7 @@ import {
   doDismissFleetSave,
   doGalaxyFleetAction,
   doGalaxyFleetPreset,
+  doGalaxyHarvest,
   doGalaxySpy,
   doSetVacationMode,
   doOpenFleetSave,
@@ -510,6 +511,21 @@ export function bindClickHandlers(): void {
             { galaxy: galaxy.galaxy, system: galaxy.system, slot },
             "raid",
           );
+        }
+        return;
+      }
+
+      const harvestSlot = closestActionEl(target, "[data-galaxy-harvest]");
+      if (harvestSlot) {
+        ev.preventDefault();
+        const slot = Number(harvestSlot.getAttribute("data-galaxy-harvest"));
+        const galaxy = session.view?.galaxy;
+        if (galaxy && Number.isInteger(slot) && slot > 0) {
+          doGalaxyHarvest({
+            galaxy: galaxy.galaxy,
+            system: galaxy.system,
+            slot,
+          });
         }
         return;
       }

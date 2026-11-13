@@ -41,6 +41,7 @@ export {
   doDeleteFleetPreset,
   doGalaxyFleetAction,
   doGalaxyFleetPreset,
+  doGalaxyHarvest,
   doGalaxySpy,
   doDismissFleetSave,
   doLaunchFleet,

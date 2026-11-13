@@ -6,7 +6,13 @@ import type {
   MissionType,
   Resources,
 } from "@starhold/game";
-import { capSwarmToCapacity, SHIP_ORDER, getFleetPreset } from "@starhold/game";
+import {
+  canCollectDebris,
+  capSwarmToCapacity,
+  getFleetPreset,
+  normalizeFleetShips,
+  SHIP_ORDER,
+} from "@starhold/game";
 import {
   deleteFleetPresetRequest,
   launchFleetMission,
@@ -177,6 +183,45 @@ export function doGalaxyFleetAction(
     ...(mission === "pirateRaid" && baseId ? { pirateBaseId: baseId } : {}),
     ...(mission === "alienRaid" && baseId ? { alienBaseId: baseId } : {}),
   };
+  navigateTo("fleet");
+}
+
+function harvestHullCounts(ships: Partial<FleetShips>): Partial<FleetShips> {
+  const recyclers = ships.recycler ?? 0;
+  if (recyclers >= 1) return { recycler: recyclers };
+  const motherships = ships.swarmMothership ?? 0;
+  if (motherships >= 1) return { swarmMothership: motherships };
+  return {};
+}
+
+/**
+ * Prefill a harvest review from the home planet hangar.
+ * Does not launch. Confirm still uses the harvest send path.
+ */
+export function doGalaxyHarvest(coords: Coordinates): void {
+  if (!session.view) return;
+  const view = session.view;
+  const homeId = view.player.homePlanetId;
+  if (homeId && view.planet.id !== homeId) {
+    setFlash(
+      "error",
+      "Harvest sends from the home planet. Switch to it first.",
+    );
+    schedulePaint();
+    return;
+  }
+  const hangar = normalizeFleetShips(view.planet.ships ?? {});
+  const counts = harvestHullCounts(hangar);
+  if (!canCollectDebris(normalizeFleetShips(counts))) {
+    setFlash(
+      "error",
+      "Harvest requires a Recovery Vessel or Mothership on the home planet.",
+    );
+    schedulePaint();
+    return;
+  }
+  const next = fleetDraftAfterPreset(null, "harvest", counts);
+  session.pendingGalaxyFleetDraft = { ...next, targetCoords: coords };
   navigateTo("fleet");
 }
 

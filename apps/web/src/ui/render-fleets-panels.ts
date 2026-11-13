@@ -339,6 +339,16 @@ function pirateBossGalaxyBanner(view: PlayerView, busy: boolean): string {
   return `<div class="pirate-boss-banner" data-testid="galaxy-boss-banner"><p>Seasonal mothership${flavor}${clock} · ${fmtCoordsLink(boss.coords)} · ${fmt(boss.hpPct)}% hull · you ${rank}${next}</p><button type="button" data-galaxy-attack-pirates="${coords}" data-galaxy-pirate-base="${escapeAttr(boss.id)}" data-testid="galaxy-raid-boss" ${busy ? "disabled" : ""}>Raid boss</button></div>`;
 }
 
+/** Harvest control for a slot that actually holds metal or crystal debris. */
+function galaxyDebrisControl(
+  slot: number,
+  debris: { metal: number; crystal: number } | null,
+  busy: boolean,
+): string {
+  if (!debris || (debris.metal <= 0 && debris.crystal <= 0)) return "";
+  return ` · <button type="button" class="galaxy-debris-badge" data-galaxy-harvest="${slot}" data-testid="galaxy-debris-${slot}" title="Harvest debris" aria-label="Harvest debris" ${busy ? "disabled" : ""}>debris ${fmt(debris.metal)}/${fmt(debris.crystal)}</button>`;
+}
+
 export function galaxyPanel(
   view: PlayerView,
   busy: boolean,
@@ -354,12 +364,7 @@ export function galaxyPanel(
 
   const rows = galaxy.slots
     .map((s) => {
-      const hasDebris = Boolean(
-        s.debris && (s.debris.metal > 0 || s.debris.crystal > 0),
-      );
-      const debrisText = hasDebris
-        ? ` · <span class="galaxy-debris-badge" data-testid="galaxy-debris-${s.coords.slot}">debris ${fmt(s.debris!.metal)}/${fmt(s.debris!.crystal)}</span>`
-        : "";
+      const debrisText = galaxyDebrisControl(s.coords.slot, s.debris, busy);
       const moon = s.hasMoon ? " · Moon" : "";
       const tag = s.allianceTag ? ` [${escapeHtml(s.allianceTag)}]` : "";
       const stance =
