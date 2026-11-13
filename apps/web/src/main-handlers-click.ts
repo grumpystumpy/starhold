@@ -92,7 +92,7 @@ import {
   doUpgrade,
 } from "./main-actions";
 import { parseGalaxyCoords } from "./galaxy-coords";
-import { setHighscoreTab } from "./ui/render-pages";
+import { isHighscoreTab, setHighscoreTab } from "./ui/render-pages";
 import {
   closeReportWindow,
   isInboxFilter,
@@ -862,7 +862,7 @@ export function bindClickHandlers(): void {
       if (highscoreTab) {
         ev.preventDefault();
         const tab = highscoreTab.getAttribute("data-highscore-tab");
-        if (tab === "players" || tab === "alliances") {
+        if (isHighscoreTab(tab)) {
           setHighscoreTab(tab);
           schedulePaint();
         }

@@ -20,9 +20,13 @@ import {
   fortressRelocateDeutCost,
   fortressRelocateLandingWindow,
   type BuildingId,
+  type CategoryHighscores,
   type DefenseId,
+  type HighscoreCategoryId,
+  type HighscoreEntry,
   type PlayerView,
   type ShipId,
+  emptyCategoryHighscores,
 } from "@starhold/game";
 
 export { WEAKEST_FIRST_DEFENSES, WEAKEST_FIRST_SHIPS };
@@ -363,44 +367,131 @@ function fleetPage(
     </section>`;
 }
 
-let highscoreTab: "players" | "alliances" = "players";
+export type HighscoreTab =
+  | "players"
+  | "alliances"
+  | "buildings"
+  | "fleet"
+  | "research"
+  | "defense";
 
-export function setHighscoreTab(tab: "players" | "alliances"): void {
+const HIGHSCORE_TABS: ReadonlyArray<{ id: HighscoreTab; label: string }> = [
+  { id: "players", label: "Commanders" },
+  { id: "alliances", label: "Alliances" },
+  { id: "buildings", label: "Buildings" },
+  { id: "fleet", label: "Fleet" },
+  { id: "research", label: "Research" },
+  { id: "defense", label: "Defense" },
+];
+
+let highscoreTab: HighscoreTab = "players";
+let categoryBoardState: CategoryHighscores = emptyCategoryHighscores();
+
+export function setHighscoreTab(tab: HighscoreTab): void {
   highscoreTab = tab;
 }
 
+export function isHighscoreTab(value: string | null): value is HighscoreTab {
+  return HIGHSCORE_TABS.some((tab) => tab.id === value);
+}
+
+export function setCategoryBoards(next: CategoryHighscores): void {
+  categoryBoardState = next;
+}
+
+export function resetCategoryBoards(): void {
+  categoryBoardState = emptyCategoryHighscores();
+}
+
+export function categoryBoardsEmpty(): boolean {
+  return (
+    categoryBoardState.buildings.length === 0 &&
+    categoryBoardState.fleet.length === 0 &&
+    categoryBoardState.research.length === 0 &&
+    categoryBoardState.defense.length === 0
+  );
+}
+
+function categoryHint(id: HighscoreCategoryId): string {
+  switch (id) {
+    case "buildings":
+      return "Ranked by building upgrade cost across each commander's planets. Rebuilt with the highscore cache, not on each page load.";
+    case "fleet":
+      return "Ranked by docked ships plus fleets in flight. Rebuilt with the highscore cache, not on each page load.";
+    case "research":
+      return "Ranked by research, counted once per commander. Rebuilt with the highscore cache, not on each page load.";
+    case "defense":
+      return "Ranked by defense stock across each commander's planets. Rebuilt with the highscore cache, not on each page load.";
+    default: {
+      const exhaustive: never = id;
+      return exhaustive;
+    }
+  }
+}
+
+function categoryLine(id: HighscoreCategoryId, row: HighscoreEntry, selfId: string): string {
+  return `<li data-testid="highscore-${id}-${row.rank}" data-player-id="${escapeAttr(row.playerId)}" data-home-planet="${escapeAttr(row.homePlanetId)}"><span class="row-with-thumb"><span class="hs-rank">#${fmt(row.rank)}</span>${planetDiscHtml({ src: row.artThumbUrl, artId: row.artId, size: 32 })}${row.allianceTag ? `[${escapeHtml(row.allianceTag)}] ` : ""}${escapeHtml(row.name)}${row.playerId === selfId ? " (you)" : ""}</span><span>Home ${escapeHtml(row.planetName || "world")} · ${fmtCoordsLink(row.coords)} · ${fmtCompact(row.points)} pts</span></li>`;
+}
+
+function highscoreList(view: PlayerView): string {
+  const tab = highscoreTab;
+  switch (tab) {
+    case "players": {
+      const playerRows = (view.highscores ?? [])
+        .map(
+          (h) =>
+            `<li data-testid="highscore-${h.rank}" data-player-id="${escapeAttr(h.playerId)}" data-home-planet="${escapeAttr(h.homePlanetId)}"><span class="row-with-thumb"><span class="hs-rank">#${fmt(h.rank)}</span>${planetDiscHtml({ src: h.artThumbUrl, artId: h.artId, size: 32 })}${h.allianceTag ? `[${escapeHtml(h.allianceTag)}] ` : ""}${escapeHtml(h.name)}${h.playerId === view.player.id ? " (you)" : ""}</span><span>Home ${escapeHtml(h.planetName || "world")} · ${fmtCoordsLink(h.coords)} · ${fmtCompact(h.points)} pts · Lv ${fmt(h.level ?? 1)} · ${fmtCompact(h.xpTotal ?? 0)} XP</span></li>`,
+        )
+        .join("");
+      return `<p class="hint">One row per commander — their home planet only. Points still count the whole empire.</p>
+      <ol class="highscores" data-testid="highscores-list">
+        ${playerRows}
+      </ol>`;
+    }
+    case "alliances": {
+      const allianceRows = (view.allianceHighscores ?? [])
+        .map(
+          (row) =>
+            `<li data-testid="alliance-highscore-${row.rank}"><span class="hs-rank">#${fmt(row.rank)}</span> [${escapeHtml(row.tag)}] ${escapeHtml(row.name)} · ${fmt(row.memberCount)} members · ${fmtCompact(row.points)} pts · avg ${fmtCompact(row.averagePoints)}</li>`,
+        )
+        .join("");
+      return `<p class="hint">Ranked by total member points. Rebuilt with the highscore cache, not on each page load.</p>
+      <ol class="highscores" data-testid="alliance-highscores">
+        ${allianceRows || `<li data-testid="alliance-highscores-empty">No alliances ranked yet.</li>`}
+      </ol>`;
+    }
+    case "buildings":
+    case "fleet":
+    case "research":
+    case "defense": {
+      const rows = categoryBoardState[tab] ?? [];
+      const body = rows.length
+        ? rows.map((row) => categoryLine(tab, row, view.player.id)).join("")
+        : `<li data-testid="highscore-category-empty">No commanders ranked yet.</li>`;
+      return `<p class="hint" data-testid="highscore-category-hint">${categoryHint(tab)}</p>
+      <ol class="highscores" data-testid="highscore-category-${tab}">
+        ${body}
+      </ol>`;
+    }
+    default: {
+      const exhaustive: never = tab;
+      return exhaustive;
+    }
+  }
+}
+
 function highscorePage(view: PlayerView): string {
-  const playersActive = highscoreTab !== "alliances";
-  const playerRows = (view.highscores ?? [])
-    .map(
-      (h) =>
-        `<li data-testid="highscore-${h.rank}" data-player-id="${escapeAttr(h.playerId)}" data-home-planet="${escapeAttr(h.homePlanetId)}"><span class="row-with-thumb"><span class="hs-rank">#${fmt(h.rank)}</span>${planetDiscHtml({ src: h.artThumbUrl, artId: h.artId, size: 32 })}${h.allianceTag ? `[${escapeHtml(h.allianceTag)}] ` : ""}${escapeHtml(h.name)}${h.playerId === view.player.id ? " (you)" : ""}</span><span>Home ${escapeHtml(h.planetName || "world")} · ${fmtCoordsLink(h.coords)} · ${fmtCompact(h.points)} pts · Lv ${fmt(h.level ?? 1)} · ${fmtCompact(h.xpTotal ?? 0)} XP</span></li>`,
-    )
-    .join("");
-  const allianceRows = (view.allianceHighscores ?? [])
-    .map(
-      (row) =>
-        `<li data-testid="alliance-highscore-${row.rank}"><span class="hs-rank">#${fmt(row.rank)}</span> [${escapeHtml(row.tag)}] ${escapeHtml(row.name)} · ${fmt(row.memberCount)} members · ${fmtCompact(row.points)} pts · avg ${fmtCompact(row.averagePoints)}</li>`,
-    )
-    .join("");
+  const tabs = HIGHSCORE_TABS.map(
+    (tab) =>
+      `<button type="button" data-highscore-tab="${tab.id}" data-testid="highscore-tab-${tab.id}" aria-pressed="${highscoreTab === tab.id ? "true" : "false"}">${tab.label}</button>`,
+  ).join("");
   return `
     <section class="panel" data-testid="highscores">
       <h2>Highscores</h2>
       <div class="alliance-member-actions" data-testid="highscore-tabs">
-        <button type="button" data-highscore-tab="players" data-testid="highscore-tab-players" aria-pressed="${playersActive ? "true" : "false"}">Commanders</button>
-        <button type="button" data-highscore-tab="alliances" data-testid="highscore-tab-alliances" aria-pressed="${playersActive ? "false" : "true"}">Alliances</button>
+        ${tabs}
       </div>
-      ${
-        playersActive
-          ? `<p class="hint">One row per commander — their home planet only. Points still count the whole empire.</p>
-      <ol class="highscores" data-testid="highscores-list">
-        ${playerRows}
-      </ol>`
-          : `<p class="hint">Ranked by total member points. Rebuilt with the highscore cache, not on each page load.</p>
-      <ol class="highscores" data-testid="alliance-highscores">
-        ${allianceRows || `<li data-testid="alliance-highscores-empty">No alliances ranked yet.</li>`}
-      </ol>`
-      }
+      ${highscoreList(view)}
     </section>
     <section class="panel" data-testid="hall-of-fame">
       <h2>Hall of Fame</h2>

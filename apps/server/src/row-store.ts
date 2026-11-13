@@ -12,7 +12,13 @@ import {
   ensureUniverseShape,
   highscoresBoard,
   allianceRankBoard,
+  categoryHighscoreBoards,
+  emptyCategoryHighscores,
+  HIGHSCORE_CATEGORY_IDS,
+  isHighscoreCategoryId,
   type AllianceRankEntry,
+  type CategoryHighscores,
+  type HighscoreCategoryId,
   type AsteroidField,
   type CombatReport,
   type DebrisField,
@@ -2169,10 +2175,12 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
 
   let boardJson: string | null = null;
   let allianceJson: string | null = null;
+  let categoryDocs: CategoryHighscores | null = null;
   let boardAt = 0;
   if (rebuildScores) {
     boardJson = timedStringify(buildHighscoreCache(universe, true));
     allianceJson = timedStringify(allianceRankBoard(universe));
+    categoryDocs = categoryHighscoreBoards(universe);
     boardAt = Date.now();
   } else {
     // Keep the board in step with every player this save scored correctly:
@@ -2229,6 +2237,18 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
       ),
     );
   }
+  if (categoryDocs) {
+    for (const id of HIGHSCORE_CATEGORY_IDS) {
+      stmts.push(
+        bind(
+          db,
+          `INSERT INTO save_highscores (id, built_at, doc) VALUES (?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET built_at = excluded.built_at, doc = excluded.doc`,
+          [id, boardAt, timedStringify(categoryDocs[id])],
+        ),
+      );
+    }
+  }
 
   if (guards) stmts.push(bind(db, "DELETE FROM save_assert", []));
   await commitRows(db, stmts);
@@ -2265,6 +2285,30 @@ async function readScoreCache(db: D1Like): Promise<{
 
 async function readBoard(db: D1Like): Promise<{ builtAt: number; cache: HighscoreCache } | null> {
   return (await readScoreCache(db)).board;
+}
+
+/** Cached category boards. A missing row is an empty list. Does not scan players. */
+export async function readCategoryHighscores(db: D1Like): Promise<CategoryHighscores> {
+  await ensureRowTables(db);
+  const rows = await all<{ id: string; doc: string }>(
+    db,
+    "SELECT id, doc FROM save_highscores WHERE id IN ('buildings', 'fleet', 'research', 'defense')",
+  );
+  const out = emptyCategoryHighscores();
+  for (const row of rows) {
+    if (!isHighscoreCategoryId(row.id)) continue;
+    out[row.id] = categoryRows(row.doc);
+  }
+  return out;
+}
+
+function categoryRows(doc: string): CategoryHighscores[HighscoreCategoryId] {
+  try {
+    const parsed = timedParse(doc);
+    return Array.isArray(parsed) ? (parsed as CategoryHighscores[HighscoreCategoryId]) : [];
+  } catch {
+    return [];
+  }
 }
 
 async function resolvePlayerIds(db: D1Like, work: UniverseWork | undefined): Promise<string[]> {

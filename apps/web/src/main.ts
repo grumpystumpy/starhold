@@ -62,8 +62,10 @@ import {
   syncSessionUrl,
 } from "./ui/router";
 import { peekEmailReset } from "./ui/render-chrome-join";
+import { syncCategoryBoards } from "./highscore-categories";
 
 function paint(): void {
+  if (session.view) syncCategoryBoards(session.activePage);
   renderApp(
     root,
     {
