@@ -20,7 +20,10 @@ export function mainColumnHtml(
     case "credits":
       return creditsPageHtml();
     case null:
-      return pageHtml(activePage, view, busy, fleetDraft);
+      return pageHtml(activePage, view, busy, fleetDraft, {
+        directory: session.alliancePageDirectory,
+        requestAllianceId: session.allianceRequestId,
+      });
     default: {
       const exhaustive: never = menu;
       return exhaustive;

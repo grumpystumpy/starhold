@@ -456,8 +456,38 @@ a.message-title:hover {
 }
 
 .alliance-form input,
-.alliance-form select {
+.alliance-form select,
+.alliance-form textarea {
   min-width: 8rem;
+}
+
+.alliance-recruiting-form {
+  flex-basis: 100%;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.alliance-recruiting-form input[type="text"],
+.alliance-recruiting-form textarea {
+  width: 100%;
+  max-width: 36rem;
+  box-sizing: border-box;
+}
+
+.alliance-form label.alliance-recruiting-check {
+  flex-direction: row;
+  align-items: center;
+}
+
+.alliance-blurb,
+.alliance-request-confirm {
+  flex-basis: 100%;
+}
+
+.alliance-request-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
 }
 
 .alliance-directory,

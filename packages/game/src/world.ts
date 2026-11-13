@@ -56,6 +56,7 @@ export type { ClassActionResult } from "./world-class.js";
 export type { AllianceActionResult } from "./world-alliances.js";
 export {
   allianceDirectory,
+  allianceRecruitingDirectory,
   allianceTagForPlayer,
   allianceViewFor,
   createAlliance,
@@ -75,6 +76,7 @@ export {
   normalizeAllianceName,
   normalizeAllianceTag,
   setAllianceJoinMode,
+  setAllianceRecruiting,
   setAllianceClass,
   setAllianceRole,
 } from "./world-alliances.js";
