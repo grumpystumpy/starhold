@@ -692,6 +692,7 @@ describe("messages inbox", () => {
           attackerLosses: { ships: { scout: 1 } },
           defenderLosses: { ships: { interceptor: 3 }, defenses: { laserBattery: 2 } },
           debrisThisRound: { metal: 800, crystal: 500, deuterium: 0 },
+          shieldsAbsorbed: { attacker: 40, defender: 120 },
         },
         {
           round: 2,
@@ -743,6 +744,11 @@ describe("messages inbox", () => {
     assert.match(pageHtml, /data-testid="open-report-expedition-e_test_1"/);
     assert.doesNotMatch(pageHtml, /data-testid="report-subwindow"/);
 
+    assert.match(pageHtml, /data-testid="battle-replay-play"/);
+    assert.match(pageHtml, /Shields absorbed: attacker 40, defender 120/);
+    assert.match(pageHtml, /data-testid="battle-details-c_test_1"/);
+    assert.match(pageHtml, /data-copy-battle-share="c_test_1"/);
+
     // Open Combat Report
     openReportWindow("combat", "c_test_1");
     const combatWinHtml = messagesPageHtml(view);
@@ -763,6 +769,12 @@ describe("messages inbox", () => {
     assert.match(combatWinHtml, /data-testid="battle-ship-totals-attacker"/);
     assert.match(combatWinHtml, /data-testid="battle-ship-totals-defender"/);
     assert.match(combatWinHtml, /data-copy-battle-share="c_test_1"/);
+    assert.match(combatWinHtml, /data-testid="battle-replay-play"/);
+    assert.match(combatWinHtml, /data-testid="battle-replay-pause"/);
+    assert.match(combatWinHtml, /data-testid="battle-replay-restart"/);
+    assert.match(combatWinHtml, /data-testid="battle-details-c_test_1"/);
+    assert.match(combatWinHtml, /Shields absorbed: attacker 40, defender 120/);
+    assert.match(combatWinHtml, /Shields absorbed: attacker 0, defender 0/);
 
     const inboxDetails = messagesPageHtml(view);
     assert.match(inboxDetails, /data-testid="inbox-combat-details-c_test_1"/);
@@ -776,6 +788,16 @@ describe("messages inbox", () => {
       combatBattleExtrasHtml(combatReport as CombatReport),
       /data-copy-battle-share="c_test_1"/,
     );
+    const replay = combatBattleExtrasHtml(combatReport as CombatReport);
+    assert.match(replay, /data-testid="battle-details-c_test_1"/);
+    assert.match(replay, /data-testid="battle-replay-play"/);
+    assert.match(replay, /data-testid="battle-replay-pause"/);
+    assert.match(replay, /data-testid="battle-replay-restart"/);
+    assert.match(replay, /data-testid="battle-fire-1"/);
+    assert.match(replay, /data-testid="battle-shields-1"/);
+    assert.match(replay, /Shields absorbed: attacker 40, defender 120/);
+    assert.match(replay, /data-testid="battle-shields-2"/);
+    assert.match(replay, /Shields absorbed: attacker 0, defender 0/);
     assert.doesNotMatch(
       combatBattleExtrasHtml({ ...combatReport, shareCode: undefined } as CombatReport),
       /data-copy-battle-share=/,
@@ -837,6 +859,9 @@ describe("messages inbox", () => {
     assert.match(legacyHtml, /coord-link/);
     assert.doesNotMatch(legacyHtml, /Defenses destroyed:/);
     assert.doesNotMatch(legacyHtml, /data-copy-battle-share="c_legacy_1"/);
+    assert.match(legacyHtml, /data-testid="battle-replay-legacy"/);
+    assert.match(legacyHtml, /Summary only — older reports have no round replay/);
+    assert.doesNotMatch(legacyHtml, /data-testid="battle-replay-play"/);
 
     closeReportWindow();
   });
