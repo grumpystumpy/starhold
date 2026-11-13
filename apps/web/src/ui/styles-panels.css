@@ -1117,6 +1117,19 @@ code {
   background: var(--accent);
 }
 
+.achievement-locked {
+  opacity: 0.55;
+}
+
+.achievement-locked .goal-meter > span {
+  background: var(--muted);
+}
+
+.achievement-unlocked,
+.achievement-locked {
+  max-width: 100%;
+}
+
 .officer-row,
 .skill-row,
 .class-card {

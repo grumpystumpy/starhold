@@ -118,6 +118,16 @@ Dismissing the briefing hides the suggestion. Restore shows it again. When every
 
 Fleet composer hides built-in `moonDestruction` and `miniPlanetDestruction` until the player owns that hull or meets its research and shipyard level. `expedition`, `raid`, `miniPlanetCapture`, and custom presets stay visible. The presets remain on the save, and the galaxy preset buttons are unchanged.
 
+## Achievements
+
+One-time achievements pay a small Starshard reward once each. Definitions and amounts live in `ACHIEVEMENTS` in `packages/game/src/data/tuning.ts` (12 rows). Optional `player.achievements` stores `{ unlocked: [{ id, at }], shipsDestroyed?, expeditions?, pirateBasesDestroyed? }`. Older saves omit it and still load. There is no claim route and no new query on a page load.
+
+`evaluatePlayerAchievements` in `packages/game/src/world-achievements.ts` runs from `playerView` after the tick, using the commander board that view already loaded. A met row is appended to `unlocked` and `grantStarshards` runs once. A later view does not pay it again.
+
+Counts that the save did not already keep are added only at the event: enemy hulls in `recordCombatReport` (ships, split across a Joint Strike, defenses ignored), finished expeditions beside the expedition goal credit, and a pirate base the player destroys in `resolveNpcRaidArrival`. Those counters are not rebuilt from old reports. Moons, colonies (a non-home planet that is not a moon), combat wins, research levels, `allianceId`, officer hire or renewal, commander level, and board rank are read from the player's own loaded record on that view. Rank uses the board already in hand and needs at least one other commander, so a solo rank of 1 does not pay Top 10. The existing top-3 Starshard grant is unchanged.
+
+The Goals page links to the board (`data-testid="goals-achievements-link"`, `data-testid="achievements-board"` in `apps/web/src/ui/render-goals.ts`). Locked rows use `achievement-locked`. Progress is shown where the count is cheap. Rank shows the current place and no meter. This entry is in `docs/FEATURE_MAP.md`.
+
 ## OAuth sign-in
 
 Email + password signup, login, claim, logout, and `/api/auth/me` are unchanged. Google and Discord are optional and env-gated. If a provider's client id and secret are unset, its button is omitted and its routes return `404 { error: "provider not configured" }`. `GET /api/auth/providers` always includes `passwordAuth: true`.
