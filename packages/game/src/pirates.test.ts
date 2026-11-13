@@ -165,6 +165,15 @@ function resolveDuePiratePlayerRaids(universe: UniverseState, playerId: string):
   advanceUniverse(universe, when);
 }
 
+let restoreInputs: (() => void) | undefined;
+beforeEach(() => {
+  restoreInputs = installDeterministicInputs(0x50495241, 1_700_000_000_000);
+});
+afterEach(() => {
+  restoreInputs?.();
+  restoreInputs = undefined;
+});
+
 describe("pirate balance helpers", () => {
   it("pays Starshards by tier on destroy (1% pirate, 2% alien)", () => {
     // Old tier 0 = 40. Pirate 1% = 0.40 exact.
