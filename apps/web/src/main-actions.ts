@@ -43,6 +43,7 @@ export {
   doGalaxySpy,
   doLaunchFleet,
   doLaunchMaxExpeditions,
+  doRecallFleet,
   doSaveFleetPreset,
   doScanSystem,
   GALAXY_SPY_PROBES,

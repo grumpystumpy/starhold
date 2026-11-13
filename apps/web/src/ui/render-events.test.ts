@@ -124,6 +124,7 @@ describe("events banner", () => {
     );
     assert.match(html, /Hostile incoming/);
     assert.match(html, /event-hostile/);
+    assert.doesNotMatch(html, /data-testid="recall-fleet"/);
   });
 
   it("renders own fleet route, arrival countdown, and a blank jump target", () => {
@@ -152,6 +153,11 @@ describe("events banner", () => {
     assert.match(html, /data-event-countdown/);
     assert.match(html, /Jump/);
     assert.doesNotMatch(html, /1:9:0/);
+    const recalls = html.match(/data-testid="recall-fleet"/g) ?? [];
+    assert.equal(recalls.length, 2);
+    assert.match(html, /data-recall-fleet="f1"/);
+    assert.match(html, /data-recall-fleet="jump"/);
+    assert.doesNotMatch(html, /data-recall-fleet="returning"/);
   });
 
   it("refetches once when a fleet arrives, despite repeated timer ticks", () => {

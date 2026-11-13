@@ -1,6 +1,6 @@
 import type { FleetMission, PlayerView } from "@starhold/game";
 import { fmt, fmtCompact, fmtCoords, fmtCoordsLink, fmtEta, remainingSeconds } from "./format";
-import { escapeHtml } from "./render-escape";
+import { escapeAttr, escapeHtml } from "./render-escape";
 import { bossDamageCallout, formatBossCountdown } from "./render-seasons";
 
 export interface EventPresentation {
@@ -108,8 +108,12 @@ export function eventsBannerHtml(view: PlayerView, now = Date.now()): string {
     const testid = isSoonest ? ' data-testid="event-soonest"' : "";
     const tag = isSoonest ? "div" : "li";
     const missionCls = fleet.mission === "occupy" ? " mission-occupy" : "";
+    const recall =
+      !hostile && fleet.phase === "outbound"
+        ? `<button type="button" class="event-recall" data-recall-fleet="${escapeAttr(fleet.id)}" data-testid="recall-fleet">Recall</button>`
+        : "";
 
-    return `<${tag} class="event-row ${presentation.className}${missionCls}" data-event-id="${id}" data-event-arrives-at="${fleet.arrivesAt}"${testid}><span class="event-kind">${presentation.label}</span><span class="event-route"><span class="${fleet.mission === "occupy" ? "mission-occupy" : ""}">${escapeHtml(missionLabel(fleet.mission))}</span> · ${routeFrom} → ${routeTo}</span><span class="event-arrival"><time>${escapeHtml(arrival)}</time> · <span data-event-countdown>${formatEventCountdown(fleet.arrivesAt, now)}</span></span></${tag}>`;
+    return `<${tag} class="event-row ${presentation.className}${missionCls}" data-event-id="${id}" data-event-arrives-at="${fleet.arrivesAt}"${testid}><span class="event-kind">${presentation.label}</span><span class="event-route"><span class="${fleet.mission === "occupy" ? "mission-occupy" : ""}">${escapeHtml(missionLabel(fleet.mission))}</span> · ${routeFrom} → ${routeTo}</span><span class="event-arrival"><time>${escapeHtml(arrival)}</time> · <span data-event-countdown>${formatEventCountdown(fleet.arrivesAt, now)}</span></span>${recall}</${tag}>`;
   };
 
   const soonestHtml = renderRow(rows[0]!, true);

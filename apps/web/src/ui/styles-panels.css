@@ -64,6 +64,13 @@
   color: var(--bad);
 }
 
+button.event-recall {
+  margin-left: auto;
+  padding: 0.12rem 0.45rem;
+  font-size: 0.75rem;
+  line-height: 1.2;
+}
+
 .mission-occupy {
   color: var(--bad, #f87171);
 }

@@ -11,6 +11,7 @@ import {
   deleteFleetPresetRequest,
   launchFleetMission,
   launchMaxExpeditionsRequest,
+  recallFleetRequest,
   saveFleetPresetRequest,
   scanSystemRequest,
 } from "./api";
@@ -114,6 +115,30 @@ export async function doLaunchFleet(opts: {
       successNotice: (view) => fleetNotice(view, opts.mission),
     });
     if (!session.error) resetFleetComposer();
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doRecallFleet(fleetId: string): Promise<void> {
+  if (!session.view || session.busy) return;
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    session.view = await recallFleetRequest(session.view.player.id, fleetId);
+    setFlash("notice", "Fleet recalled.");
+  } catch (err) {
+    await settleMutation({
+      err,
+      failureFallback: "Recall failed.",
+      applied: (view) => {
+        const fleet = view.fleets.find((row) => row.id === fleetId);
+        return !fleet || fleet.phase === "returning";
+      },
+      successNotice: () => "Fleet recalled.",
+    });
   } finally {
     session.busy = false;
     schedulePaint();

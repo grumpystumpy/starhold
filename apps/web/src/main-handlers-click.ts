@@ -63,6 +63,7 @@ import {
   doKickAllianceMember,
   doLaunchFleet,
   doLaunchMaxExpeditions,
+  doRecallFleet,
   doLeaveAlliance,
   doPostAllianceChat,
   doProposeJointStrike,
@@ -722,6 +723,14 @@ export function bindClickHandlers(): void {
         if (!reportId || !Number.isFinite(round)) return;
         setBattleReplayRound(reportId, round);
         schedulePaint();
+        return;
+      }
+
+      const recallFleet = closestActionEl(target, "[data-recall-fleet]");
+      if (recallFleet) {
+        ev.preventDefault();
+        const fleetId = recallFleet.getAttribute("data-recall-fleet");
+        if (fleetId) void doRecallFleet(fleetId);
         return;
       }
 
