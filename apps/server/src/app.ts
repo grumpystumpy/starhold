@@ -460,10 +460,15 @@ export function createApp(): Hono {
               c.header("ETag", `"${revision}"`);
               c.header("X-Starhold-State-Tick", "skipped");
               c.header("X-Starhold-Player-View", "skipped");
+              const ownedPlanetResources = (player?.planetIds ?? [])
+                .map((id) => universe.planets[id])
+                .filter((planet): planet is NonNullable<typeof planet> => planet != null)
+                .map((planet) => ({ id: planet.id, resources: { ...planet.resources } }));
               return c.json({
                 unchanged: true,
                 now,
                 resources: resources ?? { metal: 0, crystal: 0, deuterium: 0 },
+                ownedPlanetResources,
               });
             }
           }

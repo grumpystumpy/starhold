@@ -72,6 +72,20 @@ import {
 import { resetMemoryUniverse, setUniverseFaultForTests, withUniverse, withUniverseRead } from "./store.js";
 import { createApp } from "./app.js";
 
+function parseWorldShell(doc: string): UniverseState {
+  if (doc.startsWith("SH2\n")) {
+    const payload = doc.slice("SH2\n".length);
+    const nl = payload.indexOf("\n");
+    const len = Number(payload.slice(0, nl));
+    const shell = payload.slice(nl + 1, nl + 1 + len);
+    const parsed = JSON.parse(shell) as UniverseState;
+    parsed.pirateBases = parsed.pirateBases ?? {};
+    parsed.alienBases = parsed.alienBases ?? {};
+    return parsed;
+  }
+  return JSON.parse(doc) as UniverseState;
+}
+
 function sqliteD1(): { db: D1Like; raw: DatabaseSync } {
   const raw = new DatabaseSync(":memory:");
   let batchTail = Promise.resolve();
@@ -2716,12 +2730,16 @@ describe("row save review fixes", () => {
     const worldBytes = (
       await db.prepare("SELECT length(doc) AS n FROM save_world").bind().first<{ n: number }>()
     )?.n ?? 0;
-    assert.ok(worldBytes > 800_000, `world doc ${worldBytes}`);
+    const npcRows = (
+      await db.prepare("SELECT COUNT(*) AS n FROM save_npc_bases").bind().first<{ n: number }>()
+    )?.n ?? 0;
     const initialWorldDoc = await db
       .prepare("SELECT doc FROM save_world WHERE id = 'world'")
       .bind()
       .first<{ doc: string }>();
     assert.ok(initialWorldDoc?.doc.startsWith("SH2\n"), "packed worlds are the default format");
+    assert.ok(npcRows > 0, `save_npc_bases rows ${npcRows}`);
+    assert.ok(worldBytes < 100_000, `world doc should be slim after paging bases out, got ${worldBytes}`);
 
     const store = createD1Store(db);
     const scope = {
@@ -2783,7 +2801,8 @@ describe("row save review fixes", () => {
     assert.equal(packedBase?.destroyedAt ?? null, null);
     assert.equal(typeof packedBase?.name, "string");
     assert.ok(packedBase?.ships);
-    assert.equal(Object.keys(packed.universe.pirateBases ?? {}).length, bases.length);
+    const packedFull = await loadWorkingSet(db, { full: true });
+    assert.equal(Object.keys(packedFull.universe.pirateBases ?? {}).length, bases.length);
     assert.ok(after.read.median <= 6, `read median ${after.read.median}`);
     assert.ok(after.read.p95 <= 10, `read p95 ${after.read.p95}`);
     assert.ok(after.write.median <= 8, `write median ${after.write.median}`);
@@ -3622,7 +3641,7 @@ describe("row save review fixes", () => {
       .prepare("SELECT version, doc FROM save_world WHERE id = 'world'")
       .bind()
       .first<{ version: number; doc: string }>();
-    const fat = JSON.parse(stored!.doc) as UniverseState;
+    const fat = parseWorldShell(stored!.doc);
     fat.pirateBases = { [base.id]: base };
     fat.alienBases = { [alien.id]: alien };
     const fatText = JSON.stringify(fat);
@@ -3663,7 +3682,7 @@ describe("row save review fixes", () => {
       .prepare("SELECT doc FROM save_world WHERE id = 'world'")
       .bind()
       .first<{ doc: string }>();
-    const slimDoc = JSON.parse(slim!.doc) as UniverseState;
+    const slimDoc = parseWorldShell(slim!.doc);
     assert.deepEqual(slimDoc.pirateBases, {});
     assert.deepEqual(slimDoc.alienBases, {});
     assert.ok(slim!.doc.length < fatText.length);
@@ -3734,7 +3753,7 @@ describe("row save review fixes", () => {
       .prepare("SELECT doc FROM save_world WHERE id = 'world'")
       .bind()
       .first<{ doc: string }>();
-    const doc = JSON.parse(stored!.doc) as UniverseState;
+    const doc = parseWorldShell(stored!.doc);
     assert.deepEqual(doc.pirateBases, {});
     assert.deepEqual(doc.alienBases, {});
     assert.ok(
