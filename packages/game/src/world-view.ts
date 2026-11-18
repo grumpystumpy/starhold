@@ -33,6 +33,7 @@ import {
   normalArtAt,
   type PlanetArtContext,
 } from "./planet-art.js";
+import { alienBaseId, pirateBaseId } from "./world-pirates.js";
 import type {
   AllianceRankEntry,
   CategoryHighscores,
@@ -100,6 +101,23 @@ import {
   NEWBIE_BONUS_DURATION_MS,
   NEWBIE_PRODUCTION_MULT,
 } from "./world-protection.js";
+
+const SHOP_CATALOG = Object.fromEntries(
+  Object.entries(SHOP_ITEMS).map(([key, item]) => [
+    key,
+    {
+      id: item.id,
+      name: item.name,
+      category: item.category,
+      tier: item.tier,
+      bonus: item.bonus,
+      starshards: item.starshards,
+      description: item.description,
+    },
+  ]),
+);
+const OFFICER_CATALOG = OFFICER_ORDER.map((id) => OFFICERS[id]);
+const SKILL_CATALOG = SKILL_ORDER.map((id) => SKILLS[id]);
 
 export { empirePoints };
 
@@ -298,6 +316,23 @@ export function publicRoster(
   });
 }
 
+/** One base per system is stored under the slot id. Avoid walking every base. */
+function npcBaseInSystem<T extends { destroyedAt?: number | null; coords: { galaxy: number; system: number } }>(
+  bases: Record<string, T> | undefined,
+  idFor: (galaxy: number, system: number, slot: number) => string,
+  galaxy: number,
+  system: number,
+): T | undefined {
+  if (!bases) return undefined;
+  for (let slot = 1; slot <= MAP_SLOTS; slot++) {
+    const base = bases[idFor(galaxy, system, slot)];
+    if (!base || base.destroyedAt != null) continue;
+    if (base.coords.galaxy !== galaxy || base.coords.system !== system) continue;
+    return base;
+  }
+  return undefined;
+}
+
 export function galaxyViewFor(
   universe: UniverseState,
   playerId: string,
@@ -386,12 +421,7 @@ export function galaxyViewFor(
     (a, b) => a.coords.slot - b.coords.slot || a.planetId.localeCompare(b.planetId),
   );
 
-  const pirate = Object.values(universe.pirateBases ?? {}).find(
-    (b) =>
-      b.destroyedAt == null &&
-      b.coords.galaxy === g &&
-      b.coords.system === s,
-  );
+  const pirate = npcBaseInSystem(universe.pirateBases, pirateBaseId, g, s);
   if (pirate) {
     const slot = slots.find((row) => row.coords.slot === pirate.coords.slot);
     if (slot && slot.activity === "empty") {
@@ -399,12 +429,7 @@ export function galaxyViewFor(
     }
   }
 
-  const alien = Object.values(universe.alienBases ?? {}).find(
-    (b) =>
-      b.destroyedAt == null &&
-      b.coords.galaxy === g &&
-      b.coords.system === s,
-  );
+  const alien = npcBaseInSystem(universe.alienBases, alienBaseId, g, s);
   if (alien) {
     const slot = slots.find((row) => row.coords.slot === alien.coords.slot);
     if (slot && (slot.activity === "empty" || slot.activity == null)) {
@@ -642,22 +667,12 @@ export function playerView(
       remainingMs: Math.max(0, b.expiresAt - now),
     }));
 
-  const shopCatalog = Object.fromEntries(
-    Object.entries(SHOP_ITEMS).map(([key, item]) => [
-      key,
-      {
-        id: item.id,
-        name: item.name,
-        category: item.category,
-        tier: item.tier,
-        bonus: item.bonus,
-        starshards: item.starshards,
-        description: item.description,
-      },
-    ]),
-  );
+  const shopCatalog = SHOP_CATALOG;
 
-  return {
+  const galaxyView = galaxyViewFor(universe, playerId, g, s, now);
+  const seasonView = seasonLeaderboardView(universe, player, now);
+  const bossView = pirateBossSummary(universe, playerId, now);
+  const built = {
     now,
     universe: {
       id: universe.id,
@@ -738,7 +753,7 @@ export function playerView(
     allianceHighscores,
     hallOfFame: provided?.hallOfFame ?? combatHallOfFame(universe),
     hallOfShame: provided?.hallOfShame ?? combatHallOfShame(universe),
-    galaxy: galaxyViewFor(universe, playerId, g, s, now),
+    galaxy: galaxyView,
     ...(options?.includeScannerMoons
       ? { scannerMoons: ownScannerMoons(universe, player) }
       : {}),
@@ -761,8 +776,8 @@ export function playerView(
     officerLevels: { ...(player.officerLevels ?? {}) },
     officerRenewals: { ...(player.officerRenewals ?? {}) },
     researchTimeMult,
-    officerCatalog: OFFICER_ORDER.map((id) => OFFICERS[id]),
-    skillCatalog: SKILL_ORDER.map((id) => SKILLS[id]),
+    officerCatalog: OFFICER_CATALOG,
+    skillCatalog: SKILL_CATALOG,
     dailyLoginAvailable: canClaimDailyLogin(player, now),
     progress: playerProgressView(player),
     occupation: occupationForPlanet(universe, planet.id, now),
@@ -781,10 +796,11 @@ export function playerView(
         shipyard: planet.buildings.shipyard ?? 0,
         ships: planet.ships,
       })),
-    seasonLeaderboard: seasonLeaderboardView(universe, player, now),
-    pirateBoss: pirateBossSummary(universe, playerId, now),
+    seasonLeaderboard: seasonView,
+    pirateBoss: bossView,
     galaxyEvent: galaxyEventView(universe, now),
     activeItemBuffs,
     shopCatalog,
   };
+  return built;
 }

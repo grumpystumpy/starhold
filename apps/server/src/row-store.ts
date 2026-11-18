@@ -18,6 +18,13 @@ import {
   emptyCategoryHighscores,
   HIGHSCORE_CATEGORY_IDS,
   isHighscoreCategoryId,
+  armQuietPirateCull,
+  armNoSeasonalBoss,
+  isLazyPirateRoster,
+  noteLazyPirateRoster,
+  MAP_GALAXIES,
+  PIRATE_BASES_PER_GALAXY,
+  PIRATE_TARGET_BASE_COUNT,
   type AllianceRankEntry,
   type CategoryHighscores,
   type HighscoreCategoryId,
@@ -29,6 +36,7 @@ import {
   type FleetMission,
   type HighscoreEntry,
   type HighscoreCache,
+  type MessageCategory,
   type PlanetState,
   type PlayerState,
   type EspionageReport,
@@ -99,6 +107,16 @@ export interface UniverseWork {
   full?: boolean;
   /** Systems to load besides the caller's home and the open galaxy. */
   extraSystems?: Array<[number, number]>;
+  /**
+   * Oldest due fleet ids chosen for this request. Set by withRowUniverse.
+   * Not a caller input.
+   */
+  dueFleetIds?: string[];
+  /**
+   * Delete every matching inbox row for this player, including rows that
+   * were not loaded into the working set. Never stored on the world doc.
+   */
+  messagePurge?: { playerId: string; category: MessageCategory };
 }
 
 interface MigrateState {
@@ -132,6 +150,7 @@ interface SystemWrite {
 interface LoadedRows {
   universe: UniverseState;
   worldVersion: number;
+  legacyWorldFormat: boolean;
   playerVersions: Map<string, number>;
   planetVersions: Map<string, number>;
   fleetVersions: Map<string, number>;
@@ -146,8 +165,25 @@ interface LoadedRows {
   fleetSnapshots: Map<string, FleetMission>;
   pendingSystems: SystemWrite[];
   fingerprints: Map<string, string>;
+  /** Cheap world-doc fingerprint taken after ensureUniverseShape. Not persisted. */
+  worldStamp: string;
+  /** Exact shell and roster JSON taken after load, before the request callback. */
+  worldParts: WorldParts;
   /** Planet rows as loaded, so a resource-only change can be told apart from growth. */
   planetDocs: Map<string, string>;
+  messageKinds: Map<string, string>;
+  messageOwners: Map<string, string>;
+  /** Loaded report objects. Same reference means the 3KB doc was not edited. */
+  messageRefs: Map<string, object>;
+  /** Set when a purge must hit D1 even if the loaded window did not change. */
+  forceSave: boolean;
+  /** Report ids a purge removes, including rows outside the loaded window. */
+  purgeReportIds: string[];
+  messagePurge?: { playerId: string; category: MessageCategory };
+  /** Stamp after the request callback. Reused by the save so the walk runs once. */
+  worldStampAfter?: string;
+  /** World parts from `changed`. The save must not build them again. */
+  freshParts?: WorldParts;
 }
 
 const TABLE_SQL = [
@@ -191,6 +227,25 @@ const OMIT_KEYS = new Set([
   "skipPirateTopUp",
 ]);
 
+/** Newest rows the per-player view reads. Wider loads stay unbounded. */
+const REPORT_WINDOW = 12;
+const EVENT_WINDOW = 100;
+const HOSTILE_FLEET_WINDOW = 20;
+
+const WORLD_STAMP_SKIP = new Set<string>([
+  ...OMIT_KEYS,
+  "players",
+  "planets",
+  "fleets",
+  "reports",
+  "spyReports",
+  "expeditionReports",
+  "asteroids",
+  "debris",
+  "pirateBases",
+  "alienBases",
+]);
+
 const parseJson = JSON.parse;
 const stringifyJson = JSON.stringify;
 
@@ -224,6 +279,409 @@ function stable(value: unknown): string {
   } finally {
     addCpu(performance.now() - started);
   }
+}
+
+const LAZY_ROSTER_MIN = 64_000;
+const BASE_ID = /"(pir:\d+:\d+:\d+|aln:\d+:\d+:\d+)":\{/g;
+const WORLD_PACK = "SH2\n";
+let rosterSerial = 0;
+
+function scanTopLevelBases(str: string): Record<string, number> {
+  const at: Record<string, number> = {};
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  let keyStart = -1;
+  for (let i = 0; i < str.length; i++) {
+    const c = str.charCodeAt(i);
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === 92) esc = true;
+      else if (c === 34) inStr = false;
+      continue;
+    }
+    if (c === 34) {
+      inStr = true;
+      if (depth === 1) keyStart = i + 1;
+    } else if (c === 123) {
+      if (depth === 1 && keyStart >= 0) {
+        at[str.slice(keyStart, i - 2)] = i;
+      }
+      depth++;
+      keyStart = -1;
+    } else if (c === 125) {
+      depth--;
+      keyStart = -1;
+    } else if (depth === 1 && c === 44) {
+      keyStart = -1;
+    }
+  }
+  return at;
+}
+
+interface LazyRoster {
+  doc: string;
+  start: number;
+  end: number;
+  /** Set when the exact JSON is already a standalone string. */
+  raw: string | null;
+  /** Identity of the untouched text. Not the text itself. */
+  key: string;
+  values: Map<string, unknown>;
+  deleted: Set<string>;
+  added: Set<string>;
+  ids: string[] | null;
+  idSet: Set<string> | null;
+  /** JSON object of id → `{` offset, sliced off the world doc. Empty when absent. */
+  index: string;
+}
+
+const lazyRosters = new WeakMap<object, LazyRoster>();
+
+function sliceBaseAt(doc: string, start: number, end: number, id: string): string | null {
+  const token = `${JSON.stringify(id)}:`;
+  let at = doc.indexOf(token, start);
+  if (at < 0 || at >= end) return null;
+  let i = at + token.length;
+  if (doc[i] !== "{") return null;
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  for (; i < end; i++) {
+    const c = doc[i]!;
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === "\\") esc = true;
+      else if (c === "\"") inStr = false;
+      continue;
+    }
+    if (c === "\"") inStr = true;
+    else if (c === "{") depth += 1;
+    else if (c === "}") {
+      depth -= 1;
+      if (depth === 0) return doc.slice(at + token.length, i + 1);
+    }
+  }
+  return null;
+}
+
+function readObject(doc: string, open: number, end: number): string | null {
+  if (doc[open] !== "{") return null;
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  for (let i = open; i < end; i++) {
+    const c = doc[i]!;
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === "\\") esc = true;
+      else if (c === "\"") inStr = false;
+      continue;
+    }
+    if (c === "\"") inStr = true;
+    else if (c === "{") depth += 1;
+    else if (c === "}") {
+      depth -= 1;
+      if (depth === 0) return doc.slice(open, i + 1);
+    }
+  }
+  return null;
+}
+
+function offsetOf(state: LazyRoster, id: string): number | null {
+  if (!state.index || state.index === "{}") {
+    const raw = state.raw ?? state.doc.slice(state.start, state.end);
+    state.index = rosterIndexText(raw);
+  }
+  const token = `"${id}":`;
+  const at = state.index.indexOf(token);
+  if (at < 0) return null;
+  let n = 0;
+  let i = at + token.length;
+  for (; i < state.index.length; i++) {
+    const c = state.index.charCodeAt(i);
+    if (c < 48 || c > 57) break;
+    n = n * 10 + c - 48;
+  }
+  return i === at + token.length ? null : n;
+}
+
+function objectSlice(state: LazyRoster, id: string): string | null {
+  if (state.index && state.index !== "{}") {
+    const rel = offsetOf(state, id);
+    if (rel == null) return null;
+    return readObject(state.doc, state.start + rel, state.end);
+  }
+  return sliceBaseAt(state.doc, state.start, state.end, id);
+}
+
+function rosterIds(state: LazyRoster): string[] {
+  if (state.ids) return state.ids;
+  let ids: string[];
+  if (state.index && state.index !== "{}") {
+    try {
+      ids = Object.keys(parseJson(state.index));
+    } catch {
+      const raw = state.raw ?? state.doc.slice(state.start, state.end);
+      if (state.raw == null) state.raw = raw;
+      ids = [];
+      BASE_ID.lastIndex = 0;
+      for (const match of raw.matchAll(BASE_ID)) ids.push(match[1]!);
+    }
+  } else {
+    const raw = state.raw ?? state.doc.slice(state.start, state.end);
+    if (state.raw == null) state.raw = raw;
+    ids = [];
+    BASE_ID.lastIndex = 0;
+    for (const match of raw.matchAll(BASE_ID)) ids.push(match[1]!);
+  }
+  state.ids = ids;
+  state.idSet = new Set(ids);
+  for (const id of state.deleted) state.idSet.delete(id);
+  for (const id of state.added) state.idSet.add(id);
+  return ids;
+}
+
+function lazyRoster(
+  doc: string,
+  start: number,
+  end: number,
+  kind: "pirate" | "alien",
+  indexStart: number,
+  indexEnd: number,
+  indexText?: string,
+): object {
+  const state: LazyRoster = {
+    doc,
+    start,
+    end,
+    raw: doc.length === end - start ? doc : null,
+    key: `\u0000roster:${++rosterSerial}`,
+    values: new Map(),
+    deleted: new Set(),
+    added: new Set(),
+    ids: null,
+    idSet: null,
+    index: indexText ?? (indexEnd > indexStart ? doc.slice(indexStart, indexEnd) : ""),
+  };
+  const knownId = (prop: string) =>
+    state.index && state.index !== "{}"
+      ? offsetOf(state, prop) != null
+      : state.idSet
+        ? state.idSet.has(prop)
+        : sliceBaseAt(state.doc, state.start, state.end, prop) != null;
+  const proxy = new Proxy({} as Record<string, unknown>, {
+    get(_target, prop) {
+      if (typeof prop !== "string") return undefined;
+      if (state.deleted.has(prop)) return undefined;
+      if (state.values.has(prop)) return state.values.get(prop);
+      const slice = objectSlice(state, prop);
+      if (slice == null) return undefined;
+      const value = parseJson(slice);
+      state.values.set(prop, value);
+      return value;
+    },
+    set(_target, prop, value) {
+      if (typeof prop !== "string") return false;
+      state.deleted.delete(prop);
+      const known = knownId(prop);
+      state.values.set(prop, value);
+      if (!known) {
+        state.added.add(prop);
+        state.idSet?.add(prop);
+      }
+      return true;
+    },
+    deleteProperty(_target, prop) {
+      if (typeof prop !== "string") return false;
+      state.deleted.add(prop);
+      state.added.delete(prop);
+      state.values.delete(prop);
+      state.idSet?.delete(prop);
+      return true;
+    },
+    has(_target, prop) {
+      if (typeof prop !== "string") return false;
+      if (state.deleted.has(prop)) return false;
+      if (state.values.has(prop) || state.added.has(prop)) return true;
+      return knownId(prop);
+    },
+    ownKeys() {
+      const ids = rosterIds(state).filter((id) => !state.deleted.has(id));
+      for (const id of state.added) if (!ids.includes(id)) ids.push(id);
+      return ids;
+    },
+    getOwnPropertyDescriptor(_target, prop) {
+      if (typeof prop !== "string") return undefined;
+      if (state.deleted.has(prop)) return undefined;
+      if (state.ids && !state.added.has(prop) && !state.ids.includes(prop) && !state.values.has(prop)) {
+        return undefined;
+      }
+      if (!state.ids && state.index && state.index !== "{}" && !state.added.has(prop) && !state.values.has(prop)) {
+        if (offsetOf(state, prop) == null) return undefined;
+      }
+      return { configurable: true, enumerable: true, writable: true };
+    },
+  });
+  lazyRosters.set(proxy, state);
+  if (kind === "pirate") noteLazyPirateRoster(proxy);
+  return proxy;
+}
+
+function adoptText(raw: string, kind: "pirate" | "alien"): object {
+  if (raw.length < LAZY_ROSTER_MIN) return parseJson(raw) as object;
+  return lazyRoster(raw, 0, raw.length, kind, 0, 0);
+}
+
+function adoptBases(value: unknown, kind: "pirate" | "alien"): object {
+  if (typeof value === "string") return adoptText(value, kind);
+  if (value && typeof value === "object") return value;
+  return {};
+}
+
+function rosterWithinCap(roster: NonNullable<UniverseState["npcRoster"]>): boolean {
+  if (roster.destroyed > 0) return false;
+  if (roster.living > PIRATE_TARGET_BASE_COUNT) return false;
+  for (let galaxy = 1; galaxy < roster.perGalaxy.length; galaxy++) {
+    if ((roster.perGalaxy[galaxy] ?? 0) > PIRATE_BASES_PER_GALAXY) return false;
+  }
+  return true;
+}
+
+function summarizeBases(bases: object | undefined): NonNullable<UniverseState["npcRoster"]> {
+  const perGalaxy = new Array<number>(MAP_GALAXIES + 1).fill(0);
+  let living = 0;
+  let destroyed = 0;
+  let boss = false;
+  for (const base of Object.values(bases ?? {}) as Array<{
+    destroyedAt?: number | null;
+    seasonalBoss?: boolean;
+    coords?: { galaxy?: number };
+  }>) {
+    if (!base) continue;
+    if (base.seasonalBoss) boss = true;
+    if (base.destroyedAt != null) {
+      destroyed += 1;
+      continue;
+    }
+    living += 1;
+    const galaxy = base.coords?.galaxy ?? 0;
+    if (galaxy >= 1 && galaxy <= MAP_GALAXIES && !base.seasonalBoss) perGalaxy[galaxy] += 1;
+  }
+  return { living, perGalaxy, destroyed, boss };
+}
+
+function basesUnchanged(state: LazyRoster): boolean {
+  if (state.deleted.size > 0 || state.added.size > 0) return false;
+  for (const [id, value] of state.values) {
+    const slice = objectSlice(state, id);
+    if (slice == null || stringifyJson(value) !== slice) return false;
+  }
+  return true;
+}
+
+function rebuildBases(state: LazyRoster, bases: object): string {
+  const raw = state.raw ?? state.doc.slice(state.start, state.end);
+  const merged = parseJson(raw) as Record<string, unknown>;
+  for (const id of Object.keys(merged)) {
+    if (state.deleted.has(id)) delete merged[id];
+  }
+  for (const [id, value] of state.values) {
+    if (!state.deleted.has(id)) merged[id] = value;
+  }
+  for (const id of state.added) {
+    const value = (bases as Record<string, unknown>)[id];
+    if (!state.deleted.has(id)) merged[id] = value;
+  }
+  return stringifyJson(merged);
+}
+
+/** Exact JSON when a write needs it. Quiet checks use rosterKey and do not copy. */
+function rosterJson(bases: object | undefined): string {
+  if (!bases) return "{}";
+  const state = lazyRosters.get(bases);
+  if (!state) return stringifyJson(bases);
+  if (!basesUnchanged(state)) {
+    const next = rebuildBases(state, bases);
+    state.raw = next;
+    state.doc = next;
+    state.start = 0;
+    state.end = next.length;
+    state.key = next;
+    state.index = "";
+    state.ids = null;
+    state.idSet = null;
+    state.deleted.clear();
+    state.added.clear();
+    return next;
+  }
+  if (state.raw == null) state.raw = state.doc.slice(state.start, state.end);
+  return state.raw;
+}
+
+/** Stable identity. Unchanged lazy text keeps its key and is not copied. */
+function rosterKey(bases: object | undefined): string {
+  if (!bases) return "{}";
+  const state = lazyRosters.get(bases);
+  if (!state) return stringifyJson(bases);
+  if (!basesUnchanged(state)) return rosterJson(bases);
+  return state.key;
+}
+
+function takeSpan(doc: string, cursor: { n: number }): { start: number; end: number } {
+  const nl = doc.indexOf("\n", cursor.n);
+  const len = Number(doc.slice(cursor.n, nl));
+  const start = nl + 1;
+  const end = start + len;
+  cursor.n = end;
+  return { start, end };
+}
+
+function shellJson(universe: UniverseState): string {
+  const shell: Record<string, unknown> = {};
+  const source = universe as unknown as Record<string, unknown>;
+  for (const key of Object.keys(source).sort()) {
+    if (WORLD_STAMP_SKIP.has(key)) continue;
+    shell[key] = source[key];
+  }
+  return stringifyJson(shell);
+}
+
+interface WorldParts {
+  shell: string;
+  pirate: string;
+  alien: string;
+}
+
+function worldParts(universe: UniverseState): WorldParts {
+  const started = performance.now();
+  try {
+    return {
+      shell: shellJson(universe),
+      pirate: rosterKey(universe.pirateBases),
+      alien: rosterKey(universe.alienBases),
+    };
+  } finally {
+    addCpu(performance.now() - started);
+  }
+}
+
+function sameParts(a: WorldParts, b: WorldParts): boolean {
+  return a.shell === b.shell && a.pirate === b.pirate && a.alien === b.alien;
+}
+
+function rosterIndexText(raw: string, expectedCount?: number): string {
+  if (raw.length < LAZY_ROSTER_MIN) return "{}";
+  const at: Record<string, number> = {};
+  BASE_ID.lastIndex = 0;
+  for (const match of raw.matchAll(BASE_ID)) {
+    const index = match.index ?? 0;
+    at[match[1]!] = index + match[0].length - 1;
+  }
+  if (expectedCount != null && Object.keys(at).length !== expectedCount) {
+    return stringifyJson(scanTopLevelBases(raw));
+  }
+  return stringifyJson(at);
 }
 
 async function run(db: D1Like, sql: string, ...values: unknown[]): Promise<number> {
@@ -346,22 +804,60 @@ export async function readCombatReportByShareCode(
   return row ? (timedParse(row.doc) as CombatReport) : null;
 }
 
-function worldDoc(universe: UniverseState): UniverseState {
+export function shouldWritePackedWorld(): boolean {
+  // Set this flag for a rollback window when the prior release must read the
+  // world row. It is off by default so the packed CPU path stays enabled.
+  return process.env.STARHOLD_OLD_WORLD_DOC !== "1";
+}
+
+function worldText(universe: UniverseState): string {
   // Keep aiCatchUpCursor durable so the NPC cron resumes after each row save.
-  const doc = {
-    ...universe,
-    players: {},
-    planets: {},
-    fleets: {},
-    reports: {},
-    spyReports: {},
-    expeditionReports: {},
-    asteroids: {},
-    debris: {},
-  };
-  delete doc.skipNpcRaids;
-  delete doc.skipPirateTopUp;
-  return doc;
+  // Big rosters stay raw JSON beside a small shell so a cold read does not
+  // parse every base. A nested edit still replaces that exact text.
+  const started = performance.now();
+  try {
+    const pirate = rosterJson(universe.pirateBases);
+    const alien = rosterJson(universe.alienBases);
+    const lazy = universe.pirateBases ? lazyRosters.get(universe.pirateBases) : undefined;
+    if (!lazy || pirate !== lazy.raw || !universe.npcRoster) {
+      universe.npcRoster = summarizeBases(universe.pirateBases);
+    }
+    const shell: Record<string, unknown> = {
+      ...universe,
+      players: {},
+      planets: {},
+      fleets: {},
+      reports: {},
+      spyReports: {},
+      expeditionReports: {},
+      asteroids: {},
+      debris: {},
+    };
+    delete shell.pirateBases;
+    delete shell.alienBases;
+    delete shell.skipNpcRaids;
+    delete shell.skipPirateTopUp;
+    const shellText = stringifyJson(shell);
+    if (shouldWritePackedWorld()) {
+      const pirateAt = rosterIndexText(
+        pirate,
+        (universe.npcRoster?.living ?? 0) + (universe.npcRoster?.destroyed ?? 0),
+      );
+      const alienAt = rosterIndexText(alien);
+      return `${WORLD_PACK}${shellText.length}\n${shellText}${pirateAt.length}\n${pirateAt}${pirate.length}\n${pirate}${alienAt.length}\n${alienAt}${alien.length}\n${alien}`;
+    }
+    if (shellText === "{}") {
+      return `{"pirateBases":${pirate},"alienBases":${alien}}`;
+    }
+    const pirateAt = rosterIndexText(
+      pirate,
+      (universe.npcRoster?.living ?? 0) + (universe.npcRoster?.destroyed ?? 0),
+    );
+    const alienAt = rosterIndexText(alien);
+    return `${shellText.slice(0, -1)},"_npcRosterIndex":{"pirate":${stringifyJson(pirateAt)},"alien":${stringifyJson(alienAt)}},"pirateBases":${pirate},"alienBases":${alien}}`;
+  } finally {
+    addCpu(performance.now() - started);
+  }
 }
 
 function playerDoc(player: PlayerState): PlayerState {
@@ -451,7 +947,7 @@ function queueWorld(db: D1Like, stmts: D1Stmt[], universe: UniverseState): void 
     `INSERT INTO save_world (id, version, doc) VALUES ('world', 2, ?)
      ON CONFLICT(id) DO UPDATE SET doc = excluded.doc, version = excluded.version
      WHERE save_world.version <= excluded.version`,
-    [timedStringify(worldDoc(universe))],
+    [worldText(universe)],
   );
 }
 
@@ -856,7 +1352,7 @@ export async function migrateChunk(
         `INSERT INTO save_world (id, version, doc) VALUES ('world', 1, ?)
          ON CONFLICT(id) DO UPDATE SET doc = excluded.doc
          WHERE save_world.version <= excluded.version`,
-        [timedStringify(worldDoc(universe))],
+        [worldText(universe)],
       );
       state.stage = "players";
       state.cursor = "";
@@ -1073,8 +1569,9 @@ function emptyUniverse(shell: UniverseState): UniverseState {
   shell.reports = {};
   shell.spyReports = {};
   shell.expeditionReports = {};
-  shell.asteroids = shell.asteroids ?? {};
-  shell.debris = shell.debris ?? {};
+  // System rows refill these. A reused shell must not keep another request's fields.
+  shell.asteroids = {};
+  shell.debris = {};
   return shell;
 }
 
@@ -1186,10 +1683,14 @@ async function loadMessages(
   }>(db, `SELECT id, version, kind, doc, owner_id FROM save_messages ${where}`, ...values);
   for (const row of rows) {
     into.messageVersions.set(row.id, row.version);
+    into.messageKinds.set(row.id, row.kind);
+    into.messageOwners.set(row.id, row.owner_id);
     into.fingerprints.set(`message:${row.id}`, row.doc);
     const doc = timedParse(row.doc) as { id: string };
-    if (row.kind === "report") into.universe.reports[doc.id] = doc as CombatReport;
-    else if (row.kind === "spy") into.universe.spyReports[doc.id] = doc as EspionageReport;
+    if (row.kind === "report") {
+      into.messageRefs.set(row.id, doc);
+      into.universe.reports[doc.id] = doc as CombatReport;
+    } else if (row.kind === "spy") into.universe.spyReports[doc.id] = doc as EspionageReport;
     else if (row.kind === "expedition") {
       into.universe.expeditionReports[doc.id] = doc as ExpeditionReport;
     } else if (row.kind === "event") {
@@ -1323,7 +1824,178 @@ function systemPairs(planets: Iterable<PlanetState>): Array<[number, number]> {
 }
 
 function pirateSitesNeeded(universe: UniverseState): boolean {
+  const roster = universe.npcRoster;
+  if (isLazyPirateRoster(universe.pirateBases)) {
+    if (roster) return roster.destroyed > 0;
+    const state = lazyRosters.get(universe.pirateBases!);
+    const raw = state?.raw ?? (state ? state.doc.slice(state.start, state.end) : "");
+    // Old JSON worlds have no npcRoster summary. Detect a non-null wreck
+    // without hydrating every pirate object on the first state read.
+    return /"destroyedAt"\s*:\s*(?!null\b)(?:-?\d)/.test(raw);
+  }
   return Object.values(universe.pirateBases ?? {}).some((base) => base.destroyedAt != null);
+}
+
+function armLoadedRoster(universe: UniverseState): void {
+  const roster = universe.npcRoster;
+  const bases = universe.pirateBases;
+  if (!roster || !bases || !isLazyPirateRoster(bases)) return;
+  if (!roster.boss) armNoSeasonalBoss(bases);
+  if (rosterWithinCap(roster)) {
+    armQuietPirateCull(bases);
+    // A full healthy roster needs no page-load repair. Avoid enumerating
+    // every lazy base just to rediscover the summary already in the shell.
+    if (universe.skipNpcRaids && roster.living >= PIRATE_TARGET_BASE_COUNT) {
+      universe.skipPirateTopUp = true;
+    }
+  }
+}
+
+function findRosterPropertySpans(
+  doc: string,
+): { pirate: { start: number; end: number }; alien: { start: number; end: number } } | null {
+  const tokenAt = (name: string): number => doc.indexOf(`"${name}":`);
+  const openFor = (at: number, name: string): number => {
+    const open = at < 0 ? -1 : at + name.length + 3;
+    return doc[open] === "{" ? open : -1;
+  };
+  const pirateToken = tokenAt("pirateBases");
+  const alienToken = tokenAt("alienBases");
+  const pirateOpen = openFor(pirateToken, "pirateBases");
+  const alienOpen = openFor(alienToken, "alienBases");
+  if (pirateOpen < 0 || alienOpen < 0) return null;
+  // worldText's rollback format appends both rosters last. Their separator
+  // and the final root brace give exact bounds without walking every base.
+  if (
+    pirateToken < alienToken &&
+    doc[pirateToken - 1] === "," &&
+    doc[alienToken - 2] === "}" &&
+    doc[alienToken - 1] === "," &&
+    doc.endsWith("}}")
+  ) {
+    return {
+      pirate: { start: pirateOpen, end: alienToken - 1 },
+      alien: { start: alienOpen, end: doc.length - 1 },
+    };
+  }
+  const opens = [pirateOpen, alienOpen].sort((a, b) => a - b);
+  let activeOpen = opens[0]!;
+  let firstEnd = -1;
+  let secondEnd = -1;
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  for (let i = activeOpen; i < doc.length; i++) {
+    const c = doc[i]!;
+    if (i === opens[1]) {
+      activeOpen = opens[1]!;
+      depth = 0;
+    }
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === "\\") esc = true;
+      else if (c === "\"") inStr = false;
+      continue;
+    }
+    if (c === "\"") inStr = true;
+    else if (c === "{") depth += 1;
+    else if (c === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        if (firstEnd < 0) firstEnd = i + 1;
+        else {
+          secondEnd = i + 1;
+          break;
+        }
+      }
+    }
+  }
+  if (firstEnd < 0 || secondEnd < 0) return null;
+  const spans = [
+    { start: opens[0]!, end: firstEnd },
+    { start: opens[1]!, end: secondEnd },
+  ];
+  return pirateOpen < alienOpen
+    ? { pirate: spans[0]!, alien: spans[1]! }
+    : { pirate: spans[1]!, alien: spans[0]! };
+}
+
+function hydrateWorld(doc: string): UniverseState {
+  const started = performance.now();
+  try {
+    if (doc.startsWith(WORLD_PACK)) {
+      const cursor = { n: WORLD_PACK.length };
+      const shellSpan = takeSpan(doc, cursor);
+      const pirateAtSpan = takeSpan(doc, cursor);
+      const pirateSpan = takeSpan(doc, cursor);
+      const alienAtSpan = takeSpan(doc, cursor);
+      const alienSpan = takeSpan(doc, cursor);
+      const parsed = parseJson(doc.slice(shellSpan.start, shellSpan.end)) as UniverseState;
+      parsed.pirateBases = adoptSpan(doc, pirateSpan, "pirate", pirateAtSpan) as UniverseState["pirateBases"];
+      parsed.alienBases = adoptSpan(doc, alienSpan, "alien", alienAtSpan) as UniverseState["alienBases"];
+      return emptyUniverse(parsed);
+    }
+    const rosterSpans = doc.length >= LAZY_ROSTER_MIN ? findRosterPropertySpans(doc) : null;
+    if (rosterSpans) {
+      const pSpan = rosterSpans.pirate;
+      const aSpan = rosterSpans.alien;
+      const first = pSpan.start < aSpan.start ? pSpan : aSpan;
+      const second = pSpan.start < aSpan.start ? aSpan : pSpan;
+      const shellDoc =
+        doc.slice(0, first.start) +
+        "{}" +
+        doc.slice(first.end, second.start) +
+        "{}" +
+        doc.slice(second.end);
+      const parsed = parseJson(shellDoc) as UniverseState;
+      const index = (parsed as UniverseState & {
+        _npcRosterIndex?: { pirate?: string; alien?: string };
+      })._npcRosterIndex;
+      delete (parsed as UniverseState & { _npcRosterIndex?: unknown })._npcRosterIndex;
+      parsed.pirateBases = adoptSpan(
+        doc,
+        pSpan,
+        "pirate",
+        null,
+        index?.pirate,
+      ) as UniverseState["pirateBases"];
+      parsed.alienBases = adoptSpan(
+        doc,
+        aSpan,
+        "alien",
+        null,
+        index?.alien,
+      ) as UniverseState["alienBases"];
+      return emptyUniverse(parsed);
+    }
+    const parsed = parseJson(doc) as UniverseState;
+    parsed.pirateBases = adoptBases(parsed.pirateBases, "pirate") as UniverseState["pirateBases"];
+    parsed.alienBases = adoptBases(parsed.alienBases, "alien") as UniverseState["alienBases"];
+    return emptyUniverse(parsed);
+  } finally {
+    addCpu(performance.now() - started);
+  }
+}
+
+function adoptSpan(
+  doc: string,
+  span: { start: number; end: number },
+  kind: "pirate" | "alien",
+  indexSpan: { start: number; end: number } | null = null,
+  indexText?: string,
+): object {
+  const len = span.end - span.start;
+  if (!Number.isFinite(len) || len < 0) return {};
+  if (len < LAZY_ROSTER_MIN) return parseJson(doc.slice(span.start, span.end)) as object;
+  return lazyRoster(
+    doc,
+    span.start,
+    span.end,
+    kind,
+    indexSpan?.start ?? 0,
+    indexSpan?.end ?? 0,
+    indexText,
+  );
 }
 
 async function loadOccupancy(db: D1Like, loaded: LoadedRows): Promise<void> {
@@ -1367,10 +2039,14 @@ function applyMessageRows(
 ): void {
   for (const row of rows) {
     into.messageVersions.set(row.id, row.version);
+    into.messageKinds.set(row.id, row.kind);
+    into.messageOwners.set(row.id, row.owner_id);
     into.fingerprints.set(`message:${row.id}`, row.doc);
     const doc = timedParse(row.doc) as { id: string };
-    if (row.kind === "report") into.universe.reports[doc.id] = doc as CombatReport;
-    else if (row.kind === "spy") into.universe.spyReports[doc.id] = doc as EspionageReport;
+    if (row.kind === "report") {
+      into.messageRefs.set(row.id, doc);
+      into.universe.reports[doc.id] = doc as CombatReport;
+    } else if (row.kind === "spy") into.universe.spyReports[doc.id] = doc as EspionageReport;
     else if (row.kind === "expedition") {
       into.universe.expeditionReports[doc.id] = doc as ExpeditionReport;
     } else if (row.kind === "event") {
@@ -1536,6 +2212,104 @@ async function loadNpcPlayerPage(db: D1Like, loaded: LoadedRows): Promise<void> 
   applyPlayerRows(loaded, rows);
 }
 
+async function loadPlayerFleets(
+  db: D1Like,
+  into: LoadedRows,
+  playerIds: string[],
+  dueFleetIds: string[],
+): Promise<void> {
+  const rows: Array<{ id: string; version: number; doc: string }> = [];
+  let dueLeft = dueFleetIds;
+  for (const group of chunkRows(playerIds, Math.floor(MAX_IN_BINDS / 2))) {
+    const owners = inList(group);
+    let sql = `SELECT id, version, doc FROM save_fleets WHERE owner_id IN (${owners.clause})
+      UNION
+      SELECT id, version, doc FROM (
+        SELECT id, version, doc,
+          ROW_NUMBER() OVER (
+            PARTITION BY target_owner_id
+            ORDER BY json_extract(doc, '$.arrivesAt') ASC
+          ) AS rn
+        FROM save_fleets
+        WHERE target_owner_id IN (${owners.clause})
+          AND json_extract(doc, '$.phase') = 'outbound'
+          AND json_extract(doc, '$.mission') IN ('raid', 'espionage')
+      ) WHERE rn <= ${HOSTILE_FLEET_WINDOW}`;
+    const values: unknown[] = [...owners.values, ...owners.values];
+    if (dueLeft.length) {
+      const room = MAX_IN_BINDS - values.length;
+      const take = dueLeft.slice(0, room);
+      dueLeft = dueLeft.slice(take.length);
+      if (take.length) {
+        const due = inList(take);
+        sql += ` UNION SELECT id, version, doc FROM save_fleets WHERE id IN (${due.clause})`;
+        values.push(...due.values);
+      }
+    }
+    rows.push(...(await all<{ id: string; version: number; doc: string }>(db, sql, ...values)));
+  }
+  if (dueLeft.length) {
+    rows.push(
+      ...(await allInList<{ id: string; version: number; doc: string }>(
+        db,
+        dueLeft,
+        (list) => `SELECT id, version, doc FROM save_fleets WHERE id IN (${list.clause})`,
+      )),
+    );
+  }
+  applyFleetRows(into, [...new Map(rows.map((row) => [row.id, row])).values()]);
+}
+
+async function loadPlayerMessages(db: D1Like, into: LoadedRows, playerIds: string[]): Promise<void> {
+  const rows: Array<{
+    id: string;
+    version: number;
+    kind: string;
+    doc: string;
+    owner_id: string;
+  }> = [];
+  // Four selects per commander. D1 rejects a compound SELECT with 6 or more terms,
+  // so this stays one commander per statement (4 terms).
+  for (const id of playerIds) {
+    const branches = [
+      `SELECT id, version, kind, doc, owner_id FROM (
+         SELECT id, version, kind, doc, owner_id FROM save_messages
+         WHERE kind = 'report' AND (owner_id = ? OR defender_id = ?)
+         ORDER BY json_extract(doc, '$.at') DESC
+         LIMIT ${REPORT_WINDOW}
+       )`,
+      `SELECT id, version, kind, doc, owner_id FROM (
+         SELECT id, version, kind, doc, owner_id FROM save_messages
+         WHERE kind = 'spy' AND owner_id = ?
+         ORDER BY json_extract(doc, '$.at') DESC
+         LIMIT ${REPORT_WINDOW}
+       )`,
+      `SELECT id, version, kind, doc, owner_id FROM (
+         SELECT id, version, kind, doc, owner_id FROM save_messages
+         WHERE kind = 'expedition' AND owner_id = ?
+         ORDER BY json_extract(doc, '$.at') DESC
+         LIMIT ${REPORT_WINDOW}
+       )`,
+      `SELECT id, version, kind, doc, owner_id FROM (
+         SELECT id, version, kind, doc, owner_id FROM save_messages
+         WHERE kind = 'event' AND owner_id = ?
+         ORDER BY json_extract(doc, '$.createdAt') DESC
+         LIMIT ${EVENT_WINDOW}
+       )`,
+    ];
+    rows.push(
+      ...(await all<{
+        id: string;
+        version: number;
+        kind: string;
+        doc: string;
+        owner_id: string;
+      }>(db, branches.join(" UNION ALL "), id, id, id, id, id)),
+    );
+  }
+  applyMessageRows(into, [...new Map(rows.map((row) => [row.id, row])).values()]);
+}
+
 export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined): Promise<LoadedRows> {
   const requestedIds = [...new Set((work?.playerIds ?? []).filter(Boolean))] as string[];
   const planetIds = [...new Set((work?.planetIds ?? []).filter((id): id is string => Boolean(id)))];
@@ -1573,10 +2347,12 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
     );
   }
   if (!world) throw new Error("Row save is missing the world document.");
-  const universe = emptyUniverse(timedParse(world.doc) as UniverseState);
+  const universe = hydrateWorld(world.doc);
+  const parts = worldParts(universe);
   const loaded: LoadedRows = {
     universe,
     worldVersion: world.version,
+    legacyWorldFormat: !world.doc.startsWith(WORLD_PACK),
     playerVersions: new Map(),
     planetVersions: new Map(),
     fleetVersions: new Map(),
@@ -1588,8 +2364,15 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
     loadedSystemKeys: new Set(),
     fleetSnapshots: new Map(),
     pendingSystems: [],
-    fingerprints: new Map([["world", stable(worldDoc(universe))]]),
+    fingerprints: new Map(),
+    worldStamp: parts.shell,
+    worldParts: parts,
     planetDocs: new Map(),
+    messageKinds: new Map(),
+    messageOwners: new Map(),
+    messageRefs: new Map(),
+    forceSave: false,
+    purgeReportIds: [],
   };
   if (playerRows) applyPlayerRows(loaded, playerRows);
   else if (!pageNpc) await loadPlayers(db, loaded);
@@ -1687,52 +2470,8 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
     const pairs = [...systems.values()];
     await loadPlanetsAt(db, loaded, pairs);
     if (requestedIds.length) {
-      const [fleetRows, msgRows] = await Promise.all([
-        allInList<{ id: string; version: number; doc: string }>(
-          db,
-          requestedIds,
-          (list) => `SELECT id, version, doc FROM save_fleets WHERE owner_id IN (${list.clause}) OR target_owner_id IN (${list.clause})`,
-          2,
-        ),
-        allInList<{
-          id: string;
-          version: number;
-          kind: string;
-          doc: string;
-          owner_id: string;
-        }>(
-          db,
-          requestedIds,
-          (list) => `SELECT id, version, kind, doc, owner_id FROM save_messages WHERE owner_id IN (${list.clause}) OR defender_id IN (${list.clause})`,
-          2,
-        ),
-      ]);
-      for (const row of new Map(fleetRows.map((row) => [row.id, row])).values()) {
-        const fleet = timedParse(row.doc) as FleetMission;
-        loaded.universe.fleets[fleet.id] = fleet;
-        loaded.fleetVersions.set(fleet.id, row.version);
-        loaded.fleetSnapshots.set(fleet.id, structuredClone(fleet));
-        loaded.fingerprints.set(`fleet:${fleet.id}`, stable(fleet));
-      }
-      for (const row of new Map(msgRows.map((row) => [row.id, row])).values()) {
-        loaded.messageVersions.set(row.id, row.version);
-        loaded.fingerprints.set(`message:${row.id}`, row.doc);
-        const doc = timedParse(row.doc) as { id: string };
-        if (row.kind === "report") loaded.universe.reports[doc.id] = doc as CombatReport;
-        else if (row.kind === "spy") loaded.universe.spyReports[doc.id] = doc as EspionageReport;
-        else if (row.kind === "expedition") {
-          loaded.universe.expeditionReports[doc.id] = doc as ExpeditionReport;
-        } else if (row.kind === "event") {
-          const player = loaded.universe.players[row.owner_id];
-          if (player) {
-            player.eventLog = player.eventLog ?? [];
-            player.eventLog.push(doc as EventLogEntry);
-          }
-        }
-      }
-      for (const player of Object.values(loaded.universe.players)) {
-        player.eventLog?.sort((a, b) => a.createdAt - b.createdAt);
-      }
+      await loadPlayerFleets(db, loaded, requestedIds, work?.dueFleetIds ?? []);
+      await loadPlayerMessages(db, loaded, requestedIds);
     }
     await loadSystems(db, loaded, pairs);
   }
@@ -1752,6 +2491,7 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
       if (home) ensureSystemVisited(loaded.universe, home.coords.galaxy, home.coords.system, now);
     }
   }
+  armLoadedRoster(loaded.universe);
   return loaded;
 }
 
@@ -1970,17 +2710,22 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
   const newPlayerIds: string[] = [];
   const changedPlayerIds: string[] = [];
 
-  const nextWorld = stable(worldDoc(universe));
-  if (nextWorld !== loaded.fingerprints.get("world")) {
+  const nextWorld = loaded.freshParts ?? worldParts(loaded.universe);
+  loaded.freshParts = undefined;
+  if (!sameParts(nextWorld, loaded.worldParts)) {
     const version = loaded.worldVersion + 1;
+    const doc = worldText(universe);
     guards += pushUpdate(
       db,
       stmts,
       "save_world",
       ["doc", "version"],
       ["id"],
-      [[timedStringify(worldDoc(universe)), version, "world", loaded.worldVersion]],
+      [[doc, version, "world", loaded.worldVersion]],
     );
+    loaded.worldVersion = version;
+    loaded.worldParts = nextWorld;
+    loaded.worldStamp = nextWorld.shell;
   }
 
   const playerInserts: unknown[][] = [];
@@ -2149,8 +2894,9 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
   const messageUpdates: unknown[][] = [];
   for (const row of drafts) {
     const key = `message:${row.id}`;
-    const next = timedStringify(row.doc);
     const previous = loaded.fingerprints.get(key);
+    const untouched = row.kind === "report" && loaded.messageRefs.get(row.id) === row.doc;
+    const next = untouched && previous !== undefined ? previous : timedStringify(row.doc);
     if (previous === undefined) {
       messageInserts.push([row.id, row.owner, row.defender, row.kind, 1, next]);
       continue;
@@ -2174,6 +2920,40 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
     ["id"],
     messageUpdates,
   );
+
+  const purge = loaded.messagePurge;
+  if (purge) {
+    const want = (bucket: "alerts" | "spy" | "combat"): boolean =>
+      purge.category === "all" || purge.category === bucket;
+    if (want("alerts")) {
+      stmts.push(bind(db, "DELETE FROM save_messages WHERE kind = 'event' AND owner_id = ?", [purge.playerId]));
+    }
+    if (want("spy")) {
+      stmts.push(bind(db, "DELETE FROM save_messages WHERE kind = 'spy' AND owner_id = ?", [purge.playerId]));
+    }
+    if (want("combat")) {
+      stmts.push(bind(db, "DELETE FROM save_messages WHERE kind = 'expedition' AND owner_id = ?", [purge.playerId]));
+      stmts.push(
+        bind(
+          db,
+          `DELETE FROM save_messages
+           WHERE kind = 'report' AND (owner_id = ? OR defender_id = ?)
+             AND (
+               json_extract(doc, '$.attackerPlayerId') IN ('npc_pirates', 'npc_aliens')
+               OR json_extract(doc, '$.defenderPlayerId') IN ('npc_pirates', 'npc_aliens')
+               OR json_extract(doc, '$.attackerPlayerId') IS NULL
+               OR json_extract(doc, '$.defenderPlayerId') IS NULL
+               OR json_extract(doc, '$.attackerPlayerId') = json_extract(doc, '$.defenderPlayerId')
+             )`,
+          [purge.playerId, purge.playerId],
+        ),
+      );
+      for (const group of chunkRows(loaded.purgeReportIds, MAX_IN_BINDS)) {
+        const list = inList(group);
+        stmts.push(bind(db, `DELETE FROM save_messages WHERE id IN (${list.clause})`, list.values));
+      }
+    }
+  }
 
   const systemInserts: unknown[][] = [];
   const systemUpdates: unknown[][] = [];
@@ -2394,26 +3174,66 @@ async function resolvePlayerIds(db: D1Like, work: UniverseWork | undefined): Pro
   return [...ids].sort();
 }
 
+function dueFleetLimit(): number | null {
+  const fleets = currentScope()?.budget?.fleets;
+  if (fleets == null || !Number.isFinite(fleets)) return null;
+  return Math.max(0, Math.floor(fleets));
+}
+
 async function expandDueFleets(
   db: D1Like,
   playerIds: string[],
-): Promise<{ planetIds: string[]; owners: string[]; systems: Array<[number, number]> }> {
-  const fleets = await allInList<{ id: string; doc: string }>(
-    db,
-    playerIds,
-    (list) => `SELECT id, doc FROM save_fleets WHERE owner_id IN (${list.clause}) OR target_owner_id IN (${list.clause})`,
-    2,
+): Promise<{ planetIds: string[]; owners: string[]; systems: Array<[number, number]>; fleetIds: string[] }> {
+  const limit = dueFleetLimit();
+  const now = Date.now();
+  // Two IN lists per statement. Chunk so a 110-player read stays under 90 binds.
+  const chunkSize = Math.floor(MAX_IN_BINDS / 2);
+  const found = new Map<string, {
+    id: string;
+    origin_planet_id: string | null;
+    target_planet_id: string | null;
+    galaxy: number | null;
+    system: number | null;
+    arrives_at: number | null;
+  }>();
+  for (const group of chunkRows(playerIds, chunkSize)) {
+    const list = inList(group);
+    const sql = `SELECT id,
+        json_extract(doc, '$.originPlanetId') AS origin_planet_id,
+        json_extract(doc, '$.targetPlanetId') AS target_planet_id,
+        json_extract(doc, '$.targetCoords.galaxy') AS galaxy,
+        json_extract(doc, '$.targetCoords.system') AS system,
+        json_extract(doc, '$.arrivesAt') AS arrives_at
+      FROM save_fleets
+      WHERE (owner_id IN (${list.clause}) OR target_owner_id IN (${list.clause}))
+        AND json_extract(doc, '$.arrivesAt') <= ?
+      ORDER BY json_extract(doc, '$.arrivesAt') ASC
+      ${limit == null ? "" : "LIMIT ?"}`;
+    const values: unknown[] = [...list.values, ...list.values, now];
+    if (limit != null) values.push(limit);
+    const rows = await all<{
+      id: string;
+      origin_planet_id: string | null;
+      target_planet_id: string | null;
+      galaxy: number | null;
+      system: number | null;
+      arrives_at: number | null;
+    }>(db, sql, ...values);
+    for (const row of rows) found.set(row.id, row);
+  }
+  const fleets = [...found.values()].sort(
+    (a, b) => (a.arrives_at ?? 0) - (b.arrives_at ?? 0) || a.id.localeCompare(b.id),
   );
+  const chosen = limit == null ? fleets : fleets.slice(0, limit);
   const planetIds = new Set<string>();
   const systems = new Map<string, [number, number]>();
-  for (const row of new Map(fleets.map((row) => [row.id, row])).values()) {
-    const fleet = timedParse(row.doc) as FleetMission;
-    if (fleet.arrivesAt > Date.now()) continue;
-    if (fleet.originPlanetId) planetIds.add(fleet.originPlanetId);
-    if (fleet.targetPlanetId) planetIds.add(fleet.targetPlanetId);
-    const coords = fleet.targetCoords;
-    if (coords?.galaxy && coords.system) {
-      systems.set(`${coords.galaxy}:${coords.system}`, [coords.galaxy, coords.system]);
+  const fleetIds: string[] = [];
+  for (const fleet of chosen) {
+    fleetIds.push(fleet.id);
+    if (fleet.origin_planet_id) planetIds.add(fleet.origin_planet_id);
+    if (fleet.target_planet_id) planetIds.add(fleet.target_planet_id);
+    if (fleet.galaxy && fleet.system) {
+      systems.set(`${fleet.galaxy}:${fleet.system}`, [fleet.galaxy, fleet.system]);
     }
   }
   const owners = new Set<string>();
@@ -2429,7 +3249,7 @@ async function expandDueFleets(
       systems.set(`${planet.galaxy}:${planet.system}`, [planet.galaxy, planet.system]);
     }
   }
-  return { planetIds: [...planetIds], owners: [...owners], systems: [...systems.values()] };
+  return { planetIds: [...planetIds], owners: [...owners], systems: [...systems.values()], fleetIds };
 }
 
 /** Resources may drift this far from plain growth (float noise) and still count as untouched. */
@@ -2475,9 +3295,10 @@ function planetChanged(loaded: LoadedRows, planet: PlanetState, next: string): b
 
 function changed(loaded: LoadedRows): boolean {
   const universe = loaded.universe;
-  if (stable(worldDoc({ ...universe, skipNpcRaids: undefined })) !== loaded.fingerprints.get("world")) {
-    return true;
-  }
+  if (loaded.forceSave) return true;
+  const nextParts = worldParts(universe);
+  loaded.freshParts = nextParts;
+  if (!sameParts(nextParts, loaded.worldParts)) return true;
   for (const player of Object.values(universe.players)) {
     if (stable(playerDoc(player)) !== loaded.fingerprints.get(`player:${player.id}`)) return true;
   }
@@ -2492,6 +3313,8 @@ function changed(loaded: LoadedRows): boolean {
     if (stable(fleet) !== loaded.fingerprints.get(`fleet:${fleet.id}`)) return true;
   }
   for (const row of messageDrafts(universe)) {
+    const untouched = row.kind === "report" && loaded.messageRefs.get(row.id) === row.doc;
+    if (untouched) continue;
     if (timedStringify(row.doc) !== loaded.fingerprints.get(`message:${row.id}`)) return true;
   }
   if (messageDrafts(universe).length !== loaded.messageVersions.size) return true;
@@ -2533,6 +3356,101 @@ async function runGame<T>(
   }
 }
 
+function hiddenIdSet(raw: string | null): Set<string> {
+  const ids = new Set<string>();
+  if (!raw) return ids;
+  try {
+    const parsed = timedParse(raw) as unknown;
+    if (Array.isArray(parsed)) {
+      for (const id of parsed) if (typeof id === "string") ids.add(id);
+    }
+  } catch {
+    /* a bad hidden list still counts as present so the row is not dropped */
+  }
+  return ids;
+}
+
+/**
+ * Extend a windowed delete to every matching row. NPC, spy, expedition, and
+ * event rows are removed. A player-vs-player report is hidden, and the row
+ * is removed only when the other commander already hid it or is not in
+ * save_players. Loaded ids that leave memory stay in messageVersions so the
+ * versioned delete still matches; the bulk delete then covers the rest.
+ */
+async function prepareMessagePurge(db: D1Like, loaded: LoadedRows): Promise<void> {
+  const purge = loaded.messagePurge;
+  if (!purge) return;
+  const player = loaded.universe.players[purge.playerId];
+  if (!player) return;
+  loaded.forceSave = true;
+  const want = (bucket: "alerts" | "spy" | "combat"): boolean =>
+    purge.category === "all" || purge.category === bucket;
+  if (!want("combat")) return;
+
+  const rows = await all<{ id: string; attacker: string | null; defender: string | null }>(
+    db,
+    `SELECT id,
+       json_extract(doc, '$.attackerPlayerId') AS attacker,
+       json_extract(doc, '$.defenderPlayerId') AS defender
+     FROM save_messages
+     WHERE kind = 'report' AND (owner_id = ? OR defender_id = ?)`,
+    purge.playerId,
+    purge.playerId,
+  );
+  const others = new Set<string>();
+  const pvp: Array<{ id: string; other: string }> = [];
+  for (const row of rows) {
+    const attacker = row.attacker ?? "";
+    const defender = row.defender ?? "";
+    const other = attacker === purge.playerId ? defender : attacker;
+    const npc =
+      !other ||
+      other === purge.playerId ||
+      other === "npc_pirates" ||
+      other === "npc_aliens";
+    if (npc) continue;
+    others.add(other);
+    pvp.push({ id: row.id, other });
+  }
+  const alive = new Map<string, Set<string>>();
+  if (others.size) {
+    const found = await allInList<{ id: string; hidden: string | null }>(
+      db,
+      [...others],
+      (list) =>
+        `SELECT id, json_extract(doc, '$.hiddenReportIds') AS hidden FROM save_players WHERE id IN (${list.clause})`,
+    );
+    for (const row of found) {
+      const hidden = hiddenIdSet(row.hidden);
+      const memory = loaded.universe.players[row.id];
+      if (memory?.hiddenReportIds) {
+        for (const id of memory.hiddenReportIds) hidden.add(id);
+      }
+      alive.set(row.id, hidden);
+    }
+  }
+  if (!Array.isArray(player.hiddenReportIds)) player.hiddenReportIds = [];
+  const already = new Set(player.hiddenReportIds);
+  const drop: string[] = [];
+  for (const row of pvp) {
+    const otherHidden = alive.get(row.other);
+    if (!otherHidden || otherHidden.has(row.id)) {
+      drop.push(row.id);
+      delete loaded.universe.reports[row.id];
+      continue;
+    }
+    if (!already.has(row.id)) {
+      player.hiddenReportIds.push(row.id);
+      already.add(row.id);
+    }
+    // deletePlayerMessages drops a shared report when the other commander
+    // was not in this working set. Put that row back out of the delete set
+    // so the saved copy stays until they hide it too.
+    if (!loaded.universe.reports[row.id]) loaded.messageVersions.delete(row.id);
+  }
+  loaded.purgeReportIds = drop;
+}
+
 /**
  * Writes lock the named players (or the world, when the action is global)
  * and reject a stale row version. Reads never wait on a lock.
@@ -2552,13 +3470,15 @@ export async function withRowUniverse<T>(
   const requested = [...new Set((work?.playerIds ?? []).filter(Boolean))] as string[];
   const due =
     broad || requested.length === 0
-      ? { planetIds: [] as string[], owners: [] as string[], systems: [] as Array<[number, number]> }
+      ? { planetIds: [] as string[], owners: [] as string[], systems: [] as Array<[number, number]>, fleetIds: [] as string[] }
       : await expandDueFleets(db, requested);
+
   const merged: UniverseWork = {
     ...work,
     playerIds: [...new Set([...requested, ...due.owners])],
     planetIds: [...new Set([...(work?.planetIds ?? []), ...due.planetIds])],
     extraSystems: [...(work?.extraSystems ?? []), ...due.systems],
+    dueFleetIds: due.fleetIds,
   };
   const playerIds = [
     ...new Set([...(await resolvePlayerIds(db, work)), ...due.owners]),
@@ -2571,8 +3491,13 @@ export async function withRowUniverse<T>(
 
   const play = async () => {
     const loaded = await loadWorkingSet(db, loadWork);
+    if (work?.npc && loaded.legacyWorldFormat) loaded.forceSave = true;
     await attachBoard(db, work);
     const result = await runGame(loaded.universe, fn);
+    if (work?.messagePurge) {
+      loaded.messagePurge = work.messagePurge;
+      await prepareMessagePurge(db, loaded);
+    }
     restoreUnresolvedFleets(loaded);
     loaded.pendingSystems = await planSystemWrites(db, loaded);
     const scoresDue = Boolean(work?.maintenance);
@@ -2580,18 +3505,20 @@ export async function withRowUniverse<T>(
   };
 
   const runOnce = async () => {
-    const { loaded, result } = await play();
-    if (!changed(loaded)) return result;
-    if (!kv || !(await acquireLocks(kv, locks, false))) return result;
-    try {
-      await saveWorkingSet(db, loaded, false);
-      return result;
-    } catch (err) {
-      if (!(err instanceof RowStaleError)) throw err;
-      return result;
-    } finally {
-      await releaseLocks(kv, locks);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { loaded, result } = await play();
+      if (!changed(loaded)) return result;
+      if (!kv || !(await acquireLocks(kv, locks, false))) return result;
+      try {
+        await saveWorkingSet(db, loaded, false);
+        return result;
+      } catch (err) {
+        if (!(err instanceof RowStaleError) || attempt === 2) return result;
+      } finally {
+        await releaseLocks(kv, locks);
+      }
     }
+    throw new RowStaleError();
   };
 
   if (wait) {
@@ -2603,9 +3530,11 @@ export async function withRowUniverse<T>(
     try {
       for (let attempt = 0; attempt < 4; attempt++) {
         try {
-          const { loaded, result, scoresDue } = await play();
-          if (changed(loaded) || scoresDue) await saveWorkingSet(db, loaded, scoresDue);
-          return result;
+          const played = await play();
+          if (changed(played.loaded) || played.scoresDue) {
+            await saveWorkingSet(db, played.loaded, played.scoresDue);
+          }
+          return played.result;
         } catch (err) {
           if (err instanceof SaveKilledError) {
             killed = true;
