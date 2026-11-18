@@ -1,5 +1,5 @@
 import type { PlayerView } from "@starhold/game";
-import { deleteMessages, deleteCommanderMailRequest, markEventsRead, postCommanderMail } from "./api";
+import { applyDeletedMessages, deleteMessages, deleteCommanderMailRequest, markEventsRead, postCommanderMail } from "./api";
 import { reloadCommanderMail } from "./main-actions-session";
 import { setConfirmDelete } from "./ui/render-messages";
 import { clearFlash, schedulePaint, session, setFlash } from "./session";
@@ -47,7 +47,8 @@ export async function doDeleteMessages(
   setConfirmDelete(null);
   schedulePaint();
   try {
-    session.view = await deleteMessages(session.view.player.id, category);
+    await deleteMessages(session.view.player.id, category);
+    session.view = applyDeletedMessages(session.view, category);
     setFlash("notice", deleteNoticeLabel(category));
   } catch (err) {
     const beforeCount = countCategoryMessages(session.view, category);
