@@ -2740,6 +2740,13 @@ describe("row save review fixes", () => {
     assert.ok(initialWorldDoc?.doc.startsWith("SH2\n"), "packed worlds are the default format");
     assert.ok(npcRows > 0, `save_npc_bases rows ${npcRows}`);
     assert.ok(worldBytes < 100_000, `world doc should be slim after paging bases out, got ${worldBytes}`);
+    const worldVersion = async () =>
+      (
+        await db
+          .prepare("SELECT version FROM save_world WHERE id = 'world'")
+          .bind()
+          .first<{ version: number }>()
+      )?.version ?? 0;
 
     const store = createD1Store(db);
     const scope = {
@@ -2777,8 +2784,14 @@ describe("row save review fixes", () => {
       return scope.cpuMs;
     };
     const coldRead = await readOnce();
+    const worldVersionAfterCold = await worldVersion();
     const readSamples: number[] = [];
     for (let i = 0; i < 21; i++) readSamples.push(await readOnce());
+    assert.equal(
+      await worldVersion(),
+      worldVersionAfterCold,
+      "repeat page loads must not rewrite the world document",
+    );
     await writeOnce();
     const writeSamples: number[] = [];
     for (let i = 0; i < 21; i++) writeSamples.push(await writeOnce());

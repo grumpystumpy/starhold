@@ -674,10 +674,12 @@ interface WorldParts {
 function worldParts(universe: UniverseState): WorldParts {
   const started = performance.now();
   try {
+    // Bodies live in save_npc_bases; worldText writes empty payloads.
+    // Hashing the in-memory maps would make every page load look like a write.
     return {
       shell: shellJson(universe),
-      pirate: rosterKey(universe.pirateBases),
-      alien: rosterKey(universe.alienBases),
+      pirate: "{}",
+      alien: "{}",
     };
   } finally {
     addCpu(performance.now() - started);
