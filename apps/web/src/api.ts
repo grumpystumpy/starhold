@@ -578,7 +578,7 @@ export async function fetchState(
         resources: data.resources,
         lastTickAt: data.now,
       },
-      ownedPlanets: cached.view.ownedPlanets.map((body) => {
+      ownedPlanets: prior.ownedPlanets.map((body) => {
         const updated = data.ownedPlanetResources?.find(
           (entry) => entry.id === body.id,
         );
