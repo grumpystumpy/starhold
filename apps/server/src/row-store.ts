@@ -3,7 +3,6 @@
  * The legacy kv universe document is never deleted or overwritten here.
  * It stays as the rollback snapshot from before the switch.
  */
-import { AsyncLocalStorage } from "node:async_hooks";
 import {
   advancePlanetNow,
   combatHallOfFame,
@@ -143,6 +142,7 @@ interface SystemWrite {
 interface LoadedRows {
   universe: UniverseState;
   worldVersion: number;
+  legacyWorldFormat: boolean;
   playerVersions: Map<string, number>;
   planetVersions: Map<string, number>;
   fleetVersions: Map<string, number>;
@@ -274,6 +274,39 @@ const BASE_ID = /"(pir:\d+:\d+:\d+|aln:\d+:\d+:\d+)":\{/g;
 const WORLD_PACK = "SH2\n";
 let rosterSerial = 0;
 
+function scanTopLevelBases(str: string): Record<string, number> {
+  const at: Record<string, number> = {};
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  let keyStart = -1;
+  for (let i = 0; i < str.length; i++) {
+    const c = str.charCodeAt(i);
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === 92) esc = true;
+      else if (c === 34) inStr = false;
+      continue;
+    }
+    if (c === 34) {
+      inStr = true;
+      if (depth === 1) keyStart = i + 1;
+    } else if (c === 123) {
+      if (depth === 1 && keyStart >= 0) {
+        at[str.slice(keyStart, i - 2)] = i;
+      }
+      depth++;
+      keyStart = -1;
+    } else if (c === 125) {
+      depth--;
+      keyStart = -1;
+    } else if (depth === 1 && c === 44) {
+      keyStart = -1;
+    }
+  }
+  return at;
+}
+
 interface LazyRoster {
   doc: string;
   start: number;
@@ -344,20 +377,21 @@ function readObject(doc: string, open: number, end: number): string | null {
 }
 
 function offsetOf(state: LazyRoster, id: string): number | null {
-  if (!state.index || state.index === "{}") return null;
+  if (!state.index || state.index === "{}") {
+    const raw = state.raw ?? state.doc.slice(state.start, state.end);
+    state.index = rosterIndexText(raw);
+  }
   const token = `"${id}":`;
   const at = state.index.indexOf(token);
   if (at < 0) return null;
   let n = 0;
   let i = at + token.length;
-  const stop = state.index.length;
-  for (; i < stop; i++) {
+  for (; i < state.index.length; i++) {
     const c = state.index.charCodeAt(i);
     if (c < 48 || c > 57) break;
-    n = n * 10 + (c - 48);
+    n = n * 10 + c - 48;
   }
-  if (i === at + token.length) return null;
-  return n;
+  return i === at + token.length ? null : n;
 }
 
 function objectSlice(state: LazyRoster, id: string): string | null {
@@ -371,11 +405,24 @@ function objectSlice(state: LazyRoster, id: string): string | null {
 
 function rosterIds(state: LazyRoster): string[] {
   if (state.ids) return state.ids;
-  const ids: string[] = [];
-  const raw = state.raw ?? state.doc.slice(state.start, state.end);
-  if (state.raw == null) state.raw = raw;
-  BASE_ID.lastIndex = 0;
-  for (const match of raw.matchAll(BASE_ID)) ids.push(match[1]!);
+  let ids: string[];
+  if (state.index && state.index !== "{}") {
+    try {
+      ids = Object.keys(parseJson(state.index));
+    } catch {
+      const raw = state.raw ?? state.doc.slice(state.start, state.end);
+      if (state.raw == null) state.raw = raw;
+      ids = [];
+      BASE_ID.lastIndex = 0;
+      for (const match of raw.matchAll(BASE_ID)) ids.push(match[1]!);
+    }
+  } else {
+    const raw = state.raw ?? state.doc.slice(state.start, state.end);
+    if (state.raw == null) state.raw = raw;
+    ids = [];
+    BASE_ID.lastIndex = 0;
+    for (const match of raw.matchAll(BASE_ID)) ids.push(match[1]!);
+  }
   state.ids = ids;
   state.idSet = new Set(ids);
   for (const id of state.deleted) state.idSet.delete(id);
@@ -390,6 +437,7 @@ function lazyRoster(
   kind: "pirate" | "alien",
   indexStart: number,
   indexEnd: number,
+  indexText?: string,
 ): object {
   const state: LazyRoster = {
     doc,
@@ -402,7 +450,7 @@ function lazyRoster(
     added: new Set(),
     ids: null,
     idSet: null,
-    index: indexEnd > indexStart ? doc.slice(indexStart, indexEnd) : "",
+    index: indexText ?? (indexEnd > indexStart ? doc.slice(indexStart, indexEnd) : ""),
   };
   const knownId = (prop: string) =>
     state.index && state.index !== "{}"
@@ -610,13 +658,16 @@ function sameParts(a: WorldParts, b: WorldParts): boolean {
   return a.shell === b.shell && a.pirate === b.pirate && a.alien === b.alien;
 }
 
-function rosterIndexText(raw: string): string {
+function rosterIndexText(raw: string, expectedCount?: number): string {
   if (raw.length < LAZY_ROSTER_MIN) return "{}";
   const at: Record<string, number> = {};
   BASE_ID.lastIndex = 0;
   for (const match of raw.matchAll(BASE_ID)) {
     const index = match.index ?? 0;
     at[match[1]!] = index + match[0].length - 1;
+  }
+  if (expectedCount != null && Object.keys(at).length !== expectedCount) {
+    return stringifyJson(scanTopLevelBases(raw));
   }
   return stringifyJson(at);
 }
@@ -741,6 +792,12 @@ export async function readCombatReportByShareCode(
   return row ? (timedParse(row.doc) as CombatReport) : null;
 }
 
+export function shouldWritePackedWorld(): boolean {
+  // Set this flag for a rollback window when the prior release must read the
+  // world row. It is off by default so the packed CPU path stays enabled.
+  return process.env.STARHOLD_OLD_WORLD_DOC !== "1";
+}
+
 function worldText(universe: UniverseState): string {
   // Keep aiCatchUpCursor durable so the NPC cron resumes after each row save.
   // Big rosters stay raw JSON beside a small shell so a cold read does not
@@ -769,9 +826,23 @@ function worldText(universe: UniverseState): string {
     delete shell.skipNpcRaids;
     delete shell.skipPirateTopUp;
     const shellText = stringifyJson(shell);
-    const pirateAt = rosterIndexText(pirate);
+    if (shouldWritePackedWorld()) {
+      const pirateAt = rosterIndexText(
+        pirate,
+        (universe.npcRoster?.living ?? 0) + (universe.npcRoster?.destroyed ?? 0),
+      );
+      const alienAt = rosterIndexText(alien);
+      return `${WORLD_PACK}${shellText.length}\n${shellText}${pirateAt.length}\n${pirateAt}${pirate.length}\n${pirate}${alienAt.length}\n${alienAt}${alien.length}\n${alien}`;
+    }
+    if (shellText === "{}") {
+      return `{"pirateBases":${pirate},"alienBases":${alien}}`;
+    }
+    const pirateAt = rosterIndexText(
+      pirate,
+      (universe.npcRoster?.living ?? 0) + (universe.npcRoster?.destroyed ?? 0),
+    );
     const alienAt = rosterIndexText(alien);
-    return `${WORLD_PACK}${shellText.length}\n${shellText}${pirateAt.length}\n${pirateAt}${pirate.length}\n${pirate}${alienAt.length}\n${alienAt}${alien.length}\n${alien}`;
+    return `${shellText.slice(0, -1)},"_npcRosterIndex":{"pirate":${stringifyJson(pirateAt)},"alien":${stringifyJson(alienAt)}},"pirateBases":${pirate},"alienBases":${alien}}`;
   } finally {
     addCpu(performance.now() - started);
   }
@@ -1733,7 +1804,14 @@ function systemPairs(planets: Iterable<PlanetState>): Array<[number, number]> {
 
 function pirateSitesNeeded(universe: UniverseState): boolean {
   const roster = universe.npcRoster;
-  if (roster && isLazyPirateRoster(universe.pirateBases)) return roster.destroyed > 0;
+  if (isLazyPirateRoster(universe.pirateBases)) {
+    if (roster) return roster.destroyed > 0;
+    const state = lazyRosters.get(universe.pirateBases!);
+    const raw = state?.raw ?? (state ? state.doc.slice(state.start, state.end) : "");
+    // Old JSON worlds have no npcRoster summary. Detect a non-null wreck
+    // without hydrating every pirate object on the first state read.
+    return /"destroyedAt"\s*:\s*(?!null\b)(?:-?\d)/.test(raw);
+  }
   return Object.values(universe.pirateBases ?? {}).some((base) => base.destroyedAt != null);
 }
 
@@ -1742,7 +1820,83 @@ function armLoadedRoster(universe: UniverseState): void {
   const bases = universe.pirateBases;
   if (!roster || !bases || !isLazyPirateRoster(bases)) return;
   if (!roster.boss) armNoSeasonalBoss(bases);
-  if (rosterWithinCap(roster)) armQuietPirateCull(bases);
+  if (rosterWithinCap(roster)) {
+    armQuietPirateCull(bases);
+    // A full healthy roster needs no page-load repair. Avoid enumerating
+    // every lazy base just to rediscover the summary already in the shell.
+    if (universe.skipNpcRaids && roster.living >= PIRATE_TARGET_BASE_COUNT) {
+      universe.skipPirateTopUp = true;
+    }
+  }
+}
+
+function findRosterPropertySpans(
+  doc: string,
+): { pirate: { start: number; end: number }; alien: { start: number; end: number } } | null {
+  const tokenAt = (name: string): number => doc.indexOf(`"${name}":`);
+  const openFor = (at: number, name: string): number => {
+    const open = at < 0 ? -1 : at + name.length + 3;
+    return doc[open] === "{" ? open : -1;
+  };
+  const pirateToken = tokenAt("pirateBases");
+  const alienToken = tokenAt("alienBases");
+  const pirateOpen = openFor(pirateToken, "pirateBases");
+  const alienOpen = openFor(alienToken, "alienBases");
+  if (pirateOpen < 0 || alienOpen < 0) return null;
+  // worldText's rollback format appends both rosters last. Their separator
+  // and the final root brace give exact bounds without walking every base.
+  if (
+    pirateToken < alienToken &&
+    doc[pirateToken - 1] === "," &&
+    doc[alienToken - 2] === "}" &&
+    doc[alienToken - 1] === "," &&
+    doc.endsWith("}}")
+  ) {
+    return {
+      pirate: { start: pirateOpen, end: alienToken - 1 },
+      alien: { start: alienOpen, end: doc.length - 1 },
+    };
+  }
+  const opens = [pirateOpen, alienOpen].sort((a, b) => a - b);
+  let activeOpen = opens[0]!;
+  let firstEnd = -1;
+  let secondEnd = -1;
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  for (let i = activeOpen; i < doc.length; i++) {
+    const c = doc[i]!;
+    if (i === opens[1]) {
+      activeOpen = opens[1]!;
+      depth = 0;
+    }
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === "\\") esc = true;
+      else if (c === "\"") inStr = false;
+      continue;
+    }
+    if (c === "\"") inStr = true;
+    else if (c === "{") depth += 1;
+    else if (c === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        if (firstEnd < 0) firstEnd = i + 1;
+        else {
+          secondEnd = i + 1;
+          break;
+        }
+      }
+    }
+  }
+  if (firstEnd < 0 || secondEnd < 0) return null;
+  const spans = [
+    { start: opens[0]!, end: firstEnd },
+    { start: opens[1]!, end: secondEnd },
+  ];
+  return pirateOpen < alienOpen
+    ? { pirate: spans[0]!, alien: spans[1]! }
+    : { pirate: spans[1]!, alien: spans[0]! };
 }
 
 function hydrateWorld(doc: string): UniverseState {
@@ -1760,6 +1914,39 @@ function hydrateWorld(doc: string): UniverseState {
       parsed.alienBases = adoptSpan(doc, alienSpan, "alien", alienAtSpan) as UniverseState["alienBases"];
       return emptyUniverse(parsed);
     }
+    const rosterSpans = doc.length >= LAZY_ROSTER_MIN ? findRosterPropertySpans(doc) : null;
+    if (rosterSpans) {
+      const pSpan = rosterSpans.pirate;
+      const aSpan = rosterSpans.alien;
+      const first = pSpan.start < aSpan.start ? pSpan : aSpan;
+      const second = pSpan.start < aSpan.start ? aSpan : pSpan;
+      const shellDoc =
+        doc.slice(0, first.start) +
+        "{}" +
+        doc.slice(first.end, second.start) +
+        "{}" +
+        doc.slice(second.end);
+      const parsed = parseJson(shellDoc) as UniverseState;
+      const index = (parsed as UniverseState & {
+        _npcRosterIndex?: { pirate?: string; alien?: string };
+      })._npcRosterIndex;
+      delete (parsed as UniverseState & { _npcRosterIndex?: unknown })._npcRosterIndex;
+      parsed.pirateBases = adoptSpan(
+        doc,
+        pSpan,
+        "pirate",
+        null,
+        index?.pirate,
+      ) as UniverseState["pirateBases"];
+      parsed.alienBases = adoptSpan(
+        doc,
+        aSpan,
+        "alien",
+        null,
+        index?.alien,
+      ) as UniverseState["alienBases"];
+      return emptyUniverse(parsed);
+    }
     const parsed = parseJson(doc) as UniverseState;
     parsed.pirateBases = adoptBases(parsed.pirateBases, "pirate") as UniverseState["pirateBases"];
     parsed.alienBases = adoptBases(parsed.alienBases, "alien") as UniverseState["alienBases"];
@@ -1774,6 +1961,7 @@ function adoptSpan(
   span: { start: number; end: number },
   kind: "pirate" | "alien",
   indexSpan: { start: number; end: number } | null = null,
+  indexText?: string,
 ): object {
   const len = span.end - span.start;
   if (!Number.isFinite(len) || len < 0) return {};
@@ -1785,6 +1973,7 @@ function adoptSpan(
     kind,
     indexSpan?.start ?? 0,
     indexSpan?.end ?? 0,
+    indexText,
   );
 }
 
@@ -2142,6 +2331,7 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
   const loaded: LoadedRows = {
     universe,
     worldVersion: world.version,
+    legacyWorldFormat: !world.doc.startsWith(WORLD_PACK),
     playerVersions: new Map(),
     planetVersions: new Map(),
     fleetVersions: new Map(),
@@ -3163,36 +3353,6 @@ async function prepareMessagePurge(db: D1Like, loaded: LoadedRows): Promise<void
 }
 
 /**
- * One row request at a time per database, inside this isolate.
- * The queue holds no universe. Each turn loads its own rows.
- * Nested calls on the same database run immediately.
- */
-const rowLanes = new WeakMap<object, Promise<void>>();
-const rowLaneHold = new AsyncLocalStorage<Set<object>>();
-
-function withRowLane<T>(db: object, fn: () => Promise<T>): Promise<T> {
-  const held = rowLaneHold.getStore();
-  if (held?.has(db)) return fn();
-  const previous = rowLanes.get(db) ?? Promise.resolve();
-  let release: () => void = () => {};
-  const finished = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  rowLanes.set(
-    db,
-    previous.then(
-      () => finished,
-      () => finished,
-    ),
-  );
-  return previous.then(() => {
-    const next = new Set(held);
-    next.add(db);
-    return rowLaneHold.run(next, fn).finally(release);
-  });
-}
-
-/**
  * Writes lock the named players (or the world, when the action is global)
  * and reject a stale row version. Reads never wait on a lock.
  */
@@ -3203,9 +3363,6 @@ export async function withRowUniverse<T>(
   work: UniverseWork | undefined,
   wait: boolean,
 ): Promise<T> {
-  if (!rowLaneHold.getStore()?.has(db)) {
-    return withRowLane(db, () => withRowUniverse(db, kv, fn, work, wait));
-  }
   await ensureRowTables(db);
   if (!(await migrationDone(db))) {
     throw new Error("Row save is not migrated.");
@@ -3216,6 +3373,7 @@ export async function withRowUniverse<T>(
     broad || requested.length === 0
       ? { planetIds: [] as string[], owners: [] as string[], systems: [] as Array<[number, number]>, fleetIds: [] as string[] }
       : await expandDueFleets(db, requested);
+
   const merged: UniverseWork = {
     ...work,
     playerIds: [...new Set([...requested, ...due.owners])],
@@ -3234,6 +3392,7 @@ export async function withRowUniverse<T>(
 
   const play = async () => {
     const loaded = await loadWorkingSet(db, loadWork);
+    if (work?.npc && loaded.legacyWorldFormat) loaded.forceSave = true;
     await attachBoard(db, work);
     const result = await runGame(loaded.universe, fn);
     if (work?.messagePurge) {
@@ -3247,21 +3406,20 @@ export async function withRowUniverse<T>(
   };
 
   const runOnce = async () => {
-    const { loaded, result } = await play();
-    const dirty = changed(loaded);
-    if (!dirty) return result;
-    if (!kv || !(await acquireLocks(kv, locks, false))) {
-      return result;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { loaded, result } = await play();
+      if (!changed(loaded)) return result;
+      if (!kv || !(await acquireLocks(kv, locks, false))) return result;
+      try {
+        await saveWorkingSet(db, loaded, false);
+        return result;
+      } catch (err) {
+        if (!(err instanceof RowStaleError) || attempt === 2) return result;
+      } finally {
+        await releaseLocks(kv, locks);
+      }
     }
-    try {
-      await saveWorkingSet(db, loaded, false);
-      return result;
-    } catch (err) {
-      if (!(err instanceof RowStaleError)) throw err;
-      return result;
-    } finally {
-      await releaseLocks(kv, locks);
-    }
+    throw new RowStaleError();
   };
 
   if (wait) {

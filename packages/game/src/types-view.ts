@@ -61,6 +61,8 @@ export interface CombatReport {
   id: string;
   at: number;
   missionId: string;
+  /** Source fleet for NPC raid reports; absent on legacy reports. */
+  fleetId?: string;
   attackerPlayerId: string;
   defenderPlayerId: string;
   attackerName: string;

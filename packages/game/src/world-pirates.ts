@@ -2364,6 +2364,9 @@ export function resolveNpcPiratePlayerFleet(
     live.ships,
     false,
   );
+  if (fought?.reportId && universe.reports?.[fought.reportId]) {
+    universe.reports[fought.reportId]!.fleetId = live.id;
+  }
   if (!fought || fought.outcome !== "attacker_win" || fleetShipCount(fought.attackerAfter) < 1) {
     delete universe.fleets[live.id];
     if (

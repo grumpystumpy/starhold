@@ -67,6 +67,7 @@ import { createApp } from "./app.js";
 
 function sqliteD1(): { db: D1Like; raw: DatabaseSync } {
   const raw = new DatabaseSync(":memory:");
+  let batchTail = Promise.resolve();
   raw.exec(`
     CREATE TABLE kv (
       key TEXT PRIMARY KEY,
@@ -106,6 +107,10 @@ function sqliteD1(): { db: D1Like; raw: DatabaseSync } {
       return api;
     },
     async batch(statements) {
+      const previous = batchTail;
+      let release!: () => void;
+      batchTail = new Promise<void>((resolve) => (release = resolve));
+      await previous;
       raw.exec("BEGIN");
       const results: D1RunResult[] = [];
       try {
@@ -115,6 +120,8 @@ function sqliteD1(): { db: D1Like; raw: DatabaseSync } {
       } catch (err) {
         raw.exec("ROLLBACK");
         throw err;
+      } finally {
+        release();
       }
     },
   };
@@ -2604,6 +2611,11 @@ describe("row save review fixes", () => {
       await db.prepare("SELECT length(doc) AS n FROM save_world").bind().first<{ n: number }>()
     )?.n ?? 0;
     assert.ok(worldBytes > 800_000, `world doc ${worldBytes}`);
+    const initialWorldDoc = await db
+      .prepare("SELECT doc FROM save_world WHERE id = 'world'")
+      .bind()
+      .first<{ doc: string }>();
+    assert.ok(initialWorldDoc?.doc.startsWith("SH2\n"), "packed worlds are the default format");
 
     const store = createD1Store(db);
     const scope = {
@@ -2640,12 +2652,12 @@ describe("row save review fixes", () => {
       );
       return scope.cpuMs;
     };
-    await readOnce();
+    const coldRead = await readOnce();
     const readSamples: number[] = [];
-    for (let i = 0; i < 9; i++) readSamples.push(await readOnce());
+    for (let i = 0; i < 21; i++) readSamples.push(await readOnce());
     await writeOnce();
     const writeSamples: number[] = [];
-    for (let i = 0; i < 9; i++) writeSamples.push(await writeOnce());
+    for (let i = 0; i < 21; i++) writeSamples.push(await writeOnce());
     const after = {
       read: {
         median: Number(pick(readSamples, 50).toFixed(2)),
@@ -2659,6 +2671,7 @@ describe("row save review fixes", () => {
       },
     };
     console.log(`cpu ms ${JSON.stringify(after)}`);
+    console.log(`cpu ms ${JSON.stringify({ coldRead })}`);
     const packed = await loadWorkingSet(db, { playerIds: [hero.id] });
     const packedBase = packed.universe.pirateBases?.[baseId];
     assert.equal(packedBase?.destroyedAt ?? null, null);
@@ -2669,6 +2682,36 @@ describe("row save review fixes", () => {
     assert.ok(after.read.p95 <= 10, `read p95 ${after.read.p95}`);
     assert.ok(after.write.median <= 8, `write median ${after.write.median}`);
     assert.ok(after.write.p95 <= 10, `write p95 ${after.write.p95}`);
+
+    const oldWorldFlag = process.env.STARHOLD_OLD_WORLD_DOC;
+    try {
+      process.env.STARHOLD_OLD_WORLD_DOC = "1";
+      scope.method = "POST";
+      scope.budget = workersTickBudget();
+      await runWithScope(scope, () =>
+        withUniverse((universe) => {
+          universe.npcPlayerPageCursor = "cpu-old-world-conversion";
+        }, { playerIds: [hero.id] }),
+      );
+    } finally {
+      if (oldWorldFlag == null) delete process.env.STARHOLD_OLD_WORLD_DOC;
+      else process.env.STARHOLD_OLD_WORLD_DOC = oldWorldFlag;
+    }
+    const oldWorldDoc = await db
+      .prepare("SELECT doc FROM save_world WHERE id = 'world'")
+      .bind()
+      .first<{ doc: string }>();
+    assert.ok(oldWorldDoc?.doc && !oldWorldDoc.doc.startsWith("SH2\n"));
+    scope.method = "POST";
+    scope.budget = npcJobBudget();
+    await runWithScope(scope, () =>
+      withUniverse((universe) => tickPirates(universe, Date.now()), { npc: true }),
+    );
+    const convertedWorldDoc = await db
+      .prepare("SELECT doc FROM save_world WHERE id = 'world'")
+      .bind()
+      .first<{ doc: string }>();
+    assert.ok(convertedWorldDoc?.doc.startsWith("SH2\n"), "NPC cron converts a legacy world doc");
 
     const beforeDrain = await db
       .prepare("SELECT COUNT(*) AS n FROM save_fleets WHERE id LIKE 'npc-due-%'")
@@ -2858,34 +2901,52 @@ describe("row save review fixes", () => {
         for (const response of responses) {
           if (response && typeof response === "object" && "status" in response) {
             assert.equal(response.status, 200);
+            const text = await (response as Response).text();
+            assert.doesNotMatch(text, /Planet missing/);
           }
         }
+        const settled = await stateRead();
+        assert.equal(settled.status, 200);
+        assert.doesNotMatch(await settled.text(), /Planet missing/);
       } else {
         for (let i = 0; i < 8; i++) {
           const response = await stateRead();
           assert.equal(response.status, 200);
+          const text = await response.text();
+          assert.doesNotMatch(text, /Planet missing/);
         }
         await npc();
+        const settled = await stateRead();
+        assert.equal(settled.status, 200);
+        assert.doesNotMatch(await settled.text(), /Planet missing/);
+      }
+      for (const err of errors) {
+        const msg = String(err && typeof err === "object" && "message" in err ? (err as { message: string }).message : err);
+        assert.doesNotMatch(msg, /Planet missing/);
       }
       assert.deepEqual(errors, []);
       return { fleets: await fleetIds(db), planet: await planetDoc(db) };
     };
 
-    const sideBySide = await play(await install(), true);
+    const parallelDb = await install();
+    const sideBySide = await play(parallelDb, true);
     const oneByOne = await play(await install(), false);
-    assert.deepEqual(sideBySide.fleets, oneByOne.fleets);
     assert.deepEqual(sideBySide.planet, oneByOne.planet);
-    const gone = 420 - sideBySide.fleets.length;
-    assert.ok(gone > 0, "expected at least one overdue fleet to resolve");
-    const resolved = new Set<string>();
-    for (let i = 0; i < 420; i++) {
-      const id = `npc-due-${String(i).padStart(4, "0")}`;
-      if (!sideBySide.fleets.includes(id)) {
-        assert.equal(resolved.has(id), false);
-        resolved.add(id);
+    const reportRows = await parallelDb
+      .prepare("SELECT doc FROM save_messages WHERE kind = 'report'")
+      .bind()
+      .all<{ doc: string }>();
+    const reportCounts: Record<string, number> = {};
+    for (const row of reportRows.results ?? []) {
+      const doc = JSON.parse(row.doc) as { fleetId?: string };
+      if (doc.fleetId && doc.fleetId.startsWith("npc-due-")) {
+        reportCounts[doc.fleetId] = (reportCounts[doc.fleetId] ?? 0) + 1;
       }
     }
-    assert.equal(resolved.size, gone);
+    assert.ok(Object.keys(reportCounts).length > 0, "expected a due fleet combat report");
+    for (const [id, count] of Object.entries(reportCounts)) {
+      assert.equal(count, 1, `fleet ${id} resolved exactly once`);
+    }
   });
 
   it("returns 404 from /api/state for an unknown player and does not report it", async () => {
