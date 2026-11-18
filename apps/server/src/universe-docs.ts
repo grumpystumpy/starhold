@@ -1,9 +1,10 @@
 /**
  * D1 stores the universe as rows, not one blob.
- * A player action rewrites that player's document. Asteroids, pirates, and
- * aliens are their own rows. Resource stocks, `lastTickAt`, and `lastAiSimAt`
- * are left out of the revision, so a quiet poll can skip every write and the
- * next cold load recomputes accrual from the clocks.
+ * A player action rewrites that player's document. Asteroids live on
+ * `save_systems`. Pirate and alien bases live on `save_npc_bases`, not in the
+ * world document. Resource stocks, `lastTickAt`, and `lastAiSimAt` are left
+ * out of the revision, so a quiet poll can skip every write and the next cold
+ * load recomputes accrual from the clocks.
  */
 import type {
   CombatReport,
@@ -123,6 +124,11 @@ function playerIdOf(players: UniverseState["players"], id: string | null | undef
   return id;
 }
 
+/** World documents store empty base maps. The bodies live in `save_npc_bases`. */
+export function withoutNpcBases(universe: UniverseState): UniverseState {
+  return { ...universe, pirateBases: {}, alienBases: {} };
+}
+
 /** Split a live universe into the rows D1 writes. Does not mutate `universe`. */
 export function splitUniverse(universe: UniverseState): UniverseParts {
   const players: Record<string, PlayerSlice> = {};
@@ -167,7 +173,7 @@ export function splitUniverse(universe: UniverseState): UniverseParts {
     else worldExp[report.id] = report;
   }
 
-  const world: UniverseState = {
+  const world = withoutNpcBases({
     ...universe,
     players: {},
     planets: worldPlanets,
@@ -176,9 +182,7 @@ export function splitUniverse(universe: UniverseState): UniverseParts {
     spyReports: worldSpy,
     expeditionReports: worldExp,
     asteroids: {},
-    pirateBases: {},
-    alienBases: {},
-  };
+  });
 
   return {
     world,
