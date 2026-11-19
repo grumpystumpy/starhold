@@ -16,6 +16,7 @@ import {
   queueShipBuild,
 } from "./world.js";
 import { captureMiniPlanet, createMiniPlanet } from "./world-mini.js";
+import { graduateNewbieProtection } from "./test-graduate.js";
 import type { UniverseState } from "./types.js";
 
 describe("Occupation fleet mission (B7-12)", () => {
@@ -87,6 +88,7 @@ describe("Occupation fleet mission (B7-12)", () => {
     const universe = createUniverse("Occ Test 4", 8);
     const a = joinUniverse(universe, "Attacker", 100_000_000);
     const b = joinUniverse(universe, "Defender", 100_000_001);
+    graduateNewbieProtection(universe, b.player);
     const mini = createMiniPlanet(universe.seed ?? universe.id, 1, 1, 20, 100_000_000, "standard");
     mini.ownerPlayerId = b.player.id;
     b.player.planetIds.push(mini.id);
@@ -135,6 +137,7 @@ describe("Occupation fleet mission (B7-12)", () => {
     const universe = createUniverse("Occ Test 5", 8);
     const a = joinUniverse(universe, "Attacker", 100_000_000);
     const b = joinUniverse(universe, "Defender", 100_000_001);
+    graduateNewbieProtection(universe, b.player);
     const mini = createMiniPlanet(universe.seed ?? universe.id, 1, 1, 20, 100_000_000, "standard");
     mini.ownerPlayerId = b.player.id;
     b.player.planetIds.push(mini.id);
@@ -246,6 +249,7 @@ describe("Occupied mini planet is owned by the occupier (B7-54)", () => {
     const universe = createUniverse("Occ Build", 8);
     const a = joinUniverse(universe, "Occupier", 500_000_000);
     const b = joinUniverse(universe, "Previous", 500_000_001);
+    graduateNewbieProtection(universe, b.player);
     const mini = createMiniPlanet(universe.seed ?? universe.id, 1, 2, 20, 500_000_000, "standard");
     mini.ownerPlayerId = b.player.id;
     b.player.planetIds.push(mini.id);

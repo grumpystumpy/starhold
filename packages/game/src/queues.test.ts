@@ -258,6 +258,37 @@ describe("Round 2 multi-item queues", () => {
     assert.equal(ok.ok, true);
   });
 
+  it("swaps two pending buildings and keeps the front id first", () => {
+    const universe = createUniverse("Reorder Tail", 8);
+    const { player, planet } = joinUniverse(universe, "ReorderTail", 303_100_000);
+    universe.players[player.id]!.research.queueLogistics = 2;
+    universe.planets[planet.id]!.resources = {
+      metal: 500_000,
+      crystal: 500_000,
+      deuterium: 500_000,
+    };
+    const t0 = 303_100_100;
+    assert.equal(queueBuildingUpgrade(universe, player.id, "shipyard", t0).ok, true);
+    assert.equal(queueBuildingUpgrade(universe, player.id, "metalMine", t0 + 1).ok, true);
+    assert.equal(queueBuildingUpgrade(universe, player.id, "crystalMine", t0 + 2).ok, true);
+    const before = universe.planets[planet.id]!.buildQueue.map((item) => item.id);
+    assert.equal(before.length, 3);
+    const swapped = reorderQueue(
+      universe,
+      player.id,
+      {
+        kind: "building",
+        orderedIds: [before[0]!, before[2]!, before[1]!],
+        planetId: planet.id,
+      },
+      t0 + 3,
+    );
+    assert.equal(swapped.ok, true);
+    const after = universe.planets[planet.id]!.buildQueue.map((item) => item.id);
+    assert.deepEqual(after, [before[0], before[2], before[1]]);
+    assert.equal(after[0], before[0]);
+  });
+
   it("ship queue allows two batches then completes sequentially", () => {
     const universe = createUniverse("ShipQ Drift", 8);
     const { player, planet } = joinUniverse(universe, "Yard", 304_000_000);

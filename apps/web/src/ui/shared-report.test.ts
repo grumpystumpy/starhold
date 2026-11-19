@@ -43,6 +43,58 @@ describe("public battle report view", () => {
     assert.match(html, /<th scope="row">Strike Fighter<\/th><td>4<\/td><td>2<\/td><td>2<\/td>/);
     assert.match(html, /<th scope="row">Light Laser Turret<\/th><td>3<\/td><td>2<\/td>/);
     assert.doesNotMatch(html, /attackerPlayerId|defenderPlayerId|missionId|privatePlanet/);
+    assert.match(html, /Debris:<\/strong> 40 metal, 50 crystal · moon chance 0%/);
+    assert.match(html, /data-testid="battle-replay-legacy"/);
+    assert.doesNotMatch(html, /data-testid="battle-replay-play"/);
+  });
+
+  it("renders the replay on a public report with roundLog and stays summary-only without it", () => {
+    const base: PublicCombatReport = {
+      shareCode: "sh_public_replay",
+      at: 1_700_000_000_000,
+      attackerName: "Alpha",
+      defenderName: "Bravo",
+      targetCoords: { galaxy: 1, system: 4, slot: 8 },
+      attackerBefore: { scout: 3 },
+      attackerAfter: { scout: 1 },
+      defenderBefore: { interceptor: 4 },
+      defenderAfter: { interceptor: 2 },
+      defensesBefore: {},
+      defensesAfter: {},
+      loot: { metal: 0, crystal: 0, deuterium: 0 },
+      debrisCreated: { metal: 0, crystal: 0, deuterium: 0 },
+      outcome: "attacker_win",
+      rounds: 2,
+      roundLog: [
+        {
+          round: 1,
+          attackerLosses: { ships: { scout: 2 } },
+          defenderLosses: { ships: { interceptor: 1 } },
+          debrisThisRound: { metal: 1, crystal: 1, deuterium: 0 },
+          shieldsAbsorbed: { attacker: 8, defender: 22 },
+        },
+        {
+          round: 2,
+          attackerLosses: { ships: {} },
+          defenderLosses: { ships: { interceptor: 1 } },
+          debrisThisRound: { metal: 0, crystal: 0, deuterium: 0 },
+        },
+      ],
+    };
+    const html = sharedCombatReportPage(base);
+    assert.match(html, /data-testid="battle-replay-play"/);
+    assert.match(html, /data-testid="battle-replay-pause"/);
+    assert.match(html, /data-testid="battle-replay-restart"/);
+    assert.match(html, /Shields absorbed: attacker 8, defender 22/);
+    assert.match(html, /Shields absorbed: attacker 0, defender 0/);
+    assert.match(html, /<th scope="row">Recon Drone<\/th><td>3<\/td><td>1<\/td><td>2<\/td>/);
+    assert.doesNotMatch(html, /attackerPlayerId|missionId/);
+
+    const { roundLog: _log, ...legacy } = base;
+    const summary = sharedCombatReportPage(legacy);
+    assert.match(summary, /data-testid="battle-replay-legacy"/);
+    assert.doesNotMatch(summary, /data-testid="battle-replay-play"/);
+    assert.match(summary, /Recon Drone/);
   });
 
   it("escapes public lookup errors", () => {

@@ -1,5 +1,6 @@
 import {
   DEFENSES,
+  PLAYER_CLASS_BONUSES,
   RESEARCH,
   RESEARCH_ORDER,
   SHIPS,
@@ -99,6 +100,28 @@ function quantityNote(
   return `<p class="blocked-reason" role="status" id="${id}" data-testid="${id}" ${attrs}>${escapeHtml(reason)}</p>`;
 }
 
+function shipRequirementLines(
+  def: (typeof SHIPS)[ShipId],
+  research: Partial<PlayerView["player"]["research"]>,
+): string[] {
+  const lines = [`Shipyard L${fmt(def.shipyardLevel)}+`];
+  if (def.classExclusive) {
+    lines.push(`${PLAYER_CLASS_BONUSES[def.classExclusive].name} class`);
+  }
+  for (const requiredId of RESEARCH_ORDER) {
+    const requiredLevel = def.researchReq?.[requiredId];
+    if (requiredLevel == null) continue;
+    const have = research?.[requiredId] ?? 0;
+    lines.push(
+      `${RESEARCH[requiredId].name} L${fmt(requiredLevel)}+ (current L${fmt(have)})`,
+    );
+  }
+  lines.push(
+    `Cargo ${fmt(def.cargo)} · atk ${fmt(def.attack)} · Shield ${fmt(def.shield)} · Armor ${fmt(def.armor)} · Hull ${fmt(def.hull)}`,
+  );
+  return lines;
+}
+
 export function shipRow(
   id: ShipId,
   planet: PlayerView["planet"],
@@ -106,6 +129,7 @@ export function shipRow(
   costMult = 1,
   timeMult = 1,
   speed = 1,
+  research: Partial<PlayerView["player"]["research"]> = {},
 ): string {
   const def = SHIPS[id];
   const count = planet.ships?.[id] ?? 0;
@@ -145,10 +169,7 @@ export function shipRow(
     cost,
     timeSecs: unitSecs,
     detail: def.description,
-    requires: [
-      `Shipyard L${fmt(def.shipyardLevel)}+`,
-      `Cargo ${fmt(def.cargo)} · atk ${fmt(def.attack)} · Shield ${fmt(def.shield)} · Armor ${fmt(def.armor)} · Hull ${fmt(def.hull)}`,
-    ],
+    requires: shipRequirementLines(def, research),
     blocked,
   });
   // Locked hulls are disabled so mis-clicks cannot set busy and silence Upgrade.

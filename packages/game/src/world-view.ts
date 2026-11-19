@@ -3,6 +3,7 @@ import {
   DEEP_SPACE_SLOT,
   MAP_GALAXIES,
   MAP_SLOTS,
+  HIGHSCORE_CATEGORY_CAP,
   MAP_SYSTEMS,
   OFFICER_ORDER,
   OFFICERS,
@@ -10,8 +11,10 @@ import {
   SKILLS,
   STARSHARDS_HIGHSCORE_TOP3,
 } from "./catalog.js";
+import { HIGHSCORE_RANK_HISTORY_DAYS } from "./data/tuning.js";
 import {
   astrolabeResearchTimeMult,
+  categoryPointTotals,
   classBonuses,
   allianceBonusesForPlayer,
   empireExpeditionCap,
@@ -30,13 +33,17 @@ import {
   normalArtAt,
   type PlanetArtContext,
 } from "./planet-art.js";
+import { alienBaseId, pirateBaseId } from "./world-pirates.js";
 import type {
   AllianceRankEntry,
+  CategoryHighscores,
   GalaxyMiniBody,
   GalaxySlot,
   GalaxyView,
   HighscoreCache,
+  HighscoreCategoryId,
   HighscoreEntry,
+  HighscoreRankPoint,
   PlanetArtFields,
   PlayerView,
   PublicPlayer,
@@ -49,6 +56,7 @@ import {
   allianceViewFor,
   pendingAllianceRequestFor,
 } from "./world-alliances.js";
+import { activeDiplomacyFor } from "./world-alliance-diplomacy.js";
 import { galaxyMarkerOverlay } from "./world-alliance-intel.js";
 import { listOpenAcsForAlliance } from "./world-acs.js";
 import { advancePlanetNow, advanceUniverse } from "./world-arrival.js";
@@ -66,22 +74,55 @@ import {
   moonAtCoords,
   planetAtCoords,
 } from "./world-bootstrap.js";
+import { fleetSaveSuggestions } from "./fleet-save.js";
 import { stampQueueView } from "./world-queue-manage.js";
-import { inSensorPhalanxRange, ownedPlanetCount } from "./world-moons.js";
+import {
+  inSensorPhalanxRange,
+  ownedPlanetCount,
+  sensorPhalanxRange,
+} from "./world-moons.js";
 import { goalsView } from "./world-goals.js";
+import {
+  achievementsView,
+  evaluatePlayerAchievements,
+} from "./world-achievements.js";
 import { onboardingViewFor } from "./world-onboarding.js";
+import { inactivityMark } from "./player-activity.js";
 import { whatsNewViewFor } from "./release-notes.js";
 import { pirateBossSummary } from "./world-pirate-boss.js";
+import { galaxyEventView } from "./world-galaxy-events.js";
 import { occupationForPlanet } from "./world-occupation.js";
 import { empireDriftBeaconCount, empireRelicResearchTimeFactor, playerKnowsMini } from "./world-mini.js";
 import { seasonLeaderboardView } from "./world-seasons.js";
 import { SHOP_ITEMS } from "./world-shop-items.js";
 import { getDebris } from "./world-tick.js";
+import { inboxUnreadAlertCount } from "./world-inbox.js";
+import {
+  omittedStateSections,
+  type StatePollInclude,
+} from "./world-poll.js";
 import {
   isNewbieBonusActive,
   NEWBIE_BONUS_DURATION_MS,
   NEWBIE_PRODUCTION_MULT,
 } from "./world-protection.js";
+
+const SHOP_CATALOG = Object.fromEntries(
+  Object.entries(SHOP_ITEMS).map(([key, item]) => [
+    key,
+    {
+      id: item.id,
+      name: item.name,
+      category: item.category,
+      tier: item.tier,
+      bonus: item.bonus,
+      starshards: item.starshards,
+      description: item.description,
+    },
+  ]),
+);
+const OFFICER_CATALOG = OFFICER_ORDER.map((id) => OFFICERS[id]);
+const SKILL_CATALOG = SKILL_ORDER.map((id) => SKILLS[id]);
 
 export { empirePoints };
 
@@ -165,6 +206,101 @@ export function highscoresBoard(universe: UniverseState): HighscoreEntry[] {
   return rows.map((r, i) => ({ ...r, rank: i + 1 }));
 }
 
+const RANK_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** UTC calendar day for a rank snapshot. Maintenance uses this, not local time. */
+export function utcHighscoreDay(now: number): string {
+  return new Date(now).toISOString().slice(0, 10);
+}
+
+/**
+ * Append one rank for `day`. The same day replaces its point.
+ * More than `HIGHSCORE_RANK_HISTORY_DAYS` points drop the oldest day.
+ * Missing or junk history starts over. Order is oldest first.
+ * Rank math stays in `highscoresBoard`; this only stores the snapshot.
+ */
+export function appendHighscoreRankHistory(
+  history: readonly HighscoreRankPoint[] | undefined,
+  day: string,
+  rank: number,
+): HighscoreRankPoint[] {
+  const kept: HighscoreRankPoint[] = [];
+  for (const point of history ?? []) {
+    if (!point || typeof point.day !== "string" || !RANK_DAY.test(point.day)) continue;
+    if (!Number.isInteger(point.rank) || point.rank < 1) continue;
+    const existing = kept.findIndex((row) => row.day === point.day);
+    if (existing >= 0) kept.splice(existing, 1);
+    kept.push({ day: point.day, rank: point.rank });
+  }
+  kept.sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
+  if (!RANK_DAY.test(day) || !Number.isInteger(rank) || rank < 1) {
+    return kept.length > HIGHSCORE_RANK_HISTORY_DAYS
+      ? kept.slice(kept.length - HIGHSCORE_RANK_HISTORY_DAYS)
+      : kept;
+  }
+  const next = kept.filter((point) => point.day !== day);
+  next.push({ day, rank });
+  next.sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
+  return next.length > HIGHSCORE_RANK_HISTORY_DAYS
+    ? next.slice(next.length - HIGHSCORE_RANK_HISTORY_DAYS)
+    : next;
+}
+
+export const HIGHSCORE_CATEGORY_IDS: readonly HighscoreCategoryId[] = [
+  "buildings",
+  "fleet",
+  "research",
+  "defense",
+];
+
+export function isHighscoreCategoryId(id: string): id is HighscoreCategoryId {
+  return (HIGHSCORE_CATEGORY_IDS as readonly string[]).includes(id);
+}
+
+export function emptyCategoryHighscores(): CategoryHighscores {
+  return { buildings: [], fleet: [], research: [], defense: [] };
+}
+
+/** Top category boards. Called from the maintenance rebuild, not from a page read. */
+export function categoryHighscoreBoards(universe: UniverseState): CategoryHighscores {
+  const artCtx = createPlanetArtContext(universe);
+  const scored = Object.values(universe.players).map((p) => {
+    const home = universe.planets[p.homePlanetId];
+    const totals = categoryPointTotals(universe, p);
+    const row = {
+      playerId: p.id,
+      name: p.name,
+      coords: home?.coords ?? { galaxy: 0, system: 0, slot: 0 },
+      planetCount: ownedPlanetCount(universe, p.id),
+      planetName: home?.name ?? "",
+      homePlanetId: p.homePlanetId,
+      level: p.level ?? 1,
+      xpTotal: p.xpTotal ?? 0,
+      allianceTag: allianceTagForPlayer(universe, p),
+      ...artFields(universe, home, artCtx),
+    };
+    return { row, totals };
+  });
+  const rank = (key: HighscoreCategoryId): HighscoreEntry[] =>
+    scored
+      .map((entry) => ({ ...entry.row, points: entry.totals[key] }))
+      .sort(
+        (a, b) =>
+          b.points - a.points ||
+          b.level - a.level ||
+          b.xpTotal - a.xpTotal ||
+          a.playerId.localeCompare(b.playerId),
+      )
+      .slice(0, HIGHSCORE_CATEGORY_CAP)
+      .map((entry, index) => ({ ...entry, rank: index + 1 }));
+  return {
+    buildings: rank("buildings"),
+    fleet: rank("fleet"),
+    research: rank("research"),
+    defense: rank("defense"),
+  };
+}
+
 export function publicRoster(
   universe: UniverseState,
   pointsById?: ReadonlyMap<string, number>,
@@ -185,6 +321,23 @@ export function publicRoster(
   });
 }
 
+/** One base per system is stored under the slot id. Avoid walking every base. */
+function npcBaseInSystem<T extends { destroyedAt?: number | null; coords: { galaxy: number; system: number } }>(
+  bases: Record<string, T> | undefined,
+  idFor: (galaxy: number, system: number, slot: number) => string,
+  galaxy: number,
+  system: number,
+): T | undefined {
+  if (!bases) return undefined;
+  for (let slot = 1; slot <= MAP_SLOTS; slot++) {
+    const base = bases[idFor(galaxy, system, slot)];
+    if (!base || base.destroyedAt != null) continue;
+    if (base.coords.galaxy !== galaxy || base.coords.system !== system) continue;
+    return base;
+  }
+  return undefined;
+}
+
 export function galaxyViewFor(
   universe: UniverseState,
   playerId: string,
@@ -196,6 +349,7 @@ export function galaxyViewFor(
   const g = Math.min(MAP_GALAXIES, Math.max(1, Math.floor(galaxy)));
   const s = Math.min(MAP_SYSTEMS, Math.max(1, Math.floor(system)));
   const artCtx = createPlanetArtContext(universe);
+  const diplomacy = activeDiplomacyFor(universe, playerId);
   const slots: GalaxySlot[] = [];
   const empirePointsByPlayer = new Map<string, number>();
   for (let slot = 1; slot <= MAP_SLOTS; slot++) {
@@ -217,12 +371,16 @@ export function galaxyViewFor(
     const art = planet
       ? artForBody(universe, planet, artCtx)
       : normalArtAt(coords);
+    const inactivity = inactivityMark(owner?.lastActiveAt, now);
+    const stance = owner?.allianceId ? diplomacy.get(owner.allianceId) : undefined;
     slots.push({
       coords,
       planetId: planet?.id ?? null,
       playerId: owner?.id ?? null,
       playerName: owner?.name ?? null,
       allianceTag: allianceTagForPlayer(universe, owner),
+      ...(inactivity ? { inactivity } : {}),
+      ...(stance ? { diplomacy: stance } : {}),
       pointsHint: planet ? Math.floor(planetPoints(planet)) : 0,
       ...(ownerPoints === undefined ? {} : { empirePoints: ownerPoints }),
       debris: debris
@@ -248,12 +406,16 @@ export function galaxyViewFor(
       : undefined;
     const debris = getDebris(universe, planet.coords);
     const art = artForBody(universe, planet, artCtx);
+    const inactivity = inactivityMark(owner?.lastActiveAt, now);
+    const stance = owner?.allianceId ? diplomacy.get(owner.allianceId) : undefined;
     minis.push({
       planetId: planet.id,
       name: planet.name,
       coords: planet.coords,
       isOwn: planet.ownerPlayerId === playerId,
       playerName: owner?.name ?? (planet.ownerPlayerId ? null : "Unclaimed"),
+      ...(inactivity ? { inactivity } : {}),
+      ...(stance ? { diplomacy: stance } : {}),
       debris: debris
         ? { metal: debris.metal, crystal: debris.crystal }
         : null,
@@ -264,12 +426,7 @@ export function galaxyViewFor(
     (a, b) => a.coords.slot - b.coords.slot || a.planetId.localeCompare(b.planetId),
   );
 
-  const pirate = Object.values(universe.pirateBases ?? {}).find(
-    (b) =>
-      b.destroyedAt == null &&
-      b.coords.galaxy === g &&
-      b.coords.system === s,
-  );
+  const pirate = npcBaseInSystem(universe.pirateBases, pirateBaseId, g, s);
   if (pirate) {
     const slot = slots.find((row) => row.coords.slot === pirate.coords.slot);
     if (slot && slot.activity === "empty") {
@@ -277,12 +434,7 @@ export function galaxyViewFor(
     }
   }
 
-  const alien = Object.values(universe.alienBases ?? {}).find(
-    (b) =>
-      b.destroyedAt == null &&
-      b.coords.galaxy === g &&
-      b.coords.system === s,
-  );
+  const alien = npcBaseInSystem(universe.alienBases, alienBaseId, g, s);
   if (alien) {
     const slot = slots.find((row) => row.coords.slot === alien.coords.slot);
     if (slot && (slot.activity === "empty" || slot.activity == null)) {
@@ -331,6 +483,27 @@ export function galaxyViewFor(
   };
 }
 
+/** Owned moons only. Level 0 is left out. No other commanders, no extra systems. */
+function ownScannerMoons(
+  universe: UniverseState,
+  player: { planetIds?: string[] },
+): NonNullable<PlayerView["scannerMoons"]> {
+  const moons: NonNullable<PlayerView["scannerMoons"]> = [];
+  for (const id of player.planetIds ?? []) {
+    const body = universe.planets[id];
+    if (!body || body.kind !== "moon") continue;
+    const sensorArray = body.buildings.sensorArray ?? 0;
+    if (sensorArray < 1) continue;
+    moons.push({
+      planetId: body.id,
+      coords: body.coords,
+      sensorArray,
+      range: sensorPhalanxRange(sensorArray),
+    });
+  }
+  return moons;
+}
+
 /** Once-only +50 Starshards the first time a player reaches top 3 (needs rivals). */
 function maybeGrantHighscoreStarshards(
   universe: UniverseState,
@@ -347,13 +520,34 @@ function maybeGrantHighscoreStarshards(
   universe.players[player.id] = player;
 }
 
+function sectionWanted(
+  include: StatePollInclude | undefined,
+  key: keyof StatePollInclude,
+): boolean {
+  if (!include) return true;
+  return include[key] === true;
+}
+
+function emptyGalaxy(galaxy: number, system: number): GalaxyView {
+  return {
+    galaxy,
+    system,
+    slots: [],
+    minis: [],
+    deepSpace: { coords: { galaxy, system, slot: DEEP_SPACE_SLOT } },
+    asteroids: [],
+    pirateBase: null,
+    alienBase: null,
+  };
+}
+
 export function playerView(
   universe: UniverseState,
   playerId: string,
   now = Date.now(),
   galaxy?: number,
   system?: number,
-  options?: { skipUniverseTick?: boolean },
+  options?: { skipUniverseTick?: boolean; includeScannerMoons?: boolean; include?: StatePollInclude },
 ): PlayerView {
   if (options?.skipUniverseTick) {
     const player = universe.players[playerId];
@@ -373,11 +567,39 @@ export function playerView(
   const player = universe.players[playerId];
   if (!player) throw new Error("Unknown player.");
   pruneExpiredOfficers(player, now);
-  const provided = highscoreSource?.();
-  const highscores = provided?.rows ?? highscoresBoard(universe);
-  const allianceProvided = allianceRankSource?.();
-  const allianceHighscores = allianceProvided ?? allianceRankBoard(universe);
-  maybeGrantHighscoreStarshards(universe, playerId, highscores);
+  const include = options?.include;
+  const wantMessages = sectionWanted(include, "messages");
+  const wantGalaxy = sectionWanted(include, "galaxy");
+  const wantHighscores = sectionWanted(include, "highscores");
+  const wantRoster = sectionWanted(include, "roster") || wantHighscores;
+  const wantShop = sectionWanted(include, "shop");
+  const wantAlliances = sectionWanted(include, "alliances");
+  const cachedBoard = highscoreSource?.();
+  if (cachedBoard?.rows) {
+    maybeGrantHighscoreStarshards(universe, playerId, cachedBoard.rows);
+  }
+  const highscores = wantHighscores
+    ? (cachedBoard?.rows ?? highscoresBoard(universe))
+    : [];
+  if (wantHighscores && !cachedBoard?.rows) {
+    maybeGrantHighscoreStarshards(universe, playerId, highscores);
+  }
+  const allianceProvided = wantHighscores ? allianceRankSource?.() : undefined;
+  const allianceHighscores = wantHighscores
+    ? (allianceProvided ?? allianceRankBoard(universe))
+    : [];
+  const hallOfFame = wantHighscores
+    ? (cachedBoard?.hallOfFame ?? combatHallOfFame(universe))
+    : [];
+  const hallOfShame = wantHighscores
+    ? (cachedBoard?.hallOfShame ?? combatHallOfShame(universe))
+    : [];
+  const achievementRows = cachedBoard?.rows ?? (wantHighscores ? highscores : highscoresBoard(universe));
+  const achievementCtx = {
+    rank: achievementRows.find((row) => row.playerId === playerId)?.rank ?? null,
+    rivals: achievementRows.length,
+  };
+  evaluatePlayerAchievements(universe, player, now, achievementCtx);
   const pointsById = new Map(
     highscores.map((row) => [row.playerId, row.points]),
   );
@@ -415,29 +637,38 @@ export function playerView(
     .sort((a, b) => a.arrivesAt - b.arrivesAt);
 
   const hiddenReports = new Set(player.hiddenReportIds ?? []);
-  const reports = Object.values(universe.reports)
-    .filter(
-      (r) =>
-        (r.attackerPlayerId === playerId ||
-          r.defenderPlayerId === playerId ||
-          r.acsParticipantIds?.includes(playerId) === true) &&
-        !hiddenReports.has(r.id),
-    )
-    .sort((a, b) => b.at - a.at)
-    .slice(0, 12);
+  const reports = wantMessages
+    ? Object.values(universe.reports)
+        .filter(
+          (r) =>
+            (r.attackerPlayerId === playerId ||
+              r.defenderPlayerId === playerId ||
+              r.acsParticipantIds?.includes(playerId) === true) &&
+            !hiddenReports.has(r.id),
+        )
+        .sort((a, b) => b.at - a.at)
+        .slice(0, 12)
+    : [];
 
-  const spyReports = Object.values(universe.spyReports)
-    .filter((r) => r.spyPlayerId === playerId)
-    .sort((a, b) => b.at - a.at)
-    .slice(0, 12);
+  const spyReports = wantMessages
+    ? Object.values(universe.spyReports)
+        .filter((r) => r.spyPlayerId === playerId)
+        .sort((a, b) => b.at - a.at)
+        .slice(0, 12)
+    : [];
 
-  const expeditionReports = Object.values(universe.expeditionReports ?? {})
-    .filter((r) => r.playerId === playerId)
-    .sort((a, b) => b.at - a.at)
-    .slice(0, 12);
+  const expeditionReports = wantMessages
+    ? Object.values(universe.expeditionReports ?? {})
+        .filter((r) => r.playerId === playerId)
+        .sort((a, b) => b.at - a.at)
+        .slice(0, 12)
+    : [];
 
   const g = galaxy ?? planet.coords.galaxy;
   const s = system ?? planet.coords.system;
+  const galaxySlice = wantGalaxy
+    ? galaxyViewFor(universe, playerId, g, s, now)
+    : emptyGalaxy(g, s);
   const artCtx = createPlanetArtContext(universe);
   const planetArt = artForBody(universe, planet, artCtx);
 
@@ -477,6 +708,13 @@ export function playerView(
     .sort((a, b) => a.arrivesAt - b.arrivesAt)
     .slice(0, 20);
 
+  const fleetSave = fleetSaveSuggestions(
+    universe,
+    playerId,
+    hostileInbound,
+    now,
+  );
+
   const activeItemBuffs = (player.itemBuffs ?? [])
     .filter((b) => b.expiresAt > now)
     .map((b) => ({
@@ -487,22 +725,13 @@ export function playerView(
       remainingMs: Math.max(0, b.expiresAt - now),
     }));
 
-  const shopCatalog = Object.fromEntries(
-    Object.entries(SHOP_ITEMS).map(([key, item]) => [
-      key,
-      {
-        id: item.id,
-        name: item.name,
-        category: item.category,
-        tier: item.tier,
-        bonus: item.bonus,
-        starshards: item.starshards,
-        description: item.description,
-      },
-    ]),
-  );
+  const shopCatalog = wantShop ? SHOP_CATALOG : {};
+  const wirePlayer = wantMessages ? player : { ...player, eventLog: [] };
+  const directory = wantAlliances ? allianceDirectory(universe) : [];
 
-  return {
+  const seasonView = seasonLeaderboardView(universe, player, now);
+  const bossView = pirateBossSummary(universe, playerId, now);
+  const built = {
     now,
     universe: {
       id: universe.id,
@@ -510,7 +739,7 @@ export function playerView(
       speed: universe.speed,
       fleetSpeed: universe.fleetSpeed,
     },
-    player,
+    player: wirePlayer,
     planet,
     planetArt,
     ownedPlanets: player.planetIds
@@ -518,6 +747,7 @@ export function playerView(
         const p = universe.planets[id];
         if (!p) return null;
         const art = artForBody(universe, p, artCtx);
+        const sensorArrayLevel = p.buildings.sensorArray ?? 0;
         return {
           id: p.id,
           name: p.name,
@@ -528,6 +758,23 @@ export function playerView(
           isMini: isMiniBody(universe, p),
           jumpGateLevel: p.buildings.jumpGate ?? 0,
           researchLab: p.buildings.researchLab ?? 0,
+          resources: p.resources,
+          buildQueueHead: p.buildQueue[0]
+            ? {
+                buildingId: p.buildQueue[0].buildingId,
+                targetLevel: p.buildQueue[0].targetLevel,
+              }
+            : null,
+          shipQueueHead: p.shipQueue[0]
+            ? { shipId: p.shipQueue[0].shipId, count: p.shipQueue[0].count }
+            : null,
+          defenseQueueHead: p.defenseQueue[0]
+            ? {
+                defenseId: p.defenseQueue[0].defenseId,
+                count: p.defenseQueue[0].count,
+              }
+            : null,
+          ...(sensorArrayLevel > 0 ? { sensorArrayLevel } : {}),
           ...art,
         };
       })
@@ -553,19 +800,26 @@ export function playerView(
       ),
       storage: storageForPlanet(universe, planet, now),
     },
-    roster: provided
-      ? [
-          ...highscoreRoster(provided.rows),
-          ...publicRoster(universe, pointsById).filter(
-            (entry) => entry.id === playerId && !provided.rows.some((row) => row.playerId === playerId),
-          ),
-        ]
-      : publicRoster(universe, pointsById),
+    roster: wantRoster
+      ? cachedBoard
+        ? [
+            ...highscoreRoster(cachedBoard.rows),
+            ...publicRoster(universe, pointsById).filter(
+              (entry) =>
+                entry.id === playerId &&
+                !cachedBoard.rows.some((row) => row.playerId === playerId),
+            ),
+          ]
+        : publicRoster(universe, pointsById)
+      : [],
     highscores,
     allianceHighscores,
-    hallOfFame: provided?.hallOfFame ?? combatHallOfFame(universe),
-    hallOfShame: provided?.hallOfShame ?? combatHallOfShame(universe),
-    galaxy: galaxyViewFor(universe, playerId, g, s, now),
+    hallOfFame,
+    hallOfShame,
+    galaxy: galaxySlice,
+    ...(options?.includeScannerMoons
+      ? { scannerMoons: ownScannerMoons(universe, player) }
+      : {}),
     fleets,
     fleetSlotCap,
     expeditionSlotCap,
@@ -577,6 +831,7 @@ export function playerView(
       ? player.createdAt + NEWBIE_BONUS_DURATION_MS
       : null,
     hostileInbound,
+    fleetSave: fleetSave.length > 0 ? fleetSave : undefined,
     starshards: player.starshards ?? 0,
     officers: player.officers ?? [],
     skillsUnlocked: player.skillsUnlocked ?? [],
@@ -584,16 +839,17 @@ export function playerView(
     officerLevels: { ...(player.officerLevels ?? {}) },
     officerRenewals: { ...(player.officerRenewals ?? {}) },
     researchTimeMult,
-    officerCatalog: OFFICER_ORDER.map((id) => OFFICERS[id]),
-    skillCatalog: SKILL_ORDER.map((id) => SKILLS[id]),
+    officerCatalog: OFFICER_CATALOG,
+    skillCatalog: SKILL_CATALOG,
     dailyLoginAvailable: canClaimDailyLogin(player, now),
     progress: playerProgressView(player),
     occupation: occupationForPlanet(universe, planet.id, now),
     alliance: allianceViewFor(universe, playerId, now),
     pendingAllianceRequest: pendingAllianceRequestFor(universe, player),
-    allianceDirectory: allianceDirectory(universe),
+    allianceDirectory: directory,
     openAcsGroups: listOpenAcsForAlliance(universe, player.allianceId),
     goals: goalsView(player, now),
+    achievements: achievementsView(universe, player, now, achievementCtx),
     onboarding: onboardingViewFor(universe, player),
     whatsNew: whatsNewViewFor(player),
     presetUnlockPlanets: player.planetIds
@@ -603,9 +859,20 @@ export function playerView(
         shipyard: planet.buildings.shipyard ?? 0,
         ships: planet.ships,
       })),
-    seasonLeaderboard: seasonLeaderboardView(universe, player, now),
-    pirateBoss: pirateBossSummary(universe, playerId, now),
+    seasonLeaderboard: seasonView,
+    pirateBoss: bossView,
+    galaxyEvent: galaxyEventView(universe, now),
     activeItemBuffs,
     shopCatalog,
+    ...(include
+      ? {
+          omitted: omittedStateSections(include),
+          messagesOmitted: !wantMessages,
+          ...(!wantMessages
+            ? { inboxUnread: inboxUnreadAlertCount(universe, playerId) }
+            : {}),
+        }
+      : {}),
   };
+  return built;
 }

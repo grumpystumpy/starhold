@@ -86,12 +86,14 @@ async function runRequestScenario(browser, logs) {
       .locator('[data-testid^="alliance-dir-"]')
       .filter({ hasText: `[${tag}]` });
     await requestRow.waitFor({ timeout: 10_000 });
+    await requestRow.getByRole("button", { name: "Request" }).click();
+    await requestRow.getByTestId("alliance-application-note").waitFor({ timeout: 10_000 });
     await Promise.all([
       recruit.page.waitForResponse(
         (r) => r.url().includes("/api/alliance/join") && r.ok(),
         { timeout: 15_000 },
       ),
-      requestRow.getByRole("button", { name: "Request" }).click(),
+      requestRow.getByRole("button", { name: "Confirm request" }).click(),
     ]);
     await recruit.page.getByText("Request sent").first().waitFor({ timeout: 10_000 });
     logs.push("request_sent");

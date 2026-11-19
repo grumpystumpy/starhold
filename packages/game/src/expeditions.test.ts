@@ -28,6 +28,18 @@ import {
   playerView,
 } from "./world.js";
 
+/**
+ * `launchFleet` ids include `Math.random()`. A black-hole roll deletes the
+ * fleet on arrival, so a return-path test rebinds to an id that stays.
+ */
+function fleetIdThatReturns(arrivesAt: number): string {
+  for (let n = 0; n < 10_000; n++) {
+    const id = `flt_deep_${n}`;
+    if (!expeditionBlackHoleRoll(id, arrivesAt)) return id;
+  }
+  throw new Error("expected a non-black-hole expedition id");
+}
+
 describe("P2 expeditions", () => {
   it("uses the approved outcome odds and boundaries", () => {
     assert.equal(EXPEDITION_BLACK_HOLE_CHANCE, 0.002);
@@ -375,6 +387,11 @@ describe("P2 expeditions", () => {
     if (!launch.ok) return;
     assert.equal(launch.fleet.targetCoords.slot, EXPEDITION_SLOT);
     assert.equal(launch.fleet.phase, "outbound");
+
+    const fleetId = fleetIdThatReturns(launch.fleet.arrivesAt);
+    delete universe.fleets[launch.fleet.id];
+    launch.fleet.id = fleetId;
+    universe.fleets[fleetId] = launch.fleet;
 
     advanceUniverse(universe, launch.fleet.arrivesAt);
     const mid = universe.fleets[launch.fleet.id];

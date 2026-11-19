@@ -40,6 +40,7 @@ const ROUTES = [
   "shipyard",
   "research",
   "fleet",
+  "simulator",
   "galaxy",
   "officers",
   "skills",

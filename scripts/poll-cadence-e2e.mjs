@@ -104,13 +104,17 @@ async function runViewport(browser, viewport) {
   const joinPosts = log.filter(
     (entry) => entry.method === "POST" && entry.url.includes("/api/join"),
   );
-  // Join chrome may also GET /api/auth/providers once for optional OAuth buttons.
+  // Join chrome may also GET providers once and the public lobby board once.
+  const lobbyGets = log.filter(
+    (entry) => entry.method === "GET" && entry.url.includes("/api/lobby"),
+  );
   const unexpected = log.filter(
     (entry) =>
       !(entry.method === "POST" && entry.url.includes("/api/join")) &&
-      !(entry.method === "GET" && entry.url.includes("/api/auth/providers")),
+      !(entry.method === "GET" && entry.url.includes("/api/auth/providers")) &&
+      !(entry.method === "GET" && entry.url.includes("/api/lobby")),
   );
-  if (joinPosts.length !== 1 || unexpected.length !== 0) {
+  if (joinPosts.length !== 1 || lobbyGets.length !== 1 || unexpected.length !== 0) {
     throw new Error(`${viewport.name} join was not one request: ${JSON.stringify(log)}`);
   }
 

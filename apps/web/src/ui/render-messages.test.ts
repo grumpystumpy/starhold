@@ -1,17 +1,23 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { CombatReport, PlayerView } from "@starhold/game";
+import type { CombatReport, EspionageReport, PlayerView } from "@starhold/game";
 import {
   categoryLabel,
   closeReportWindow,
   collectInbox,
   combatLossSummary,
+  combatReadoutHtml,
   inboxBucket,
   inboxUnreadCount,
   messagesPageHtml,
   openReportWindow,
+  previousSpyReport,
+  setCompareSpy,
   setConfirmDelete,
+  setCommanderMail,
   setInboxFilter,
+  spyCompareSections,
+  setMessagesTab,
 } from "./render-messages";
 import { fmt, fmtCompact } from "./format";
 import { combatBattleExtrasHtml } from "./render-fleets-panels";
@@ -692,6 +698,7 @@ describe("messages inbox", () => {
           attackerLosses: { ships: { scout: 1 } },
           defenderLosses: { ships: { interceptor: 3 }, defenses: { laserBattery: 2 } },
           debrisThisRound: { metal: 800, crystal: 500, deuterium: 0 },
+          shieldsAbsorbed: { attacker: 40, defender: 120 },
         },
         {
           round: 2,
@@ -743,6 +750,11 @@ describe("messages inbox", () => {
     assert.match(pageHtml, /data-testid="open-report-expedition-e_test_1"/);
     assert.doesNotMatch(pageHtml, /data-testid="report-subwindow"/);
 
+    assert.match(pageHtml, /data-testid="battle-replay-play"/);
+    assert.match(pageHtml, /Shields absorbed: attacker 40, defender 120/);
+    assert.match(pageHtml, /data-testid="battle-details-c_test_1"/);
+    assert.match(pageHtml, /data-copy-battle-share="c_test_1"/);
+
     // Open Combat Report
     openReportWindow("combat", "c_test_1");
     const combatWinHtml = messagesPageHtml(view);
@@ -763,6 +775,12 @@ describe("messages inbox", () => {
     assert.match(combatWinHtml, /data-testid="battle-ship-totals-attacker"/);
     assert.match(combatWinHtml, /data-testid="battle-ship-totals-defender"/);
     assert.match(combatWinHtml, /data-copy-battle-share="c_test_1"/);
+    assert.match(combatWinHtml, /data-testid="battle-replay-play"/);
+    assert.match(combatWinHtml, /data-testid="battle-replay-pause"/);
+    assert.match(combatWinHtml, /data-testid="battle-replay-restart"/);
+    assert.match(combatWinHtml, /data-testid="battle-details-c_test_1"/);
+    assert.match(combatWinHtml, /Shields absorbed: attacker 40, defender 120/);
+    assert.match(combatWinHtml, /Shields absorbed: attacker 0, defender 0/);
 
     const inboxDetails = messagesPageHtml(view);
     assert.match(inboxDetails, /data-testid="inbox-combat-details-c_test_1"/);
@@ -776,6 +794,16 @@ describe("messages inbox", () => {
       combatBattleExtrasHtml(combatReport as CombatReport),
       /data-copy-battle-share="c_test_1"/,
     );
+    const replay = combatBattleExtrasHtml(combatReport as CombatReport);
+    assert.match(replay, /data-testid="battle-details-c_test_1"/);
+    assert.match(replay, /data-testid="battle-replay-play"/);
+    assert.match(replay, /data-testid="battle-replay-pause"/);
+    assert.match(replay, /data-testid="battle-replay-restart"/);
+    assert.match(replay, /data-testid="battle-fire-1"/);
+    assert.match(replay, /data-testid="battle-shields-1"/);
+    assert.match(replay, /Shields absorbed: attacker 40, defender 120/);
+    assert.match(replay, /data-testid="battle-shields-2"/);
+    assert.match(replay, /Shields absorbed: attacker 0, defender 0/);
     assert.doesNotMatch(
       combatBattleExtrasHtml({ ...combatReport, shareCode: undefined } as CombatReport),
       /data-copy-battle-share=/,
@@ -837,6 +865,9 @@ describe("messages inbox", () => {
     assert.match(legacyHtml, /coord-link/);
     assert.doesNotMatch(legacyHtml, /Defenses destroyed:/);
     assert.doesNotMatch(legacyHtml, /data-copy-battle-share="c_legacy_1"/);
+    assert.match(legacyHtml, /data-testid="battle-replay-legacy"/);
+    assert.match(legacyHtml, /Summary only — older reports have no round replay/);
+    assert.doesNotMatch(legacyHtml, /data-testid="battle-replay-play"/);
 
     closeReportWindow();
   });
@@ -955,5 +986,299 @@ describe("messages inbox", () => {
     assert.match(defenderWinHtml, /data-combat-result="loss"/);
     assert.doesNotMatch(defenderWinHtml, /data-copy-battle-share="c_read_def"/);
     closeReportWindow();
+  });
+
+  it("shows moon chance on combat debris at 0%, mid, and the 20% cap", () => {
+    closeReportWindow();
+    const report = (
+      id: string,
+      debrisCreated: { metal: number; crystal: number; deuterium: number },
+    ) =>
+      ({
+        id,
+        at: 1000,
+        missionId: `m_${id}`,
+        attackerPlayerId: "p1",
+        defenderPlayerId: "p2",
+        attackerName: "Alpha",
+        defenderName: "Bravo",
+        targetCoords: { galaxy: 1, system: 2, slot: 4 },
+        attackerBefore: {},
+        attackerAfter: {},
+        defenderBefore: {},
+        defenderAfter: {},
+        defensesBefore: {},
+        defensesAfter: {},
+        loot: { metal: 0, crystal: 0, deuterium: 0 },
+        debrisCreated,
+        outcome: "attacker_win" as const,
+        rounds: 1,
+        summary: "Debris field",
+      }) as CombatReport;
+
+    const zero = report("c_moon_0", {
+      metal: 249_999,
+      crystal: 0,
+      deuterium: 8_000_000,
+    });
+    const mid = report("c_moon_mid", {
+      metal: 1_000_000,
+      crystal: 0,
+      deuterium: 0,
+    });
+    const cap = report("c_moon_cap", {
+      metal: 6_000_000,
+      crystal: 2_500_000,
+      deuterium: 0,
+    });
+
+    const section = (html: string) =>
+      html.match(/data-testid="combat-debris"[\s\S]*?<\/section>/)?.[0] ?? "";
+
+    const zeroHtml = combatReadoutHtml(zero, "p1");
+    const zeroDebris = section(zeroHtml);
+    assert.match(zeroDebris, /249\.9k metal, 0 crystal, 8M deuterium/);
+    assert.match(zeroDebris, /data-testid="combat-moon-chance"/);
+    assert.match(zeroDebris, /moon chance 0%/);
+    assert.doesNotMatch(zeroDebris, /moon chance 32%/);
+
+    const midDebris = section(combatReadoutHtml(mid, "p1"));
+    assert.match(midDebris, /1M metal, 0 crystal, 0 deuterium/);
+    assert.match(midDebris, /moon chance 4%/);
+
+    const capDebris = section(combatReadoutHtml(cap, "p1"));
+    assert.match(capDebris, /6M metal, 2\.5M crystal, 0 deuterium/);
+    assert.match(capDebris, /moon chance 20%/);
+    assert.doesNotMatch(capDebris, /moon chance 3[0-9]%/);
+
+    const inbox = messagesPageHtml(
+      baseView({ reports: [zero, mid, cap] as PlayerView["reports"] }),
+    );
+    assert.match(inbox, /Debris: 249\.9k metal, 8M deuterium · moon chance 0%/);
+    assert.match(inbox, /Debris: 1M metal · moon chance 4%/);
+    assert.match(inbox, /Debris: 6M metal, 2\.5M crystal · moon chance 20%/);
+  });
+});
+
+function spyReport(overrides: Partial<EspionageReport> & Pick<EspionageReport, "id" | "at">): EspionageReport {
+  return {
+    missionId: "m",
+    spyPlayerId: "p1",
+    targetPlayerId: "p2",
+    targetName: "Bravo",
+    targetCoords: { galaxy: 1, system: 22, slot: 8 },
+    detail: 5,
+    resources: null,
+    buildings: null,
+    ships: null,
+    defenses: null,
+    research: null,
+    summary: "Scan",
+    ...overrides,
+  };
+}
+
+describe("spy report compare", () => {
+  it("picks the previous scan on the same coordinates and ignores other targets", () => {
+    const oldest = spyReport({ id: "a-old", at: 100 });
+    const middle = spyReport({ id: "a-mid", at: 200, resources: { metal: 100, crystal: 40, deuterium: 10 } });
+    const newest = spyReport({ id: "a-new", at: 400, resources: { metal: 600, crystal: 10, deuterium: 10 } });
+    const betweenOtherSlot = spyReport({
+      id: "b-between",
+      at: 300,
+      targetCoords: { galaxy: 1, system: 22, slot: 9 },
+      resources: { metal: 9999, crystal: 0, deuterium: 0 },
+    });
+    const laterOtherGalaxy = spyReport({
+      id: "c-later",
+      at: 500,
+      targetCoords: { galaxy: 2, system: 22, slot: 8 },
+      resources: { metal: 1, crystal: 1, deuterium: 1 },
+    });
+    const tieCoords = { galaxy: 4, system: 4, slot: 4 };
+    const tiedOlderId = spyReport({ id: "tie-b", at: 700, targetCoords: tieCoords });
+    const tiedNewerId = spyReport({ id: "tie-a", at: 700, targetCoords: tieCoords });
+    const reports = [laterOtherGalaxy, newest, betweenOtherSlot, middle, oldest, tiedOlderId, tiedNewerId];
+
+    assert.equal(previousSpyReport(reports, "a-new")?.id, "a-mid");
+    assert.equal(previousSpyReport(reports, "a-mid")?.id, "a-old");
+    assert.equal(previousSpyReport(reports, "a-old"), null);
+    assert.equal(previousSpyReport(reports, "b-between"), null);
+    assert.equal(previousSpyReport(reports, "c-later"), null);
+    assert.equal(previousSpyReport(reports, "tie-a")?.id, "tie-b");
+    assert.equal(previousSpyReport(reports, "tie-b"), null);
+    assert.equal(previousSpyReport(reports, "missing"), null);
+
+    const sections = spyCompareSections(middle, newest);
+    const resources = sections.find((section) => section.id === "resources");
+    assert.ok(resources);
+    const metal = resources.rows.find((row) => row.key === "metal");
+    const crystal = resources.rows.find((row) => row.key === "crystal");
+    const deuterium = resources.rows.find((row) => row.key === "deuterium");
+    assert.equal(metal?.delta, 500);
+    assert.equal(metal?.tone, "up");
+    assert.equal(metal?.change, "+500");
+    assert.equal(crystal?.delta, -30);
+    assert.equal(crystal?.tone, "down");
+    assert.equal(crystal?.change, "-30");
+    assert.equal(deuterium?.delta, 0);
+    assert.equal(deuterium?.tone, "same");
+    assert.equal(sections.some((section) => section.id === "fleet"), false);
+  });
+
+  it("diffs fleet, defense, buildings, and research, and marks an unscanned layer", () => {
+    const previous = spyReport({
+      id: "prev",
+      at: 10,
+      resources: { metal: 1500, crystal: 0, deuterium: 0 },
+      ships: { scout: 4 },
+      defenses: { laserBattery: 8 },
+      buildings: { metalMine: 3 },
+      research: { weaponsTech: 2 },
+    });
+    const current = spyReport({
+      id: "curr",
+      at: 20,
+      resources: { metal: 1500, crystal: 0, deuterium: 25 },
+      ships: { scout: 1, interceptor: 2 },
+      defenses: null,
+      buildings: { metalMine: 5 },
+      research: { weaponsTech: 2 },
+    });
+    const sections = spyCompareSections(previous, current);
+    const byId = Object.fromEntries(sections.map((section) => [section.id, section]));
+    assert.deepEqual(
+      byId.fleet?.rows.map((row) => [row.key, row.delta, row.tone]),
+      [
+        ["scout", -3, "down"],
+        ["interceptor", 2, "up"],
+      ],
+    );
+    assert.equal(byId.fleet?.rows[0]?.previous, "4");
+    assert.equal(byId.fleet?.rows[0]?.current, "1");
+    assert.equal(byId.fleet?.rows[0]?.label, "Recon Drone");
+    const defense = byId.defense?.rows.find((row) => row.key === "laserBattery");
+    assert.equal(defense?.delta, null);
+    assert.equal(defense?.tone, "unknown");
+    assert.equal(defense?.previous, "8");
+    assert.equal(defense?.current, "—");
+    assert.equal(defense?.change, "not scanned");
+    assert.equal(byId.buildings?.rows.find((row) => row.key === "metalMine")?.delta, 2);
+    assert.equal(byId.research?.rows.find((row) => row.key === "weaponsTech")?.delta, 0);
+    assert.equal(byId.resources?.rows.find((row) => row.key === "metal")?.change, "0");
+    assert.equal(byId.resources?.rows.find((row) => row.key === "deuterium")?.change, "+25");
+    assert.equal(byId.resources?.rows.find((row) => row.key === "metal")?.current, "1.5k");
+  });
+
+  it("hides the compare button when the target has only one report", () => {
+    setCompareSpy(null);
+    closeReportWindow();
+    const alone = spyReport({
+      id: "solo",
+      at: 5,
+      resources: { metal: 1, crystal: 0, deuterium: 0 },
+    });
+    const other = spyReport({
+      id: "other",
+      at: 9,
+      targetCoords: { galaxy: 3, system: 1, slot: 1 },
+      resources: { metal: 4, crystal: 0, deuterium: 0 },
+    });
+    const one = messagesPageHtml(baseView({ spyReports: [alone] }));
+    assert.doesNotMatch(one, /Compare with previous/);
+    assert.doesNotMatch(one, /data-testid="compare-spy-/);
+    assert.doesNotMatch(one, /data-testid="spy-compare-/);
+
+    const split = messagesPageHtml(baseView({ spyReports: [alone, other] }));
+    assert.doesNotMatch(split, /Compare with previous/);
+    assert.doesNotMatch(split, /data-testid="compare-spy-/);
+  });
+
+  it("renders the side-by-side panel only after compare is opened", () => {
+    setCompareSpy(null);
+    closeReportWindow();
+    const previous = spyReport({
+      id: "prev-ui",
+      at: 10,
+      resources: { metal: 100, crystal: 0, deuterium: 0 },
+      ships: { scout: 2 },
+      defenses: { laserBattery: 1 },
+      buildings: { metalMine: 1 },
+      research: null,
+    });
+    const current = spyReport({
+      id: "curr-ui",
+      at: 30,
+      resources: { metal: 250, crystal: 0, deuterium: 0 },
+      ships: { scout: 5 },
+      defenses: { laserBattery: 1 },
+      buildings: { metalMine: 1 },
+      research: null,
+    });
+    const view = baseView({ spyReports: [current, previous] });
+    const closed = messagesPageHtml(view);
+    assert.match(closed, /data-testid="compare-spy-curr-ui"/);
+    assert.match(closed, /aria-expanded="false"/);
+    assert.doesNotMatch(closed, /data-testid="compare-spy-prev-ui"/);
+    assert.doesNotMatch(closed, /data-testid="spy-compare-curr-ui"/);
+
+    setCompareSpy("curr-ui");
+    const open = messagesPageHtml(view);
+    assert.match(open, /data-testid="spy-compare-curr-ui"/);
+    assert.match(open, /data-testid="spy-compare-inbox-previous"/);
+    assert.match(open, /data-testid="spy-compare-inbox-current"/);
+    assert.match(open, /aria-expanded="true"/);
+    assert.match(open, /data-testid="spy-delta-inbox-curr-ui-resources-metal"[^>]*data-delta="150"/);
+    assert.match(open, /data-testid="spy-delta-inbox-curr-ui-fleet-scout"[^>]*data-delta="3"/);
+    assert.match(open, /data-testid="spy-delta-inbox-curr-ui-defense-laserBattery"[^>]*data-delta="0"/);
+    assert.match(open, /data-testid="spy-delta-inbox-curr-ui-buildings-metalMine"[^>]*data-delta="0"/);
+    assert.doesNotMatch(open, /spy-delta-inbox-curr-ui-research-/);
+    assert.match(open, /class="spy-delta spy-delta-up"/);
+    assert.match(open, />\+150</);
+    assert.match(open, />\+3</);
+
+    openReportWindow("spy", "curr-ui");
+    const windowHtml = messagesPageHtml(view);
+    assert.match(windowHtml, /data-testid="compare-spy-window-curr-ui"/);
+    assert.match(windowHtml, /data-testid="spy-compare-window-curr-ui"/);
+    assert.match(windowHtml, /data-testid="spy-delta-window-curr-ui-resources-metal"[^>]*data-delta="150"/);
+    assert.match(windowHtml, /spy-compare-columns/);
+
+    setCompareSpy(null);
+    closeReportWindow();
+    const again = messagesPageHtml(view);
+    assert.doesNotMatch(again, /data-testid="spy-compare-curr-ui"/);
+    assert.doesNotMatch(again, /data-testid="spy-compare-window-curr-ui"/);
+  });
+
+  it("renders a mail tab with escaped compose, reply, and delete", () => {
+    setMessagesTab("inbox");
+    const inbox = messagesPageHtml(baseView());
+    assert.match(inbox, /data-testid="messages-tab-mail"/);
+    assert.match(inbox, /data-testid="messages-inbox"|data-testid="messages-empty"/);
+    assert.doesNotMatch(inbox, /data-testid="commander-mail-compose"/);
+
+    setMessagesTab("mail");
+    const rawName = "<" + "Admin>";
+    const rawBody = "<" + "script>alert(1)</" + "script>";
+    setCommanderMail([
+      {
+        id: "mail-1",
+        fromName: rawName,
+        body: rawBody,
+        createdAt: 1_700_000_000_000,
+      },
+    ]);
+    const mail = messagesPageHtml(baseView());
+    const escapedName = "&" + "lt;Admin&" + "gt;";
+    const escapedBody = "&" + "lt;script&" + "gt;alert(1)&" + "lt;/script&" + "gt;";
+    assert.match(mail, /data-testid="commander-mail-compose"/);
+    assert.match(mail, /data-testid="commander-mail-send"/);
+    assert.ok(mail.includes(`data-mail-reply="${escapedName}"`));
+    assert.match(mail, /data-testid="commander-mail-delete"/);
+    assert.ok(mail.includes(escapedBody));
+    assert.equal(mail.includes(rawBody), false);
+    setMessagesTab("inbox");
+    setCommanderMail([]);
   });
 });

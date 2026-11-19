@@ -1,4 +1,5 @@
 import {
+  BUILDINGS,
   DEFENSE_ORDER,
   DEFENSES,
   MAP_GALAXIES,
@@ -15,14 +16,20 @@ import {
   WEAKEST_FIRST_SHIPS,
   allianceClassBonuses,
   classBonuses,
+  HIGHSCORE_RANK_HISTORY_DAYS,
   levelBonuses,
   shipClassAllowed,
   fortressRelocateDeutCost,
   fortressRelocateLandingWindow,
   type BuildingId,
+  type CategoryHighscores,
   type DefenseId,
+  type HighscoreRankPoint,
+  type HighscoreCategoryId,
+  type HighscoreEntry,
   type PlayerView,
   type ShipId,
+  emptyCategoryHighscores,
 } from "@starhold/game";
 
 export { WEAKEST_FIRST_DEFENSES, WEAKEST_FIRST_SHIPS };
@@ -38,6 +45,7 @@ import {
   shipRow,
 } from "./render-chrome";
 import { escapeAttr, escapeHtml } from "./render-escape";
+import { commanderNameButton } from "./commander-dossier";
 import {
   fleetComposer,
   galaxyPanel,
@@ -45,9 +53,11 @@ import {
   sensorContactsHtml,
   type FleetDraft,
 } from "./render-fleets";
-import { alliancesPageHtml } from "./render-alliances";
+import { alliancesPageHtml, type AlliancePageExtras } from "./render-alliances";
 import { recommendedNext } from "./render-helpers";
 import { goalsPageHtml } from "./render-goals";
+import { midgameBriefingHtml } from "./render-midgame";
+import { awayRecapHtml } from "./render-away-recap";
 import { onboardingPanelHtml } from "./render-onboarding";
 import { messagesPageHtml } from "./render-messages";
 import { shopPageHtml } from "./render-shop";
@@ -61,6 +71,8 @@ import {
 import { hrefForPage } from "./router";
 import { infoTooltip } from "./render-tooltips";
 import { seasonsPage } from "./render-seasons";
+import { researchTreeMapHtml } from "./render-research-tree";
+import { combatSimHtml } from "./render-combat-sim";
 
 const RESOURCE_BUILDINGS: BuildingId[] = [
   "metalMine",
@@ -107,6 +119,9 @@ function overviewPage(view: PlayerView, busy: boolean): string {
   const readyDailyMissions = (view.goals ?? []).filter(
     (g) => g.cadence === "daily" && !g.claimed && g.progress >= g.target,
   ).length;
+  const readyWeeklyMissions = (view.goals ?? []).filter(
+    (g) => g.cadence === "weekly" && !g.claimed && g.progress >= g.target,
+  ).length;
   const goalsHref = hrefForPage("goals", {
     playerId: view.player.id,
     planetId: view.planet.id,
@@ -114,10 +129,17 @@ function overviewPage(view: PlayerView, busy: boolean): string {
   return `
     <section class="panel" data-testid="overview-panel">
       <h2>Overview</h2>
+      ${awayRecapHtml(view)}
       ${onboardingPanelHtml(view, busy)}
+      ${midgameBriefingHtml(view, busy)}
+      <div class="overview-missions">
       <p class="hint" data-testid="overview-daily-missions-ready">
         Daily missions ready to claim: <a href="${escapeAttr(goalsHref)}" data-nav="goals" data-testid="overview-goals-link"><strong>${fmt(readyDailyMissions)}</strong></a>
       </p>
+      <p class="hint" data-testid="overview-weekly-missions-ready">
+        Weekly missions ready to claim: <a href="${escapeAttr(goalsHref)}" data-nav="goals" data-testid="overview-weekly-goals-link"><strong>${fmt(readyWeeklyMissions)}</strong></a>
+      </p>
+      </div>
       <div class="overview-hero">
         <div class="planet-frame" data-testid="planet-skin-frame" data-planet-skin="${escapeAttr(skin)}">
           ${planetDiscHtml({
@@ -144,6 +166,7 @@ function overviewPage(view: PlayerView, busy: boolean): string {
           <p class="hint" data-testid="planet-temperature">Temp ${fmt(tempK)} K · solar ×${solarTemp.toFixed(2)}${helio > 0 ? ` · Solar Relay Satellite +${fmt(helio)}` : ""}</p>
         </div>
       </div>
+      ${empireOverviewHtml(view, busy)}
       <form class="planet-rename" id="planet-rename-form" data-testid="planet-rename-form">
         <label for="planet-rename-input">Rename colony</label>
         <div class="planet-rename-row">
@@ -152,6 +175,7 @@ function overviewPage(view: PlayerView, busy: boolean): string {
         </div>
         <p class="hint">${PLANET_NAME_MAX_LEN} chars max · letters, numbers, spaces</p>
       </form>
+      ${abandonColonyHtml(view, busy)}
       <p class="hint" data-testid="position-mult" title="Position production multipliers for this slot">
         Position × metal ${pm.metal.toFixed(2)} · crystal ${pm.crystal.toFixed(2)} · deut ${pm.deuterium.toFixed(2)} · energy ${pm.energy.toFixed(2)}
         ${infoTooltip({
@@ -169,6 +193,72 @@ function overviewPage(view: PlayerView, busy: boolean): string {
       <p class="hint" data-testid="recommended-next">${escapeHtml(recommendedNext(view))}</p>
     </section>
     ${classPanelHtml(view, busy)}`;
+}
+
+function empireOverviewHtml(view: PlayerView, busy: boolean): string {
+  const bodies = view.ownedPlanets ?? [];
+  if (bodies.length < 2) return "";
+  const totals = bodies.reduce(
+    (sum, body) => ({
+      metal: sum.metal + body.resources.metal,
+      crystal: sum.crystal + body.resources.crystal,
+      deuterium: sum.deuterium + body.resources.deuterium,
+    }),
+    { metal: 0, crystal: 0, deuterium: 0 },
+  );
+  const rows = bodies
+    .map((body) => {
+      const queues = [
+        body.buildQueueHead
+          ? `Building ${BUILDINGS[body.buildQueueHead.buildingId]?.name ?? body.buildQueueHead.buildingId} → L${fmt(body.buildQueueHead.targetLevel)}`
+          : "",
+        body.shipQueueHead
+          ? `Ships ${fmt(body.shipQueueHead.count)}× ${SHIPS[body.shipQueueHead.shipId]?.name ?? body.shipQueueHead.shipId}`
+          : "",
+        body.defenseQueueHead
+          ? `Defense ${fmt(body.defenseQueueHead.count)}× ${DEFENSES[body.defenseQueueHead.defenseId]?.name ?? body.defenseQueueHead.defenseId}`
+          : "",
+      ].filter(Boolean);
+      return `<li>
+        <button type="button" class="empire-overview-row" data-select-planet="${escapeAttr(body.id)}" data-testid="empire-planet-row-${escapeAttr(body.id)}" aria-label="Select ${escapeAttr(body.name)} at ${fmtCoords(body.coords)}"${busy ? " disabled" : ""}>
+          <span class="empire-overview-planet"><strong>${escapeHtml(body.name)}${body.isMini ? " · Mini" : body.isMoon ? " · Moon" : ""}</strong><small>${fmtCoords(body.coords)}</small></span>
+          <span class="empire-overview-stock"><small>Metal</small><strong>${fmt(body.resources.metal)}</strong></span>
+          <span class="empire-overview-stock"><small>Crystal</small><strong>${fmt(body.resources.crystal)}</strong></span>
+          <span class="empire-overview-stock" title="Deuterium"><small>Deut</small><strong>${fmt(body.resources.deuterium)}</strong></span>
+          ${queues.length ? `<span class="empire-overview-queues">${queues.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</span>` : ""}
+        </button>
+      </li>`;
+    })
+    .join("");
+  return `<section class="empire-overview" data-testid="empire-overview-strip" aria-label="Empire overview">
+    <h3>Empire resources</h3>
+    <div class="empire-overview-totals" aria-label="Empire resource totals">
+      <span><small>Metal</small><strong data-testid="empire-metal-total">${fmt(totals.metal)}</strong></span>
+      <span><small>Crystal</small><strong data-testid="empire-crystal-total">${fmt(totals.crystal)}</strong></span>
+      <span><small>Deuterium</small><strong data-testid="empire-deuterium-total">${fmt(totals.deuterium)}</strong></span>
+    </div>
+    <ul class="empire-overview-planets">${rows}</ul>
+  </section>`;
+}
+
+function abandonColonyHtml(view: PlayerView, busy: boolean): string {
+  const { planet, player } = view;
+  if (planet.kind === "moon") return "";
+  if (!player.homePlanetId || planet.id === player.homePlanetId) return "";
+  const name = escapeHtml(planet.name);
+  const disabled = busy ? "disabled" : "";
+  return `
+    <div class="planet-abandon" data-testid="abandon-colony">
+      <button type="button" data-abandon-colony="open" data-testid="abandon-colony-open" ${disabled}>Abandon colony</button>
+      <dialog class="abandon-colony-dialog" data-testid="abandon-colony-dialog" aria-labelledby="abandon-colony-title">
+        <h3 id="abandon-colony-title">Abandon ${name}?</h3>
+        <p data-testid="abandon-colony-warning">Buildings, docked ships, defenses, resources, and any moon are lost.</p>
+        <form id="abandon-colony-form" data-testid="abandon-colony-form">
+          <button type="submit" data-testid="abandon-colony-confirm" ${disabled}>Abandon ${name}</button>
+          <button type="button" data-abandon-colony="cancel" data-testid="abandon-colony-cancel">Cancel</button>
+        </form>
+      </dialog>
+    </div>`;
 }
 
 function buildingsPage(view: PlayerView, busy: boolean): string {
@@ -201,9 +291,9 @@ function buildingsPage(view: PlayerView, busy: boolean): string {
           : ""
       }
       <h3 class="subhead">Extraction &amp; storage</h3>
-      ${resourceIds.map((id) => buildingRow(id, planet, view.player, universe.speed, now, busy, buildMods)).join("")}
+      ${resourceIds.map((id) => buildingRow(id, planet, view.player, universe.speed, now, busy, buildMods, view.economy.energy)).join("")}
       <h3 class="subhead">${isMini ? "Structures &amp; anomaly specials" : "Structures"}</h3>
-      ${facilityIds.map((id) => buildingRow(id, planet, view.player, universe.speed, now, busy, buildMods)).join("")}
+      ${facilityIds.map((id) => buildingRow(id, planet, view.player, universe.speed, now, busy, buildMods, view.economy.energy)).join("")}
       ${
         buildQueueHtml(planet, now) ||
         (isMini
@@ -248,6 +338,8 @@ function researchPage(view: PlayerView, busy: boolean): string {
   return `
     <section class="panel" data-testid="research-panel">
       <h2>Research</h2>
+      ${researchTreeMapHtml(view, busy)}
+      <h3 class="subhead">All Research Projects</h3>
       ${RESEARCH_ORDER.map((id) => researchRow(id, view, busy)).join("")}
       ${
         researchQueueHtml(player, now) ||
@@ -295,7 +387,7 @@ export function shipyardPage(view: PlayerView, busy: boolean): string {
           ? `<p class="hint" data-testid="shipyard-need-class">Choose a class on Overview to unlock class-exclusive hulls.</p>`
           : ""
       }
-      ${buildable.map((id) => shipRow(id, planet, busy, mods.shipCostMult, mods.shipTimeMult, view.universe.speed)).join("")}
+      ${buildable.map((id) => shipRow(id, planet, busy, mods.shipCostMult, mods.shipTimeMult, view.universe.speed, view.player.research)).join("")}
       ${
         shipQueueHtml(planet, now) ||
         `<p class="hint">Raise the Shipyard facility to unlock hulls.</p>`
@@ -363,44 +455,164 @@ function fleetPage(
     </section>`;
 }
 
-let highscoreTab: "players" | "alliances" = "players";
+export type HighscoreTab =
+  | "players"
+  | "alliances"
+  | "buildings"
+  | "fleet"
+  | "research"
+  | "defense";
 
-export function setHighscoreTab(tab: "players" | "alliances"): void {
+const HIGHSCORE_TABS: ReadonlyArray<{ id: HighscoreTab; label: string }> = [
+  { id: "players", label: "Commanders" },
+  { id: "alliances", label: "Alliances" },
+  { id: "buildings", label: "Buildings" },
+  { id: "fleet", label: "Fleet" },
+  { id: "research", label: "Research" },
+  { id: "defense", label: "Defense" },
+];
+
+let highscoreTab: HighscoreTab = "players";
+let categoryBoardState: CategoryHighscores = emptyCategoryHighscores();
+
+export function setHighscoreTab(tab: HighscoreTab): void {
   highscoreTab = tab;
 }
 
+const SPARK_W = 56;
+const SPARK_H = 16;
+
+function rankSparkline(playerId: string, history: HighscoreRankPoint[] | undefined): string {
+  if (!Array.isArray(history) || history.length === 0) return "";
+  const points: HighscoreRankPoint[] = [];
+  for (const point of history) {
+    if (!point || typeof point.day !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(point.day)) continue;
+    if (!Number.isInteger(point.rank) || point.rank < 1) continue;
+    points.push({ day: point.day, rank: point.rank });
+  }
+  const shown = points.slice(-HIGHSCORE_RANK_HISTORY_DAYS);
+  if (!shown.length) return "";
+  const ranks = shown.map((point) => point.rank);
+  const min = Math.min(...ranks);
+  const max = Math.max(...ranks);
+  const span = max - min;
+  const coords = shown.map((point, index) => {
+    const x = shown.length === 1
+      ? SPARK_W / 2
+      : (index / (shown.length - 1)) * (SPARK_W - 2) + 1;
+    const y = span === 0 ? SPARK_H / 2 : ((point.rank - min) / span) * (SPARK_H - 4) + 2;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const label = `Rank over ${shown.length} UTC days, oldest first: ${shown
+    .map((point) => `${point.day} rank ${point.rank}`)
+    .join(", ")}`;
+  const mark = shown.length === 1
+    ? `<circle cx="${SPARK_W / 2}" cy="${SPARK_H / 2}" r="2" fill="currentColor" />`
+    : `<polyline points="${coords.join(" ")}" />`;
+  return `<svg class="hs-spark" data-testid="highscore-sparkline" data-player-id="${escapeAttr(playerId)}" data-days="${escapeAttr(shown.map((point) => point.day).join(","))}" viewBox="0 0 ${SPARK_W} ${SPARK_H}" width="${SPARK_W}" height="${SPARK_H}" role="img" aria-label="${escapeAttr(label)}">${mark}</svg>`;
+}
+
+export function isHighscoreTab(value: string | null): value is HighscoreTab {
+  return HIGHSCORE_TABS.some((tab) => tab.id === value);
+}
+
+export function setCategoryBoards(next: CategoryHighscores): void {
+  categoryBoardState = next;
+}
+
+export function resetCategoryBoards(): void {
+  categoryBoardState = emptyCategoryHighscores();
+}
+
+export function categoryBoardsEmpty(): boolean {
+  return (
+    categoryBoardState.buildings.length === 0 &&
+    categoryBoardState.fleet.length === 0 &&
+    categoryBoardState.research.length === 0 &&
+    categoryBoardState.defense.length === 0
+  );
+}
+
+function categoryHint(id: HighscoreCategoryId): string {
+  switch (id) {
+    case "buildings":
+      return "Ranked by building upgrade cost across each commander's planets. Rebuilt with the highscore cache, not on each page load.";
+    case "fleet":
+      return "Ranked by docked ships plus fleets in flight. Rebuilt with the highscore cache, not on each page load.";
+    case "research":
+      return "Ranked by research, counted once per commander. Rebuilt with the highscore cache, not on each page load.";
+    case "defense":
+      return "Ranked by defense stock across each commander's planets. Rebuilt with the highscore cache, not on each page load.";
+    default: {
+      const exhaustive: never = id;
+      return exhaustive;
+    }
+  }
+}
+
+function categoryLine(id: HighscoreCategoryId, row: HighscoreEntry, selfId: string): string {
+  return `<li data-testid="highscore-${id}-${row.rank}" data-player-id="${escapeAttr(row.playerId)}" data-home-planet="${escapeAttr(row.homePlanetId)}"><span class="row-with-thumb"><span class="hs-rank">#${fmt(row.rank)}</span>${planetDiscHtml({ src: row.artThumbUrl, artId: row.artId, size: 32 })}${row.allianceTag ? `[${escapeHtml(row.allianceTag)}] ` : ""}${escapeHtml(row.name)}${row.playerId === selfId ? " (you)" : ""}</span><span>Home ${escapeHtml(row.planetName || "world")} · ${fmtCoordsLink(row.coords)} · ${fmtCompact(row.points)} pts</span></li>`;
+}
+
+function highscoreList(view: PlayerView): string {
+  const tab = highscoreTab;
+  switch (tab) {
+    case "players": {
+      const playerRows = (view.highscores ?? [])
+        .map(
+          (h) =>
+            `<li data-testid="highscore-${h.rank}" data-player-id="${escapeAttr(h.playerId)}" data-home-planet="${escapeAttr(h.homePlanetId)}"><span class="row-with-thumb"><span class="hs-rank">#${fmt(h.rank)}</span>${planetDiscHtml({ src: h.artThumbUrl, artId: h.artId, size: 32 })}${h.allianceTag ? `[${escapeHtml(h.allianceTag)}] ` : ""}${commanderNameButton(h.playerId, h.name, `open-commander-${h.playerId}`)}${h.playerId === view.player.id ? " (you)" : ""}</span>${rankSparkline(h.playerId, h.rankHistory)}<span class="hs-meta">Home ${escapeHtml(h.planetName || "world")} · ${fmtCoordsLink(h.coords)} · ${fmtCompact(h.points)} pts · Lv ${fmt(h.level ?? 1)} · ${fmtCompact(h.xpTotal ?? 0)} XP</span></li>`,
+        )
+        .join("");
+      return `<p class="hint">One row per commander — their home planet only. Points still count the whole empire.</p>
+      <ol class="highscores" data-testid="highscores-list">
+        ${playerRows}
+      </ol>`;
+    }
+    case "alliances": {
+      const allianceRows = (view.allianceHighscores ?? [])
+        .map(
+          (row) =>
+            `<li data-testid="alliance-highscore-${row.rank}"><span class="hs-rank">#${fmt(row.rank)}</span> [${escapeHtml(row.tag)}] ${escapeHtml(row.name)} · ${fmt(row.memberCount)} members · ${fmtCompact(row.points)} pts · avg ${fmtCompact(row.averagePoints)}</li>`,
+        )
+        .join("");
+      return `<p class="hint">Ranked by total member points. Rebuilt with the highscore cache, not on each page load.</p>
+      <ol class="highscores" data-testid="alliance-highscores">
+        ${allianceRows || `<li data-testid="alliance-highscores-empty">No alliances ranked yet.</li>`}
+      </ol>`;
+    }
+    case "buildings":
+    case "fleet":
+    case "research":
+    case "defense": {
+      const rows = categoryBoardState[tab] ?? [];
+      const body = rows.length
+        ? rows.map((row) => categoryLine(tab, row, view.player.id)).join("")
+        : `<li data-testid="highscore-category-empty">No commanders ranked yet.</li>`;
+      return `<p class="hint" data-testid="highscore-category-hint">${categoryHint(tab)}</p>
+      <ol class="highscores" data-testid="highscore-category-${tab}">
+        ${body}
+      </ol>`;
+    }
+    default: {
+      const exhaustive: never = tab;
+      return exhaustive;
+    }
+  }
+}
+
 function highscorePage(view: PlayerView): string {
-  const playersActive = highscoreTab !== "alliances";
-  const playerRows = (view.highscores ?? [])
-    .map(
-      (h) =>
-        `<li data-testid="highscore-${h.rank}" data-player-id="${escapeAttr(h.playerId)}" data-home-planet="${escapeAttr(h.homePlanetId)}"><span class="row-with-thumb"><span class="hs-rank">#${fmt(h.rank)}</span>${planetDiscHtml({ src: h.artThumbUrl, artId: h.artId, size: 32 })}${h.allianceTag ? `[${escapeHtml(h.allianceTag)}] ` : ""}${escapeHtml(h.name)}${h.playerId === view.player.id ? " (you)" : ""}</span><span>Home ${escapeHtml(h.planetName || "world")} · ${fmtCoordsLink(h.coords)} · ${fmtCompact(h.points)} pts · Lv ${fmt(h.level ?? 1)} · ${fmtCompact(h.xpTotal ?? 0)} XP</span></li>`,
-    )
-    .join("");
-  const allianceRows = (view.allianceHighscores ?? [])
-    .map(
-      (row) =>
-        `<li data-testid="alliance-highscore-${row.rank}"><span class="hs-rank">#${fmt(row.rank)}</span> [${escapeHtml(row.tag)}] ${escapeHtml(row.name)} · ${fmt(row.memberCount)} members · ${fmtCompact(row.points)} pts · avg ${fmtCompact(row.averagePoints)}</li>`,
-    )
-    .join("");
+  const tabs = HIGHSCORE_TABS.map(
+    (tab) =>
+      `<button type="button" data-highscore-tab="${tab.id}" data-testid="highscore-tab-${tab.id}" aria-pressed="${highscoreTab === tab.id ? "true" : "false"}">${tab.label}</button>`,
+  ).join("");
   return `
     <section class="panel" data-testid="highscores">
       <h2>Highscores</h2>
       <div class="alliance-member-actions" data-testid="highscore-tabs">
-        <button type="button" data-highscore-tab="players" data-testid="highscore-tab-players" aria-pressed="${playersActive ? "true" : "false"}">Commanders</button>
-        <button type="button" data-highscore-tab="alliances" data-testid="highscore-tab-alliances" aria-pressed="${playersActive ? "false" : "true"}">Alliances</button>
+        ${tabs}
       </div>
-      ${
-        playersActive
-          ? `<p class="hint">One row per commander — their home planet only. Points still count the whole empire.</p>
-      <ol class="highscores" data-testid="highscores-list">
-        ${playerRows}
-      </ol>`
-          : `<p class="hint">Ranked by total member points. Rebuilt with the highscore cache, not on each page load.</p>
-      <ol class="highscores" data-testid="alliance-highscores">
-        ${allianceRows || `<li data-testid="alliance-highscores-empty">No alliances ranked yet.</li>`}
-      </ol>`
-      }
+      ${highscoreList(view)}
     </section>
     <section class="panel" data-testid="hall-of-fame">
       <h2>Hall of Fame</h2>
@@ -446,6 +658,7 @@ export function pageHtml(
   view: PlayerView,
   busy: boolean,
   fleetDraft: FleetDraft | null,
+  alliancePage?: AlliancePageExtras | null,
 ): string {
   switch (page) {
     case "overview":
@@ -462,6 +675,8 @@ export function pageHtml(
       return defensesPage(view, busy);
     case "fleet":
       return fleetPage(view, busy, fleetDraft);
+    case "simulator":
+      return combatSimHtml(view);
     case "galaxy":
       return galaxyPanel(view, busy);
     case "shop":
@@ -469,7 +684,7 @@ export function pageHtml(
     case "highscore":
       return highscorePage(view);
     case "alliances":
-      return alliancesPageHtml(view, busy);
+      return alliancesPageHtml(view, busy, alliancePage);
     case "seasons":
       return seasonsPage(view, busy);
     case "messages":

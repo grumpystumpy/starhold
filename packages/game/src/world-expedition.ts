@@ -40,6 +40,7 @@ import {
   grantStarshards,
 } from "./world-boosts.js";
 import { recordCombatReport } from "./combat-share.js";
+import { galaxyEventShieldMods } from "./world-galaxy-events.js";
 
 /** OGame-style expedition find scaling constants. */
 export const EXPEDITION_STRUCTURAL_CAP = 10_000;
@@ -101,6 +102,7 @@ export function expeditionPlayerEncounterRoll(
   return (hashSeed(`pvpExped:${fleetId}:${at}`) % rollSpace) < threshold;
 }
 
+import { noteAchievementCount } from "./world-achievements.js";
 import { noteGoalMetric } from "./world-goals.js";
 import { noteOnboardingRecon } from "./world-onboarding.js";
 import { addDebris } from "./world-tick.js";
@@ -316,6 +318,11 @@ export function resolveExpeditionArrival(
       const rivalFleet = otherExpeditionFleets[targetIndex]!;
       const rivalBefore = normalizeFleetShips(rivalFleet.ships);
       const rivalOwner = universe.players[rivalFleet.ownerPlayerId];
+      const encounterShields = galaxyEventShieldMods(
+        universe,
+        fleet.targetCoords,
+        now,
+      );
 
       const combat = resolveCombat(
         before,
@@ -323,6 +330,10 @@ export function resolveExpeditionArrival(
         emptyDefenses(),
         effectiveCombatResearch(ownerForYield),
         effectiveCombatResearch(rivalOwner),
+        {
+          attackerShieldMult: encounterShields.attackerShieldMult,
+          defenderShieldMult: encounterShields.defenderShieldMult,
+        },
       );
 
       fleet.ships = combat.attackerAfter;
@@ -434,7 +445,10 @@ export function resolveExpeditionArrival(
       emptyDefenses(),
       attackerResearch,
       defenderResearch,
-      { seed: `${fleet.id}:ambush:${fleet.arrivesAt}` },
+      {
+        seed: `${fleet.id}:ambush:${fleet.arrivesAt}`,
+        ...galaxyEventShieldMods(universe, fleet.targetCoords, now),
+      },
     );
 
     let attackerSurvivingShips: FleetShips;
@@ -668,6 +682,7 @@ export function resolveExpeditionArrival(
     // Outbound arrival counts as a run, including an empty find.
     // `now` is the lazy catch-up clock, so offline flights credit the open period.
     noteGoalMetric(owner, "expedition", 1, now);
+    noteAchievementCount(owner, "expeditions", 1);
     noteOnboardingRecon(owner);
     universe.players[owner.id] = owner;
   }

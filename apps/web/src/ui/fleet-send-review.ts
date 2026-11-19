@@ -27,7 +27,10 @@ export interface FleetSendReviewInput {
   cruiseSeconds: number | null;
   /** Full-cruise one-way deuterium. Null if unknown. */
   cruiseFuel: number | null;
+  /** Fleet cargo capacity from `fleetCargoCapacity`. */
   cargo: number;
+  /** Floored metal + crystal + deuterium loaded for transport. */
+  cargoLoaded?: number;
   speedPercent: number;
   /** Speed-control preview. Not sent. */
   previewSeconds: number | null;
@@ -53,6 +56,14 @@ export interface FleetSendReview {
   returnText: string;
   holdText: string;
   limitText: string;
+  /** Set only for transport. Other missions leave this null. */
+  transport: TransportClarity | null;
+}
+
+export interface TransportClarity {
+  cargoUsed: number;
+  cargoAvailable: number;
+  overCapacity: boolean;
 }
 
 export function fleetReviewTimeZone(): string {
@@ -141,7 +152,7 @@ export function buildFleetSendReview(input: FleetSendReviewInput): FleetSendRevi
       holdText = "No hold. Moon Bridge arrival is about 1 second. Cruise speed is not used.";
     } else if (input.mission === "transport") {
       returnMode = "stay";
-      returnText = "No return flight. Ships and cargo stay on your world.";
+      returnText = "Return time: No return flight. Ships and cargo stay on your world.";
       holdText = "No hold.";
     } else if (input.mission === "deploy" && input.ownTarget) {
       returnMode = "stay";
@@ -206,6 +217,17 @@ export function buildFleetSendReview(input: FleetSendReviewInput): FleetSendRevi
     speedNote = `${speedNote} Speed ${fmt(input.speedPercent)}% preview only, not sent: flight ~${fmtEta(input.previewSeconds)} · fuel ~${fmt(input.previewFuel)} deut.`;
   }
 
+  const cargoUsed = Math.max(0, Math.floor(input.cargoLoaded ?? 0));
+  const cargoAvailable = Math.max(0, Math.floor(input.cargo));
+  const transport: TransportClarity | null =
+    input.mission === "transport"
+      ? {
+          cargoUsed,
+          cargoAvailable,
+          overCapacity: cargoUsed > cargoAvailable,
+        }
+      : null;
+
   return {
     missionLabel: input.missionLabel,
     coordsText: input.coords ? fmtCoords(input.coords) : null,
@@ -223,6 +245,7 @@ export function buildFleetSendReview(input: FleetSendReviewInput): FleetSendRevi
     returnText,
     holdText,
     limitText: FLEET_REVIEW_LIMIT,
+    transport,
   };
 }
 
@@ -243,15 +266,31 @@ export function renderFleetSendReview(review: FleetSendReview): string {
   const arrival =
     review.arrivalClock == null
       ? "Not available. No clock is shown without a flight duration."
-      : `Clock ${escapeHtml(review.arrivalClock)}`;
-  const fuel =
+      : review.transport
+        ? `<span data-testid="fleet-transfer-eta">ETA ${escapeHtml(review.arrivalClock)}</span>`
+        : `Clock ${escapeHtml(review.arrivalClock)}`;
+  const fuelText =
     review.fuel == null
       ? "Not available."
       : `${fmt(review.fuel)} deuterium, one way, at full cruise. cargo ${fmt(review.cargo)}`;
+  const fuel = review.transport
+    ? `<span data-testid="fleet-transfer-fuel">${fuelText}</span>`
+    : fuelText;
   const ret =
     review.returnClock == null
       ? escapeHtml(review.returnText)
       : `${escapeHtml(review.returnText)} Clock ${escapeHtml(review.returnClock)}.`;
+  const cargoRow = review.transport
+    ? `<p data-testid="fleet-transfer-cargo"><strong>Cargo</strong> ${fmt(review.transport.cargoUsed)} used / ${fmt(review.transport.cargoAvailable)} available</p>`
+    : "";
+  const transfer = review.transport;
+  const overCapacity =
+    transfer?.overCapacity === true
+      ? `<p class="blocked-reason" data-testid="fleet-cargo-over-capacity">Cargo exceeds fleet capacity (${fmt(transfer.cargoAvailable)}).</p>`
+      : "";
+  const returnValue = review.transport
+    ? `<span data-testid="fleet-transfer-return">${ret}</span>`
+    : ret;
   return `
     <section class="fleet-review" data-testid="fleet-send-review" aria-label="Review before send">
       <h3>Review before send</h3>
@@ -261,9 +300,11 @@ export function renderFleetSendReview(review: FleetSendReview): string {
         ${row("Flight out", "fleet-review-outbound", `<span data-testid="fleet-flight">${duration}</span>`)}
         ${row("Arrival", "fleet-review-arrival", arrival)}
         ${row("Launch fuel", "fleet-review-fuel", fuel)}
-        ${row("Return", "fleet-review-return", ret)}
+        ${row("Return", "fleet-review-return", returnValue)}
         ${row("Hold", "fleet-review-hold", escapeHtml(review.holdText))}
       </dl>
+      ${cargoRow}
+      ${overCapacity}
       <p class="hint" data-testid="fleet-review-limit">${escapeHtml(review.limitText)}</p>
       <p class="hint" data-testid="fleet-speed-note">${escapeHtml(review.speedNote)}</p>
     </section>`;

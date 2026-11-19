@@ -1,5 +1,6 @@
 import type {
   AcsPrefill,
+  AllianceRecruitingEntry,
   BuildingId,
   DefenseId,
   PlayerView,
@@ -63,20 +64,34 @@ export const session = {
   armedResearch: null as ResearchId | null,
   /** Mark-read armed the same way. `all` marks every unread alert. */
   armedEventRead: null as { kind: "one"; id: string } | { kind: "all" } | null,
+  /** Last Galaxy-page scanner moons. The 30s poll does not refresh this list. */
+  scannerMoons: null as PlayerView["scannerMoons"] | null,
+  /** Opening Galaxy should load scanner moons on that page's state read. */
+  galaxyScannersDue: false,
   /** Galaxy browser system override (null = follow active planet). */
   galaxySystem: null as number | null,
   /** Galaxy browser override (null = follow active planet). */
   galaxyGalaxy: null as number | null,
   /** Active routed page (synced to URL pathname). */
   activePage: "overview" as NavPage,
+  /** Alliances-page directory from GET /api/alliance/list. Not part of the state poll. */
+  alliancePageDirectory: null as AllianceRecruitingEntry[] | null,
+  /** Request-mode apply panel open for this alliance id. */
+  allianceRequestId: null as string | null,
   /** Fleet deep-link from Propose Joint Strike. Cleared once the form is armed. */
   pendingAcsPrefill: null as AcsPrefill | null,
   /** One-shot Fleet draft from a galaxy Colonize/Attack action. */
   pendingGalaxyFleetDraft: null as FleetDraft | null,
+  /** One-shot Fleet draft from Send fleet away. Cleared once the form is armed. */
+  pendingFleetSaveDraft: null as FleetDraft | null,
   /** Ignore duplicate click after pointerup already dispatched the armed action. */
   suppressClickUntil: 0,
   /** `?reset=` token for the email password-reset landing. Null hides the form. */
   passwordResetToken: null as string | null,
+  /** `?invite=` code for a new home near a friend. Cleared after join. */
+  inviteCode: null as string | null,
+  /** Last invite URL, shown if the clipboard is unavailable. */
+  inviteShareUrl: null as string | null,
   /** A 5xx or network failure must not offer a new commander. */
   holdJoin: false,
 };
@@ -189,9 +204,16 @@ export function readDefenseCount(defenseId: DefenseId): number {
  * Deep-link `playerId` / `planet` are kept by `syncSessionUrl` after resume.
  */
 export function stripJoinParams(): void {
+  session.inviteCode = null;
   const url = new URL(window.location.href);
-  if (!url.searchParams.has("commander")) return;
-  url.searchParams.delete("commander");
+  let changed = false;
+  for (const key of ["commander", "invite"]) {
+    if (url.searchParams.has(key)) {
+      url.searchParams.delete(key);
+      changed = true;
+    }
+  }
+  if (!changed) return;
   const next = `${url.pathname}${url.search}${url.hash}`;
   window.history.replaceState({}, "", next || "/");
 }

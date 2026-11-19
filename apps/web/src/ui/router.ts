@@ -115,6 +115,9 @@ export function navigateTo(
     session.security = null;
     session.securityFor = null;
   }
+  if (page === "galaxy" && (session.activePage !== "galaxy" || leftAccountMenu)) {
+    session.galaxyScannersDue = true;
+  }
   if (session.activePage === page) {
     syncSessionUrl({ replace: true, page });
     if (leftAccountMenu) schedulePaint();
@@ -123,6 +126,7 @@ export function navigateTo(
   session.activePage = page;
   syncSessionUrl({ replace: opts.replace, page });
   schedulePaint();
+  onPageChange?.(page);
 }
 
 export function openAccountMenu(page: AccountMenuPage): void {
@@ -174,6 +178,13 @@ export function navigateShopTab(tab: ShopTab): void {
   schedulePaint();
 }
 
+let onPageChange: ((page: NavPage) => void) | null = null;
+
+/** Fired after a real page change so the poll can fetch that page's slice. */
+export function setOnPageChange(fn: ((page: NavPage) => void) | null): void {
+  onPageChange = fn;
+}
+
 let popBound = false;
 
 /** Bind once: back/forward restores the routed page. */
@@ -188,7 +199,10 @@ export function ensurePopstateHandler(): void {
       session.securityFor = null;
       if (!account) session.recoveryCodes = null;
     }
+    const previous = session.activePage;
     session.activePage = pageFromLocation();
+    if (session.activePage === "galaxy") session.galaxyScannersDue = true;
+    if (session.activePage !== previous) onPageChange?.(session.activePage);
     schedulePaint();
   });
 }

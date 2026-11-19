@@ -8,10 +8,16 @@ import {
   advanceUniverse,
   applyNpcRaidOnNpc,
   applyNpcRaidOnPlanet,
+  claimDailyLogin,
+  createAlienBase,
   createPirateBase,
+  categoryHighscoreBoards,
   createUniverse,
+  emptyCategoryHighscores,
   empirePoints,
+  type CategoryHighscores,
   graduateNewbieProtection,
+  HIGHSCORE_RANK_HISTORY_DAYS,
   joinUniverse,
   launchFleet,
   migrateOrResetUniverse,
@@ -19,14 +25,19 @@ import {
   MAP_SLOTS,
   MAP_SYSTEMS,
   NEWBIE_PROTECTION_POINTS,
+  PIRATE_BASES_PER_GALAXY,
   PIRATE_TARGET_BASE_COUNT,
   pickRaidTarget,
+  abandonColony,
   playerView,
   queueBuildingUpgrade,
   queueResearch,
   queueShipBuild,
   resolvePirateRaidArrival,
   tickPirates,
+  utcHighscoreDay,
+  workersTickBudget,
+  npcJobBudget,
   UNIVERSE_SCHEMA_VERSION,
   emptyDefenses,
   emptyFleetShips,
@@ -61,8 +72,23 @@ import {
 import { resetMemoryUniverse, setUniverseFaultForTests, withUniverse, withUniverseRead } from "./store.js";
 import { createApp } from "./app.js";
 
+function parseWorldShell(doc: string): UniverseState {
+  if (doc.startsWith("SH2\n")) {
+    const payload = doc.slice("SH2\n".length);
+    const nl = payload.indexOf("\n");
+    const len = Number(payload.slice(0, nl));
+    const shell = payload.slice(nl + 1, nl + 1 + len);
+    const parsed = JSON.parse(shell) as UniverseState;
+    parsed.pirateBases = parsed.pirateBases ?? {};
+    parsed.alienBases = parsed.alienBases ?? {};
+    return parsed;
+  }
+  return JSON.parse(doc) as UniverseState;
+}
+
 function sqliteD1(): { db: D1Like; raw: DatabaseSync } {
   const raw = new DatabaseSync(":memory:");
+  let batchTail = Promise.resolve();
   raw.exec(`
     CREATE TABLE kv (
       key TEXT PRIMARY KEY,
@@ -102,6 +128,10 @@ function sqliteD1(): { db: D1Like; raw: DatabaseSync } {
       return api;
     },
     async batch(statements) {
+      const previous = batchTail;
+      let release!: () => void;
+      batchTail = new Promise<void>((resolve) => (release = resolve));
+      await previous;
       raw.exec("BEGIN");
       const results: D1RunResult[] = [];
       try {
@@ -111,6 +141,8 @@ function sqliteD1(): { db: D1Like; raw: DatabaseSync } {
       } catch (err) {
         raw.exec("ROLLBACK");
         throw err;
+      } finally {
+        release();
       }
     },
   };
@@ -822,6 +854,105 @@ describe("row save migration", () => {
     );
     assert.equal(board.rows.find((row) => row.playerId === offline.id)?.points, expectedPoints);
     assert.ok(db.count() <= 40, `maintenance used ${db.count()} D1 queries`);
+  });
+
+  it("writes category boards only during maintenance and serves them from cache", async () => {
+    resetMemoryUniverse();
+    const { db, raw } = sqliteD1();
+    const source = fixture();
+    const alpha = Object.values(source.players).find((player) => player.name === "OldHand")!;
+    const home = source.planets[alpha.homePlanetId]!;
+    home.ships.scout = 5;
+    home.defenses = { ...home.defenses, laserBattery: 3 };
+    await migrateAll(db, source);
+    const ids = ["buildings", "fleet", "research", "defense"] as const;
+    const countRows = () =>
+      (
+        raw
+          .prepare(
+            "SELECT COUNT(*) AS n FROM save_highscores WHERE id IN ('buildings', 'fleet', 'research', 'defense')",
+          )
+          .get() as { n: number }
+      ).n;
+    assert.equal(countRows(), 0);
+
+    const store = createD1Store(db);
+    const app = createApp();
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "GET", cpuMs: 0 },
+      () => withUniverseRead(() => undefined, { playerIds: [alpha.id] }),
+    );
+    assert.equal(countRows(), 0);
+
+    const request = (method: string, path: string) =>
+      runWithScope({ kv: store, db, mode: "d1", method, cpuMs: 0 }, () => app.request(path, { method }));
+    const missing = await request("GET", "/api/highscores/categories");
+    assert.equal(missing.status, 200);
+    const missingBody = (await missing.json()) as CategoryHighscores;
+    assert.deepEqual(missingBody, emptyCategoryHighscores());
+
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "POST", cpuMs: 0 },
+      () => withUniverse((universe) => {
+        advanceUniverse(universe);
+      }, { maintenance: true }),
+    );
+    assert.equal(countRows(), 4);
+    const loaded = await loadWorkingSet(db, { maintenance: true });
+    const expected = categoryHighscoreBoards(loaded.universe);
+    for (const id of ids) {
+      const row = raw.prepare("SELECT doc FROM save_highscores WHERE id = ?").get(id) as { doc: string };
+      assert.equal(row.doc, JSON.stringify(expected[id]));
+    }
+
+    const cached = await request("GET", "/api/highscores/categories");
+    assert.equal(cached.status, 200);
+    const cachedBody = (await cached.json()) as CategoryHighscores;
+    assert.deepEqual(cachedBody.buildings, expected.buildings);
+    assert.equal(cachedBody.fleet[0]?.playerId, alpha.id);
+    assert.equal(cachedBody.research[0]?.playerId, alpha.id);
+    assert.equal(cachedBody.defense[0]?.playerId, alpha.id);
+
+    const state = await request("GET", `/api/state?playerId=${encodeURIComponent(alpha.id)}`);
+    assert.equal(state.status, 200);
+    const view = (await state.json()) as {
+      categoryHighscores?: unknown;
+      highscores: Array<Record<string, unknown>>;
+    };
+    assert.equal(view.categoryHighscores, undefined);
+    const score = view.highscores[0];
+    assert.ok(score);
+    assert.equal("buildings" in score, false);
+    assert.equal("fleet" in score, false);
+    assert.equal("research" in score, false);
+    assert.equal("defense" in score, false);
+
+    const before = ids.map(
+      (id) => (raw.prepare("SELECT doc FROM save_highscores WHERE id = ?").get(id) as { doc: string }).doc,
+    );
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "POST", cpuMs: 0 },
+      () => withUniverse((universe) => {
+        const player = universe.players[alpha.id];
+        if (player) player.starshards = (player.starshards ?? 0) + 1;
+      }, { playerIds: [alpha.id] }),
+    );
+    const after = ids.map(
+      (id) => (raw.prepare("SELECT doc FROM save_highscores WHERE id = ?").get(id) as { doc: string }).doc,
+    );
+    assert.deepEqual(after, before);
+
+    const counted = subrequestD1(db, 20);
+    counted.reset();
+    await runWithScope(
+      { kv: createD1Store(counted), db: counted, mode: "d1", method: "GET", cpuMs: 0 },
+      () => app.request("/api/highscores/categories"),
+    );
+    assert.ok(counted.count() <= 2, `category read used ${counted.count()} queries`);
+
+    const memory = await createApp().request("/api/highscores/categories");
+    assert.equal(memory.status, 200);
+    assert.deepEqual(await memory.json(), emptyCategoryHighscores());
   });
 
   it("locks per player and rejects a stale row", async () => {
@@ -2384,6 +2515,578 @@ describe("row save review fixes", () => {
     assert.ok(stepP95 <= 20, `migration p95 ${stepP95}`);
   });
 
+  it("keeps the same view when a small save fits the message and fleet window", async () => {
+    const { db } = sqliteD1();
+    const source = fixture();
+    await migrateAll(db, source);
+    const alpha = Object.values(source.players).find((player) => player.name === "OldHand")!;
+    const bravo = Object.values(source.players).find((player) => player.name === "Other")!;
+    const full = await loadWorkingSet(db, { full: true });
+    const scopedAlpha = await loadWorkingSet(db, { playerIds: [alpha.id] });
+    const scopedBravo = await loadWorkingSet(db, { playerIds: [bravo.id] });
+    const now = Date.now();
+    const view = (loaded: { universe: UniverseState }, playerId: string) =>
+      playerView(structuredClone(loaded.universe), playerId, now);
+    const same = (playerId: string, wide: ReturnType<typeof view>, narrow: ReturnType<typeof view>) => {
+      assert.deepEqual(
+        narrow.fleets.map((fleet) => fleet.id),
+        wide.fleets.map((fleet) => fleet.id),
+        `${playerId} fleets`,
+      );
+      assert.deepEqual(
+        narrow.hostileInbound.map((fleet) => fleet.id),
+        wide.hostileInbound.map((fleet) => fleet.id),
+        `${playerId} hostile`,
+      );
+      assert.deepEqual(narrow.reports.map((report) => report.id), wide.reports.map((report) => report.id));
+      assert.deepEqual(narrow.spyReports.map((report) => report.id), wide.spyReports.map((report) => report.id));
+      assert.deepEqual(
+        narrow.expeditionReports.map((report) => report.id),
+        wide.expeditionReports.map((report) => report.id),
+      );
+      assert.deepEqual(
+        (narrow.player.eventLog ?? []).map((event) => event.id),
+        (wide.player.eventLog ?? []).map((event) => event.id),
+      );
+    };
+    same(alpha.id, view(full, alpha.id), view(scopedAlpha, alpha.id));
+    same(bravo.id, view(full, bravo.id), view(scopedBravo, bravo.id));
+  });
+
+  it("stays inside the CPU budget on a big account and still deletes every message", async () => {
+    const NOW = 1_700_000_000_000;
+    const VIEW_AT = 1_800_000_000_000;
+    const source = createUniverse("Big Account", 8, 8, { lazySeed: true });
+    if (source.seedCursor) source.seedCursor.done = true;
+    source.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
+    const players = Array.from({ length: 5 }, (_, index) => joinUniverse(source, `Big${index}`, NOW).player);
+    const hero = players[0]!;
+    const rival = players[1]!;
+    const home = source.planets[hero.homePlanetId]!;
+    home.ships = { ...emptyFleetShips(), scout: 40 };
+    home.defenses = { ...emptyDefenses(), laserBattery: 40 };
+    home.resources = { metal: 5_000, crystal: 5_000, deuterium: 5_000 };
+    for (let i = 0; i < 6; i++) {
+      const id = `colony-${i}`;
+      source.planets[id] = {
+        ...home,
+        id,
+        name: id,
+        coords: { galaxy: 1, system: 200 + i, slot: 4 },
+        moonId: null,
+        parentPlanetId: null,
+      };
+      hero.planetIds = [...hero.planetIds, id];
+    }
+    hero.eventLog = Array.from({ length: 120 }, (_, index) => ({
+      id: `ev-${index}`,
+      kind: "raidAlert" as const,
+      createdAt: NOW + index,
+      readAt: null,
+      title: "Alert",
+      body: "Kept",
+    }));
+    const bases = [];
+    for (let galaxy = 1; galaxy <= MAP_GALAXIES; galaxy++) {
+      for (let system = 1; system <= PIRATE_BASES_PER_GALAXY; system++) {
+        const base = createPirateBase(source.seed ?? source.id, galaxy, system, 15, NOW, 0);
+        base.nextRaidAt = Number.MAX_SAFE_INTEGER;
+        base.lastGrewAt = NOW;
+        base.lastFreeSpawnAt = NOW;
+        bases.push(base);
+      }
+    }
+    assert.equal(bases.length, PIRATE_TARGET_BASE_COUNT);
+    source.pirateBases = Object.fromEntries(bases.map((base) => [base.id, base]));
+    source.alienBases = {};
+    for (let i = 0; i < 4; i++) {
+      source.fleets[`own-${i}`] = {
+        id: `own-${i}`,
+        ownerPlayerId: hero.id,
+        originPlanetId: home.id,
+        targetPlanetId: home.id,
+        targetPlayerId: hero.id,
+        targetCoords: { ...home.coords },
+        mission: "deploy",
+        ships: { scout: 1 },
+        cargo: { metal: 0, crystal: 0, deuterium: 0 },
+        departedAt: NOW,
+        arrivesAt: VIEW_AT + 86_400_000,
+        phase: "outbound",
+        reportId: null,
+      };
+    }
+    const { db, raw } = sqliteD1();
+    await migrateAll(db, source);
+    const pad = "x".repeat(2400);
+    const reportStmt = raw.prepare(
+      "INSERT INTO save_messages (id, owner_id, defender_id, kind, version, doc) VALUES (?, ?, ?, ?, 1, ?)",
+    );
+    const fleetStmt = raw.prepare(
+      "INSERT INTO save_fleets (id, owner_id, target_owner_id, version, doc) VALUES (?, 'npc_pirates', ?, 1, ?)",
+    );
+    const baseId = bases[0]!.id;
+    raw.exec("BEGIN");
+    for (let i = 0; i < 2070; i++) {
+      const pvp = i === 0;
+      const id = pvp ? "rpt_pvp_keep" : `rpt_big_${i}`;
+      const attacker = pvp ? rival.id : "npc_pirates";
+      const defender = hero.id;
+      reportStmt.run(
+        id,
+        attacker,
+        defender,
+        "report",
+        JSON.stringify({
+          id,
+          at: NOW + i,
+          missionId: "m",
+          attackerPlayerId: attacker,
+          defenderPlayerId: defender,
+          attackerName: attacker,
+          defenderName: hero.name,
+          targetCoords: home.coords,
+          attackerBefore: { scout: 1 },
+          attackerAfter: {},
+          defenderBefore: { scout: 1 },
+          defenderAfter: { scout: 1 },
+          defensesBefore: {},
+          defensesAfter: {},
+          loot: { metal: 0, crystal: 0, deuterium: 0 },
+          debrisCreated: { metal: 0, crystal: 0 },
+          outcome: "defender_win",
+          rounds: 1,
+          summary: pad,
+        }),
+      );
+    }
+    for (let i = 0; i < 15; i++) {
+      const spyId = `spy_big_${i}`;
+      reportStmt.run(
+        spyId,
+        hero.id,
+        "",
+        "spy",
+        JSON.stringify({
+          id: spyId,
+          at: VIEW_AT - 60_000 + i,
+          missionId: "m",
+          spyPlayerId: hero.id,
+          targetPlayerId: rival.id,
+          targetName: rival.name,
+          targetCoords: home.coords,
+          detail: 1,
+          resources: null,
+          buildings: null,
+          ships: null,
+          defenses: null,
+          research: null,
+          summary: "Scan",
+        }),
+      );
+      const expId = `exp_big_${i}`;
+      reportStmt.run(
+        expId,
+        hero.id,
+        "",
+        "expedition",
+        JSON.stringify({
+          id: expId,
+          at: VIEW_AT - 60_000 + i,
+          missionId: "m",
+          playerId: hero.id,
+          targetCoords: { ...home.coords, slot: 16 },
+          kind: "nothing",
+          cargoGained: { metal: 0, crystal: 0, deuterium: 0 },
+          shipsDelta: {},
+          summary: "Empty",
+        }),
+      );
+    }
+    for (let i = 0; i < 420; i++) {
+      const id = `npc-due-${String(i).padStart(4, "0")}`;
+      fleetStmt.run(
+        id,
+        hero.id,
+        JSON.stringify({
+          id,
+          ownerPlayerId: "npc_pirates",
+          originPlanetId: baseId,
+          originPirateBaseId: baseId,
+          targetPlanetId: home.id,
+          targetPlayerId: hero.id,
+          targetCoords: home.coords,
+          mission: "raid",
+          ships: { scout: 1 },
+          cargo: { metal: 0, crystal: 0, deuterium: 0 },
+          departedAt: 1,
+          arrivesAt: i + 1,
+          phase: "outbound",
+          reportId: null,
+        }),
+      );
+    }
+    raw.exec("COMMIT");
+    const worldBytes = (
+      await db.prepare("SELECT length(doc) AS n FROM save_world").bind().first<{ n: number }>()
+    )?.n ?? 0;
+    const npcRows = (
+      await db.prepare("SELECT COUNT(*) AS n FROM save_npc_bases").bind().first<{ n: number }>()
+    )?.n ?? 0;
+    const initialWorldDoc = await db
+      .prepare("SELECT doc FROM save_world WHERE id = 'world'")
+      .bind()
+      .first<{ doc: string }>();
+    assert.ok(initialWorldDoc?.doc.startsWith("SH2\n"), "packed worlds are the default format");
+    assert.ok(npcRows > 0, `save_npc_bases rows ${npcRows}`);
+    assert.ok(worldBytes < 100_000, `world doc should be slim after paging bases out, got ${worldBytes}`);
+    const worldVersion = async () =>
+      (
+        await db
+          .prepare("SELECT version FROM save_world WHERE id = 'world'")
+          .bind()
+          .first<{ version: number }>()
+      )?.version ?? 0;
+
+    const store = createD1Store(db);
+    const scope = {
+      kv: store,
+      db,
+      mode: "d1" as const,
+      method: "GET",
+      cpuMs: 0,
+      budget: workersTickBudget(),
+    };
+    const pick = (values: number[], p: number) => {
+      const sorted = [...values].sort((a, b) => a - b);
+      return sorted[Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1)]!;
+    };
+    const readOnce = async () => {
+      scope.cpuMs = 0;
+      scope.method = "GET";
+      scope.budget = workersTickBudget();
+      await runWithScope(scope, () =>
+        withUniverseRead((universe) => {
+          playerView(universe, hero.id, VIEW_AT);
+        }, { playerIds: [hero.id] }),
+      );
+      return scope.cpuMs;
+    };
+    const writeOnce = async () => {
+      scope.cpuMs = 0;
+      scope.method = "POST";
+      scope.budget = workersTickBudget();
+      await runWithScope(scope, () =>
+        withUniverse((universe) => {
+          claimDailyLogin(universe, hero.id, VIEW_AT);
+        }, { playerIds: [hero.id] }),
+      );
+      return scope.cpuMs;
+    };
+    const coldRead = await readOnce();
+    const worldVersionAfterCold = await worldVersion();
+    const readSamples: number[] = [];
+    for (let i = 0; i < 21; i++) readSamples.push(await readOnce());
+    assert.equal(
+      await worldVersion(),
+      worldVersionAfterCold,
+      "repeat page loads must not rewrite the world document",
+    );
+    await writeOnce();
+    const writeSamples: number[] = [];
+    for (let i = 0; i < 21; i++) writeSamples.push(await writeOnce());
+    const after = {
+      read: {
+        median: Number(pick(readSamples, 50).toFixed(2)),
+        p95: Number(pick(readSamples, 95).toFixed(2)),
+        samples: readSamples.map((n) => Number(n.toFixed(2))),
+      },
+      write: {
+        median: Number(pick(writeSamples, 50).toFixed(2)),
+        p95: Number(pick(writeSamples, 95).toFixed(2)),
+        samples: writeSamples.map((n) => Number(n.toFixed(2))),
+      },
+    };
+    console.log(`cpu ms ${JSON.stringify(after)}`);
+    console.log(`cpu ms ${JSON.stringify({ coldRead })}`);
+    const packed = await loadWorkingSet(db, { playerIds: [hero.id] });
+    const packedBase = packed.universe.pirateBases?.[baseId];
+    assert.equal(packedBase?.destroyedAt ?? null, null);
+    assert.equal(typeof packedBase?.name, "string");
+    assert.ok(packedBase?.ships);
+    const packedFull = await loadWorkingSet(db, { full: true });
+    assert.equal(Object.keys(packedFull.universe.pirateBases ?? {}).length, bases.length);
+    assert.ok(after.read.median <= 6, `read median ${after.read.median}`);
+    assert.ok(after.read.p95 <= 10, `read p95 ${after.read.p95}`);
+    assert.ok(after.write.median <= 8, `write median ${after.write.median}`);
+    assert.ok(after.write.p95 <= 10, `write p95 ${after.write.p95}`);
+
+    const oldWorldFlag = process.env.STARHOLD_OLD_WORLD_DOC;
+    try {
+      process.env.STARHOLD_OLD_WORLD_DOC = "1";
+      scope.method = "POST";
+      scope.budget = workersTickBudget();
+      await runWithScope(scope, () =>
+        withUniverse((universe) => {
+          universe.npcPlayerPageCursor = "cpu-old-world-conversion";
+        }, { playerIds: [hero.id] }),
+      );
+    } finally {
+      if (oldWorldFlag == null) delete process.env.STARHOLD_OLD_WORLD_DOC;
+      else process.env.STARHOLD_OLD_WORLD_DOC = oldWorldFlag;
+    }
+    const oldWorldDoc = await db
+      .prepare("SELECT doc FROM save_world WHERE id = 'world'")
+      .bind()
+      .first<{ doc: string }>();
+    assert.ok(oldWorldDoc?.doc && !oldWorldDoc.doc.startsWith("SH2\n"));
+    scope.method = "POST";
+    scope.budget = npcJobBudget();
+    await runWithScope(scope, () =>
+      withUniverse((universe) => tickPirates(universe, Date.now()), { npc: true }),
+    );
+    const convertedWorldDoc = await db
+      .prepare("SELECT doc FROM save_world WHERE id = 'world'")
+      .bind()
+      .first<{ doc: string }>();
+    assert.ok(convertedWorldDoc?.doc.startsWith("SH2\n"), "NPC cron converts a legacy world doc");
+
+    const beforeDrain = await db
+      .prepare("SELECT COUNT(*) AS n FROM save_fleets WHERE id LIKE 'npc-due-%'")
+      .bind()
+      .first<{ n: number }>();
+    const resolved = new Set<string>();
+    const stepSamples: number[] = [];
+    for (let step = 0; step < 500; step++) {
+      scope.cpuMs = 0;
+      scope.method = "GET";
+      scope.budget = workersTickBudget();
+      let batch: string[] = [];
+      await runWithScope(scope, () =>
+        withUniverseRead((universe) => {
+          const before = Object.keys(universe.fleets).filter((id) => id.startsWith("npc-due-"));
+          playerView(universe, hero.id, VIEW_AT);
+          batch = before.filter((id) => !universe.fleets[id]);
+        }, { playerIds: [hero.id] }),
+      );
+      stepSamples.push(scope.cpuMs);
+      if (batch.length === 0) break;
+      for (const id of batch) {
+        assert.equal(resolved.has(id), false, `${id} resolved twice`);
+        resolved.add(id);
+      }
+    }
+    const left = await db
+      .prepare("SELECT COUNT(*) AS n FROM save_fleets WHERE id LIKE 'npc-due-%'")
+      .bind()
+      .first<{ n: number }>();
+    assert.equal(left?.n ?? -1, 0, `overdue left ${left?.n}, resolved ${resolved.size}`);
+    assert.equal(resolved.size, beforeDrain?.n ?? -1);
+    const drainP95 = Number(pick(stepSamples, 95).toFixed(2));
+    assert.ok(drainP95 <= 10, `drain p95 ${drainP95}`);
+
+    const app = createApp();
+    const post = (playerId: string, category: string) =>
+      runWithScope({ ...scope, method: "POST", cpuMs: 0, budget: workersTickBudget() }, () =>
+        app.request("/api/delete-messages", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ playerId, category }),
+        }),
+      );
+    const combat = await post(hero.id, "combat");
+    assert.equal(combat.status, 200);
+    const npcLeft = await db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM save_messages
+         WHERE kind = 'report' AND defender_id = ? AND owner_id = 'npc_pirates'`,
+      )
+      .bind(hero.id)
+      .first<{ n: number }>();
+    assert.equal(npcLeft?.n, 0);
+    const expeditions = await db
+      .prepare("SELECT COUNT(*) AS n FROM save_messages WHERE kind = 'expedition' AND owner_id = ?")
+      .bind(hero.id)
+      .first<{ n: number }>();
+    assert.equal(expeditions?.n, 0);
+    const pvp = await db
+      .prepare("SELECT id FROM save_messages WHERE id = 'rpt_pvp_keep'")
+      .bind()
+      .first<{ id: string }>();
+    assert.equal(pvp?.id, "rpt_pvp_keep");
+    const hidden = await db
+      .prepare("SELECT doc FROM save_players WHERE id = ?")
+      .bind(hero.id)
+      .first<{ doc: string }>();
+    assert.match(hidden?.doc ?? "", /rpt_pvp_keep/);
+    const spies = await db
+      .prepare("SELECT COUNT(*) AS n FROM save_messages WHERE kind = 'spy' AND owner_id = ?")
+      .bind(hero.id)
+      .first<{ n: number }>();
+    assert.equal(spies?.n, 15);
+    const other = await post(rival.id, "combat");
+    assert.equal(other.status, 200);
+    const gone = await db
+      .prepare("SELECT id FROM save_messages WHERE id = 'rpt_pvp_keep'")
+      .bind()
+      .first<{ id: string }>();
+    assert.equal(gone, null);
+  });
+
+  it("overlapping /api/state reads and an NPC tick do not share a world", async () => {
+    const NOW = 1_700_000_000_000;
+    const source = createUniverse("Overlap Account", 8, 8, { lazySeed: true });
+    if (source.seedCursor) source.seedCursor.done = true;
+    source.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
+    const players = Array.from({ length: 5 }, (_, index) => joinUniverse(source, `Lap${index}`, NOW).player);
+    const hero = players[0]!;
+    const home = source.planets[hero.homePlanetId]!;
+    home.ships = { ...emptyFleetShips(), scout: 40 };
+    home.defenses = { ...emptyDefenses(), laserBattery: 40 };
+    home.resources = { metal: 5_000, crystal: 5_000, deuterium: 5_000 };
+    const bases = [];
+    for (let galaxy = 1; galaxy <= MAP_GALAXIES; galaxy++) {
+      for (let system = 1; system <= PIRATE_BASES_PER_GALAXY; system++) {
+        const base = createPirateBase(source.seed ?? source.id, galaxy, system, 15, NOW, 0);
+        base.nextRaidAt = Number.MAX_SAFE_INTEGER;
+        base.lastGrewAt = NOW;
+        base.lastFreeSpawnAt = NOW;
+        bases.push(base);
+      }
+    }
+    source.pirateBases = Object.fromEntries(bases.map((base) => [base.id, base]));
+    source.alienBases = {};
+    const baseId = bases[0]!.id;
+
+    const install = async () => {
+      const { db, raw } = sqliteD1();
+      await migrateAll(db, structuredClone(source));
+      const fleetStmt = raw.prepare(
+        "INSERT INTO save_fleets (id, owner_id, target_owner_id, version, doc) VALUES (?, 'npc_pirates', ?, 1, ?)",
+      );
+      raw.exec("BEGIN");
+      for (let i = 0; i < 420; i++) {
+        const id = `npc-due-${String(i).padStart(4, "0")}`;
+        fleetStmt.run(
+          id,
+          hero.id,
+          JSON.stringify({
+            id,
+            ownerPlayerId: "npc_pirates",
+            originPlanetId: baseId,
+            originPirateBaseId: baseId,
+            targetPlanetId: home.id,
+            targetPlayerId: hero.id,
+            targetCoords: home.coords,
+            mission: "raid",
+            ships: { scout: 1 },
+            cargo: { metal: 0, crystal: 0, deuterium: 0 },
+            departedAt: 1,
+            arrivesAt: i + 1,
+            phase: "outbound",
+            reportId: null,
+          }),
+        );
+      }
+      raw.exec("COMMIT");
+      return db;
+    };
+
+    const fleetIds = async (db: D1Like) => {
+      const rows = await db
+        .prepare("SELECT id FROM save_fleets WHERE id LIKE 'npc-due-%' ORDER BY id")
+        .bind()
+        .all<{ id: string }>();
+      return (rows.results ?? []).map((row) => row.id);
+    };
+    const planetDoc = async (db: D1Like) => {
+      const row = await db
+        .prepare("SELECT doc FROM save_planets WHERE id = ?")
+        .bind(home.id)
+        .first<{ doc: string }>();
+      const planet = JSON.parse(row?.doc ?? "{}") as { ships?: unknown; defenses?: unknown };
+      return JSON.stringify({ ships: planet.ships, defenses: planet.defenses });
+    };
+
+    const play = async (db: D1Like, parallel: boolean) => {
+      const store = createD1Store(db);
+      const app = createApp();
+      const errors: unknown[] = [];
+      const stateRead = () =>
+        runWithScope(
+          { kv: store, db, mode: "d1", method: "GET", cpuMs: 0, budget: workersTickBudget() },
+          () => app.request(`/api/state?playerId=${encodeURIComponent(hero.id)}`),
+        ).catch((err: unknown) => {
+          errors.push(err);
+          throw err;
+        });
+      const npc = () =>
+        runWithScope(
+          { kv: store, db, mode: "d1", method: "POST", cpuMs: 0, budget: npcJobBudget() },
+          () => withUniverse((universe) => {
+            tickPirates(universe, Date.now());
+          }, { npc: true }),
+        ).catch((err: unknown) => {
+          errors.push(err);
+          throw err;
+        });
+      if (parallel) {
+        const responses = await Promise.all([
+          stateRead(), stateRead(), stateRead(), stateRead(),
+          stateRead(), stateRead(), stateRead(), stateRead(),
+          npc(),
+        ]);
+        for (const response of responses) {
+          if (response && typeof response === "object" && "status" in response) {
+            assert.equal(response.status, 200);
+            const text = await (response as Response).text();
+            assert.doesNotMatch(text, /Planet missing/);
+          }
+        }
+        const settled = await stateRead();
+        assert.equal(settled.status, 200);
+        assert.doesNotMatch(await settled.text(), /Planet missing/);
+      } else {
+        for (let i = 0; i < 8; i++) {
+          const response = await stateRead();
+          assert.equal(response.status, 200);
+          const text = await response.text();
+          assert.doesNotMatch(text, /Planet missing/);
+        }
+        await npc();
+        const settled = await stateRead();
+        assert.equal(settled.status, 200);
+        assert.doesNotMatch(await settled.text(), /Planet missing/);
+      }
+      for (const err of errors) {
+        const msg = String(err && typeof err === "object" && "message" in err ? (err as { message: string }).message : err);
+        assert.doesNotMatch(msg, /Planet missing/);
+      }
+      assert.deepEqual(errors, []);
+      return { fleets: await fleetIds(db), planet: await planetDoc(db) };
+    };
+
+    const parallelDb = await install();
+    const sideBySide = await play(parallelDb, true);
+    const oneByOne = await play(await install(), false);
+    assert.deepEqual(sideBySide.planet, oneByOne.planet);
+    const reportRows = await parallelDb
+      .prepare("SELECT doc FROM save_messages WHERE kind = 'report'")
+      .bind()
+      .all<{ doc: string }>();
+    const reportCounts: Record<string, number> = {};
+    for (const row of reportRows.results ?? []) {
+      const doc = JSON.parse(row.doc) as { fleetId?: string };
+      if (doc.fleetId && doc.fleetId.startsWith("npc-due-")) {
+        reportCounts[doc.fleetId] = (reportCounts[doc.fleetId] ?? 0) + 1;
+      }
+    }
+    assert.ok(Object.keys(reportCounts).length > 0, "expected a due fleet combat report");
+    for (const [id, count] of Object.entries(reportCounts)) {
+      assert.equal(count, 1, `fleet ${id} resolved exactly once`);
+    }
+  });
+
   it("returns 404 from /api/state for an unknown player and does not report it", async () => {
     let reported = 0;
     setServerErrorReporter(() => {
@@ -2900,4 +3603,667 @@ describe("row save review fixes", () => {
     assert.ok(totalPlayers >= 115);
     assert.ok(maxQueries <= 50);
   });
+
+  it("adds save_npc_bases without a destructive migration", () => {
+    const sql = readFileSync(
+      fileURLToPath(new URL("../../../migrations/0003_npc_bases.sql", import.meta.url)),
+      "utf8",
+    );
+    assert.match(sql, /CREATE TABLE IF NOT EXISTS save_npc_bases/);
+    assert.doesNotMatch(sql, /\bDROP\b/i);
+    assert.doesNotMatch(sql, /\bRENAME\b/i);
+    assert.doesNotMatch(sql, /\bALTER\b/i);
+    console.log("MIGRATION_FILE migrations/0003_npc_bases.sql");
+    console.log(sql);
+  });
+
+  it("moves blob bases into rows once and keeps an in-flight pirate fleet", async () => {
+    const NOW = 1_700_000_000_000;
+    const { db } = sqliteD1();
+    const source = createUniverse("Blob pirates", 8, 8, { lazySeed: true });
+    if (source.seedCursor) source.seedCursor.done = true;
+    source.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
+    const { player } = joinUniverse(source, "Keeper", NOW);
+    const home = source.planets[player.homePlanetId]!;
+    const base = createPirateBase(source.seed ?? source.id, home.coords.galaxy, home.coords.system + 1, 4, NOW, 3);
+    base.ships = { ...base.ships, hauler: 9 };
+    const alien = createAlienBase(source, home.coords.galaxy, home.coords.system + 2, 5, NOW, player.id);
+    alien.name = "Kept visitor";
+    source.pirateBases = { [base.id]: base };
+    source.alienBases = { [alien.id]: alien };
+    source.fleets = {
+      "raid-keep": {
+        id: "raid-keep",
+        ownerPlayerId: "npc_pirates",
+        originPlanetId: base.id,
+        originPirateBaseId: base.id,
+        targetPlanetId: home.id,
+        targetPlayerId: player.id,
+        targetCoords: { ...home.coords },
+        mission: "raid",
+        ships: { hauler: 4 },
+        cargo: { metal: 3, crystal: 0, deuterium: 0 },
+        departedAt: NOW,
+        arrivesAt: NOW + 60_000,
+        phase: "outbound",
+        reportId: null,
+      },
+    };
+    await migrateAll(db, source);
+    const stored = await db
+      .prepare("SELECT version, doc FROM save_world WHERE id = 'world'")
+      .bind()
+      .first<{ version: number; doc: string }>();
+    const fat = parseWorldShell(stored!.doc);
+    fat.pirateBases = { [base.id]: base };
+    fat.alienBases = { [alien.id]: alien };
+    const fatText = JSON.stringify(fat);
+    await db.prepare("UPDATE save_world SET doc = ? WHERE id = 'world'").bind(fatText).run();
+    await db.prepare("DELETE FROM save_npc_bases").bind().run();
+
+    let writes = 0;
+    const counting: D1Like = {
+      prepare(sql: string): D1Stmt {
+        const stmt = db.prepare(sql);
+        let bound: D1Stmt = stmt;
+        const api: D1Stmt = {
+          bind(...values: unknown[]) {
+            bound = stmt.bind(...values);
+            return api;
+          },
+          async first<T>() {
+            return bound.first<T>();
+          },
+          async all<T>() {
+            return bound.all<T>();
+          },
+          async run() {
+            if (/\b(INSERT|UPDATE|DELETE)\b/i.test(sql)) writes += 1;
+            return bound.run();
+          },
+        };
+        return api;
+      },
+      async batch(statements) {
+        return db.batch(statements);
+      },
+    };
+
+    const firstLoad = await loadWorkingSet(counting, { full: true });
+    assert.ok(writes > 0, "legacy blob did not write rows");
+    const slim = await db
+      .prepare("SELECT doc FROM save_world WHERE id = 'world'")
+      .bind()
+      .first<{ doc: string }>();
+    const slimDoc = parseWorldShell(slim!.doc);
+    assert.deepEqual(slimDoc.pirateBases, {});
+    assert.deepEqual(slimDoc.alienBases, {});
+    assert.ok(slim!.doc.length < fatText.length);
+    assert.equal(firstLoad.universe.pirateBases?.[base.id]?.ships.hauler, 9);
+    assert.equal(firstLoad.universe.alienBases?.[alien.id]?.name, "Kept visitor");
+    assert.equal(firstLoad.universe.fleets["raid-keep"]?.phase, "outbound");
+    assert.equal(firstLoad.universe.fleets["raid-keep"]?.ships.hauler, 4);
+    assert.equal(firstLoad.universe.planets[home.id]?.ownerPlayerId, player.id);
+    const migrated = migrateOrResetUniverse(structuredClone(firstLoad.universe));
+    assert.equal(migrated.didReset, false);
+    assert.equal(migrated.universe.fleets["raid-keep"]?.phase, "outbound");
+    assert.equal(migrated.universe.fleets["raid-keep"]?.ships.hauler, 4);
+    assert.equal(migrated.universe.players[player.id]?.name, "Keeper");
+    const rowsAfter = await db
+      .prepare("SELECT kind, galaxy, version, doc FROM save_npc_bases ORDER BY kind, galaxy")
+      .bind()
+      .all<{ kind: string; galaxy: number; version: number; doc: string }>();
+    assert.equal(rowsAfter.results?.length, 2);
+
+    writes = 0;
+    const secondLoad = await loadWorkingSet(counting, { full: true });
+    assert.equal(writes, 0, "second load wrote the base table again");
+    const rowsAgain = await db
+      .prepare("SELECT kind, galaxy, version, doc FROM save_npc_bases ORDER BY kind, galaxy")
+      .bind()
+      .all<{ kind: string; galaxy: number; version: number; doc: string }>();
+    assert.deepEqual(rowsAgain.results, rowsAfter.results);
+    assert.equal(secondLoad.universe.fleets["raid-keep"]?.ships.hauler, 4);
+    assert.equal(secondLoad.universe.pirateBases?.[base.id]?.ships.hauler, 9);
+    const worldAgain = await db
+      .prepare("SELECT doc FROM save_world WHERE id = 'world'")
+      .bind()
+      .first<{ doc: string }>();
+    assert.equal(worldAgain?.doc, slim!.doc);
+  });
+
+  it("stores 750 pirate bases outside the world document", async () => {
+    const NOW = 1_700_000_000_000;
+    const { db } = sqliteD1();
+    const source = createUniverse("Seven fifty", 8, 8, { lazySeed: true });
+    if (source.seedCursor) source.seedCursor.done = true;
+    source.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
+    source.pirateBases = {};
+    source.alienBases = {};
+    let placed = 0;
+    for (let galaxy = 1; galaxy <= MAP_GALAXIES && placed < PIRATE_TARGET_BASE_COUNT; galaxy += 1) {
+      for (let system = 1; system <= 75 && placed < PIRATE_TARGET_BASE_COUNT; system += 1) {
+        const base = createPirateBase(source.seed ?? source.id, galaxy, system, 8, NOW, 1);
+        base.nextRaidAt = NOW + 86_400_000;
+        source.pirateBases[base.id] = base;
+        placed += 1;
+      }
+    }
+    assert.equal(placed, 750);
+    const fat = JSON.stringify({
+      ...source,
+      players: {},
+      planets: {},
+      fleets: {},
+      reports: {},
+      spyReports: {},
+      expeditionReports: {},
+      asteroids: {},
+      debris: {},
+    });
+    await migrateAll(db, source);
+    const stored = await db
+      .prepare("SELECT doc FROM save_world WHERE id = 'world'")
+      .bind()
+      .first<{ doc: string }>();
+    const doc = parseWorldShell(stored!.doc);
+    assert.deepEqual(doc.pirateBases, {});
+    assert.deepEqual(doc.alienBases, {});
+    assert.ok(
+      stored!.doc.length * 5 < fat.length,
+      `world doc ${stored!.doc.length} bytes did not shrink from ${fat.length}`,
+    );
+    const count = await db
+      .prepare("SELECT COUNT(*) AS n FROM save_npc_bases")
+      .bind()
+      .first<{ n: number }>();
+    assert.equal(count?.n, MAP_GALAXIES);
+    const loaded = await loadWorkingSet(db, { full: true });
+    assert.equal(Object.keys(loaded.universe.pirateBases ?? {}).length, 750);
+    assert.equal(loaded.universe.npcBaseCount, 750);
+    console.log(
+      `npc base world bytes slim=${stored!.doc.length} fat=${fat.length} galaxyRows=${count?.n}`,
+    );
+  });
+
+  it("pages NPC bases and does not mint a second roster", async () => {
+    const NOW = 1_700_000_000_000;
+    const { db } = sqliteD1();
+    const source = createUniverse("Paged bases", 8, 8, { lazySeed: true });
+    if (source.seedCursor) source.seedCursor.done = true;
+    source.pirateBossNextSpawnAt = Number.MAX_SAFE_INTEGER;
+    source.pirateBases = {};
+    const perGalaxy = 20;
+    for (const galaxy of [1, 2]) {
+      for (let index = 0; index < perGalaxy; index += 1) {
+        const base = createPirateBase(source.seed ?? source.id, galaxy, index + 1, 8, NOW, 0);
+        base.nextRaidAt = NOW + 86_400_000;
+        base.lastGrewAt = NOW;
+        base.lastFreeSpawnAt = NOW;
+        source.pirateBases[base.id] = base;
+      }
+    }
+    const total = perGalaxy * 2;
+    await migrateAll(db, source);
+    const store = createD1Store(db);
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "POST", cpuMs: 0 },
+      () =>
+        withUniverse((loaded) => {
+          assert.equal(loaded.skipPirateTopUp, true);
+          const seen = Object.values(loaded.pirateBases ?? {});
+          assert.equal(seen.length, perGalaxy);
+          assert.equal(new Set(seen.map((base) => base.coords.galaxy)).size, 1);
+          tickPirates(loaded, NOW);
+        }, { npc: true }),
+    );
+    const kept = await loadWorkingSet(db, { full: true });
+    assert.equal(Object.keys(kept.universe.pirateBases ?? {}).length, total);
+    const ids = Object.keys(kept.universe.pirateBases ?? {});
+    assert.equal(new Set(ids).size, total);
+  });
+
+  it("loads a main 72096eb world-blob save without reset, then does not copy twice", async () => {
+    const snap = JSON.parse(
+      readFileSync(fileURLToPath(new URL("./fixtures/main-72096eb-npc-blob-save.json", import.meta.url)), "utf8"),
+    ) as {
+      builtOn: string;
+      world: Array<{ id: string; version: number; doc: string }>;
+      players: Array<{ id: string; version: number; doc: string }>;
+      planets: Array<{ id: string; owner_id: string; galaxy: number; system: number; slot: number; kind: string; version: number; doc: string }>;
+      fleets: Array<{ id: string; owner_id: string; target_owner_id: string; version: number; doc: string }>;
+      meta: Array<{ id: string; value: string }>;
+      expect: {
+        fleet: { id: string; phase: string; ships: { hauler: number }; arrivesAt: number };
+        bases: Array<{ id: string; kind: string; coords: { galaxy: number; system: number; slot: number }; level: number; name: string }>;
+      };
+    };
+    const { db } = sqliteD1();
+    await ensureRowTables(db);
+    const world = snap.world[0]!;
+    await db.prepare("INSERT INTO save_world (id, version, doc) VALUES (?, ?, ?)").bind(world.id, world.version, world.doc).run();
+    for (const row of snap.players) {
+      await db.prepare("INSERT INTO save_players (id, version, doc) VALUES (?, ?, ?)").bind(row.id, row.version, row.doc).run();
+    }
+    for (const row of snap.planets) {
+      await db.prepare(
+        "INSERT INTO save_planets (id, owner_id, galaxy, system, slot, kind, version, doc) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      ).bind(row.id, row.owner_id, row.galaxy, row.system, row.slot, row.kind, row.version, row.doc).run();
+    }
+    for (const row of snap.fleets) {
+      await db.prepare(
+        "INSERT INTO save_fleets (id, owner_id, target_owner_id, version, doc) VALUES (?, ?, ?, ?, ?)",
+      ).bind(row.id, row.owner_id, row.target_owner_id, row.version, row.doc).run();
+    }
+    for (const row of snap.meta) {
+      await db.prepare("INSERT INTO save_meta (id, value) VALUES (?, ?)").bind(row.id, row.value).run();
+    }
+
+    let writes = 0;
+    const counting = countingD1(db, () => {
+      writes += 1;
+    });
+    const firstLoad = await loadWorkingSet(counting, { full: true });
+    const migrated = migrateOrResetUniverse(structuredClone(firstLoad.universe));
+    const fleet = migrated.universe.fleets[snap.expect.fleet.id];
+    const bases = [
+      ...Object.values(migrated.universe.pirateBases ?? {}).map((base) => ({
+        id: base.id,
+        kind: "pirate",
+        coords: base.coords,
+        level: base.level,
+        name: base.name,
+      })),
+      ...Object.values(migrated.universe.alienBases ?? {}).map((base) => ({
+        id: base.id,
+        kind: "alien",
+        coords: base.coords,
+        level: base.level,
+        name: base.name,
+      })),
+    ].sort((a, b) => a.id.localeCompare(b.id));
+    const rowsAfter = await db.prepare("SELECT kind, galaxy, version, doc FROM save_npc_bases ORDER BY kind, galaxy").bind().all<{
+      kind: string;
+      galaxy: number;
+      version: number;
+      doc: string;
+    }>();
+    const firstReport = {
+      builtOn: snap.builtOn,
+      didReset: migrated.didReset,
+      fleet: fleet
+        ? { id: fleet.id, phase: fleet.phase, ships: fleet.ships, arrivesAt: fleet.arrivesAt, originPirateBaseId: fleet.originPirateBaseId }
+        : null,
+      bases,
+      npcRows: rowsAfter.results?.length,
+      copyWrites: writes,
+    };
+    console.log(`SAVE_COMPAT_FIRST ${JSON.stringify(firstReport)}`);
+    assert.equal(migrated.didReset, false);
+    assert.equal(fleet?.phase, "outbound");
+    assert.equal(fleet?.ships.hauler, 4);
+    assert.deepEqual(bases, [...snap.expect.bases].sort((a, b) => a.id.localeCompare(b.id)));
+    assert.ok(writes > 0);
+
+    writes = 0;
+    const secondLoad = await loadWorkingSet(counting, { full: true });
+    const rowsAgain = await db.prepare("SELECT kind, galaxy, version, doc FROM save_npc_bases ORDER BY kind, galaxy").bind().all<{
+      kind: string;
+      galaxy: number;
+      version: number;
+      doc: string;
+    }>();
+    const secondBases = [
+      ...Object.values(secondLoad.universe.pirateBases ?? {}),
+      ...Object.values(secondLoad.universe.alienBases ?? {}),
+    ].map((base) => base.id).sort();
+    console.log(`SAVE_COMPAT_SECOND ${JSON.stringify({ copyWrites: writes, baseIds: secondBases, rowsUnchanged: JSON.stringify(rowsAgain.results) === JSON.stringify(rowsAfter.results) })}`);
+    assert.equal(writes, 0);
+    assert.deepEqual(rowsAgain.results, rowsAfter.results);
+    assert.equal(secondBases.length, bases.length);
+    assert.equal(new Set(secondBases).size, bases.length);
+  });
+
+  it("finishes a partial npc-base copy on the next load without duplicating bases", async () => {
+    const snap = JSON.parse(
+      readFileSync(fileURLToPath(new URL("./fixtures/main-72096eb-npc-blob-save.json", import.meta.url)), "utf8"),
+    ) as {
+      world: Array<{ id: string; version: number; doc: string }>;
+      players: Array<{ id: string; version: number; doc: string }>;
+      planets: Array<{ id: string; owner_id: string; galaxy: number; system: number; slot: number; kind: string; version: number; doc: string }>;
+      fleets: Array<{ id: string; owner_id: string; target_owner_id: string; version: number; doc: string }>;
+      meta: Array<{ id: string; value: string }>;
+    };
+    const { db } = sqliteD1();
+    await ensureRowTables(db);
+    const world = snap.world[0]!;
+    await db.prepare("INSERT INTO save_world (id, version, doc) VALUES (?, ?, ?)").bind(world.id, world.version, world.doc).run();
+    for (const row of snap.players) {
+      await db.prepare("INSERT INTO save_players (id, version, doc) VALUES (?, ?, ?)").bind(row.id, row.version, row.doc).run();
+    }
+    for (const row of snap.planets) {
+      await db.prepare(
+        "INSERT INTO save_planets (id, owner_id, galaxy, system, slot, kind, version, doc) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      ).bind(row.id, row.owner_id, row.galaxy, row.system, row.slot, row.kind, row.version, row.doc).run();
+    }
+    for (const row of snap.fleets) {
+      await db.prepare(
+        "INSERT INTO save_fleets (id, owner_id, target_owner_id, version, doc) VALUES (?, ?, ?, ?, ?)",
+      ).bind(row.id, row.owner_id, row.target_owner_id, row.version, row.doc).run();
+    }
+    const blob = JSON.parse(world.doc) as UniverseState;
+    const galaxyOne = Object.values(blob.pirateBases ?? {}).filter((base) => base.coords.galaxy === 1);
+    assert.ok(galaxyOne.length >= 2);
+    const partial = { [galaxyOne[0]!.id]: galaxyOne[0]! };
+    await db.prepare(
+      "INSERT INTO save_npc_bases (kind, galaxy, destroyed, version, doc) VALUES ('pirate', 1, 0, 1, ?)",
+    ).bind(JSON.stringify(partial)).run();
+    console.log(`PARTIAL_BEFORE ${JSON.stringify({
+      blobPirates: Object.keys(blob.pirateBases ?? {}),
+      blobAliens: Object.keys(blob.alienBases ?? {}),
+      storedPirateGalaxy1: Object.keys(partial),
+    })}`);
+
+    let writes = 0;
+    const counting = countingD1(db, () => {
+      writes += 1;
+    });
+    const loaded = await loadWorkingSet(counting, { full: true });
+    const seen = [
+      ...Object.values(loaded.universe.pirateBases ?? {}),
+      ...Object.values(loaded.universe.alienBases ?? {}),
+    ].map((base) => ({ id: base.id, coords: base.coords, level: base.level })).sort((a, b) => a.id.localeCompare(b.id));
+    const stored = await db.prepare("SELECT kind, galaxy, doc FROM save_npc_bases ORDER BY kind, galaxy").bind().all<{
+      kind: string;
+      galaxy: number;
+      doc: string;
+    }>();
+    const rowIds = (stored.results ?? []).map((row) => ({
+      kind: row.kind,
+      galaxy: row.galaxy,
+      ids: Object.keys(JSON.parse(row.doc) as object).sort(),
+    }));
+    console.log(`PARTIAL_AFTER ${JSON.stringify({ bases: seen, rows: rowIds, copyWrites: writes })}`);
+    assert.equal(seen.length, 4);
+    assert.equal(new Set(seen.map((base) => base.id)).size, 4);
+    assert.deepEqual(
+      seen.map((base) => base.id),
+      [...Object.keys(blob.pirateBases ?? {}), ...Object.keys(blob.alienBases ?? {})].sort(),
+    );
+    const pirateGalaxy = rowIds.find((row) => row.kind === "pirate" && row.galaxy === 1);
+    assert.deepEqual(pirateGalaxy?.ids, galaxyOne.map((base) => base.id).sort());
+
+    const migrated = migrateOrResetUniverse(structuredClone(loaded.universe));
+    assert.equal(migrated.didReset, false);
+    assert.equal(migrated.universe.fleets["raid-main"]?.phase, "outbound");
+
+    writes = 0;
+    await loadWorkingSet(counting, { full: true });
+    const storedAgain = await db.prepare("SELECT kind, galaxy, version, doc FROM save_npc_bases ORDER BY kind, galaxy").bind().all();
+    console.log(`PARTIAL_SECOND ${JSON.stringify({ copyWrites: writes, rowCount: storedAgain.results?.length })}`);
+    assert.equal(writes, 0);
+    assert.equal(storedAgain.results?.length, stored.results?.length);
+  });
 });
+
+describe("highscore 7-day rank snapshots", () => {
+  function boardDoc(raw: DatabaseSync): {
+    rows: Array<{ playerId: string; rank: number; rankHistory?: Array<{ day: string; rank: number }> }>;
+  } {
+    const row = raw.prepare("SELECT doc FROM save_highscores WHERE id = 'board'").get() as { doc: string };
+    return JSON.parse(row.doc) as {
+      rows: Array<{ playerId: string; rank: number; rankHistory?: Array<{ day: string; rank: number }> }>;
+    };
+  }
+
+  function shiftUtcDay(day: string, delta: number): string {
+    const [year, month, date] = day.split("-").map(Number);
+    const next = new Date(Date.UTC(year!, (month ?? 1) - 1, date ?? 1));
+    next.setUTCDate(next.getUTCDate() + delta);
+    return next.toISOString().slice(0, 10);
+  }
+
+  async function maintain(db: D1Like): Promise<void> {
+    const store = createD1Store(db);
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "POST", cpuMs: 0 },
+      () => withUniverse(() => undefined, { maintenance: true }),
+    );
+  }
+
+  it("writes one UTC day on maintenance and does not duplicate that day", async () => {
+    resetMemoryUniverse();
+    const { db, raw } = sqliteD1();
+    const source = fixture();
+    await migrateAll(db, source);
+    const migrated = boardDoc(raw);
+    const stripped = {
+      ...migrated,
+      rows: migrated.rows.map(({ rankHistory: _history, ...row }) => row),
+    };
+    raw.prepare("UPDATE save_highscores SET doc = ? WHERE id = 'board'").run(JSON.stringify(stripped));
+
+    const day = utcHighscoreDay(Date.now());
+    await maintain(db);
+    const first = boardDoc(raw);
+    assert.ok(first.rows.length >= 2);
+    for (const row of first.rows) {
+      assert.deepEqual(row.rankHistory, [{ day, rank: row.rank }]);
+    }
+
+    const alpha = Object.values(source.players).find((player) => player.name === "OldHand")!;
+    const stored = raw.prepare("SELECT doc FROM save_highscores WHERE id = 'board'").get() as { doc: string };
+    await runWithScope(
+      { kv: createD1Store(db), db, mode: "d1", method: "GET", cpuMs: 0 },
+      () => withUniverseRead(() => undefined, { playerIds: [alpha.id], galaxy: 1, system: 1 }),
+    );
+    const afterRead = raw.prepare("SELECT doc FROM save_highscores WHERE id = 'board'").get() as { doc: string };
+    assert.equal(afterRead.doc, stored.doc);
+
+    await maintain(db);
+    const second = boardDoc(raw);
+    for (const row of second.rows) {
+      assert.equal(row.rankHistory?.length, 1);
+      assert.equal(row.rankHistory?.[0]?.day, day);
+      assert.equal(row.rankHistory?.[0]?.rank, row.rank);
+      assert.equal(new Set(row.rankHistory?.map((point) => point.day)).size, 1);
+    }
+  });
+
+  it("drops the oldest day so each commander keeps at most 7 points", async () => {
+    assert.equal(HIGHSCORE_RANK_HISTORY_DAYS, 7);
+    resetMemoryUniverse();
+    const { db, raw } = sqliteD1();
+    const source = fixture();
+    await migrateAll(db, source);
+    const today = utcHighscoreDay(Date.now());
+    const seeded = Array.from({ length: HIGHSCORE_RANK_HISTORY_DAYS }, (_, index) => ({
+      day: shiftUtcDay(today, index - HIGHSCORE_RANK_HISTORY_DAYS),
+      rank: index + 1,
+    }));
+    const current = boardDoc(raw);
+    raw.prepare("UPDATE save_highscores SET doc = ? WHERE id = 'board'").run(JSON.stringify({
+      ...current,
+      rows: current.rows.map((row) => ({ ...row, rankHistory: seeded })),
+    }));
+
+    await maintain(db);
+    const after = boardDoc(raw);
+    const expectedDays = [...seeded.slice(1).map((point) => point.day), today];
+    assert.equal(expectedDays.length, 7);
+    for (const row of after.rows) {
+      assert.equal(row.rankHistory?.length, 7);
+      assert.deepEqual(row.rankHistory?.map((point) => point.day), expectedDays);
+      assert.equal(row.rankHistory?.[0]?.day, shiftUtcDay(today, -6));
+      assert.equal(row.rankHistory?.[0]?.rank, seeded[1]?.rank);
+      assert.equal(row.rankHistory?.[6]?.day, today);
+      assert.equal(row.rankHistory?.[6]?.rank, row.rank);
+      assert.equal(new Set(row.rankHistory?.map((point) => point.day)).size, 7);
+    }
+  });
+
+  it("loads a legacy board with no history and does not invent a sparkline on read", async () => {
+    resetMemoryUniverse();
+    const { db, raw } = sqliteD1();
+    const source = fixture();
+    await migrateAll(db, source);
+    const current = boardDoc(raw);
+    const legacyRows = current.rows.map(({ rankHistory: _history, ...row }) => row);
+    const legacyDoc = JSON.stringify(legacyRows);
+    const builtAt = Date.now();
+    raw.prepare("UPDATE save_highscores SET doc = ?, built_at = ? WHERE id = 'board'").run(legacyDoc, builtAt);
+    const alpha = Object.values(source.players).find((player) => player.name === "OldHand")!;
+    await runWithScope(
+      { kv: createD1Store(db), db, mode: "d1", method: "GET", cpuMs: 0 },
+      () => withUniverseRead((universe) => {
+        const view = playerView(universe, alpha.id, Date.now(), 1, 1, { skipUniverseTick: true });
+        assert.ok(view.highscores.length >= 2);
+        for (const row of view.highscores) assert.equal(row.rankHistory, undefined);
+        assert.ok(view.highscores.some((row) => row.playerId === alpha.id));
+      }, { playerIds: [alpha.id], galaxy: 1, system: 1 }),
+    );
+    const afterRead = raw.prepare("SELECT doc FROM save_highscores WHERE id = 'board'").get() as { doc: string };
+    assert.equal(afterRead.doc.includes("rankHistory"), false);
+
+    const objectDoc = JSON.stringify({ rows: legacyRows, hallOfFame: [], hallOfShame: [] });
+    raw.prepare("UPDATE save_highscores SET doc = ?, built_at = ? WHERE id = 'board'").run(objectDoc, builtAt);
+    await runWithScope(
+      { kv: createD1Store(db), db, mode: "d1", method: "GET", cpuMs: 0 },
+      () => withUniverseRead((universe) => {
+        const view = playerView(universe, alpha.id, Date.now(), 1, 1, { skipUniverseTick: true });
+        assert.ok(view.highscores.every((row) => row.rankHistory === undefined));
+      }, { playerIds: [alpha.id], galaxy: 1, system: 1 }),
+    );
+    const afterObject = raw.prepare("SELECT doc FROM save_highscores WHERE id = 'board'").get() as { doc: string };
+    assert.equal(afterObject.doc.includes("rankHistory"), false);
+  });
+
+  it("keeps stored rank history when a normal save rewrites a commander row", async () => {
+    resetMemoryUniverse();
+    const { db, raw } = sqliteD1();
+    const source = fixture();
+    await migrateAll(db, source);
+    const today = utcHighscoreDay(Date.now());
+    const current = boardDoc(raw);
+    const legacyRows = current.rows.map(({ rankHistory: _history, ...row }) => row);
+    raw.prepare("UPDATE save_highscores SET doc = ? WHERE id = 'board'").run(JSON.stringify({
+      ...current,
+      rows: legacyRows,
+    }));
+    await maintain(db);
+    const before = boardDoc(raw);
+    const alpha = Object.values(source.players).find((player) => player.name === "OldHand")!;
+    await runWithScope(
+      { kv: createD1Store(db), db, mode: "d1", method: "POST", cpuMs: 0 },
+      () => withUniverse((universe) => {
+        const player = universe.players[alpha.id]!;
+        player.starshards = (player.starshards ?? 0) + 1;
+      }, { playerIds: [alpha.id] }),
+    );
+    const after = boardDoc(raw);
+    for (const row of after.rows) {
+      const previous = before.rows.find((item) => item.playerId === row.playerId);
+      assert.deepEqual(row.rankHistory, previous?.rankHistory);
+      assert.equal(row.rankHistory?.length, 1);
+      assert.equal(row.rankHistory?.[0]?.day, today);
+    }
+  });
+});
+
+describe("abandon colony row save", () => {
+  it("deletes the colony and its moon row and keeps debris", async () => {
+    const { db } = sqliteD1();
+    const source = fixture();
+    const alpha = Object.values(source.players).find((player) => player.name === "OldHand")!;
+    const home = source.planets[alpha.homePlanetId]!;
+    let coords: { galaxy: number; system: number; slot: number } | null = null;
+    for (let system = 1; system <= 40 && !coords; system++) {
+      const taken = new Set(
+        Object.values(source.planets)
+          .filter((planet) => planet.kind !== "moon" && planet.coords.galaxy === 1 && planet.coords.system === system)
+          .map((planet) => planet.coords.slot),
+      );
+      for (let slot = 1; slot <= 15; slot++) {
+        if (!taken.has(slot)) {
+          coords = { galaxy: 1, system, slot };
+          break;
+        }
+      }
+    }
+    assert.ok(coords);
+    const colonyId = "colony-row";
+    const moonId = "colony-row-moon";
+    const colony: PlanetState = {
+      ...structuredClone(home),
+      id: colonyId,
+      name: "Far Reach",
+      coords,
+      kind: "planet",
+      parentPlanetId: null,
+      moonId,
+      resources: { metal: 111, crystal: 222, deuterium: 333 },
+    };
+    const moon: PlanetState = {
+      ...structuredClone(colony),
+      id: moonId,
+      name: "Far Reach Moon",
+      kind: "moon",
+      parentPlanetId: colonyId,
+      moonId: null,
+      resources: { metal: 9, crystal: 8, deuterium: 7 },
+    };
+    source.planets[colonyId] = colony;
+    source.planets[moonId] = moon;
+    alpha.planetIds = [...alpha.planetIds, colonyId, moonId];
+    const debrisKey = `${coords.galaxy}:${coords.system}:${coords.slot}`;
+    source.debris[debrisKey] = { coords, metal: 50, crystal: 25 };
+    await migrateAll(db, source);
+    const store = createD1Store(db);
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "POST", cpuMs: 0 },
+      () =>
+        withUniverse((universe) => {
+          const result = abandonColony(universe, alpha.id, colonyId);
+          assert.equal(result.ok, true);
+        }, { playerIds: [alpha.id], planetIds: [colonyId, moonId] }),
+    );
+    const loaded = await loadWorkingSet(db, { full: true });
+    assert.equal(loaded.universe.planets[colonyId], undefined);
+    assert.equal(loaded.universe.planets[moonId], undefined);
+    assert.equal(loaded.universe.players[alpha.id]?.planetIds.includes(colonyId), false);
+    assert.equal(loaded.universe.players[alpha.id]?.planetIds.includes(moonId), false);
+    assert.ok(loaded.universe.planets[alpha.homePlanetId]);
+    assert.equal(loaded.universe.debris[debrisKey]?.metal, 50);
+    assert.equal(loaded.universe.debris[debrisKey]?.crystal, 25);
+  });
+});
+
+
+function countingD1(inner: D1Like, onWrite: () => void): D1Like {
+  return {
+    prepare(sql: string): D1Stmt {
+      const stmt = inner.prepare(sql);
+      let bound: D1Stmt = stmt;
+      const api: D1Stmt = {
+        bind(...values: unknown[]) {
+          bound = stmt.bind(...values);
+          return api;
+        },
+        async first<T>() {
+          return bound.first<T>();
+        },
+        async all<T>() {
+          return bound.all<T>();
+        },
+        async run() {
+          if (/\b(INSERT|UPDATE|DELETE)\b/i.test(sql)) onWrite();
+          return bound.run();
+        },
+      };
+      return api;
+    },
+    async batch(statements) {
+      return inner.batch(statements);
+    },
+  };
+}

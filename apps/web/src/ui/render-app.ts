@@ -1,10 +1,15 @@
 import type { PlayerView } from "@starhold/game";
+import { forgetSoundBaseline, observeViewSounds } from "../settings";
 import { session } from "../session";
 import { startCountdownTick } from "./countdown";
 import type { NavPage } from "./nav";
 import { morphHtml } from "./morph-dom";
 import { canPatchShell, patchLiveChrome } from "./patch-chrome";
-import { syncWhatsNewPopup } from "./render-shell";
+import {
+  closeCommanderDossier,
+  syncCommanderDossier,
+} from "./commander-dossier";
+import { syncVacationBanner, syncWhatsNewPopup } from "./render-shell";
 import { renderJoin, reconnectScreenHtml } from "./render-chrome";
 import { creditsPageHtml } from "./render-credits";
 import {
@@ -13,6 +18,7 @@ import {
   type FleetDraft,
 } from "./render-fleets";
 import { dashboardHtml, mainColumnHtml } from "./render-dashboard";
+import { captureMerchantDraft } from "./render-shop";
 import type { UiHandlers } from "./render-helpers";
 import {
   eventsBannerHtml,
@@ -53,12 +59,15 @@ export function renderApp(
     claimablePlayerId?: string | null;
     emailReset?: boolean;
     passwordResetToken?: string | null;
+    inviteCode?: string | null;
     activePage: NavPage;
     onEventsRefresh: () => void;
   },
   _handlers: UiHandlers,
 ): void {
   if (!state.view) {
+    forgetSoundBaseline();
+    closeCommanderDossier();
     stopEventsCountdown();
     syncBackdrop(false, state.activePage);
     if (session.accountMenu === "credits") {
@@ -74,9 +83,11 @@ export function renderApp(
   }
 
   syncBackdrop(true, state.activePage);
+  captureMerchantDraft(root);
 
   const fleetDraft = fleetDraftForPage(root, state.activePage);
   watchFleetLaunches(state.view, state.onEventsRefresh);
+  observeViewSounds(state.view);
   startEventsCountdown(state.view, state.onEventsRefresh);
 
   if (
@@ -103,6 +114,7 @@ export function renderApp(
 
   if (menuMatches && canPatchShell(root, state.view, state.activePage)) {
     patchLiveChrome(root, state.view, state);
+    syncVacationBanner(root, state.view);
     syncWhatsNewPopup(root, state.view, state.busy);
     const main = root.querySelector<HTMLElement>("#page-main");
     if (main) {
@@ -114,6 +126,7 @@ export function renderApp(
       } else morphHtml(main, column);
     }
     startCountdownTick();
+    syncCommanderDossier(root, state.view);
     return;
   }
 
@@ -129,6 +142,7 @@ export function renderApp(
       ?.insertAdjacentHTML("afterbegin", eventsBannerHtml(state.view));
   }
   startCountdownTick();
+  syncCommanderDossier(root, state.view);
 }
 
 export function fleetDraftForPage(
@@ -138,6 +152,11 @@ export function fleetDraftForPage(
   const salvaged = salvageFleetForm(root);
   const prefill = session.pendingAcsPrefill;
   if (activePage !== "fleet") return salvaged;
+  const saveDraft = session.pendingFleetSaveDraft;
+  if (saveDraft) {
+    session.pendingFleetSaveDraft = null;
+    return saveDraft;
+  }
   const galaxyDraft = session.pendingGalaxyFleetDraft;
   if (galaxyDraft) {
     session.pendingGalaxyFleetDraft = null;

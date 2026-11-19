@@ -13,6 +13,35 @@ function etaSpan(completesAt: number, now: number): string {
   return `<span class="eta" data-eta-until="${completesAt}" data-testid="eta">${fmtEta(secs)}</span>`;
 }
 
+function reorderControls(
+  kind: "building" | "ship" | "defense" | "research",
+  id: string,
+  index: number,
+  length: number,
+): string {
+  if (length < 3 || index < 1) return "";
+  const safeId = escapeHtml(id);
+  const up =
+    index > 1
+      ? `<button type="button" class="btn ghost queue-reorder" data-queue-reorder="${kind}" data-queue-item="${safeId}" data-queue-dir="up" data-testid="reorder-${kind}-${safeId}-up">Up</button>`
+      : "";
+  const down =
+    index < length - 1
+      ? `<button type="button" class="btn ghost queue-reorder" data-queue-reorder="${kind}" data-queue-item="${safeId}" data-queue-dir="down" data-testid="reorder-${kind}-${safeId}-down">Down</button>`
+      : "";
+  return `${up}${down}`;
+}
+
+function queueActions(
+  kind: "building" | "ship" | "defense" | "research",
+  id: string,
+  index: number,
+  length: number,
+  cancelTestId: string,
+): string {
+  return `<span class="queue-actions">${reorderControls(kind, id, index, length)}<button type="button" class="btn ghost queue-cancel" data-queue-cancel="${kind}" data-queue-item="${escapeHtml(id)}" data-testid="${cancelTestId}">Cancel</button></span>`;
+}
+
 function queueItemEta(
   item: { completesAt: number; remainingSeconds?: number; startedAt: number | null },
   index: number,
@@ -43,7 +72,7 @@ export function buildQueueHtml(
       const name = BUILDINGS[q.buildingId]?.name ?? q.buildingId;
       return `<li class="queue-item" data-testid="build-queue-item" data-queue-id="${escapeHtml(q.id)}">
         <span>${i === 0 ? "Building" : "Queued"} ${escapeHtml(name)} → L${fmt(q.targetLevel)} · ${queueItemEta(q, i, now, cursor)} left</span>
-        <button type="button" class="btn ghost queue-cancel" data-queue-cancel="building" data-queue-item="${escapeHtml(q.id)}" data-testid="cancel-build-${escapeHtml(q.id)}">Cancel</button>
+        ${queueActions("building", q.id, i, queue.length, `cancel-build-${escapeHtml(q.id)}`)}
       </li>`;
     })
     .join("");
@@ -62,7 +91,7 @@ export function shipQueueHtml(
       const name = SHIPS[q.shipId]?.name ?? q.shipId;
       return `<li class="queue-item" data-testid="ship-queue-item" data-queue-id="${escapeHtml(q.id)}">
         <span>${i === 0 ? "Assembling" : "Queued"} ${fmt(q.count)}× ${escapeHtml(name)} · ${queueItemEta(q, i, now, cursor)} left</span>
-        <button type="button" class="btn ghost queue-cancel" data-queue-cancel="ship" data-queue-item="${escapeHtml(q.id)}" data-testid="cancel-ship-${escapeHtml(q.id)}">Cancel</button>
+        ${queueActions("ship", q.id, i, queue.length, `cancel-ship-${escapeHtml(q.id)}`)}
       </li>`;
     })
     .join("");
@@ -81,7 +110,7 @@ export function defenseQueueHtml(
       const name = DEFENSES[q.defenseId]?.name ?? q.defenseId;
       return `<li class="queue-item" data-testid="defense-queue-item" data-queue-id="${escapeHtml(q.id)}">
         <span>${i === 0 ? "Building" : "Queued"} ${fmt(q.count)}× ${escapeHtml(name)} · ${queueItemEta(q, i, now, cursor)} left</span>
-        <button type="button" class="btn ghost queue-cancel" data-queue-cancel="defense" data-queue-item="${escapeHtml(q.id)}" data-testid="cancel-defense-${escapeHtml(q.id)}">Cancel</button>
+        ${queueActions("defense", q.id, i, queue.length, `cancel-defense-${escapeHtml(q.id)}`)}
       </li>`;
     })
     .join("");
@@ -100,7 +129,7 @@ export function researchQueueHtml(
       const name = RESEARCH[q.researchId]?.name ?? q.researchId;
       return `<li class="queue-item" data-testid="research-queue-item" data-queue-id="${escapeHtml(q.id)}">
         <span>${i === 0 ? "Researching" : "Queued"} ${escapeHtml(name)} → L${fmt(q.targetLevel)} · ${queueItemEta(q, i, now, cursor)} left</span>
-        <button type="button" class="btn ghost queue-cancel" data-queue-cancel="research" data-queue-item="${escapeHtml(q.id)}" data-testid="cancel-research-${escapeHtml(q.id)}">Cancel</button>
+        ${queueActions("research", q.id, i, queue.length, `cancel-research-${escapeHtml(q.id)}`)}
       </li>`;
     })
     .join("");

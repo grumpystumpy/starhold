@@ -10,8 +10,27 @@ import {
   type ResearchId,
   type ShipId,
 } from "@starhold/game";
+import { noteSoundGesture, readSoundEnabled, writeSoundEnabled } from "./settings";
+import { browserVisitStorage, visitStamp, writeLastVisit } from "./away-recap";
 import { fmt } from "./ui/format";
+import { paintSoundToggle } from "./ui/sound-settings";
+import {
+  applyCombatSimField,
+  applyCombatSimPaste,
+  loadCombatSimSpy,
+  resetCombatSimOrbit,
+  runCombatSim,
+  setCombatSimSeed,
+} from "./ui/render-combat-sim";
+import { describeMarketPost } from "./ui/render-shop";
+import {
+  asMarketResource,
+  marketBook,
+  marketDraft,
+  setMarketDraft,
+} from "./ui/market-panel";
 import { syncBuildCountReason } from "./ui/render-chrome-rows";
+import { syncResourceMerchant } from "./ui/render-shop";
 import {
   clearFlash,
   closestActionEl,
@@ -34,17 +53,28 @@ import {
   doClaimDaily,
   doClaimGoal,
   doClaimOnboarding,
+  doDismissMidgameBriefing,
   doDismissOnboarding,
   doDismissWhatsNew,
   doGenerateRecoveryCodes,
   doChangePassword,
   doRecover,
+  doReorderQueue,
   doRequestEmailReset,
   doConfirmEmailReset,
   doRevokeOtherSessions,
   doTradeResources,
+  doAcceptAllianceNap,
+  doCancelAllianceRelation,
+  doMerchantTrade,
+  doAcceptMarket,
+  doCancelMarket,
+  doPostMarket,
+  refreshMarketIfOpen,
   doCreateAlliance,
+  doDeclareAllianceWar,
   doDeleteAllianceIntel,
+  doOfferAllianceNap,
   doDeleteAllianceMarker,
   doDeleteFleetPreset,
   doDisbandAlliance,
@@ -52,6 +82,7 @@ import {
   doGalaxyJump,
   doGalaxyGalaxyNav,
   doClaimAnonymous,
+  doCopyInvite,
   doInviteAlliance,
   doJoin,
   doJoinAlliance,
@@ -62,10 +93,12 @@ import {
   doKickAllianceMember,
   doLaunchFleet,
   doLaunchMaxExpeditions,
+  doRecallFleet,
   doLeaveAlliance,
   doPostAllianceChat,
   doProposeJointStrike,
   doRaiseOfficer,
+  doAbandonColony,
   doRenamePlanet,
   doRelocateFortress,
   doLogin,
@@ -76,11 +109,18 @@ import {
   doClaimSeason,
   doSelectPlanet,
   doDeleteMessages,
+  doDeleteCommanderMail,
   doMarkEventsRead,
+  doDismissFleetSave,
+  doSendCommanderMail,
   doGalaxyFleetAction,
   doGalaxyFleetPreset,
+  doGalaxyHarvest,
   doGalaxySpy,
+  doSetVacationMode,
+  doOpenFleetSave,
   doSetAllianceJoinMode,
+  doSetAllianceRecruiting,
   doSetAllianceClass,
   doSetAllianceRole,
   doSetSeasonSkin,
@@ -92,19 +132,32 @@ import {
   doUpgrade,
 } from "./main-actions";
 import { parseGalaxyCoords } from "./galaxy-coords";
-import { setHighscoreTab } from "./ui/render-pages";
+import {
+  closeCommanderDossier,
+  commanderDossierOpenId,
+  openCommanderDossier,
+} from "./ui/commander-dossier";
+import { isHighscoreTab, setHighscoreTab } from "./ui/render-pages";
 import {
   closeReportWindow,
   isInboxFilter,
   openReportWindow,
   setConfirmDelete,
   setInboxFilter,
+  toggleCompareSpy,
+  setMailReplyTo,
+  setMessagesTab,
 } from "./ui/render-messages";
 import {
+  notifyBattleReplayPaint,
+  pauseBattleReplay,
+  playBattleReplay,
+  restartBattleReplay,
   setBattleReplayRound,
   toggleBattleReplay,
 } from "./ui/render-fleets-panels";
 import { readFleetForm } from "./main-fleet-form";
+import { napAttackDecision, napAttackWarning } from "./ui/nap-attack";
 import {
   fleetDraftAfterBack,
   fleetDraftAfterNext,
@@ -145,6 +198,49 @@ export async function submitGalaxyJump(raw: string): Promise<void> {
 }
 
 export function bindClickHandlers(): void {
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Escape" || !commanderDossierOpenId()) return;
+    ev.preventDefault();
+    closeCommanderDossier();
+    schedulePaint();
+  });
+
+  const onMarketField = (ev: Event) => {
+    const target = ev.target;
+    if (!(target instanceof Element) || !target.closest("[data-market-field]")) return;
+    const form = target.closest("form");
+    const view = session.view;
+    if (!form || !view) return;
+    const read = (name: string) =>
+      form.querySelector<HTMLInputElement | HTMLSelectElement>(
+        `[data-market-field="${name}"]`,
+      )?.value ?? "";
+    setMarketDraft({
+      offerResource: asMarketResource(read("offerResource")),
+      requestResource: asMarketResource(read("requestResource")),
+      offerAmount: Number(read("offerAmount")),
+      requestAmount: Number(read("requestAmount")),
+    });
+    const described = describeMarketPost(view, marketBook(), marketDraft(), session.busy);
+    const preview = form.querySelector("[data-testid='market-post-preview']");
+    if (preview) preview.textContent = described.preview;
+    const button = form.querySelector<HTMLButtonElement>("[data-testid='market-post']");
+    if (button) button.disabled = described.reason != null;
+    let reason = form.querySelector("[data-testid='market-post-reason']");
+    if (described.reason) {
+      if (!reason) {
+        reason = document.createElement("span");
+        reason.className = "market-reason";
+        reason.setAttribute("data-testid", "market-post-reason");
+        button?.insertAdjacentElement("afterend", reason);
+      }
+      reason.textContent = described.reason;
+    } else {
+      reason?.remove();
+    }
+  };
+  root.addEventListener("input", onMarketField);
+  root.addEventListener("change", onMarketField);
   root.addEventListener(
     "click",
     (ev) => {
@@ -157,12 +253,75 @@ export function bindClickHandlers(): void {
       const target = ev.target;
       if (!(target instanceof Element)) return;
 
+      const soundToggle = closestActionEl(target, "[data-sound-toggle]");
+      if (soundToggle) {
+        ev.preventDefault();
+        writeSoundEnabled(!readSoundEnabled());
+        noteSoundGesture();
+        paintSoundToggle(soundToggle, readSoundEnabled());
+        return;
+      }
+      if (readSoundEnabled()) noteSoundGesture();
+
+      const copyInvite = closestActionEl(target, "[data-copy-invite]");
+      if (copyInvite) {
+        ev.preventDefault();
+        void doCopyInvite();
+        return;
+      }
+
+      const abandonOpen = closestActionEl(target, "[data-abandon-colony='open']");
+      if (abandonOpen instanceof HTMLButtonElement && !abandonOpen.disabled) {
+        ev.preventDefault();
+        const dialog = abandonOpen.parentElement?.querySelector("dialog");
+        if (dialog instanceof HTMLDialogElement && !dialog.open) dialog.showModal();
+        return;
+      }
+
+      const abandonCancel = closestActionEl(target, "[data-abandon-colony='cancel']");
+      if (abandonCancel) {
+        ev.preventDefault();
+        const dialog = abandonCancel.closest("dialog");
+        if (dialog instanceof HTMLDialogElement) dialog.close();
+        return;
+      }
+
+      const openCommander = closestActionEl(target, "[data-open-commander]");
+      if (openCommander) {
+        ev.preventDefault();
+        const id = openCommander.getAttribute("data-open-commander");
+        if (id) {
+          openCommanderDossier(id);
+          schedulePaint();
+        }
+        return;
+      }
+
+      if (closestActionEl(target, "[data-close-commander-dossier]")) {
+        ev.preventDefault();
+        closeCommanderDossier();
+        schedulePaint();
+        return;
+      }
+
+      const dossierBackdrop = closestActionEl(
+        target,
+        "[data-commander-dossier-backdrop]",
+      );
+      if (dossierBackdrop && target === dossierBackdrop) {
+        ev.preventDefault();
+        closeCommanderDossier();
+        schedulePaint();
+        return;
+      }
+
       const shopTab = closestActionEl(target, "[data-shop-tab]");
       if (shopTab) {
         ev.preventDefault();
         const tab = shopTab.getAttribute("data-shop-tab");
-        if (tab === "resources" || tab === "officers" || tab === "skills") {
+        if (tab === "resources" || tab === "officers" || tab === "skills" || tab === "market") {
           navigateShopTab(tab);
+          if (tab === "market") void refreshMarketIfOpen();
         }
         return;
       }
@@ -191,8 +350,88 @@ export function bindClickHandlers(): void {
         return;
       }
 
+      const merchantTrade = closestActionEl(target, "[data-merchant-trade]");
+      if (merchantTrade) {
+        ev.preventDefault();
+        syncResourceMerchant(root);
+        if (
+          merchantTrade instanceof HTMLButtonElement &&
+          merchantTrade.disabled
+        ) {
+          return;
+        }
+        const section = merchantTrade.closest("[data-testid='resource-merchant']");
+        const give = section?.querySelector<HTMLSelectElement>("[data-merchant-give]")?.value;
+        const get = section?.querySelector<HTMLSelectElement>("[data-merchant-get]")?.value;
+        const raw = section?.querySelector<HTMLInputElement>("[data-merchant-amount]")?.value ?? "";
+        const amount = /^[0-9]+$/.test(raw.trim()) ? Number(raw.trim()) : Number.NaN;
+        if (
+          (give === "metal" || give === "crystal" || give === "deuterium") &&
+          (get === "metal" || get === "crystal" || get === "deuterium") &&
+          Number.isSafeInteger(amount)
+        ) {
+          void doMerchantTrade(give, get, amount);
+        }
+        return;
+      }
+
+      const marketPost = closestActionEl(target, "[data-market-post]");
+      if (marketPost) {
+        ev.preventDefault();
+        const form = marketPost.closest("form");
+        const read = (name: string) =>
+          form?.querySelector<HTMLInputElement | HTMLSelectElement>(
+            `[data-market-field="${name}"]`,
+          )?.value ?? "";
+        void doPostMarket({
+          offerResource: read("offerResource"),
+          offerAmount: Number(read("offerAmount")),
+          requestResource: read("requestResource"),
+          requestAmount: Number(read("requestAmount")),
+        });
+        return;
+      }
+
+      const marketAccept = closestActionEl(target, "[data-market-accept]");
+      if (marketAccept) {
+        ev.preventDefault();
+        const offerId = marketAccept.getAttribute("data-market-accept");
+        if (offerId) void doAcceptMarket(offerId);
+        return;
+      }
+
+      const marketCancel = closestActionEl(target, "[data-market-cancel]");
+      if (marketCancel) {
+        ev.preventDefault();
+        const offerId = marketCancel.getAttribute("data-market-cancel");
+        if (offerId) void doCancelMarket(offerId);
+        return;
+      }
+
       if (closestActionEl(target, "[data-dismiss-flash]")) {
         clearFlash();
+        schedulePaint();
+        return;
+      }
+
+      const awayDismiss = closestActionEl(target, "[data-away-recap-dismiss]");
+      if (awayDismiss) {
+        ev.preventDefault();
+        const playerId = session.view?.player.id;
+        const storage = browserVisitStorage();
+        if (playerId && storage) {
+          writeLastVisit(
+            storage,
+            playerId,
+            visitStamp(Date.now(), session.view?.now),
+          );
+        }
+        // The page morph keeps a focused control. Blur and drop the card
+        // so dismiss hides it before the deferred paint.
+        awayDismiss.closest("[data-testid='away-recap']")?.remove();
+        if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur();
+        }
         schedulePaint();
         return;
       }
@@ -211,6 +450,43 @@ export function bindClickHandlers(): void {
           setInboxFilter(raw);
           schedulePaint();
         }
+        return;
+      }
+
+      const messagesTab = closestActionEl(target, "button[data-messages-tab]");
+      if (messagesTab) {
+        ev.preventDefault();
+        const tab = messagesTab.getAttribute("data-messages-tab");
+        if (tab === "inbox" || tab === "mail") {
+          setMessagesTab(tab);
+          schedulePaint();
+        }
+        return;
+      }
+
+      const mailReply = closestActionEl(target, "[data-mail-reply]");
+      if (mailReply) {
+        ev.preventDefault();
+        const name = mailReply.getAttribute("data-mail-reply") ?? "";
+        setMailReplyTo(name);
+        schedulePaint();
+        return;
+      }
+
+      const mailDelete = closestActionEl(target, "[data-mail-delete]");
+      if (mailDelete) {
+        ev.preventDefault();
+        const mailId = mailDelete.getAttribute("data-mail-delete");
+        if (mailId) void doDeleteCommanderMail(mailId);
+        return;
+      }
+
+      const mailSend = closestActionEl(target, "[data-mail-send]");
+      if (mailSend) {
+        ev.preventDefault();
+        const to = root.querySelector<HTMLInputElement>("[data-mail-to]")?.value ?? "";
+        const body = root.querySelector<HTMLTextAreaElement>("[data-mail-body]")?.value ?? "";
+        void doSendCommanderMail(to, body);
         return;
       }
 
@@ -239,6 +515,17 @@ export function bindClickHandlers(): void {
         return;
       }
 
+      const compareSpyBtn = closestActionEl(target, "[data-compare-spy]");
+      if (compareSpyBtn) {
+        ev.preventDefault();
+        const id = compareSpyBtn.getAttribute("data-compare-spy");
+        if (id) {
+          toggleCompareSpy(id);
+          schedulePaint();
+        }
+        return;
+      }
+
       const readOne = closestActionEl(target, "[data-event-read]");
       if (readOne) {
         ev.preventDefault();
@@ -250,6 +537,22 @@ export function bindClickHandlers(): void {
       if (closestActionEl(target, "[data-event-read-all]")) {
         ev.preventDefault();
         void doMarkEventsRead();
+        return;
+      }
+
+      const fleetSave = closestActionEl(target, "[data-fleet-save]");
+      if (fleetSave) {
+        ev.preventDefault();
+        const attackId = fleetSave.getAttribute("data-fleet-save");
+        if (attackId) void doOpenFleetSave(attackId);
+        return;
+      }
+
+      const fleetSaveDismiss = closestActionEl(target, "[data-fleet-save-dismiss]");
+      if (fleetSaveDismiss) {
+        ev.preventDefault();
+        const attackId = fleetSaveDismiss.getAttribute("data-fleet-save-dismiss");
+        if (attackId) doDismissFleetSave(attackId);
         return;
       }
 
@@ -315,6 +618,14 @@ export function bindClickHandlers(): void {
       if (closestActionEl(target, "[data-security-revoke]")) {
         ev.preventDefault();
         void doRevokeOtherSessions();
+        return;
+      }
+
+      const vacationToggle = closestActionEl(target, "[data-vacation-mode]");
+      if (vacationToggle) {
+        ev.preventDefault();
+        const next = vacationToggle.getAttribute("data-vacation-mode");
+        if (next === "on" || next === "off") void doSetVacationMode(next === "on");
         return;
       }
 
@@ -413,6 +724,21 @@ export function bindClickHandlers(): void {
             { galaxy: galaxy.galaxy, system: galaxy.system, slot },
             "raid",
           );
+        }
+        return;
+      }
+
+      const harvestSlot = closestActionEl(target, "[data-galaxy-harvest]");
+      if (harvestSlot) {
+        ev.preventDefault();
+        const slot = Number(harvestSlot.getAttribute("data-galaxy-harvest"));
+        const galaxy = session.view?.galaxy;
+        if (galaxy && Number.isInteger(slot) && slot > 0) {
+          doGalaxyHarvest({
+            galaxy: galaxy.galaxy,
+            system: galaxy.system,
+            slot,
+          });
         }
         return;
       }
@@ -536,6 +862,28 @@ export function bindClickHandlers(): void {
           | null;
         const itemId = cancelBtn.getAttribute("data-queue-item");
         if (kind && itemId) void doCancelQueue(kind, itemId);
+        return;
+      }
+
+      const reorderBtn = closestActionEl(target, "[data-queue-reorder]");
+      if (reorderBtn) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const kind = reorderBtn.getAttribute("data-queue-reorder") as
+          | "building"
+          | "ship"
+          | "defense"
+          | "research"
+          | null;
+        const itemId = reorderBtn.getAttribute("data-queue-item");
+        const dir = reorderBtn.getAttribute("data-queue-dir");
+        if (
+          (kind === "building" || kind === "ship" || kind === "defense" || kind === "research") &&
+          itemId &&
+          (dir === "up" || dir === "down")
+        ) {
+          void doReorderQueue(kind, itemId, dir);
+        }
         return;
       }
 
@@ -673,6 +1021,36 @@ export function bindClickHandlers(): void {
         return;
       }
 
+      const replayPlay = closestActionEl(target, "[data-battle-replay-play]");
+      if (replayPlay) {
+        ev.preventDefault();
+        const id = replayPlay.getAttribute("data-battle-replay-play");
+        if (id) playBattleReplay(id);
+        notifyBattleReplayPaint();
+        return;
+      }
+
+      const replayPause = closestActionEl(target, "[data-battle-replay-pause]");
+      if (replayPause) {
+        ev.preventDefault();
+        const id = replayPause.getAttribute("data-battle-replay-pause");
+        if (id) pauseBattleReplay(id);
+        notifyBattleReplayPaint();
+        return;
+      }
+
+      const replayRestart = closestActionEl(
+        target,
+        "[data-battle-replay-restart]",
+      );
+      if (replayRestart) {
+        ev.preventDefault();
+        const id = replayRestart.getAttribute("data-battle-replay-restart");
+        if (id) restartBattleReplay(id);
+        notifyBattleReplayPaint();
+        return;
+      }
+
       const replaySummary = closestActionEl(
         target,
         "[data-battle-replay-summary]",
@@ -684,7 +1062,7 @@ export function bindClickHandlers(): void {
           replaySummary.getAttribute("data-first-round") || "1",
         );
         if (id) toggleBattleReplay(id, Number.isFinite(first) ? first : 1);
-        schedulePaint();
+        notifyBattleReplayPaint();
         return;
       }
 
@@ -698,7 +1076,15 @@ export function bindClickHandlers(): void {
           roundTab.closest("[data-battle-report]")?.getAttribute("data-battle-report");
         if (!reportId || !Number.isFinite(round)) return;
         setBattleReplayRound(reportId, round);
-        schedulePaint();
+        notifyBattleReplayPaint();
+        return;
+      }
+
+      const recallFleet = closestActionEl(target, "[data-recall-fleet]");
+      if (recallFleet) {
+        ev.preventDefault();
+        const fleetId = recallFleet.getAttribute("data-recall-fleet");
+        if (fleetId) void doRecallFleet(fleetId);
         return;
       }
 
@@ -723,6 +1109,15 @@ export function bindClickHandlers(): void {
         ev.preventDefault();
         void doDismissOnboarding(
           onboardingDismiss.getAttribute("data-onboarding-dismiss") !== "false",
+        );
+        return;
+      }
+
+      const midgameDismiss = closestActionEl(target, "[data-midgame-dismiss]");
+      if (midgameDismiss) {
+        ev.preventDefault();
+        void doDismissMidgameBriefing(
+          midgameDismiss.getAttribute("data-midgame-dismiss") !== "false",
         );
         return;
       }
@@ -832,7 +1227,29 @@ export function bindClickHandlers(): void {
       if (requestAlly) {
         ev.preventDefault();
         const id = requestAlly.getAttribute("data-alliance-request");
+        if (id) {
+          session.allianceRequestId = id;
+          schedulePaint();
+        }
+        return;
+      }
+
+      const confirmRequest = closestActionEl(
+        target,
+        "[data-alliance-request-confirm]",
+      );
+      if (confirmRequest) {
+        ev.preventDefault();
+        const id = confirmRequest.getAttribute("data-alliance-request-confirm");
+        session.allianceRequestId = null;
         if (id) void doRequestAllianceJoin(id);
+        return;
+      }
+
+      if (closestActionEl(target, "[data-alliance-request-dismiss]")) {
+        ev.preventDefault();
+        session.allianceRequestId = null;
+        schedulePaint();
         return;
       }
 
@@ -858,11 +1275,38 @@ export function bindClickHandlers(): void {
         return;
       }
 
+      const simRun = closestActionEl(target, "[data-sim-run]");
+      if (simRun) {
+        ev.preventDefault();
+        const seedEl = root.querySelector<HTMLInputElement>("[data-testid='combat-sim-seed']");
+        if (seedEl) setCombatSimSeed(seedEl.value);
+        if (session.view) runCombatSim(session.view);
+        schedulePaint();
+        return;
+      }
+
+      const simReset = closestActionEl(target, "[data-sim-reset]");
+      if (simReset) {
+        ev.preventDefault();
+        if (session.view) resetCombatSimOrbit(session.view.planet);
+        schedulePaint();
+        return;
+      }
+
+      const simPaste = closestActionEl(target, "[data-sim-apply-paste]");
+      if (simPaste) {
+        ev.preventDefault();
+        const area = root.querySelector<HTMLTextAreaElement>("[data-testid='combat-sim-paste']");
+        applyCombatSimPaste(area?.value ?? "");
+        schedulePaint();
+        return;
+      }
+
       const highscoreTab = closestActionEl(target, "[data-highscore-tab]");
       if (highscoreTab) {
         ev.preventDefault();
         const tab = highscoreTab.getAttribute("data-highscore-tab");
-        if (tab === "players" || tab === "alliances") {
+        if (isHighscoreTab(tab)) {
           setHighscoreTab(tab);
           schedulePaint();
         }
@@ -878,6 +1322,36 @@ export function bindClickHandlers(): void {
       if (closestActionEl(target, "[data-alliance-disband]")) {
         ev.preventDefault();
         void doDisbandAlliance();
+        return;
+      }
+
+      const diplomacyOffer = closestActionEl(target, "[data-diplomacy-offer]");
+      if (diplomacyOffer) {
+        ev.preventDefault();
+        const kind = diplomacyOffer.getAttribute("data-diplomacy-offer");
+        const select = root.querySelector<HTMLSelectElement>(
+          "[data-testid='alliance-diplomacy-target']",
+        );
+        const id = select?.value ?? "";
+        if (!id) return;
+        if (kind === "nap") void doOfferAllianceNap(id);
+        else if (kind === "war") void doDeclareAllianceWar(id);
+        return;
+      }
+
+      const diplomacyAccept = closestActionEl(target, "[data-diplomacy-accept]");
+      if (diplomacyAccept) {
+        ev.preventDefault();
+        const id = diplomacyAccept.getAttribute("data-diplomacy-accept");
+        if (id) void doAcceptAllianceNap(id);
+        return;
+      }
+
+      const diplomacyCancel = closestActionEl(target, "[data-diplomacy-cancel]");
+      if (diplomacyCancel) {
+        ev.preventDefault();
+        const id = diplomacyCancel.getAttribute("data-diplomacy-cancel");
+        if (id) void doCancelAllianceRelation(id);
         return;
       }
 
@@ -983,6 +1457,25 @@ export function bindClickHandlers(): void {
 
   root.addEventListener("change", (ev) => {
     const el = ev.target;
+    if (el instanceof HTMLSelectElement && el.matches("[data-sim-spy]")) {
+      const report = session.view?.spyReports?.find((row) => row.id === el.value);
+      if (report) {
+        loadCombatSimSpy(report);
+        schedulePaint();
+      }
+      return;
+    }
+    if (
+      (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) &&
+      el.matches("[data-sim-attacker], [data-sim-defender-ship], [data-sim-defender-defense], [data-sim-seed], [data-sim-paste]")
+    ) {
+      applyCombatSimField(el);
+      return;
+    }
+    if (el instanceof HTMLElement && el.closest("[data-testid='resource-merchant']")) {
+      syncResourceMerchant(root);
+      return;
+    }
     if (el instanceof HTMLSelectElement && el.matches("[data-shop-item-tier]")) {
       const option = el.selectedOptions[0];
       const card = el.closest<HTMLElement>(".shop-item-card");
@@ -1063,12 +1556,27 @@ export function bindClickHandlers(): void {
 
   root.addEventListener("input", (ev) => {
     const el = ev.target;
+    if (
+      (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) &&
+      el.matches("[data-sim-attacker], [data-sim-defender-ship], [data-sim-defender-defense], [data-sim-seed], [data-sim-paste]")
+    ) {
+      applyCombatSimField(el);
+      return;
+    }
     if (!(el instanceof HTMLInputElement)) return;
     if (el.matches("[data-ship-count], [data-defense-count]")) {
       syncBuildCountReason(el);
       return;
     }
-    if (!el.matches("[data-fleet-count]")) {
+    if (el.closest("[data-testid='resource-merchant']")) {
+      syncResourceMerchant(root);
+      return;
+    }
+    if (
+      !el.matches(
+        "[data-fleet-count], [data-cargo-metal], [data-cargo-crystal], [data-cargo-deuterium]",
+      )
+    ) {
       return;
     }
     const form = el.closest("form");
@@ -1196,6 +1704,19 @@ export function bindClickHandlers(): void {
         schedulePaint();
         return;
       }
+      const napWarning = session.view
+        ? napAttackWarning(session.view, {
+            mission: draft.mission,
+            planetId: draft.targetPlanetId,
+            coords: draft.targetCoords,
+          })
+        : null;
+      if (
+        napAttackDecision(napWarning, (message) => globalThis.confirm(message)) ===
+        "stop"
+      ) {
+        return;
+      }
       void doLaunchFleet(draft);
       return;
     }
@@ -1206,6 +1727,12 @@ export function bindClickHandlers(): void {
         "#planet-rename-input",
       );
       void doRenamePlanet(input?.value ?? "");
+      return;
+    }
+
+    if (form.id === "abandon-colony-form") {
+      ev.preventDefault();
+      void doAbandonColony();
       return;
     }
 
@@ -1238,6 +1765,23 @@ export function bindClickHandlers(): void {
         tagInput?.value ?? "",
         joinMode,
       );
+      return;
+    }
+
+    if (form.id === "alliance-recruiting-form") {
+      ev.preventDefault();
+      const blurb =
+        form.querySelector<HTMLInputElement>(
+          '[name="alliance-recruitment-blurb"]',
+        )?.value ?? "";
+      const note =
+        form.querySelector<HTMLTextAreaElement>(
+          '[name="alliance-application-note"]',
+        )?.value ?? "";
+      const recruiting =
+        form.querySelector<HTMLInputElement>('[name="alliance-recruiting"]')
+          ?.checked ?? false;
+      void doSetAllianceRecruiting(blurb, recruiting, note);
       return;
     }
 

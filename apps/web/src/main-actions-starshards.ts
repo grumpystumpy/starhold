@@ -1,5 +1,7 @@
 import {
   CURRENT_RELEASE_ID,
+  isVacationMode,
+  quoteResourceMerchant,
   type OfficerId,
   type PlayerClassId,
 } from "@starhold/game";
@@ -11,10 +13,13 @@ import {
   claimDaily,
   claimGoalReward,
   claimOnboarding,
+  dismissMidgameBriefing,
   dismissOnboarding,
   dismissWhatsNew,
+  setVacationMode,
   raiseOfficerLevel,
   tradeResources,
+  tradeWithMerchant,
   unlockSkillNode,
 } from "./api";
 import { clearFlash, schedulePaint, session, setFlash } from "./session";
@@ -127,6 +132,32 @@ export async function doClaimOnboarding(stepId: string): Promise<void> {
   }
 }
 
+export async function doSetVacationMode(enabled: boolean): Promise<void> {
+  if (!session.view || session.busy) return;
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    session.view = await setVacationMode(session.view.player.id, enabled);
+    setFlash(
+      "notice",
+      enabled ? "Vacation mode is on." : "Vacation mode is off.",
+    );
+  } catch (err) {
+    await settleMutation({
+      err,
+      failureFallback: "Couldn't change vacation mode.",
+      applied: (view) => isVacationMode(view.player) === enabled,
+      successNotice: () =>
+        enabled ? "Vacation mode is on." : "Vacation mode is off.",
+    });
+  } finally {
+    session.busy = false;
+    releaseActionFocus();
+    schedulePaint();
+  }
+}
+
 export async function doDismissWhatsNew(): Promise<void> {
   if (!session.view || session.busy) return;
   session.busy = true;
@@ -164,6 +195,28 @@ export async function doDismissOnboarding(dismissed: boolean): Promise<void> {
       failureFallback: "Tutorial update failed.",
       applied: (view) => Boolean(view.onboarding?.dismissed) === dismissed,
       successNotice: () => dismissed ? "Tutorial hidden." : "Tutorial restored.",
+    });
+  } finally {
+    session.busy = false;
+    releaseActionFocus();
+    schedulePaint();
+  }
+}
+
+export async function doDismissMidgameBriefing(dismissed: boolean): Promise<void> {
+  if (!session.view || session.busy) return;
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    session.view = await dismissMidgameBriefing(session.view.player.id, dismissed);
+    setFlash("notice", dismissed ? "Milestones hidden." : "Milestones restored.");
+  } catch (err) {
+    await settleMutation({
+      err,
+      failureFallback: "Milestone update failed.",
+      applied: (view) => Boolean(view.player.midgameBriefingDismissed) === dismissed,
+      successNotice: () => dismissed ? "Milestones hidden." : "Milestones restored.",
     });
   } finally {
     session.busy = false;
@@ -300,6 +353,48 @@ export async function doTradeResources(
     });
   } finally {
     session.busy = false;
+    schedulePaint();
+  }
+}
+
+export async function doMerchantTrade(
+  give: "metal" | "crystal" | "deuterium",
+  get: "metal" | "crystal" | "deuterium",
+  amount: number,
+): Promise<void> {
+  if (!session.view || session.busy) return;
+  const planetId = session.view.planet.id;
+  const before = { ...session.view.planet.resources };
+  const beforeShards = session.view.starshards ?? 0;
+  const quote = quoteResourceMerchant(give, get, amount);
+  const delivered = quote.ok ? quote.output : 0;
+  releaseActionFocus();
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    session.view = await tradeWithMerchant(
+      session.view.player.id,
+      planetId,
+      give,
+      get,
+      amount,
+    );
+    setFlash("notice", `Merchant delivered ${delivered} ${get}.`);
+  } catch (err) {
+    await settleMutation({
+      err,
+      failureFallback: "Resource trade failed.",
+      applied: (view) =>
+        view.planet.id === planetId &&
+        quote.ok &&
+        view.planet.resources[get] >= before[get] + delivered &&
+        (view.starshards ?? 0) >= beforeShards,
+      successNotice: () => `Merchant delivered ${delivered} ${get}.`,
+    });
+  } finally {
+    session.busy = false;
+    releaseActionFocus();
     schedulePaint();
   }
 }

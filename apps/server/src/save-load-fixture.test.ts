@@ -159,7 +159,8 @@ describe("catalog-complete old save fixture", () => {
       );
       assert.deepEqual(loaded.officers, before.officers);
       assert.deepEqual(loaded.skills, before.skills);
-      assert.equal(loaded.starshards, before.starshards);
+      // Retro achievements pay once for research already on the save and the alliance attached above.
+      assert.equal(loaded.starshards, before.starshards + 10 + 10);
       assert.equal(loaded.allianceId, "ally_old");
       assert.equal(loaded.tag, "OLD");
       assert.equal(loaded.role, "founder");

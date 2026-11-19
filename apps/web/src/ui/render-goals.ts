@@ -1,4 +1,10 @@
-import type { GoalCadence, GoalRewardView, GoalView, PlayerView } from "@starhold/game";
+import type {
+  AchievementView,
+  GoalCadence,
+  GoalRewardView,
+  GoalView,
+  PlayerView,
+} from "@starhold/game";
 import { fmt } from "./format";
 import { escapeAttr, escapeHtml } from "./render-escape";
 import { onboardingGoalsHtml } from "./render-onboarding";
@@ -75,10 +81,53 @@ function goalSection(
   </section>`;
 }
 
+function achievementRow(row: AchievementView): string {
+  const pct =
+    row.target <= 0
+      ? 0
+      : Math.max(0, Math.min(100, Math.round((row.progress / row.target) * 100)));
+  const stateClass = row.unlocked ? "achievement-unlocked" : "achievement-locked";
+  const status = row.unlocked ? "Unlocked" : "Locked";
+  const meter = row.showProgress
+    ? `<div class="goal-meter" role="meter" aria-valuemin="0" aria-valuemax="${row.target}" aria-valuenow="${row.progress}" aria-label="${escapeAttr(row.title)}">
+        <span style="width:${pct}%"></span>
+      </div>
+      <span class="hint" data-testid="achievement-progress-${escapeAttr(row.id)}">${fmt(row.progress)} / ${fmt(row.target)}</span>`
+    : "";
+  const note = row.note
+    ? `<span class="hint" data-testid="achievement-note-${escapeAttr(row.id)}">${escapeHtml(row.note)}</span>`
+    : "";
+  return `<li class="goal-row ${stateClass}" data-testid="achievement-${escapeAttr(row.id)}">
+    <div class="goal-copy">
+      <strong>${escapeHtml(row.title)}</strong>
+      <span class="hint">${escapeHtml(row.detail)}</span>
+      ${meter}
+      ${note}
+    </div>
+    <div class="goal-actions">
+      <span class="hint" data-testid="achievement-reward-${escapeAttr(row.id)}">${fmt(row.starshards)} Starshards</span>
+      <span class="hint" data-testid="achievement-status-${escapeAttr(row.id)}">${status}</span>
+    </div>
+  </li>`;
+}
+
+function achievementsBoard(rows: AchievementView[] | undefined): string {
+  const body =
+    rows && rows.length > 0
+      ? rows.map((row) => achievementRow(row)).join("")
+      : `<li class="hint">No achievements on this view.</li>`;
+  return `<section class="panel" id="achievements" data-testid="achievements-board">
+    <h2>Achievements</h2>
+    <p class="hint">One-time. Each Starshard reward is paid once when you reach it.</p>
+    <ul class="goal-list">${body}</ul>
+  </section>`;
+}
+
 export function goalsPageHtml(view: PlayerView, busy: boolean): string {
   const goals = view.goals ?? [];
   return `<div data-testid="goals-panel">
     ${onboardingGoalsHtml(view, busy)}
+    <p class="hint"><a href="#achievements" data-testid="goals-achievements-link">Achievements</a></p>
     ${goalSection(
       "Today",
       "Resets at 00:00 UTC. Progress from flights that resolve while you are away counts in the open day.",
@@ -93,5 +142,6 @@ export function goalsPageHtml(view: PlayerView, busy: boolean): string {
       goalsFor(goals, "weekly"),
       busy,
     )}
+    ${achievementsBoard(view.achievements)}
   </div>`;
 }

@@ -10,6 +10,7 @@ import {
   buildDefense,
   buildShip,
   cancelQueueItem,
+  reorderQueueItems,
   researchTech,
   upgradeBuilding,
 } from "./api";
@@ -310,6 +311,50 @@ export async function doCancelQueue(
       failureFallback: "Cancel failed.",
       applied: (view) => !queueItems(view, kind).some((item) => item.id === itemId),
       successNotice: () => "Queue item cancelled.",
+    });
+  } finally {
+    session.busy = false;
+    schedulePaint();
+  }
+}
+
+type QueueKind = "building" | "ship" | "defense" | "research";
+
+export async function doReorderQueue(
+  kind: QueueKind,
+  itemId: string,
+  dir: "up" | "down",
+): Promise<void> {
+  if (!session.view || session.busy) return;
+  if (dir !== "up" && dir !== "down") return;
+  const items = queueItems(session.view, kind);
+  const index = items.findIndex((item) => item.id === itemId);
+  if (index <= 0) return;
+  const swapWith = dir === "up" ? index - 1 : index + 1;
+  if (swapWith <= 0 || swapWith >= items.length) return;
+  const orderedIds = items.map((item) => item.id);
+  const moving = orderedIds[index];
+  const neighbor = orderedIds[swapWith];
+  if (!moving || !neighbor) return;
+  orderedIds[index] = neighbor;
+  orderedIds[swapWith] = moving;
+  if (orderedIds[0] !== items[0]?.id) return;
+
+  const playerId = session.view.player.id;
+  const planetId = session.view.planet.id;
+  const expected = orderedIds.join(",");
+  session.busy = true;
+  clearFlash();
+  schedulePaint();
+  try {
+    session.view = await reorderQueueItems(playerId, kind, orderedIds, planetId);
+    setFlash("notice", "Queue reordered.");
+  } catch (err) {
+    await settleMutation({
+      err,
+      failureFallback: "Reorder failed.",
+      applied: (view) => queueItems(view, kind).map((item) => item.id).join(",") === expected,
+      successNotice: () => "Queue reordered.",
     });
   } finally {
     session.busy = false;

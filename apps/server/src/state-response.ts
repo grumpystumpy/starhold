@@ -11,7 +11,14 @@ export function stateRevision(view: PlayerView): string {
   const { now: _now, planet, ...rest } = view;
   const { resources: _resources, lastTickAt: _lastTickAt, ...planetRest } =
     planet;
-  const body = JSON.stringify({ ...rest, planet: planetRest });
+  const { ownedPlanets, ...restWithoutOwnedPlanets } = rest;
+  const body = JSON.stringify({
+    ...restWithoutOwnedPlanets,
+    ownedPlanets: (ownedPlanets ?? []).map(
+      ({ resources: _stocks, ...body }) => body,
+    ),
+    planet: planetRest,
+  });
   return createHash("sha1").update(body).digest("base64url").slice(0, 22);
 }
 
@@ -31,6 +38,7 @@ export interface UnchangedState {
   unchanged: true;
   now: number;
   resources: Resources;
+  ownedPlanetResources: Array<{ id: string; resources: Resources }>;
 }
 
 /**
@@ -38,14 +46,21 @@ export interface UnchangedState {
  * Catalogs are static for a deploy; a client that already has them sends
  * `X-Starhold-Have-Catalogs: 1` and we leave them off the wire.
  */
-export function respondWithPlayerView(c: Context, view: PlayerView): Response {
-  const revision = stateRevision(view);
+export function respondWithPlayerView(
+  c: Context,
+  view: PlayerView,
+  revision = stateRevision(view),
+): Response {
   c.header("ETag", `"${revision}"`);
   if (ifNoneMatchHits(c.req.header("If-None-Match"), revision)) {
     const body: UnchangedState = {
       unchanged: true,
       now: view.now,
       resources: view.planet.resources,
+      ownedPlanetResources: view.ownedPlanets.map(({ id, resources }) => ({
+        id,
+        resources,
+      })),
     };
     return c.json(body);
   }

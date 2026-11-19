@@ -21,12 +21,28 @@ export const BASE_INCOME_PER_HOUR = {
 } as const;
 
 /**
+ * Resource merchant. These weights are equal value:
+ * 3 metal = 2 crystal = 1 deuterium.
+ * The fee is a percent of the converted output, taken before delivery.
+ */
+export const RESOURCE_MERCHANT_VALUE = {
+  metal: 3,
+  crystal: 2,
+  deuterium: 1,
+} as const;
+
+export const RESOURCE_MERCHANT_FEE_PERCENT = 10;
+
+/**
  * Lane-c balance / content tuning — single source for ship, defense,
  * building, and research numbers (plus Round 2 combat/economy constants).
  *
  * Catalog modules re-export these tables. Prefer editing here when changing
  * balance; follow-up can migrate remaining economy constants from catalog.ts.
  */
+
+/** Daily commander-rank points kept on the highscore board. Older days drop. */
+export const HIGHSCORE_RANK_HISTORY_DAYS = 7;
 
 export const SHIPS: Record<ShipId, ShipDef> = {
   scout: {
@@ -1182,6 +1198,13 @@ export const OCCUPATION_DURATION_MS = 2 * 24 * 60 * 60 * 1000;
 /** Occupier / owner mine output split while occupied. */
 export const OCCUPATION_OCCUPIER_SHARE = 0.3;
 export const OCCUPATION_OWNER_SHARE = 0.7;
+/** Timed galaxy events. One active window, a few per week, no overlap. */
+export const GALAXY_EVENTS_PER_WEEK = 3;
+export const GALAXY_EVENT_DURATION_MS = 24 * 60 * 60 * 1000;
+/** Meteor shower: debris from fights in the event galaxy. */
+export const GALAXY_EVENT_METEOR_DEBRIS_MULT = 1.5;
+/** Solar flare: ship shields on both sides in the event galaxy. */
+export const GALAXY_EVENT_SOLAR_FLARE_SHIELD_MULT = 0.8;
 /**
  * World Eaters required to **destroy** a mini planet.
  * Direct capture on win: Void Titan / Mothership / World Eater (see canDirectCaptureMini).
@@ -1542,8 +1565,8 @@ export const PIRATE_BASES_PER_GALAXY = 75;
 /** A base will not raid the same target again until this elapses. */
 export const PIRATE_SAME_TARGET_COOLDOWN_MS = 4 * 60 * 60 * 1000;
 
-/** Once per 180 minutes; each base rolls nextRaidAt = periodStart + offset. */
-export const PIRATE_RAID_PERIOD_MS = 180 * 60 * 1000;
+/** Once per 360 minutes; each base rolls nextRaidAt = periodStart + offset. */
+export const PIRATE_RAID_PERIOD_MS = 360 * 60 * 1000;
 export const PIRATE_FATIGUE_WINDOW_MS = 2 * 60 * 60 * 1000;
 export const PIRATE_FATIGUE_FIRST_HITS = 5;
 export const PIRATE_FATIGUE_EXTRA_HITS = 3;
@@ -1680,6 +1703,11 @@ export const PIRATE_STRENGTH_MULT = 0.5;
  * The term itself is never zero. Aliens do not use it.
  */
 export const PIRATE_RAID_DISTANCE_REF = 400;
+/**
+ * Hide the fleet-save reminder when a hostile raid arrives in this long or sooner.
+ * The player still has to send; this only gates the suggestion.
+ */
+export const FLEET_SAVE_MIN_LEAD_MS = 60_000;
 export const PIRATE_TECH_OFFSET = 3;
 
 /** Max catch-up raid firings per base per tick (lazy Hobby path). */
@@ -1815,10 +1843,18 @@ export const ALLIANCE_MAX_OFFICERS = 3;
 export const ALLIANCE_CREATE_MIN_POINTS = 0;
 /** Pending join requests stored on one alliance. */
 export const ALLIANCE_PENDING_REQUEST_CAP = 20;
+/** NAP and war rows stored on one alliance. */
+export const ALLIANCE_RELATION_CAP = 20;
 /** Alliance rank rows kept on the cached board. */
 export const ALLIANCE_RANK_CAP = 100;
+/** Category highscore rows kept on each cached board. */
+export const HIGHSCORE_CATEGORY_CAP = 100;
 /** Default join mode when creating an alliance. */
 export const ALLIANCE_JOIN_MODE_DEFAULT: "open" | "invite" | "request" = "open";
+/** Public recruitment blurb. Optional; older saves omit it. */
+export const ALLIANCE_RECRUITMENT_BLURB_MAX = 160;
+/** Note shown when a commander opens a request-mode apply. Optional. */
+export const ALLIANCE_APPLICATION_NOTE_MAX = 400;
 
 /**
  * Newbie protection (Micah CHANGE #15): empire points below this are
@@ -1826,6 +1862,23 @@ export const ALLIANCE_JOIN_MODE_DEFAULT: "open" | "invite" | "request" = "open";
  * once empire points reach the threshold (no re-entry).
  */
 export const NEWBIE_PROTECTION_POINTS = 2500;
+
+/**
+ * Player trade market (resource for resource, not Starshards).
+ * 3 metal = 2 crystal = 1 deuterium, same weights the merchant notes use.
+ */
+export const PLAYER_TRADE_MIN_AMOUNT = 1000;
+export const PLAYER_TRADE_FEE_PERCENT = 10;
+export const PLAYER_TRADE_EXPIRE_MS = 48 * 60 * 60 * 1000;
+export const PLAYER_TRADE_MAX_OPEN_PER_PLAYER = 3;
+export const PLAYER_TRADE_MAX_OPEN_TOTAL = 100;
+/** Metal-equivalent a commander may receive from accepts per UTC day. */
+export const PLAYER_TRADE_DAILY_ACCEPT_VALUE_CAP = 1_000_000;
+export const PLAYER_TRADE_METAL_WEIGHT = 1;
+export const PLAYER_TRADE_CRYSTAL_WEIGHT = 1.5;
+export const PLAYER_TRADE_DEUTERIUM_WEIGHT = 3;
+/** Expired offers refunded per advanceUniverse call. The book is at most 100. */
+export const PLAYER_TRADE_EXPIRE_PER_TICK = 20;
 
 /**
  * Pirate raid fairness (Micah CHANGE #18): players under this empire
@@ -1908,6 +1961,19 @@ export const GOAL_WEEKLY_EXPEDITIONS = 20;
 export const GOAL_WEEKLY_EXPEDITION_METAL = 12_000;
 export const GOAL_WEEKLY_EXPEDITION_CRYSTAL = 6_000;
 export const GOAL_WEEKLY_EXPEDITION_DEUTERIUM = 3_000;
+
+export const GOAL_WEEKLY_BUILDINGS = 12;
+export const GOAL_WEEKLY_BUILDING_METAL = 9_000;
+export const GOAL_WEEKLY_BUILDING_CRYSTAL = 4_500;
+export const GOAL_WEEKLY_BUILDING_DEUTERIUM = 1_500;
+
+export const GOAL_WEEKLY_RESEARCH = 4;
+export const GOAL_WEEKLY_RESEARCH_STARSHARDS = 60;
+
+export const GOAL_WEEKLY_SHIPS = 40;
+export const GOAL_WEEKLY_SHIP_METAL = 15_000;
+export const GOAL_WEEKLY_SHIP_CRYSTAL = 7_500;
+export const GOAL_WEEKLY_SHIP_DEUTERIUM = 3_000;
 
 export const GOALS: readonly GoalTuning[] = [
   {
@@ -1994,6 +2060,42 @@ export const GOALS: readonly GoalTuning[] = [
     crystal: GOAL_WEEKLY_EXPEDITION_CRYSTAL,
     deuterium: GOAL_WEEKLY_EXPEDITION_DEUTERIUM,
   },
+  {
+    id: "weeklyBuildingUpgrades",
+    cadence: "weekly",
+    metric: "buildingUpgrade",
+    title: "Weekly building upgrades",
+    detail: "Finish building upgrades this week across your empire.",
+    target: GOAL_WEEKLY_BUILDINGS,
+    starshards: 0,
+    metal: GOAL_WEEKLY_BUILDING_METAL,
+    crystal: GOAL_WEEKLY_BUILDING_CRYSTAL,
+    deuterium: GOAL_WEEKLY_BUILDING_DEUTERIUM,
+  },
+  {
+    id: "weeklyResearch",
+    cadence: "weekly",
+    metric: "researchComplete",
+    title: "Weekly research projects",
+    detail: "Finish research projects this week across your empire.",
+    target: GOAL_WEEKLY_RESEARCH,
+    starshards: GOAL_WEEKLY_RESEARCH_STARSHARDS,
+    metal: 0,
+    crystal: 0,
+    deuterium: 0,
+  },
+  {
+    id: "weeklyShips",
+    cadence: "weekly",
+    metric: "shipBuild",
+    title: "Weekly fleet construction",
+    detail: "Build ships of any type this week across your shipyards.",
+    target: GOAL_WEEKLY_SHIPS,
+    starshards: 0,
+    metal: GOAL_WEEKLY_SHIP_METAL,
+    crystal: GOAL_WEEKLY_SHIP_CRYSTAL,
+    deuterium: GOAL_WEEKLY_SHIP_DEUTERIUM,
+  },
 ];
 
 /**
@@ -2010,6 +2112,56 @@ export interface OnboardingStepTuning {
   deuterium: number;
   starshards: number;
 }
+
+/**
+ * Mid-game milestones shown after the commander briefing is finished
+ * or dismissed. Copy only. Completion is computed on read. No rewards.
+ * `jointStrike` is an info card and does not complete.
+ */
+export const MIDGAME_BRIEFING_CARDS = [
+  {
+    id: "extraColony",
+    title: "First extra colony",
+    unlocks:
+      "A second world for mines, storage, and fleets. Stellar Cartography, a Colonizer, then an empty galaxy slot.",
+    targetNavPage: "galaxy",
+  },
+  {
+    id: "firstMoon",
+    title: "First moon",
+    unlocks:
+      "A moon for Lunar Habitat, System Scanner, and Moon Bridge. Moons form from combat debris at a colony.",
+    targetNavPage: "fleets",
+  },
+  {
+    id: "systemScanner",
+    title: "System Scanner",
+    unlocks:
+      "Scans nearby systems for outbound fleets heading to planets and mini planets. Built on a moon.",
+    targetNavPage: "buildings",
+  },
+  {
+    id: "moonBridge",
+    title: "Moon Bridge",
+    unlocks:
+      "Near-instant fleet hops between your moons. Both moons need a Moon Bridge.",
+    targetNavPage: "buildings",
+  },
+  {
+    id: "jointStrike",
+    title: "Joint Strike",
+    unlocks:
+      "Alliance mates join one attack. The join window is 15 minutes and the hold lasts up to 30 minutes.",
+    targetNavPage: "fleets",
+  },
+] as const satisfies readonly {
+  id: string;
+  title: string;
+  unlocks: string;
+  targetNavPage: OnboardingNavPage;
+}[];
+
+export type MidgameCardId = (typeof MIDGAME_BRIEFING_CARDS)[number]["id"];
 
 export const ONBOARDING_STEPS: readonly OnboardingStepTuning[] = [
   {
@@ -2094,6 +2246,132 @@ export const ONBOARDING_STEPS: readonly OnboardingStepTuning[] = [
   },
 ];
 
+/**
+ * One-time achievements. Rewards are Starshards only and stay small
+ * next to the daily and weekly goal payouts. `highscoreRank` uses
+ * `target` as the best rank that still counts (10 means 10th or better).
+ */
+export type AchievementMetric =
+  | "moons"
+  | "colonies"
+  | "shipsDestroyed"
+  | "pirateBases"
+  | "highscoreRank"
+  | "expeditions"
+  | "victories"
+  | "research"
+  | "alliance"
+  | "officer"
+  | "commanderLevel";
+
+export interface AchievementTuning {
+  id: string;
+  metric: AchievementMetric;
+  title: string;
+  detail: string;
+  target: number;
+  starshards: number;
+}
+
+export const ACHIEVEMENTS: readonly AchievementTuning[] = [
+  {
+    id: "firstMoon",
+    metric: "moons",
+    title: "First moon",
+    detail: "Own a moon.",
+    target: 1,
+    starshards: 15,
+  },
+  {
+    id: "firstColony",
+    metric: "colonies",
+    title: "First colony",
+    detail: "Own a planet that is not your homeworld and not a moon.",
+    target: 1,
+    starshards: 15,
+  },
+  {
+    id: "shipsDestroyed1000",
+    metric: "shipsDestroyed",
+    title: "Thousand hulls",
+    detail: "Destroy 1,000 enemy ships. Defenses do not count.",
+    target: 1000,
+    starshards: 25,
+  },
+  {
+    id: "firstPirateBase",
+    metric: "pirateBases",
+    title: "Pirate base",
+    detail: "Destroy a pirate base.",
+    target: 1,
+    starshards: 20,
+  },
+  {
+    id: "highscoreTop10",
+    metric: "highscoreRank",
+    title: "Top 10",
+    detail: "Place 10th or better on the commander board, with at least one other commander.",
+    target: 10,
+    starshards: 20,
+  },
+  {
+    id: "expeditions10",
+    metric: "expeditions",
+    title: "Ten expeditions",
+    detail: "Finish 10 expedition flights. An empty find still counts.",
+    target: 10,
+    starshards: 15,
+  },
+  {
+    id: "firstVictory",
+    metric: "victories",
+    title: "First victory",
+    detail: "Win a battle.",
+    target: 1,
+    starshards: 10,
+  },
+  {
+    id: "victories10",
+    metric: "victories",
+    title: "Ten victories",
+    detail: "Win 10 battles.",
+    target: 10,
+    starshards: 20,
+  },
+  {
+    id: "firstResearch",
+    metric: "research",
+    title: "First research",
+    detail: "Finish any research at level 1.",
+    target: 1,
+    starshards: 10,
+  },
+  {
+    id: "firstAlliance",
+    metric: "alliance",
+    title: "Alliance",
+    detail: "Join or found an alliance.",
+    target: 1,
+    starshards: 10,
+  },
+  {
+    id: "officerHired",
+    metric: "officer",
+    title: "Officer",
+    detail: "Hire an officer.",
+    target: 1,
+    starshards: 10,
+  },
+  {
+    id: "commanderLevel5",
+    metric: "commanderLevel",
+    title: "Commander level 5",
+    detail: "Reach commander level 5.",
+    target: 5,
+    starshards: 15,
+  },
+];
+
 /** Per-player ring buffer for synthetic empire alerts (builds, returns, raids, minis). */
 export const EVENT_LOG_MAX = 100;
 /** Same-galaxy system distance that counts as “nearby” for mini-planet sightings. */
@@ -2106,9 +2384,24 @@ export const ALLIANCE_CHAT_MAX_MESSAGES = 200;
 export const ALLIANCE_CHAT_RETURN_MAX = 50;
 export const ALLIANCE_CHAT_MAX_CHARS = 500;
 export const ALLIANCE_CHAT_RATE_PER_MIN = 20;
+/** Private commander mail. Not stored on the universe document. */
+export const COMMANDER_MAIL_MAX_CHARS = 500;
+export const COMMANDER_MAIL_MAX_PER_RECIPIENT = 100;
+export const COMMANDER_MAIL_RATE_PER_MIN = 20;
 export const ALLIANCE_INTEL_MAX_REPORTS = 50;
 export const ALLIANCE_MARKERS_MAX = 30;
 /** Galaxy marker lifetime. Lazy purge on read — no cron. */
 export const ALLIANCE_MARKER_TTL_MS = 72 * 60 * 60 * 1000;
 /** Marker / strike note cap. */
 export const ALLIANCE_MARKER_NOTE_MAX = 80;
+
+/**
+ * Galaxy inactivity. `player.lastActiveAt` is the last authenticated
+ * `/api/state` read. A missing value is not inactive.
+ */
+/** Minimum gap between writes of `player.lastActiveAt`. */
+export const PLAYER_ACTIVITY_STAMP_MS = 60 * 60 * 1000;
+/** Galaxy mark `i`. */
+export const PLAYER_INACTIVE_MS = 7 * 24 * 60 * 60 * 1000;
+/** Galaxy mark `I`. */
+export const PLAYER_LONG_INACTIVE_MS = 28 * 24 * 60 * 60 * 1000;

@@ -129,4 +129,70 @@ describe("goal reward text", () => {
     assert.ok(html.includes('data-testid="goal-dailyBuildingUpgrades"'));
     assert.ok(html.includes('data-testid="goal-dailyResearch"'));
   });
+
+  it("renders the weekly board beside the daily ready count", () => {
+    const mockView = {
+      player: { id: "p1", name: "Commander", cosmetics: {}, research: {} },
+      planet: {
+        id: "pl1",
+        name: "Home",
+        coords: { galaxy: 1, system: 1, slot: 1 },
+        buildings: { shipyard: 1, metalMine: 1, solarPlant: 1 },
+        buildQueue: [],
+        shipQueue: [],
+        defenseQueue: [],
+        ships: { scout: 0 },
+        defenses: {},
+      },
+      planetArt: { artId: "earth", artUrl: "", artThumbUrl: "" },
+      economy: {
+        fields: { used: 10, cap: 100, remaining: 90 },
+        positionMult: { metal: 1, crystal: 1, deuterium: 1, energy: 1 },
+        productionPerHour: { metal: 100, crystal: 50, deuterium: 20 },
+        energy: { factor: 1, produced: 100, used: 50 },
+      },
+      goals: [
+        {
+          id: "weeklyBuildingUpgrades",
+          cadence: "weekly",
+          title: "Weekly building upgrades",
+          detail: "Finish building upgrades this week across your empire.",
+          progress: 12,
+          target: 12,
+          claimed: false,
+          reward: { starshards: 0, metal: 9000, crystal: 4500, deuterium: 1500 },
+        },
+        {
+          id: "weeklyResearch",
+          cadence: "weekly",
+          title: "Weekly research projects",
+          detail: "Finish research projects this week across your empire.",
+          progress: 4,
+          target: 4,
+          claimed: true,
+          reward: { starshards: 60, metal: 0, crystal: 0, deuterium: 0 },
+        },
+      ],
+    } as unknown as PlayerView;
+
+    const overview = pageHtml("overview", mockView, false, null);
+    assert.ok(overview.includes('data-testid="overview-daily-missions-ready"'));
+    assert.ok(overview.includes('data-testid="overview-weekly-missions-ready"'));
+    assert.ok(overview.includes("Weekly missions ready to claim:"));
+    assert.ok(overview.includes('data-testid="overview-weekly-goals-link"'));
+    const dailyCount = overview.match(
+      /data-testid="overview-daily-missions-ready"[\s\S]*?<strong>([^<]+)<\/strong>/,
+    );
+    const weeklyCount = overview.match(
+      /data-testid="overview-weekly-missions-ready"[\s\S]*?<strong>([^<]+)<\/strong>/,
+    );
+    assert.equal(dailyCount?.[1], "0");
+    assert.equal(weeklyCount?.[1], "1");
+
+    const goals = goalsPageHtml(mockView, false);
+    assert.ok(goals.includes('data-testid="goals-weekly"'));
+    assert.ok(goals.includes('data-testid="goal-weeklyBuildingUpgrades"'));
+    assert.ok(goals.includes("Resets Monday 00:00 UTC"));
+    assert.equal(goals.includes("_"), false);
+  });
 });

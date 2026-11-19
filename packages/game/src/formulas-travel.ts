@@ -97,8 +97,8 @@ export function shipStockPoints(
   return points;
 }
 
-/** Unfloored buildings + docked ships + defenses (no research). */
-export function planetPoints(planet: PlanetState): number {
+/** Unfloored building upgrade costs / 1000. The building loop from planetPoints. */
+export function buildingPoints(planet: PlanetState): number {
   let points = 0;
   for (const [id, level] of Object.entries(planet.buildings)) {
     for (let L = 0; L < level; L++) {
@@ -106,11 +106,24 @@ export function planetPoints(planet: PlanetState): number {
       points += (c.metal + c.crystal + c.deuterium) / 1000;
     }
   }
-  points += shipStockPoints(planet.ships);
+  return points;
+}
+
+/** Unfloored defense stock costs / 1000. The defense loop from planetPoints. */
+export function defenseStockPoints(planet: PlanetState): number {
+  let points = 0;
   for (const [id, count] of Object.entries(planet.defenses ?? {})) {
     const c = DEFENSES[id as DefenseId].cost;
     points += ((c.metal + c.crystal + c.deuterium) * count) / 1000;
   }
+  return points;
+}
+
+/** Unfloored buildings + docked ships + defenses (no research). */
+export function planetPoints(planet: PlanetState): number {
+  let points = buildingPoints(planet);
+  points += shipStockPoints(planet.ships);
+  points += defenseStockPoints(planet);
   return points;
 }
 
@@ -159,6 +172,44 @@ export function empirePoints(
     }
   }
   return Math.floor(points);
+}
+
+/**
+ * Category totals for one commander. Research is counted once.
+ * Fleet is docked ships plus that commander's fleets in flight.
+ */
+export function categoryPointTotals(
+  universe: {
+    planets: Record<string, PlanetState>;
+    fleets: Record<string, { ownerPlayerId: string; ships: FleetShips }>;
+  },
+  player: {
+    research: ResearchLevels;
+    planetIds?: string[];
+    id: string;
+  },
+): { buildings: number; fleet: number; research: number; defense: number } {
+  let buildings = 0;
+  let fleet = 0;
+  let defense = 0;
+  for (const id of player.planetIds ?? []) {
+    const planet = universe.planets[id];
+    if (!planet) continue;
+    buildings += buildingPoints(planet);
+    fleet += shipStockPoints(planet.ships);
+    defense += defenseStockPoints(planet);
+  }
+  for (const mission of Object.values(universe.fleets)) {
+    if (mission.ownerPlayerId === player.id) {
+      fleet += shipStockPoints(mission.ships);
+    }
+  }
+  return {
+    buildings: Math.floor(buildings),
+    fleet: Math.floor(fleet),
+    research: Math.floor(researchPoints(player.research)),
+    defense: Math.floor(defense),
+  };
 }
 
 export function economySnapshot(

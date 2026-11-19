@@ -6,10 +6,13 @@ import {
   ACS_HOLD_MAX_MS,
   ACS_JOIN_WINDOW_MS,
   OCCUPATION_DURATION_MS,
+  fleetCargoCapacity,
+  flightSecondsOneWay,
   fuelCostOneWay,
   normalizeFleetShips,
   type PlayerView,
 } from "@starhold/game";
+import { fmt, fmtEta } from "./format";
 import {
   buildFleetSendReview,
   fleetReviewTimeZone,
@@ -17,6 +20,7 @@ import {
   renderFleetSendReview,
   type FleetSendReviewInput,
 } from "./fleet-send-review";
+import { napAttackDecision, napAttackWarning } from "./nap-attack";
 import { fleetComposer } from "./render-fleets-composer";
 import {
   blankFleetDraft,
@@ -328,6 +332,61 @@ describe("fleet send review", () => {
     assert.match(joined, /No guaranteed return/);
   });
 
+  it("warns on a NAP attack and still leaves Send enabled", () => {
+    const base = view();
+    const pact = {
+      ...base,
+      roster: [{ ...base.roster[0], allianceTag: "FOE" }],
+      alliance: {
+        id: "ally_1",
+        tag: "SOL",
+        relations: [
+          {
+            allianceId: "ally_foe",
+            name: "Foes",
+            tag: "FOE",
+            kind: "nap",
+            status: "active",
+            initiatedBy: "ally_1",
+            since: 1,
+            canAccept: false,
+            canCancel: true,
+          },
+        ],
+      },
+    } as unknown as PlayerView;
+    const warning = napAttackWarning(pact, { mission: "raid", planetId: "pl2" });
+    assert.match(warning ?? "", /Non-aggression pact with \[FOE\]/);
+    assert.match(warning ?? "", /This attack is allowed/);
+    assert.equal(napAttackDecision(warning, () => false), "stop");
+    assert.equal(napAttackDecision(warning, () => true), "send");
+    assert.equal(napAttackDecision(null, () => false), "send");
+    assert.equal(napAttackDecision(warning, undefined), "send");
+    assert.equal(napAttackWarning(pact, { mission: "espionage", planetId: "pl2" }), null);
+    assert.equal(
+      napAttackWarning(
+        {
+          ...pact,
+          alliance: {
+            ...pact.alliance!,
+            relations: [{ ...pact.alliance!.relations![0]!, kind: "war", status: "active" }],
+          },
+        } as PlayerView,
+        { mission: "raid", planetId: "pl2" },
+      ),
+      null,
+    );
+    const html = fleetComposer(
+      pact,
+      false,
+      draft({ mission: "raid", targetPlanetId: "pl2", counts: { scout: 1 } }),
+    );
+    assert.match(html, /data-testid="fleet-nap-warning"/);
+    assert.match(html, /This attack is allowed/);
+    const button = html.match(/<button[^>]*data-testid="launch-fleet"[^>]*>/)?.[0] ?? "";
+    assert.doesNotMatch(button, /disabled/);
+  });
+
   it("stacks the review on a phone width without a hover-only fact", () => {
     const css = readFileSync(
       fileURLToPath(new URL("./styles-base.css", import.meta.url)),
@@ -337,5 +396,145 @@ describe("fleet send review", () => {
     assert.match(block, /@media \(max-width: 640px\)/);
     assert.match(block, /grid-template-columns:\s*minmax\(0,\s*1fr\)/);
     assert.doesNotMatch(block.slice(0, block.indexOf(".fleet-speed")), /:hover/);
+  });
+});
+
+function buttonTag(html: string, testId: string): string {
+  const match = html.match(new RegExp(`<button\\b[^>]*data-testid="${testId}"[^>]*>`));
+  assert.ok(match, `missing button ${testId}`);
+  return match[0];
+}
+
+function transportView(): PlayerView {
+  const base = view();
+  base.player.research = { cargoHoldTech: 2 };
+  base.planet.ships = { scout: 2 };
+  base.planet.resources = { metal: 8000, crystal: 8000, deuterium: 50000 };
+  const colony = base.ownedPlanets.find((planet) => planet.id === "pl9");
+  assert.ok(colony);
+  colony.coords = { galaxy: 1, system: 3, slot: 8 };
+  return base;
+}
+
+describe("transport mission clarity", () => {
+  const origin = { galaxy: 1, system: 1, slot: 8 };
+  const target = { galaxy: 1, system: 3, slot: 8 };
+
+  function cruise(counts: { scout: number }) {
+    const ships = normalizeFleetShips(counts);
+    return {
+      ships,
+      seconds: flightSecondsOneWay(origin, target, ships, 1, 0, undefined, 0),
+      fuel: fuelCostOneWay(origin, target, ships),
+      cap: fleetCargoCapacity(ships, 2),
+    };
+  }
+
+  it("matches formulas-travel for cargo, arrival, return, and deuterium", () => {
+    const expected = cruise({ scout: 1 });
+    assert.equal(expected.cap, 55);
+    const html = fleetComposer(
+      transportView(),
+      false,
+      draft({
+        mission: "transport",
+        targetPlanetId: "pl9",
+        counts: { scout: 1 },
+        cargo: { metal: 20, crystal: 10, deuterium: 5 },
+        speedPercent: 100,
+      }),
+    );
+    const clock = formatFleetClock(
+      1_700_000_000_000 + expected.seconds * 1000,
+      fleetReviewTimeZone(),
+    );
+    assert.match(html, /data-testid="mission-transport"[^>]*selected/);
+    assert.match(html, /data-testid="fleet-transfer-cargo"/);
+    assert.match(
+      html,
+      new RegExp(`${fmt(35)} used / ${fmt(expected.cap)} available`),
+    );
+    assert.match(html, new RegExp(`Duration ${fmtEta(expected.seconds).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+    assert.match(html, /data-testid="fleet-transfer-eta"/);
+    assert.match(html, new RegExp(`ETA ${clock.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+    assert.match(html, /data-testid="fleet-transfer-return"/);
+    assert.match(html, /Return time: No return flight/);
+    assert.doesNotMatch(html, /data-testid="fleet-review-return"[^>]*>[^<]*Clock /);
+    assert.match(
+      html,
+      new RegExp(
+        `data-testid="fleet-transfer-fuel"[^>]*>${fmt(expected.fuel)} deuterium, one way, at full cruise`,
+      ),
+    );
+    assert.doesNotMatch(html, /data-testid="fleet-cargo-over-capacity"/);
+    assert.doesNotMatch(buttonTag(html, "launch-fleet"), /disabled/);
+    assert.doesNotMatch(html, /active-fleets|combat report/i);
+  });
+
+  it("warns when cargo is over capacity and still leaves send unchanged", () => {
+    const expected = cruise({ scout: 1 });
+    const html = fleetComposer(
+      transportView(),
+      false,
+      draft({
+        mission: "transport",
+        targetPlanetId: "pl9",
+        counts: { scout: 1 },
+        speedPercent: 40,
+        cargo: { metal: -5, crystal: 1.9, deuterium: 60 },
+      }),
+    );
+    assert.match(html, /61 used \/ 55 available/);
+    assert.match(html, /data-testid="fleet-cargo-over-capacity"/);
+    assert.match(html, /Cargo exceeds fleet capacity \(55\)/);
+    assert.match(
+      html,
+      new RegExp(`${fmt(expected.fuel)} deuterium, one way, at full cruise`),
+    );
+    assert.doesNotMatch(
+      html,
+      new RegExp(`data-testid="fleet-transfer-fuel"[^>]*>${fmt(Math.ceil(expected.fuel * 0.4))} deuterium, one way`),
+    );
+    assert.match(html, /Return time: No return flight/);
+    assert.equal(
+      buildFleetSendReview(
+        input({
+          mission: "transport",
+          missionLabel: "Transport cargo (own worlds)",
+          cargo: expected.cap,
+          cargoLoaded: 61,
+          cruiseSeconds: expected.seconds,
+          cruiseFuel: expected.fuel,
+        }),
+      ).returnClock,
+      null,
+    );
+    assert.doesNotMatch(buttonTag(html, "launch-fleet"), /disabled/);
+    assert.match(html, /data-cargo-metal/);
+    assert.match(html, /data-cargo-crystal/);
+    assert.match(html, /data-cargo-deuterium/);
+  });
+
+  it("stacks cargo inputs on a phone width", () => {
+    const css = readFileSync(
+      fileURLToPath(new URL("./styles-panels.css", import.meta.url)),
+      "utf8",
+    );
+    const block = css.slice(css.indexOf(".cargo-load {"));
+    assert.match(block, /\.cargo-load input \{[^}]*min-width:\s*0/);
+    assert.match(block, /@media \(max-width: 640px\)/);
+    assert.match(block, /grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+  });
+
+  it("does not add the transfer lines to a raid review", () => {
+    const html = fleetComposer(
+      transportView(),
+      false,
+      draft({ mission: "raid", targetPlanetId: "pl2", counts: { scout: 1 } }),
+    );
+    assert.doesNotMatch(html, /data-testid="fleet-transfer-cargo"/);
+    assert.doesNotMatch(html, /data-testid="fleet-transfer-eta"/);
+    assert.doesNotMatch(html, /data-testid="fleet-cargo-over-capacity"/);
+    assert.match(html, /Clock /);
   });
 });

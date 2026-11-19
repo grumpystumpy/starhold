@@ -4,6 +4,7 @@ import {
   DAILY_LOGIN_METAL,
   PRODUCTION_MULT,
   STARSHARDS_DAILY_LOGIN,
+  isVacationMode,
   levelBonuses,
   type PlayerView,
 } from "@starhold/game";
@@ -13,6 +14,7 @@ import { planetDiscHtml } from "./planet-disc";
 import { NAV_LABELS, NAV_PAGES, type NavPage } from "./nav";
 import { creditsHref, creditsNavHtml } from "./render-credits";
 import { accountNavHtml, securityHref } from "./render-security";
+import { soundSettingsHtml } from "./sound-settings";
 import { flashHtml, resBlock } from "./render-chrome";
 import { escapeAttr, escapeHtml } from "./render-escape";
 import { hrefForPage } from "./router";
@@ -161,7 +163,7 @@ function planetDropdown(view: PlayerView, busy: boolean): string {
   return `<label class="nav-dropdown-wrap" data-testid="planet-dropdown-wrap"><span class="nav-dropdown-label">Colony</span><select class="nav-dropdown" data-planet-select data-testid="planet-dropdown" aria-label="Planets, moons, and mini planets" ${busy ? "disabled" : ""}>${options}</select></label>`;
 }
 
-function leftNav(view: PlayerView, active: NavPage): string {
+function leftNav(view: PlayerView, active: NavPage, busy: boolean): string {
   const q = navQuery(view);
   const params = new URLSearchParams();
   params.set("playerId", q.playerId);
@@ -180,7 +182,9 @@ function leftNav(view: PlayerView, active: NavPage): string {
           return `<li><a href="${escapeAttr(href)}" class="nav-link${id === gameActive ? " active" : ""}" data-nav="${id}" data-testid="nav-${id}">${NAV_LABELS[id]}${badge}</a></li>`;
         }).join("")}
         ${accountNavHtml(Boolean(session.account), session.accountMenu === "security", securityHref(`?${params.toString()}`))}
+        ${session.account ? `<li class="nav-invite"><button type="button" class="nav-link" data-copy-invite data-testid="copy-invite" ${busy ? "disabled" : ""}>Copy invite link</button>${session.inviteShareUrl ? `<input class="invite-link-fallback" type="text" readonly value="${escapeAttr(session.inviteShareUrl)}" data-testid="invite-link-fallback" aria-label="Invite link" />` : ""}</li>` : ""}
         ${creditsNavHtml(session.accountMenu === "credits", creditsHref(`?${params.toString()}`))}
+        ${soundSettingsHtml()}
       </ul>
     </nav>`;
 }
@@ -217,6 +221,31 @@ function planetSwitcher(
           .join("")}
       </ul>
     </aside>`;
+}
+
+/** Visible while vacation mode is on. Empty when the field is absent or off. */
+export function vacationBannerHtml(view: PlayerView): string {
+  if (!isVacationMode(view.player)) return "";
+  return `<p class="vacation-banner" role="status" data-testid="vacation-banner">Vacation mode is on. Your fleets already out finish and return home. You cannot send new fleets. Attacks already on the way still arrive. New attacks cannot be sent.</p>`;
+}
+
+/** Keep the banner in step with the view when the shell is patched in place. */
+export function syncVacationBanner(root: ParentNode, view: PlayerView): void {
+  const shell = root.querySelector<HTMLElement>('[data-testid="game-shell"]');
+  if (!shell) return;
+  const next = vacationBannerHtml(view);
+  const existing = shell.querySelector<HTMLElement>('[data-testid="vacation-banner"]');
+  if (!next) {
+    existing?.remove();
+    return;
+  }
+  if (!existing) {
+    const header = shell.querySelector("header");
+    if (header) header.insertAdjacentHTML("afterend", next);
+    else shell.insertAdjacentHTML("afterbegin", next);
+    return;
+  }
+  if (existing.outerHTML !== next) existing.outerHTML = next;
 }
 
 /** One-time release notes. Empty once this commander dismissed the current key. */
@@ -327,11 +356,12 @@ export function shellHtml(
           </div>
         </div>
       </header>
+      ${vacationBannerHtml(view)}
       <div data-flash-slot>${flashHtml(state.error, state.notice)}</div>
       <button type="button" class="idle-pause" data-testid="idle-pause"${session.idlePaused ? "" : " hidden"}>Paused, tap to resume</button>
       ${resourceBar(view, state.busy)}
       <div class="shell-body">
-        ${leftNav(view, activePage)}
+        ${leftNav(view, activePage, state.busy)}
         <main class="shell-main" data-testid="page-${activePage}" id="page-main">
           ${mainHtml}
         </main>

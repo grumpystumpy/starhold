@@ -497,9 +497,11 @@ describe("Thread D Starshards / officers / skills", () => {
     joinUniverse(universe, "Beta", 165_000_100);
     universe.planets[a.planet.id].buildings.metalMine = 20;
     const view = playerView(universe, a.player.id, 165_000_200);
-    assert.equal(view.starshards, 50);
+    const top10 = view.achievements?.find((row) => row.id === "highscoreTop10");
+    assert.equal(top10?.unlocked, true);
+    assert.equal(view.starshards, 50 + (top10?.starshards ?? 0));
     assert.equal(universe.players[a.player.id].highscoreStarshardsClaimed, true);
     const again = playerView(universe, a.player.id, 165_000_300);
-    assert.equal(again.starshards, 50);
+    assert.equal(again.starshards, view.starshards);
   });
 });
