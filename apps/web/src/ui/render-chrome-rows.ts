@@ -27,6 +27,7 @@ import {
 import { fmt, fmtCost, fmtEta } from "./format";
 import { escapeAttr, escapeHtml } from "./render-escape";
 import { blockedActionNote, costTooltip } from "./render-tooltips";
+import { applyAffordLabel, type AffordEcon } from "./affordable";
 
 export function buildQuantityReason(opts: {
   count: number;
@@ -130,6 +131,7 @@ export function shipRow(
   timeMult = 1,
   speed = 1,
   research: Partial<PlayerView["player"]["research"]> = {},
+  econ?: AffordEcon,
 ): string {
   const def = SHIPS[id];
   const count = planet.ships?.[id] ?? 0;
@@ -151,6 +153,16 @@ export function shipRow(
     cost,
     have: planet.resources,
   });
+  const afford = applyAffordLabel({
+    label,
+    reason: blocked,
+    cost,
+    current: planet.resources,
+    econ,
+    now: econ?.now ?? Date.now(),
+  });
+  label = afford.label;
+  const shownReason = afford.reason;
 
   const naniteLevel = Math.max(0, Math.floor(planet.buildings.chronoLathe ?? 0));
   const rigLevel = Math.max(0, Math.floor(planet.buildings.rigFoundry ?? 0));
@@ -170,7 +182,7 @@ export function shipRow(
     timeSecs: unitSecs,
     detail: def.description,
     requires: shipRequirementLines(def, research),
-    blocked,
+    blocked: shownReason,
   });
   // Locked hulls are disabled so mis-clicks cannot set busy and silence Upgrade.
   // Unlocked Build stays enabled during client busy (same reason as Upgrade).
@@ -187,7 +199,7 @@ export function shipRow(
       <div class="actions">
         <input type="number" min="1" max="999999" value="1" data-ship-count="${id}" data-testid="ship-count-${id}" ${locked ? "disabled" : ""} style="min-width:4rem;width:4.5rem" />
         <button type="button" data-ship="${id}" data-locked="${locked ? "1" : "0"}" data-testid="build-${id}" ${blocked ? "disabled" : ""} ${blocked ? `aria-describedby="blocked-build-${id}"` : ""} title="${tip.title}">${label}</button>
-        ${quantityNote(`blocked-build-${id}`, blocked, locked ? lockMsg : null, queueMsg, cost, planet.resources)}
+        ${quantityNote(`blocked-build-${id}`, shownReason, locked ? lockMsg : null, queueMsg, cost, planet.resources)}
       </div>
     </article>
   `;
@@ -199,6 +211,7 @@ export function defenseRow(
   _busy: boolean,
   timeMult = 1,
   speed = 1,
+  econ?: AffordEcon,
 ): string {
   const def = DEFENSES[id];
   const have = planet.defenses?.[id] ?? 0;
@@ -220,6 +233,16 @@ export function defenseRow(
     cost,
     have: planet.resources,
   });
+  const afford = applyAffordLabel({
+    label,
+    reason: blocked,
+    cost,
+    current: planet.resources,
+    econ,
+    now: econ?.now ?? Date.now(),
+  });
+  label = afford.label;
+  const shownReason = afford.reason;
 
   const naniteLevel = Math.max(0, Math.floor(planet.buildings.chronoLathe ?? 0));
   const rigLevel = Math.max(0, Math.floor(planet.buildings.rigFoundry ?? 0));
@@ -241,7 +264,7 @@ export function defenseRow(
       `Shipyard L${fmt(def.shipyardLevel)}+`,
       `Attack ${fmt(def.attack)} · Shield ${fmt(def.shield)} · Armor ${fmt(def.armor)} · Hull ${fmt(def.hull)}`,
     ],
-    blocked,
+    blocked: shownReason,
   });
   return `
     <article class="item item-thumb" data-testid="defense-${id}">
@@ -254,7 +277,7 @@ export function defenseRow(
       <div class="actions">
         <input type="number" min="1" max="999999" value="1" data-defense-count="${id}" data-testid="defense-count-${id}" ${locked ? "disabled" : ""} style="min-width:4rem;width:4.5rem" />
         <button type="button" data-defense="${id}" data-locked="${locked ? "1" : "0"}" data-testid="build-defense-${id}" ${blocked ? "disabled" : ""} ${blocked ? `aria-describedby="blocked-defense-${id}"` : ""} title="${tip.title}">${label}</button>
-        ${quantityNote(`blocked-defense-${id}`, blocked, lockMsg, queueMsg, cost, planet.resources)}
+        ${quantityNote(`blocked-defense-${id}`, shownReason, lockMsg, queueMsg, cost, planet.resources)}
       </div>
     </article>
   `;
@@ -329,7 +352,16 @@ export function researchRow(
     ),
   );
   const blocked = preview.ok ? null : preview.error;
-  const label = researchButtonLabel(blocked);
+  const afford = applyAffordLabel({
+    label: researchButtonLabel(blocked),
+    reason: blocked,
+    cost,
+    current: view.planet.resources,
+    econ: view.economy,
+    now: view.now,
+  });
+  const label = afford.label;
+  const shownReason = afford.reason;
   const requiredResearch = RESEARCH_ORDER.flatMap((requiredId) => {
     const requiredLevel = def.requires?.[requiredId];
     return requiredLevel == null
@@ -349,7 +381,7 @@ export function researchRow(
       `Best lab L${fmt(lab)}`,
       `Current L${fmt(level)}`,
     ],
-    blocked,
+    blocked: shownReason,
   });
   return `
     <article class="item item-thumb" data-testid="research-${id}">
@@ -361,7 +393,7 @@ export function researchRow(
       </div>
       <div class="actions">
         <button type="button" data-research="${id}" data-locked="${blocked ? "1" : "0"}" data-testid="research-btn-${id}" ${blocked ? "disabled" : ""} ${blocked ? `aria-describedby="blocked-research-${id}"` : ""} title="${tip.title}">${label}</button>
-        ${blockedActionNote(`blocked-research-${id}`, blocked)}
+        ${blockedActionNote(`blocked-research-${id}`, shownReason)}
       </div>
     </article>
   `;

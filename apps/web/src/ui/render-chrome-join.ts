@@ -18,6 +18,7 @@ import { fmt, fmtCost, fmtEta } from "./format";
 import { escapeAttr, escapeHtml } from "./render-escape";
 import { blockedActionNote, costTooltip } from "./render-tooltips";
 import { recoverFormHtml } from "./render-security";
+import { applyAffordLabel, type AffordEcon } from "./affordable";
 
 export type JoinScreenState = {
   error: string | null;
@@ -542,6 +543,7 @@ export function buildingRow(
   _busy: boolean,
   mods?: BuildingPreviewMods & { timeMult?: number },
   energy?: { used: number; produced: number },
+  econ?: AffordEcon,
 ): string {
   const def = BUILDINGS[id];
   const preview = previewBuildingUpgrade(planet, player, id, now, mods);
@@ -568,7 +570,16 @@ export function buildingRow(
   // Disable only when the server would reject. Client busy stays clickable
   // so a second tap surfaces "Still applying…" instead of a silent no-op.
   const blocked = preview.ok ? null : preview.error;
-  const label = upgradeButtonLabel(blocked);
+  const afford = applyAffordLabel({
+    label: upgradeButtonLabel(blocked),
+    reason: blocked,
+    cost,
+    current: planet.resources,
+    econ,
+    now,
+  });
+  const label = afford.label;
+  const shownReason = afford.reason;
   const storageLine =
     id === "metalStorage" || id === "crystalStorage" || id === "deutTank"
       ? `Capacity ${fmt(storageCap(level))} now, ${fmt(storageCap(preview.current + 1))} at the next level. Each level doubles the cap.`
@@ -598,7 +609,7 @@ export function buildingRow(
           ]
         : []),
     ],
-    blocked,
+    blocked: shownReason,
   });
   const energyHtml = energyPreview
     ? ` · <span class="building-energy-preview${energyPreview.deficit ? " deficit" : ""}" data-testid="building-energy-preview-${id}">${escapeHtml(energyPreview.text)}</span>`
@@ -613,7 +624,7 @@ export function buildingRow(
       </div>
       <div class="actions">
         <button type="button" data-upgrade="${id}" data-building-id="${id}" data-locked="${blocked ? "1" : "0"}" data-testid="upgrade-${id}" ${blocked ? "disabled" : ""} ${blocked ? `aria-describedby="blocked-upgrade-${id}"` : ""} title="${tip.title}">${label}</button>
-        ${blockedActionNote(`blocked-upgrade-${id}`, blocked)}
+        ${blockedActionNote(`blocked-upgrade-${id}`, shownReason)}
       </div>
     </article>
   `;

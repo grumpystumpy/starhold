@@ -192,7 +192,8 @@ async function runViewport(browser, viewport, ids) {
     const solar = page.locator('[data-testid="upgrade-solarPlant"]');
     assert(await solar.isDisabled(), `${tag} solar upgrade still enabled`);
     assert(
-      (await solar.innerText()).includes("Can't afford"),
+      (await solar.innerText()).includes("Affordable in") ||
+        (await solar.innerText()).includes("Can't afford"),
       `${tag} solar label: ${await solar.innerText()}`,
     );
     let upgradePosts = 0;
