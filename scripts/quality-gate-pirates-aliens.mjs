@@ -74,6 +74,39 @@ async function shot(page, dir, name) {
   });
 }
 
+async function waitForGameNavigation(page) {
+  await page.waitForFunction(
+    () => {
+      const visible = (testId) => {
+        const element = document.querySelector(`[data-testid="${testId}"]`);
+        return Boolean(
+          element &&
+            element.getClientRects().length > 0 &&
+            getComputedStyle(element).visibility !== "hidden",
+        );
+      };
+      return visible("side-nav") || visible("phone-bottom-nav");
+    },
+    null,
+    { timeout: 10_000 },
+  );
+}
+
+async function openNav(page, id) {
+  const side = page.locator(`[data-testid="nav-${id}"]`);
+  if (await side.isVisible()) {
+    await side.click();
+    return;
+  }
+  const phone = page.locator(`[data-testid="phone-nav-${id}"]`);
+  if (await phone.isVisible()) {
+    await phone.click();
+    return;
+  }
+  await page.click('[data-testid="phone-bottom-more"]');
+  await page.click(`[data-testid="phone-more-${id}"]`);
+}
+
 async function runViewport(browser, vp, email, password, commander) {
   const context = await browser.newContext({
     viewport: { width: vp.width, height: vp.height },
@@ -104,7 +137,7 @@ async function runViewport(browser, vp, email, password, commander) {
   await page.fill('[data-testid="commander-input"]', commander);
   await page.click('[data-testid="join-btn"]');
   await page.waitForSelector('[data-testid="resources"]', { timeout: 20_000 });
-  await page.waitForSelector('[data-testid="side-nav"]', { timeout: 10_000 });
+  await waitForGameNavigation(page);
   pass.push("entered game after signup+join");
   await shot(page, dir, "04-in-game-after-signup-join.png");
 
@@ -202,7 +235,7 @@ async function runViewport(browser, vp, email, password, commander) {
       : `API pirate seed ok outside home galaxy ${homeGalaxy} @ ${pirateHit.coords.galaxy}:${pirateHit.coords.system}`,
   );
 
-  await loginPage.click('[data-testid="nav-galaxy"]');
+  await openNav(loginPage, "galaxy");
   await loginPage.waitForSelector('[data-testid="galaxy-panel"]', {
     timeout: 10_000,
   });
@@ -354,7 +387,7 @@ async function runViewport(browser, vp, email, password, commander) {
   await shot(loginPage, path.join(OUT, vp.name), "09-galaxy-pirate.png");
 
   // Fleet composer should offer pirate target when in that system
-  await loginPage.click('[data-testid="nav-fleet"]');
+  await openNav(loginPage, "fleet");
   await loginPage.waitForSelector('[data-testid="page-fleet"], [data-testid="fleet-panel"], .fleet-composer, [data-testid="fleet-form"]', {
     timeout: 10_000,
   });

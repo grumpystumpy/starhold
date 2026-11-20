@@ -71,6 +71,39 @@ async function waitHealthy() {
   throw new Error("worker health timeout");
 }
 
+async function waitForGameNavigation(page) {
+  await page.waitForFunction(
+    () => {
+      const visible = (testId) => {
+        const element = document.querySelector(`[data-testid="${testId}"]`);
+        return Boolean(
+          element &&
+            element.getClientRects().length > 0 &&
+            getComputedStyle(element).visibility !== "hidden",
+        );
+      };
+      return visible("side-nav") || visible("phone-bottom-nav");
+    },
+    null,
+    { timeout: 10_000 },
+  );
+}
+
+async function openNav(page, id) {
+  const side = page.locator(`[data-testid="nav-${id}"]`);
+  if (await side.isVisible()) {
+    await side.click();
+    return;
+  }
+  const phone = page.locator(`[data-testid="phone-nav-${id}"]`);
+  if (await phone.isVisible()) {
+    await phone.click();
+    return;
+  }
+  await page.click('[data-testid="phone-bottom-more"]');
+  await page.click(`[data-testid="phone-more-${id}"]`);
+}
+
 async function runViewport(width, height) {
   const browser = await chromium.launch({ headless: true });
   const page = await armWhatsNewDismiss(await browser.newPage({ viewport: { width, height } }));
@@ -98,8 +131,9 @@ async function runViewport(width, height) {
     await page.fill('[data-testid="commander-input"]', name);
     await page.click('[data-testid="join-btn"]');
     await page.waitForSelector('[data-testid="resources"]', { timeout: 20_000 });
+    await waitForGameNavigation(page);
 
-    await page.click('[data-testid="nav-buildings"]');
+    await openNav(page, "buildings");
     await page.click('[data-testid="upgrade-metalMine"]');
     await page.waitForSelector(
       '[data-testid="flash-ok"], [data-testid="build-queue"]',
@@ -121,7 +155,7 @@ async function runViewport(width, height) {
 
     await page.reload({ waitUntil: "networkidle" });
     await page.waitForSelector('[data-testid="resources"]', { timeout: 20_000 });
-    await page.click('[data-testid="nav-fleet"]');
+    await openNav(page, "fleet");
     await page.waitForSelector('[data-testid="fleet-form"]', { timeout: 15_000 });
     await fleetToStep2(page, { scout: 1 });
     await page.waitForSelector('[data-testid="fleet-mission"]', { timeout: 10_000 });
