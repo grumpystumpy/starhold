@@ -1500,12 +1500,12 @@ describe("row save review fixes", () => {
       const priorIds = new Set((raw.prepare(
         "SELECT id FROM save_fleets WHERE id LIKE 'synthetic-pirate-%'",
       ).all() as Array<{ id: string }>).map((row) => row.id));
-      const scope = { kv: store, db, mode: "d1" as const, method: "POST", cpuMs: 0, budget: maintenanceTickBudget() };
+      const scope = { kv: store, db, mode: "d1" as const, method: "POST", cpuMs: 0, budget: maintenanceTickBudget(performance.now()) };
       await runWithScope(scope, () => withUniverse(
         (universe) => advanceUniverse(universe, now),
         { maintenance: true },
       ));
-      assert.ok(scope.cpuMs < 1_000, `maintenance CPU ${scope.cpuMs}ms`);
+      assert.ok(scope.cpuMs < 300, `maintenance CPU ${scope.cpuMs}ms`);
       const after = dueCount();
       assert.equal(before - after, (pass + 1) * 24);
       const nextIds = new Set((raw.prepare(

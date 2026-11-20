@@ -22,6 +22,7 @@ import {
   armNoSeasonalBoss,
   isLazyPirateRoster,
   noteLazyPirateRoster,
+  budgetScheduledTickAfterLoad,
   MAP_GALAXIES,
   PIRATE_BASES_PER_GALAXY,
   PIRATE_TARGET_BASE_COUNT,
@@ -3912,8 +3913,7 @@ async function runGame<T>(
   const started = performance.now();
   const scope = currentScope();
   if (scope?.budget?.timeBudgetMs != null) {
-    scope.budget.timeBudgetCpuMs = scope.cpuMs;
-    scope.budget.timeBudgetStartedAt = started;
+    budgetScheduledTickAfterLoad(scope.budget, started, scope.cpuMs);
   }
   try {
     return await fn(universe);

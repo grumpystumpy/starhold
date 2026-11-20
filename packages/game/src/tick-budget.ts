@@ -10,7 +10,11 @@ import {
   WORKERS_TICK_SEED_PIRATES,
   WORKERS_TICK_SEED_SYSTEMS,
 } from "./catalog.js";
-import { MAINTENANCE_TICK_FLEET_BUDGET, SCHEDULED_TICK_TIME_BUDGET_MS } from "./data/tuning.js";
+import {
+  MAINTENANCE_TICK_FLEET_BUDGET,
+  SCHEDULED_PASS_SAVE_RESERVE_MS,
+  SCHEDULED_PASS_TOTAL_BUDGET_MS,
+} from "./data/tuning.js";
 import type { UniverseState } from "./types.js";
 
 /**
@@ -93,6 +97,25 @@ export function tickTimeBudgetExpired(budget = readBudget()): boolean {
   );
 }
 
+/** Fit scheduled simulation into its total pass window after loading rows. */
+export function budgetScheduledTickAfterLoad(
+  budget: TickBudget,
+  now: number,
+  cpuMs: number,
+): void {
+  const passStarted = budget.timeBudgetStartedAt;
+  const elapsedBeforeTick = passStarted == null ? 0 : now - passStarted;
+  budget.timeBudgetCpuMs = cpuMs;
+  budget.timeBudgetStartedAt = now;
+  budget.timeBudgetMs = Math.max(
+    0,
+    Math.min(
+      budget.timeBudgetMs ?? SCHEDULED_PASS_TOTAL_BUDGET_MS,
+      SCHEDULED_PASS_TOTAL_BUDGET_MS - elapsedBeforeTick - SCHEDULED_PASS_SAVE_RESERVE_MS,
+    ),
+  );
+}
+
 /** Fresh budget object for one Workers request. */
 export function workersTickBudget(): TickBudget {
   return {
@@ -121,7 +144,7 @@ export function maintenanceTickBudget(startedAt?: number): TickBudget {
     resolvedFleetIds: new Set(),
     ...(startedAt == null
       ? {}
-      : { timeBudgetStartedAt: startedAt, timeBudgetMs: SCHEDULED_TICK_TIME_BUDGET_MS }),
+      : { timeBudgetStartedAt: startedAt, timeBudgetMs: SCHEDULED_PASS_TOTAL_BUDGET_MS }),
   };
 }
 
@@ -139,6 +162,6 @@ export function npcJobBudget(startedAt?: number): TickBudget {
     resolvedFleetIds: new Set(),
     ...(startedAt == null
       ? {}
-      : { timeBudgetStartedAt: startedAt, timeBudgetMs: SCHEDULED_TICK_TIME_BUDGET_MS }),
+      : { timeBudgetStartedAt: startedAt, timeBudgetMs: SCHEDULED_PASS_TOTAL_BUDGET_MS }),
   };
 }
