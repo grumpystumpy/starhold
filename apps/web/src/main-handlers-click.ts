@@ -14,6 +14,7 @@ import { noteSoundGesture, readSoundEnabled, writeSoundEnabled } from "./setting
 import { browserVisitStorage, visitStamp, writeLastVisit } from "./away-recap";
 import { fmt } from "./ui/format";
 import { paintSoundToggle } from "./ui/sound-settings";
+import { syncPhoneMore } from "./ui/patch-chrome";
 import {
   applyCombatSimField,
   applyCombatSimPaste,
@@ -197,12 +198,37 @@ export async function submitGalaxyJump(raw: string): Promise<void> {
   await doGalaxyJump(parsed.galaxy, parsed.system);
 }
 
-export function bindClickHandlers(): void {
-  document.addEventListener("keydown", (ev) => {
-    if (ev.key !== "Escape" || !commanderDossierOpenId()) return;
+export function onShellKeydown(ev: { key: string; preventDefault(): void }): void {
+  if (ev.key !== "Escape") return;
+  if (commanderDossierOpenId()) {
     ev.preventDefault();
     closeCommanderDossier();
     schedulePaint();
+    return;
+  }
+  if (!session.phoneMoreOpen) return;
+  ev.preventDefault();
+  session.phoneMoreOpen = false;
+  syncPhoneMore(root);
+  schedulePaint();
+}
+
+/** Close the phone More sheet. Returns whether it was open. */
+export function dismissPhoneMore(): boolean {
+  if (!session.phoneMoreOpen) return false;
+  session.phoneMoreOpen = false;
+  syncPhoneMore(root);
+  return true;
+}
+
+export function togglePhoneMore(): void {
+  session.phoneMoreOpen = !session.phoneMoreOpen;
+  syncPhoneMore(root);
+}
+
+export function bindClickHandlers(): void {
+  document.addEventListener("keydown", (ev) => {
+    onShellKeydown(ev);
   });
 
   const onMarketField = (ev: Event) => {
@@ -258,7 +284,10 @@ export function bindClickHandlers(): void {
         ev.preventDefault();
         writeSoundEnabled(!readSoundEnabled());
         noteSoundGesture();
-        paintSoundToggle(soundToggle, readSoundEnabled());
+        const enabled = readSoundEnabled();
+        root.querySelectorAll<HTMLElement>("[data-sound-toggle]").forEach((button) => {
+          paintSoundToggle(button, enabled);
+        });
         return;
       }
       if (readSoundEnabled()) noteSoundGesture();
@@ -571,17 +600,36 @@ export function bindClickHandlers(): void {
         return;
       }
 
+      const moreClose = closestActionEl(target, "[data-phone-more-close]");
+      if (moreClose) {
+        ev.preventDefault();
+        if (dismissPhoneMore()) schedulePaint();
+        return;
+      }
+
+      const moreBtn = closestActionEl(target, "[data-phone-more]");
+      if (moreBtn) {
+        ev.preventDefault();
+        togglePhoneMore();
+        schedulePaint();
+        return;
+      }
+
       const navBtn = closestActionEl(target, "[data-nav]");
       if (navBtn) {
         ev.preventDefault();
         const page = resolveNavPage(navBtn.getAttribute("data-nav"));
+        const closed = dismissPhoneMore();
+        const samePage = page != null && session.activePage === page;
         if (page) navigateTo(page);
+        if (closed && (page == null || samePage)) schedulePaint();
         return;
       }
 
       const accountNav = closestActionEl(target, "[data-account-nav]");
       if (accountNav) {
         ev.preventDefault();
+        dismissPhoneMore();
         const which = accountNav.getAttribute("data-account-nav");
         switch (which) {
           case "security":
