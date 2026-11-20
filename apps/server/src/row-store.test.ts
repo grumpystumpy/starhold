@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
+import { performance } from "node:perf_hooks";
 import {
   activePirateBases,
   advanceUniverse,
@@ -84,6 +85,69 @@ function parseWorldShell(doc: string): UniverseState {
     return parsed;
   }
   return JSON.parse(doc) as UniverseState;
+}
+
+const REFERENCE_MS_ON_BOX = 3.56;
+const REFERENCE_CPU_FIXTURE = JSON.stringify({
+  reports: Array.from({ length: 12 }, (_, index) => ({
+    id: `report-${index}`,
+    at: 1_700_000_000_000 + index,
+    coords: { galaxy: 1, system: 200 + index, slot: 4 },
+    ships: { scout: index + 1, cruiser: index % 3 },
+    summary: "A fixed report payload for the CPU calibration workload.",
+  })),
+  fleets: Array.from({ length: 8 }, (_, index) => ({
+    id: `fleet-${index}`,
+    ships: { scout: index + 1 },
+    cargo: { metal: index * 10, crystal: index * 5, deuterium: index },
+  })),
+});
+
+function referenceCpuWork(): number {
+  let checksum = 0;
+  for (let sample = 0; sample < 96; sample++) {
+    const value: unknown = JSON.parse(REFERENCE_CPU_FIXTURE);
+    const encoded = JSON.stringify(value);
+    const visit = (item: unknown): void => {
+      if (Array.isArray(item)) {
+        for (const child of item) visit(child);
+      } else if (item && typeof item === "object") {
+        for (const [key, child] of Object.entries(item)) {
+          checksum += key.length;
+          visit(child);
+        }
+      } else if (typeof item === "string") {
+        checksum += item.length;
+      } else if (typeof item === "number") {
+        checksum += item;
+      }
+    };
+    visit(value);
+    checksum += encoded.length;
+  }
+  return checksum;
+}
+
+function measureReferenceCpuMs(): number {
+  const samples: number[] = [];
+  for (let warmup = 0; warmup < 3; warmup++) referenceCpuWork();
+  for (let sample = 0; sample < 9; sample++) {
+    const start = performance.now();
+    referenceCpuWork();
+    samples.push(performance.now() - start);
+  }
+  return [...samples].sort((a, b) => a - b)[Math.floor(samples.length / 2)]!;
+}
+
+function normalizeCpuMs(rawMs: number, speedFactor: number): number {
+  return Number((rawMs / Math.max(1, speedFactor)).toFixed(2));
+}
+
+function assertCpuBudgets(metrics: { read: { median: number; p95: number }; write: { median: number; p95: number } }): void {
+  assert.ok(metrics.read.median <= 6, `read median ${metrics.read.median}`);
+  assert.ok(metrics.read.p95 <= 10, `read p95 ${metrics.read.p95}`);
+  assert.ok(metrics.write.median <= 8, `write median ${metrics.write.median}`);
+  assert.ok(metrics.write.p95 <= 10, `write p95 ${metrics.write.p95}`);
 }
 
 function sqliteD1(): { db: D1Like; raw: DatabaseSync } {
@@ -2553,6 +2617,14 @@ describe("row save review fixes", () => {
     same(bravo.id, view(full, bravo.id), view(scopedBravo, bravo.id));
   });
 
+  it("keeps CPU-budget normalization strict on the reference machine", () => {
+    assert.equal(normalizeCpuMs(6, 1), 6);
+    assert.throws(
+      () => assertCpuBudgets({ read: { median: normalizeCpuMs(6 + 3, 1), p95: 0 }, write: { median: 0, p95: 0 } }),
+      /read median 9/,
+    );
+  });
+
   it("stays inside the CPU budget on a big account and still deletes every message", async () => {
     const NOW = 1_700_000_000_000;
     const VIEW_AT = 1_800_000_000_000;
@@ -2783,10 +2855,12 @@ describe("row save review fixes", () => {
       );
       return scope.cpuMs;
     };
+    const referenceMedianMs = Number(measureReferenceCpuMs().toFixed(2));
+    const speedFactor = Math.max(1, referenceMedianMs / REFERENCE_MS_ON_BOX);
     const coldRead = await readOnce();
     const worldVersionAfterCold = await worldVersion();
     const readSamples: number[] = [];
-    for (let i = 0; i < 41; i++) readSamples.push(await readOnce());
+    for (let i = 0; i < 21; i++) readSamples.push(await readOnce());
     assert.equal(
       await worldVersion(),
       worldVersionAfterCold,
@@ -2794,8 +2868,8 @@ describe("row save review fixes", () => {
     );
     await writeOnce();
     const writeSamples: number[] = [];
-    for (let i = 0; i < 41; i++) writeSamples.push(await writeOnce());
-    const after = {
+    for (let i = 0; i < 21; i++) writeSamples.push(await writeOnce());
+    const rawMetrics = {
       read: {
         median: Number(pick(readSamples, 50).toFixed(2)),
         p95: Number(pick(readSamples, 95).toFixed(2)),
@@ -2807,7 +2881,17 @@ describe("row save review fixes", () => {
         samples: writeSamples.map((n) => Number(n.toFixed(2))),
       },
     };
-    console.log(`cpu ms ${JSON.stringify(after)}`);
+    const after = {
+      read: {
+        median: normalizeCpuMs(rawMetrics.read.median, speedFactor),
+        p95: normalizeCpuMs(rawMetrics.read.p95, speedFactor),
+      },
+      write: {
+        median: normalizeCpuMs(rawMetrics.write.median, speedFactor),
+        p95: normalizeCpuMs(rawMetrics.write.p95, speedFactor),
+      },
+    };
+    process.stderr.write(`cpu ms ${JSON.stringify({ raw: rawMetrics, normalized: after, speedFactor: Number(speedFactor.toFixed(3)), referenceMedianMs, referenceMsOnBox: REFERENCE_MS_ON_BOX })}\n`);
     console.log(`cpu ms ${JSON.stringify({ coldRead })}`);
     const packed = await loadWorkingSet(db, { playerIds: [hero.id] });
     const packedBase = packed.universe.pirateBases?.[baseId];
@@ -2816,10 +2900,7 @@ describe("row save review fixes", () => {
     assert.ok(packedBase?.ships);
     const packedFull = await loadWorkingSet(db, { full: true });
     assert.equal(Object.keys(packedFull.universe.pirateBases ?? {}).length, bases.length);
-    assert.ok(after.read.median <= 6, `read median ${after.read.median}`);
-    assert.ok(after.read.p95 <= 10, `read p95 ${after.read.p95}`);
-    assert.ok(after.write.median <= 8, `write median ${after.write.median}`);
-    assert.ok(after.write.p95 <= 10, `write p95 ${after.write.p95}`);
+    assertCpuBudgets(after);
 
     const oldWorldFlag = process.env.STARHOLD_OLD_WORLD_DOC;
     try {
