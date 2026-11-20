@@ -11,10 +11,11 @@ import {
 import { RESOURCE_ART } from "./assets";
 import { fmt, fmtBonusPct, fmtCompact, fmtCoords } from "./format";
 import { planetDiscHtml } from "./planet-disc";
-import { NAV_LABELS, NAV_PAGES, type NavPage } from "./nav";
+import { NAV_LABELS, NAV_PAGES, PHONE_BAR_PAGES, PHONE_MORE_PAGES, type NavPage } from "./nav";
 import { creditsHref, creditsNavHtml } from "./render-credits";
 import { accountNavHtml, securityHref } from "./render-security";
 import { soundSettingsHtml } from "./sound-settings";
+import { readSoundEnabled } from "../settings";
 import { flashHtml, resBlock } from "./render-chrome";
 import { escapeAttr, escapeHtml } from "./render-escape";
 import { hrefForPage } from "./router";
@@ -187,6 +188,70 @@ function leftNav(view: PlayerView, active: NavPage, busy: boolean): string {
         ${soundSettingsHtml()}
       </ul>
     </nav>`;
+}
+
+function phoneBarLink(
+  id: (typeof PHONE_BAR_PAGES)[number],
+  active: NavPage,
+  query: { playerId: string; planetId: string },
+  unread: number,
+): string {
+  const href = hrefForPage(id, query);
+  const on = !session.accountMenu && id === active;
+  const badge =
+    id === "messages" && unread > 0
+      ? `<span class="nav-badge" data-testid="phone-nav-messages-badge">${fmt(unread)}</span>`
+      : "";
+  return `<a href="${escapeAttr(href)}" class="phone-nav-link${on ? " active" : ""}" data-nav="${id}" data-testid="phone-nav-${id}">${NAV_LABELS[id]}${badge}</a>`;
+}
+
+function phoneSoundRow(): string {
+  const on = readSoundEnabled();
+  const pressed = on ? "true" : "false";
+  const label = on ? "Sound on" : "Sound off";
+  const aria = on ? "Settings, sound on" : "Settings, sound off";
+  return `<li class="nav-settings" data-testid="phone-more-sound"><span class="nav-settings-kicker">Settings</span><button type="button" class="nav-link" data-sound-toggle data-testid="phone-more-sound-toggle" aria-pressed="${pressed}" aria-label="${aria}">${label}</button></li>`;
+}
+
+function phoneBottomNav(view: PlayerView, active: NavPage, busy: boolean): string {
+  const q = navQuery(view);
+  const params = new URLSearchParams();
+  params.set("playerId", q.playerId);
+  params.set("planet", q.planetId);
+  const query = `?${params.toString()}`;
+  const unread = inboxUnreadCount(view);
+  const moreOn =
+    session.accountMenu != null ||
+    (PHONE_MORE_PAGES as readonly string[]).includes(active);
+  const open = session.phoneMoreOpen;
+  const security = session.account
+    ? `<li><a href="${escapeAttr(securityHref(query))}" class="nav-link${session.accountMenu === "security" ? " active" : ""}" data-account-nav="security" data-testid="phone-more-security">Security</a></li>`
+    : "";
+  const invite = session.account
+    ? `<li class="nav-invite"><button type="button" class="nav-link" data-copy-invite data-testid="phone-more-invite" ${busy ? "disabled" : ""}>Copy invite link</button>${session.inviteShareUrl ? `<input class="invite-link-fallback" type="text" readonly value="${escapeAttr(session.inviteShareUrl)}" data-testid="phone-more-invite-fallback" aria-label="Invite link" />` : ""}</li>`
+    : "";
+  const credits = `<li><a href="${escapeAttr(creditsHref(query))}" class="nav-link${session.accountMenu === "credits" ? " active" : ""}" data-account-nav="credits" data-testid="phone-more-credits">Credits</a></li>`;
+  return `
+    <nav class="phone-bottom-nav" aria-label="Phone menu" data-testid="phone-bottom-nav">
+      ${PHONE_BAR_PAGES.map((id) => phoneBarLink(id, active, q, unread)).join("")}
+      <button type="button" class="phone-nav-link${moreOn ? " active" : ""}" data-phone-more data-testid="phone-bottom-more" aria-expanded="${open ? "true" : "false"}" aria-controls="phone-more-sheet">More</button>
+    </nav>
+    <div class="phone-more" data-testid="phone-more" ${open ? "" : "hidden"}>
+      <button type="button" class="phone-more-backdrop" data-phone-more-close data-testid="phone-more-backdrop" aria-label="Close menu"></button>
+      <div class="phone-more-sheet" id="phone-more-sheet" role="dialog" aria-modal="true" aria-label="More" data-testid="phone-more-sheet">
+        <ul>
+          ${PHONE_MORE_PAGES.map((id) => {
+            const href = hrefForPage(id, q);
+            const on = !session.accountMenu && id === active;
+            return `<li><a href="${escapeAttr(href)}" class="nav-link${on ? " active" : ""}" data-nav="${id}" data-testid="phone-more-${id}">${NAV_LABELS[id]}</a></li>`;
+          }).join("")}
+          ${security}
+          ${invite}
+          ${credits}
+          ${phoneSoundRow()}
+        </ul>
+      </div>
+    </div>`;
 }
 
 function planetSwitcher(
@@ -367,6 +432,7 @@ export function shellHtml(
         </main>
         ${planetSwitcher(view, state.busy)}
       </div>
+      ${phoneBottomNav(view, activePage, state.busy)}
       ${whatsNewHtml(view, state.busy)}
     </div>`;
 }

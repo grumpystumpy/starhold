@@ -1,4 +1,5 @@
 import { session } from "../session";
+import { fmtAffordableDuration } from "./affordable";
 import { fmt, fmtEta, remainingSeconds } from "./format";
 
 let timer: number | undefined;
@@ -38,6 +39,15 @@ export function startCountdownTick(): void {
       const until = Number(el.dataset.etaUntil);
       if (!Number.isFinite(until)) return;
       el.textContent = fmtEta(remainingSeconds(until, now));
+    });
+    document.querySelectorAll<HTMLElement>("[data-afford-until]").forEach((el) => {
+      const until = Number(el.dataset.affordUntil);
+      if (!Number.isFinite(until)) return;
+      const remainingMs = until - now;
+      el.textContent =
+        remainingMs > 0
+          ? `Affordable in ${fmtAffordableDuration(remainingMs / 1000)}`
+          : "Affordable soon";
     });
     paintLocalResources(now);
   }, 250);

@@ -1948,13 +1948,31 @@ function pickWeightedPlayerPlanet(
     if (slot < baseW) {
       const effectiveW = planetRaidDeterrence(planets[i]!, faction, baseW);
       if (slot < effectiveW) {
-        return planets[i]!;
+        const planet = planets[i]!;
+        if (faction === "pirate" && attacker && !pirateDistanceRollSucceeds(attacker, planet, now)) {
+          return null;
+        }
+        return planet;
       }
       return null;
     }
     slot -= baseW;
   }
   return null;
+}
+
+function pirateDistanceRollSucceeds(
+  attacker: PirateBase | AlienBase,
+  planet: PlanetState,
+  now: number,
+): boolean {
+  if (isAlienBase(attacker)) return true;
+  const distanceWeight = pirateRaidDistanceWeight(
+    coordDistance(attacker.coords, planet.coords),
+  );
+  const distanceRoll =
+    hashSeed(`${attacker.id}:distance:${planet.id}:${attacker.lastRaidAt}:${now}`) % 1_000_000;
+  return distanceRoll < distanceWeight * 1_000_000;
 }
 
 export function planetRaidWeight(planet: PlanetState): number {
@@ -2305,8 +2323,6 @@ function launchPiratePlanetRaid(
   if (!owner) return;
   const raidFleet = piratePlayerRaidFleet(base, live, universe);
   if (fleetShipCount(raidFleet) < 1) return;
-  rememberRaidTarget(base, live.id, now);
-  base.ships = subtractShips(base.ships, raidFleet);
   const seconds = flightSecondsOneWay(
     base.coords,
     live.coords,
@@ -2316,7 +2332,10 @@ function launchPiratePlanetRaid(
     null,
     0,
   );
-  const fleetId = `flt_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  const fleetId = `flt_pir_${hashSeed(`${base.id}:${live.id}:${now}`).toString(36)}_${now.toString(36)}`;
+  if (universe.fleets[fleetId]) return;
+  rememberRaidTarget(base, live.id, now);
+  base.ships = subtractShips(base.ships, raidFleet);
   const fleet: FleetMission = {
     id: fleetId,
     ownerPlayerId: NPC_PIRATE_OWNER_ID,

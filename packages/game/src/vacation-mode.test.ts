@@ -265,6 +265,7 @@ describe("vacation mode", () => {
     const homePlanet = universe.planets[home.planet.id]!;
     const base = activePirateBases(universe).find((entry) => !entry.seasonalBoss);
     assert.ok(base);
+    base.coords = { ...homePlanet.coords };
     universe.planets = {
       [awayPlanet.id]: awayPlanet,
       [homePlanet.id]: homePlanet,

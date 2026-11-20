@@ -5,6 +5,8 @@ import { createUniverse, joinUniverse, levelBonuses, playerView } from "@starhol
 import type { CombatReport } from "@starhold/game";
 
 const { shellHtml, levelBonusLines, syncWhatsNewPopup, vacationBannerHtml } = await import("./render-shell.js");
+const { session } = await import("../session.js");
+const { hrefForPage } = await import("./router.js");
 
 describe("newbie bonus header badge", () => {
   it("shows remaining time while active and omits the badge when forfeited or expired", () => {
@@ -176,6 +178,82 @@ describe("messages badge", () => {
     const html = shellHtml(view, { error: null, notice: null, busy: false }, "overview", "<div>Main</div>");
     assert.match(html, /data-testid="nav-messages-badge">1</);
     assert.doesNotMatch(html, /data-testid="nav-messages-badge">2</);
+    assert.match(html, /data-testid="phone-nav-messages-badge">1</);
+  });
+});
+
+describe("phone bottom nav", () => {
+  function shell(page: "overview" | "buildings" | "fleet" = "overview") {
+    const now = 100_000_000;
+    const universe = createUniverse("Phone", 1, 1, { lazySeed: true });
+    const { player, planet } = joinUniverse(universe, "Walker", now);
+    const view = playerView(universe, player.id, now);
+    const html = shellHtml(view, { error: null, notice: null, busy: false }, page, "<div>Main</div>");
+    return { html, playerId: player.id, planetId: planet.id };
+  }
+
+  it("renders five bar links and a More sheet with the other pages and account tools", () => {
+    session.phoneMoreOpen = false;
+    session.account = null;
+    session.accountMenu = null;
+    session.inviteShareUrl = null;
+    const { html, playerId, planetId } = shell("overview");
+    const bar = html.slice(
+      html.indexOf('data-testid="phone-bottom-nav"'),
+      html.indexOf('data-testid="phone-more"'),
+    );
+    const query = { playerId, planetId };
+    for (const id of ["overview", "fleet", "galaxy", "messages"] as const) {
+      assert.match(bar, new RegExp(`data-nav="${id}"`));
+      assert.match(bar, new RegExp(`data-testid="phone-nav-${id}"`));
+      const href = hrefForPage(id, query).replaceAll("&", "&amp;");
+      assert.match(bar, new RegExp(`href="${href.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
+    }
+    assert.match(bar, /data-testid="phone-bottom-more"/);
+    assert.equal((bar.match(/class="phone-nav-link/g) ?? []).length, 5);
+    assert.match(html, /data-testid="phone-more"[^>]*hidden/);
+    for (const id of ["goals", "buildings", "defenses", "shipyard", "research", "simulator", "shop", "highscore", "alliances", "seasons"]) {
+      assert.match(html, new RegExp(`data-testid="phone-more-${id}"`));
+      assert.match(html, new RegExp(`data-nav="${id}"`));
+    }
+    assert.match(html, /data-testid="phone-more-credits"/);
+    assert.match(html, /data-account-nav="credits"/);
+    assert.match(html, /data-testid="phone-more-sound-toggle"/);
+    assert.match(html, /data-sound-toggle/);
+    assert.doesNotMatch(html, /data-testid="phone-more-security"/);
+    assert.doesNotMatch(html, /data-testid="phone-more-invite"/);
+
+    session.account = { id: "acct", email: "walk@example.com", playerId };
+    session.inviteShareUrl = "https://starhold.example/?invite=ABCDEFGH";
+    try {
+      const signed = shell("overview").html;
+      assert.match(signed, /data-testid="phone-more-security"/);
+      assert.match(signed, /data-account-nav="security"/);
+      assert.match(signed, /data-testid="phone-more-invite"/);
+      assert.match(signed, /data-copy-invite/);
+      assert.match(signed, /Copy invite link/);
+      assert.match(signed, /data-testid="phone-more-invite-fallback"/);
+      assert.match(signed, /data-testid="phone-more-sound"/);
+    } finally {
+      session.account = null;
+      session.inviteShareUrl = null;
+      session.phoneMoreOpen = false;
+    }
+  });
+
+  it("marks the open primary page and marks More when that page lives in the sheet", () => {
+    session.accountMenu = null;
+    session.phoneMoreOpen = false;
+    const overview = shell("overview").html;
+    assert.match(overview, /class="phone-nav-link active" data-nav="overview"/);
+    assert.doesNotMatch(overview, /class="phone-nav-link active" data-phone-more/);
+    const buildings = shell("buildings").html;
+    assert.match(buildings, /class="phone-nav-link active" data-phone-more/);
+    assert.match(buildings, /class="nav-link active" data-nav="buildings"/);
+    assert.doesNotMatch(buildings, /class="phone-nav-link active" data-nav="overview"/);
+    const fleet = shell("fleet").html;
+    assert.match(fleet, /class="phone-nav-link active" data-nav="fleet"/);
+    assert.doesNotMatch(fleet, /class="phone-nav-link active" data-phone-more/);
   });
 });
 

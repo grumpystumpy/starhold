@@ -122,16 +122,57 @@ async function collectLayoutIssues(page) {
       const vw = window.innerWidth;
       const vh = window.innerHeight;
 
+      function isShown(el) {
+        for (let node = el; node && node.nodeType === 1; node = node.parentElement) {
+          if (node.hasAttribute("hidden")) return false;
+          const st = getComputedStyle(node);
+          if (st.display === "none" || st.visibility === "hidden") return false;
+          if (Number(st.opacity) === 0) return false;
+        }
+        return true;
+      }
+
+      // Clip to overflow ancestors. position:fixed paints against the viewport,
+      // so the phone bar is not clipped by #app's scrollport.
+      function visibleRect(el) {
+        const r = el.getBoundingClientRect();
+        let left = r.left;
+        let top = r.top;
+        let right = r.right;
+        let bottom = r.bottom;
+        let fixed = false;
+        for (let node = el; node && node.nodeType === 1; node = node.parentElement) {
+          const st = getComputedStyle(node);
+          if (st.position === "fixed") fixed = true;
+          if (!fixed && node !== el) {
+            const ov = `${st.overflow} ${st.overflowX} ${st.overflowY}`;
+            if (/(auto|scroll|hidden|clip)/.test(ov)) {
+              const cr = node.getBoundingClientRect();
+              left = Math.max(left, cr.left);
+              top = Math.max(top, cr.top);
+              right = Math.min(right, cr.right);
+              bottom = Math.min(bottom, cr.bottom);
+            }
+          }
+        }
+        return {
+          left,
+          top,
+          right,
+          bottom,
+          width: Math.max(0, right - left),
+          height: Math.max(0, bottom - top),
+        };
+      }
+
       const candidates = [
         ...document.querySelectorAll(
           "a, button, h1, h2, h3, label, .nav-link, .planet-chip, .planet-chip-name, .item-thumb, .res, .queue, .panel, img.thumb, img.icon, .hint, .meta, [data-testid]",
         ),
       ].filter((el) => {
         if (skipTags.has(el.tagName)) return false;
-        const st = getComputedStyle(el);
-        if (st.display === "none" || st.visibility === "hidden") return false;
-        if (Number(st.opacity) === 0) return false;
-        const r = el.getBoundingClientRect();
+        if (!isShown(el)) return false;
+        const r = visibleRect(el);
         if (r.width < 2 || r.height < 2) return false;
         // Ignore off-screen sticky ghosts
         if (r.bottom < -20 || r.top > vh + 20) return false;
@@ -139,7 +180,7 @@ async function collectLayoutIssues(page) {
       });
 
       const boxes = candidates.map((el) => {
-        const r = el.getBoundingClientRect();
+        const r = visibleRect(el);
         return {
           el,
           tag: el.tagName,
@@ -294,6 +335,7 @@ async function collectLayoutIssues(page) {
         ),
       ];
       for (const el of textEls) {
+        if (!isShown(el)) continue;
         const st = getComputedStyle(el);
         const fg = parseRgb(st.color);
         let bgEl = el;
@@ -324,6 +366,7 @@ async function collectLayoutIssues(page) {
 
       // Icons without accessible name
       for (const img of document.querySelectorAll("img.icon, img.thumb")) {
+        if (!isShown(img)) continue;
         const alt = (img.getAttribute("alt") ?? "").trim();
         const labeled =
           alt ||

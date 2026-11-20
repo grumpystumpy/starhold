@@ -36,6 +36,17 @@ async function readLog(page) {
   return page.evaluate(() => window.__apiLog.slice());
 }
 
+/** Side nav is hidden below 640px. Phone uses the More sheet. */
+async function openBuildings(page) {
+  const side = page.locator('[data-testid="nav-buildings"]');
+  if (await side.isVisible()) {
+    await side.click();
+    return;
+  }
+  await page.click('[data-testid="phone-bottom-more"]');
+  await page.click('[data-testid="phone-more-buildings"]');
+}
+
 async function waitForLog(page, pred, ms = 8_000) {
   const activeClock = createActiveWaitClock();
   let last = [];
@@ -188,7 +199,7 @@ async function runViewport(browser, viewport) {
   }
 
   await dismissWhatsNew(page);
-  await page.click('[data-testid="nav-buildings"]');
+  await openBuildings(page);
   await page.waitForSelector('[data-testid="upgrade-shipyard"]', {
     timeout: 10_000,
   });
@@ -327,7 +338,7 @@ async function runIdlePause(browser, viewport) {
   }
 
   await dismissWhatsNew(page);
-  await page.click('[data-testid="nav-buildings"]');
+  await openBuildings(page);
   const upgradeResponse = page.waitForResponse(
     (res) =>
       res.url().includes("/api/upgrade") && res.request().method() === "POST",
