@@ -710,6 +710,7 @@ describe("B7-95/96 per-galaxy cap and same-target cooldown", () => {
     const home = universe.planets[joined.planet.id]!;
     universe.planets = { [home.id]: home };
     const base = activePirateBases(universe).find((entry) => !entry.seasonalBoss)!;
+    base.coords = { ...home.coords };
     base.ships = { ...emptyFleetShips(), interceptor: 30 };
     universe.pirateBases = { [base.id]: base };
     universe.alienBases = {};
@@ -2026,6 +2027,7 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
     planetState.ships = { ...emptyFleetShips(), cruiser: 10 };
 
     const baseB = activePirateBases(universe2)[0]!;
+    baseB.coords = { ...planetState.coords };
     universe2.pirateBases = { [baseB.id]: baseB };
     baseB.level = 100;
     baseB.tier = 100;
@@ -2267,6 +2269,7 @@ describe("B3-24 pirate strength, raid power and strong-ship cap", () => {
 
     original.planets = { [body.id]: body };
     const base = activePirateBases(original)[0]!;
+    base.coords = { ...body.coords };
     original.pirateBases = { [base.id]: base };
     base.nextRaidAt = now;
     // A total loss now removes every sent hull. One gun keeps the base
@@ -3126,6 +3129,81 @@ describe("B7-97/98 pirate distance and flight raids", () => {
     const farD = pirateRaidDistanceWeight(coordDistance(base.coords, far.coords));
     assert.ok(Math.abs(nearW / farW - nearD / farD) < 1e-9);
     assert.ok(coordDistance(base.coords, far.coords) > coordDistance(base.coords, near.coords));
+  });
+
+  it("reduces absolute player raid rolls with galaxy distance", () => {
+    const { universe, body } = stage("distance probability");
+    universe.planets = { [body.id]: body };
+    universe.pirateBases = {};
+    universe.alienBases = {};
+    const samples = 4_000;
+    const raidsByGalaxy: number[] = [];
+    for (let galaxy = 1; galaxy <= MAP_GALAXIES; galaxy++) {
+      let raids = 0;
+      for (let i = 0; i < samples; i++) {
+        const base = createPirateBase(
+          `distance-${galaxy}-${i}`,
+          galaxy,
+          body.coords.system + 1,
+          2,
+          NOW,
+          0,
+        );
+        base.lastRaidAt = NOW;
+        if (pickRaidTarget(universe, base, NOW + i * 1_000, "pirate")?.kind === "planet") raids++;
+      }
+      raidsByGalaxy.push(raids);
+    }
+    for (let galaxy = 1; galaxy < MAP_GALAXIES; galaxy++) {
+      assert.ok(
+        raidsByGalaxy[galaxy - 1]! > raidsByGalaxy[galaxy]!,
+        `galaxy ${galaxy} (${raidsByGalaxy[galaxy - 1]}) should raid more than galaxy ${galaxy + 1} (${raidsByGalaxy[galaxy]})`,
+      );
+    }
+    assert.ok(
+      raidsByGalaxy[MAP_GALAXIES - 1]! < raidsByGalaxy[0]! * 0.4,
+      `galaxy 10 (${raidsByGalaxy[MAP_GALAXIES - 1]}) should be under 40% of galaxy 1 (${raidsByGalaxy[0]})`,
+    );
+  });
+
+  it("keeps the same-target cooldown across a multi-period catch-up", () => {
+    const { universe, player, body } = stage("catch-up target cooldown");
+    universe.planets = { [body.id]: body };
+    universe.pirateBases = {};
+    universe.alienBases = {};
+    delete universe.skipNpcRaids;
+    const base = createPirateBase(
+      universe.seed ?? universe.id,
+      body.coords.galaxy,
+      body.coords.system + 1,
+      2,
+      NOW,
+      0,
+    );
+    base.ships = { ...emptyFleetShips(), interceptor: 300 };
+    base.nextRaidAt = NOW - 20 * PIRATE_RAID_PERIOD_MS;
+    universe.pirateBases = { [base.id]: base };
+    tickPirates(universe, NOW);
+    const raids = piratePlayerFleets(universe, player.id)
+      .filter((fleet) => fleet.phase === "outbound")
+      .sort((a, b) => a.departedAt - b.departedAt);
+    assert.ok(raids.length > 1, "catch-up launches raids after cooldown expires");
+    for (let i = 1; i < raids.length; i++) {
+      assert.ok(raids[i]!.departedAt - raids[i - 1]!.departedAt >= PIRATE_SAME_TARGET_COOLDOWN_MS);
+    }
+    assert.equal(new Set(raids.map((fleet) => fleet.departedAt)).size, raids.length);
+
+    const latest = raids[raids.length - 1]!;
+    const fleetCount = raids.length;
+    base.coords = { ...body.coords };
+    base.nextRaidAt = latest.departedAt;
+    base.ships = { ...emptyFleetShips(), interceptor: 300 };
+    delete base.recentRaidTargets;
+    tickPirates(universe, NOW);
+    assert.equal(piratePlayerFleets(universe, player.id).length, fleetCount);
+    assert.deepEqual(base.ships, { ...emptyFleetShips(), interceptor: 300 });
+    assert.ok(fleetCount > 0);
+    assert.ok(Object.keys(universe.fleets).includes(latest.id));
   });
 
   it("launches a pirate fleet whose flight time matches flightSecondsOneWay", () => {
