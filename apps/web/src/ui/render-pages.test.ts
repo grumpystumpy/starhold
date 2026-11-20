@@ -528,3 +528,22 @@ describe("catalog row tooltips", () => {
     );
   });
 });
+
+describe("affordable-in page wiring", () => {
+  it("passes economy into building, ship, defense, and research rows", () => {
+    const view = catalogView();
+    view.planet.resources = { metal: 0, crystal: 0, deuterium: 0 };
+    view.planet.buildings = { solarPlant: 1, researchLab: 1, shipyard: 2 };
+    view.economy = {
+      ...view.economy,
+      productionPerHour: { metal: 500, crystal: 500, deuterium: 500 },
+      storage: { metal: 1_000_000, crystal: 1_000_000, deuterium: 1_000_000 },
+    } as PlayerView["economy"];
+    for (const page of ["buildings", "shipyard", "defenses", "research"] as const) {
+      const html = pageHtml(page, view, false, null);
+      assert.match(html, /data-afford-until=/);
+      assert.match(html, /Affordable in /);
+      assert.match(html, /disabled/);
+    }
+  });
+});

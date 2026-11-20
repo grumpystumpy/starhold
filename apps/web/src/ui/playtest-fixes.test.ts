@@ -2,14 +2,19 @@ import "../test-dom";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
-import { researchUpgradeSeconds, type PlayerView } from "@starhold/game";
+import { researchUpgradeSeconds, type PlayerView, type Resources } from "@starhold/game";
 import { fmtEta } from "./format";
 import {
+  buildingUpgradeCost,
   buildingUpgradeSeconds,
+  defenseCost,
   defenseUnitBuildSeconds,
   levelBonuses,
+  researchUpgradeCost,
   shipUnitBuildSeconds,
+  SHIPS,
 } from "@starhold/game";
+import { computeAffordability } from "./affordable";
 import { buildingRow, joinScreenHtml } from "./render-chrome-join";
 import { defenseRow, researchRow, shipRow } from "./render-chrome-rows";
 import { fleetComposer } from "./render-fleets-composer";
@@ -609,5 +614,233 @@ describe("playtest fixes", () => {
     assert.doesNotMatch(signedIn, /Automation/);
     assert.doesNotMatch(signedIn, /commander=/);
     assert.doesNotMatch(signedIn, /window\.starhold/);
+  });
+});
+
+const AFFORD_NOW = 1_700_000_000_000;
+const broke = { metal: 0, crystal: 0, deuterium: 0 };
+const producing = {
+  productionPerHour: { metal: 220, crystal: 80_000, deuterium: 40_000 },
+  storage: { metal: 5_000_000, crystal: 5_000_000, deuterium: 5_000_000 },
+  now: AFFORD_NOW,
+};
+const stalled = {
+  productionPerHour: { metal: 0, crystal: 0, deuterium: -4 },
+  storage: producing.storage,
+  now: AFFORD_NOW,
+};
+const tinyStore = {
+  productionPerHour: producing.productionPerHour,
+  storage: { metal: 1, crystal: 1, deuterium: 1 },
+  now: AFFORD_NOW,
+};
+
+function expectCountdown(html: string, cost: Resources, rates: Resources, storage: Resources): void {
+  const afford = computeAffordability(cost, broke, rates, storage);
+  assert.equal(afford.affordable, false);
+  if (afford.affordable || afford.secondsRemaining == null) {
+    assert.fail("expected a countdown");
+  }
+  assert.match(html, new RegExp(`data-afford-until="${AFFORD_NOW + afford.secondsRemaining * 1000}"`));
+  assert.match(html, new RegExp(`>${afford.label}</span>`));
+  assert.match(html, /disabled/);
+  assert.match(html, /Not enough/);
+  assert.doesNotMatch(html, />Can't afford</);
+}
+
+function yardPlanet(): PlayerView["planet"] {
+  const p = planet();
+  p.buildings = { solarPlant: 2, researchLab: 1, shipyard: 2 };
+  p.resources = { ...broke };
+  p.shipQueue = [];
+  p.defenseQueue = [];
+  return p;
+}
+
+function researchView(resources: Resources, lab = 1): PlayerView {
+  return {
+    now: AFFORD_NOW,
+    player: player(),
+    planet: {
+      ...planet(),
+      resources,
+      buildings: { solarPlant: 2, researchLab: lab, shipyard: 2 },
+    },
+    ownedPlanets: [{ id: "pl1", researchLab: lab }],
+    universe: { speed: 1 },
+  } as unknown as PlayerView;
+}
+
+describe("affordable in on build rows", () => {
+  it("shows a building countdown, short reasons, and the old label when econ is omitted", () => {
+    const cost = buildingUpgradeCost("solarPlant", 2);
+    const row = buildingRow("solarPlant", planet(), player(), 1, AFFORD_NOW, false, undefined, undefined, producing);
+    expectCountdown(row, cost, producing.productionPerHour, producing.storage);
+    assert.match(row, /data-upgrade="solarPlant"/);
+    assert.match(row, /data-locked="1"/);
+    assert.match(row, /data-testid="upgrade-solarPlant"[^>]*disabled/);
+
+    const none = buildingRow("solarPlant", planet(), player(), 1, AFFORD_NOW, false, undefined, undefined, stalled);
+    assert.match(none, />Can't afford</);
+    assert.match(none, /no production/);
+    assert.match(none, /disabled/);
+    assert.doesNotMatch(none, /data-afford-until/);
+
+    const stored = buildingRow("solarPlant", planet(), player(), 1, AFFORD_NOW, false, undefined, undefined, tinyStore);
+    assert.match(stored, />Can't afford</);
+    assert.match(stored, /needs more storage/);
+    assert.match(stored, /disabled/);
+    assert.doesNotMatch(stored, /Affordable in/);
+
+    const plain = buildingRow("solarPlant", planet(), player(), 1, AFFORD_NOW, false);
+    assert.match(plain, />Can't afford</);
+    assert.match(plain, /Not enough/);
+    assert.doesNotMatch(plain, /data-afford-until|no production|needs more storage/);
+
+    const locked = planet();
+    locked.resources = { metal: 9_000_000, crystal: 9_000_000, deuterium: 9_000_000 };
+    const foundry = buildingRow("rigFoundry", locked, player(), 1, AFFORD_NOW, false, undefined, undefined, producing);
+    assert.match(foundry, />Locked</);
+    assert.doesNotMatch(foundry, /Affordable in|Can't afford/);
+
+    const tight = planet();
+    tight.fieldsCap = 3;
+    const noFields = buildingRow("solarPlant", tight, player(), 1, AFFORD_NOW, false, undefined, undefined, producing);
+    assert.match(noFields, />No fields</);
+    assert.doesNotMatch(noFields, /Affordable in/);
+  });
+
+  it("shows a ship countdown, short reasons, and the old label when econ is omitted", () => {
+    const cost = SHIPS.scout.cost;
+    const row = shipRow("scout", yardPlanet(), false, 1, 1, 1, {}, producing);
+    expectCountdown(row, cost, producing.productionPerHour, producing.storage);
+    assert.match(row, /data-ship="scout"/);
+    assert.match(row, /data-locked="0"/);
+    assert.match(row, /data-cost-metal="220"/);
+    assert.match(row, /data-testid="build-scout"[^>]*disabled/);
+
+    const none = shipRow("scout", yardPlanet(), false, 1, 1, 1, {}, stalled);
+    assert.match(none, />Can't afford</);
+    assert.match(none, /no production/);
+    assert.match(none, /data-cost-metal="220"/);
+    assert.doesNotMatch(none, /data-afford-until/);
+
+    const stored = shipRow("scout", yardPlanet(), false, 1, 1, 1, {}, tinyStore);
+    assert.match(stored, />Can't afford</);
+    assert.match(stored, /needs more storage/);
+    assert.doesNotMatch(stored, /Affordable in/);
+
+    const plain = shipRow("scout", yardPlanet(), false, 1, 1, 1, {});
+    assert.match(plain, />Can't afford</);
+    assert.match(plain, /Not enough/);
+    assert.match(plain, /data-ship="scout"/);
+    assert.match(plain, /data-locked="0"/);
+    assert.match(plain, /data-cost-metal="220"/);
+    assert.doesNotMatch(plain, /data-afford-until|no production|needs more storage/);
+
+    const lockedPlanet = planet();
+    lockedPlanet.resources = { metal: 9_000_000, crystal: 9_000_000, deuterium: 9_000_000 };
+    const locked = shipRow("scout", lockedPlanet, false, 1, 1, 1, {}, producing);
+    assert.match(locked, />Locked</);
+    assert.doesNotMatch(locked, /Affordable in|Can't afford/);
+
+    const queued = yardPlanet();
+    queued.shipQueue = Array.from({ length: 8 }, () => ({ id: "q" })) as PlayerView["planet"]["shipQueue"];
+    const full = shipRow("scout", queued, false, 1, 1, 1, {}, producing);
+    assert.match(full, />Queue full</);
+    assert.match(full, /disabled/);
+    assert.doesNotMatch(full, /Affordable in/);
+  });
+
+  it("shows a defense countdown, short reasons, and the old label when econ is omitted", () => {
+    const cost = defenseCost("laserBattery", 1);
+    const row = defenseRow("laserBattery", yardPlanet(), false, 1, 1, producing);
+    expectCountdown(row, cost, producing.productionPerHour, producing.storage);
+    assert.match(row, /data-defense="laserBattery"/);
+    assert.match(row, /data-locked="0"/);
+    assert.match(row, /data-testid="build-defense-laserBattery"[^>]*disabled/);
+
+    const none = defenseRow("laserBattery", yardPlanet(), false, 1, 1, stalled);
+    assert.match(none, />Can't afford</);
+    assert.match(none, /no production/);
+    assert.doesNotMatch(none, /data-afford-until/);
+
+    const stored = defenseRow("laserBattery", yardPlanet(), false, 1, 1, tinyStore);
+    assert.match(stored, />Can't afford</);
+    assert.match(stored, /needs more storage/);
+    assert.doesNotMatch(stored, /Affordable in/);
+
+    const plain = defenseRow("laserBattery", yardPlanet(), false);
+    assert.match(plain, />Can't afford</);
+    assert.match(plain, /Not enough/);
+    assert.match(plain, /data-defense="laserBattery"/);
+    assert.doesNotMatch(plain, /data-afford-until|no production|needs more storage/);
+
+    const lockedPlanet = planet();
+    lockedPlanet.resources = { metal: 9_000_000, crystal: 9_000_000, deuterium: 9_000_000 };
+    const locked = defenseRow("laserBattery", lockedPlanet, false, 1, 1, producing);
+    assert.match(locked, />Locked</);
+    assert.doesNotMatch(locked, /Affordable in|Can't afford/);
+
+    const queued = yardPlanet();
+    queued.defenseQueue = Array.from({ length: 8 }, () => ({ id: "q" })) as PlayerView["planet"]["defenseQueue"];
+    const full = defenseRow("laserBattery", queued, false, 1, 1, producing);
+    assert.match(full, />Queue full</);
+    assert.match(full, /disabled/);
+    assert.doesNotMatch(full, /Affordable in/);
+  });
+
+  it("shows a research countdown, short reasons, and the old label without economy", () => {
+    const cost = researchUpgradeCost("energyTech", 0, 1);
+    const rich = researchView(broke);
+    rich.economy = producing as PlayerView["economy"];
+    const row = researchRow("energyTech", rich, false);
+    expectCountdown(row, cost, producing.productionPerHour, producing.storage);
+    assert.match(row, /data-research="energyTech"/);
+    assert.match(row, /data-locked="1"/);
+    assert.match(row, /data-testid="research-btn-energyTech"[^>]*disabled/);
+
+    const stalledView = researchView(broke);
+    stalledView.economy = stalled as PlayerView["economy"];
+    const none = researchRow("energyTech", stalledView, false);
+    assert.match(none, />Can't afford</);
+    assert.match(none, /no production/);
+    assert.doesNotMatch(none, /data-afford-until/);
+
+    const storedView = researchView(broke);
+    storedView.economy = tinyStore as PlayerView["economy"];
+    const stored = researchRow("energyTech", storedView, false);
+    assert.match(stored, />Can't afford</);
+    assert.match(stored, /needs more storage/);
+    assert.doesNotMatch(stored, /Affordable in/);
+
+    const plain = researchRow("energyTech", researchView(broke), false);
+    assert.match(plain, />Can't afford</);
+    assert.match(plain, /Not enough/);
+    assert.doesNotMatch(plain, /data-afford-until|no production|needs more storage/);
+
+    const needsLab = researchView({ metal: 9_000_000, crystal: 9_000_000, deuterium: 9_000_000 }, 1);
+    needsLab.economy = producing as PlayerView["economy"];
+    const labRow = researchRow("shieldingTech", needsLab, false);
+    assert.match(labRow, />Needs lab 6</);
+    assert.doesNotMatch(labRow, /Affordable in|Can't afford/);
+
+    const fullView = researchView(broke);
+    fullView.economy = producing as PlayerView["economy"];
+    fullView.player.researchQueue = Array.from({ length: 1 }, () => ({
+      id: "q1",
+      kind: "research",
+      researchId: "energyTech",
+      targetLevel: 1,
+      enqueuedAt: 1,
+      completesAt: 2,
+      workSeconds: 10,
+      startedAt: 1,
+      paidCost: { metal: 0, crystal: 1, deuterium: 0 },
+    })) as PlayerView["player"]["researchQueue"];
+    const full = researchRow("energyTech", fullView, false);
+    assert.match(full, />Queue full</);
+    assert.match(full, /disabled/);
+    assert.doesNotMatch(full, /Affordable in/);
   });
 });
