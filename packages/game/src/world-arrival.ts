@@ -452,7 +452,7 @@ export function advanceFleets(universe: UniverseState, now: number): void {
   }
   const due = Object.values(universe.fleets)
     .filter((f) => f.arrivesAt <= now)
-    .sort((a, b) => a.arrivesAt - b.arrivesAt);
+    .sort((a, b) => a.arrivesAt - b.arrivesAt || a.id.localeCompare(b.id));
   for (const fleet of due) {
     if (!consumeTickBudget("fleets")) break;
     const live = universe.fleets[fleet.id];

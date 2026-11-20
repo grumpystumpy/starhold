@@ -2663,16 +2663,7 @@ async function loadNpcBasesForNpc(db: D1Like, loaded: LoadedRows): Promise<void>
     "SELECT galaxy FROM save_npc_bases WHERE destroyed = 1 ORDER BY galaxy LIMIT 1",
   );
   if (wreck) {
-    const galaxies = new Set<number>([wreck.galaxy]);
-    const bossGalaxy = galaxyOfBaseId(loaded.universe.pirateBossBaseId);
-    if (bossGalaxy) galaxies.add(bossGalaxy);
-    const list = [...galaxies];
-    const rows = await all<NpcGalaxyRow>(
-      db,
-      `${NPC_BASE_SELECT} WHERE galaxy IN (${list.map(() => "?").join(", ")}) ORDER BY kind, galaxy`,
-      ...list,
-    );
-    applyNpcGalaxyRows(loaded, rows);
+    await loadAllNpcBases(db, loaded);
     loaded.npcBaseGalaxy = wreck.galaxy;
     loaded.npcBasePhase = npcBasePhase(Date.now());
     const cursorKey = loaded.npcBasePhase === "raid" ? "aiRaidCatchUpCursor" : "aiCatchUpCursor";
@@ -2888,6 +2879,20 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
     await loadFleets(db, loaded, "", []);
     await loadMessages(db, loaded, "", []);
     await loadAllNpcBases(db, loaded);
+  } else if (work?.maintenance) {
+    await loadAllNpcBases(db, loaded);
+    if (!planetRows) {
+      await loadPlanetDocs(
+        db,
+        loaded,
+        "SELECT id, version, doc FROM save_planets WHERE owner_id != ''",
+        [],
+      );
+    }
+    await loadFleets(db, loaded, "", []);
+    const systems = systemPairs(Object.values(loaded.universe.planets));
+    await loadScheduledRows(db, loaded, systems, false, false);
+    await loadMessages(db, loaded, "WHERE kind = 'event'", []);
   } else if (wide) {
     await loadAllNpcBases(db, loaded);
     placePirates = placePirates || pirateSitesNeeded(loaded.universe);
@@ -2969,6 +2974,7 @@ export function restoreUnresolvedFleets(loaded: LoadedRows): void {
   const fleets = loaded.universe.fleets;
   for (const [id, fleet] of loaded.fleetSnapshots) {
     if (fleets[id]) continue;
+    if (fleet.ownerPlayerId === "npc_pirates") continue;
     const originOk = Boolean(fleet.originPlanetId) && planetResolved(loaded, fleet.originPlanetId);
     const targetOk = !fleet.targetPlanetId || planetResolved(loaded, fleet.targetPlanetId);
     if (!originOk || !targetOk) fleets[id] = fleet;
@@ -3540,7 +3546,9 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
   if (rebuildScores) {
     const now = Date.now();
     const previousRows = currentScope()?.priorHighscoreRows;
-    boardJson = timedStringify(buildHighscoreCache(universe, true, previousRows, now));
+    const cache = buildHighscoreCache(universe, false, previousRows, now);
+    const halls = await combatHallsForPartialSave(db, universe);
+    boardJson = timedStringify({ ...cache, ...halls });
     allianceJson = timedStringify(allianceRankBoard(universe));
     categoryDocs = categoryHighscoreBoards(universe);
     boardAt = now;

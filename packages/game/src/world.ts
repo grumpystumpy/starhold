@@ -41,7 +41,7 @@ export {
   statePollIncludeForPage,
 } from "./world-poll.js";
 export type { StatePollInclude } from "./world-poll.js";
-export { bindTickBudget, npcJobBudget, workersTickBudget } from "./tick-budget.js";
+export { bindTickBudget, maintenanceTickBudget, npcJobBudget, requestTickBudget, workersTickBudget } from "./tick-budget.js";
 export type { TickBudget } from "./tick-budget.js";
 export type { ActionResult, FleetActionResult } from "./world-queues.js";
 export {

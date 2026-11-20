@@ -4,7 +4,7 @@
  * the tick budget, and the password KDF differ from Vercel.
  */
 import * as Sentry from "@sentry/cloudflare";
-import { advanceUniverse, bindTickBudget, npcJobBudget, tickPirates, workersTickBudget } from "@starhold/game";
+import { advanceUniverse, bindTickBudget, maintenanceTickBudget, npcJobBudget, requestTickBudget, tickPirates, workersTickBudget } from "@starhold/game";
 import { app } from "../apps/server/src/app.js";
 import { createD1Store, type D1Like } from "../apps/server/src/d1-store.js";
 import {
@@ -113,7 +113,7 @@ const worker = {
         db: env.DB,
         mode: "d1",
         method: request.method,
-        budget: workersTickBudget(),
+        budget: requestTickBudget(),
         cpuMs: 0,
       },
       () => app.fetch(request),
@@ -137,7 +137,7 @@ const worker = {
           db: env.DB,
           mode: "d1",
           method: "POST",
-          budget: npc ? npcJobBudget() : workersTickBudget(),
+          budget: npc ? npcJobBudget() : maintenanceTickBudget(),
           cpuMs: 0,
         },
         () =>

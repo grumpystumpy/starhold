@@ -10,6 +10,7 @@ import {
   WORKERS_TICK_SEED_PIRATES,
   WORKERS_TICK_SEED_SYSTEMS,
 } from "./catalog.js";
+import { MAINTENANCE_TICK_FLEET_BUDGET } from "./data/tuning.js";
 import type { UniverseState } from "./types.js";
 
 /**
@@ -87,6 +88,16 @@ export function workersTickBudget(): TickBudget {
     seedPirates: WORKERS_TICK_SEED_PIRATES,
     lazyPlanets: true,
   };
+}
+
+/** Small arrival budget for normal request paths. */
+export function requestTickBudget(): TickBudget {
+  return workersTickBudget();
+}
+
+/** Arrival backlog budget for the wide thirty-minute maintenance pass. */
+export function maintenanceTickBudget(): TickBudget {
+  return { ...workersTickBudget(), fleets: MAINTENANCE_TICK_FLEET_BUDGET };
 }
 
 /** Budget for the 10-minute pirate and alien job. Not used on page loads. */
