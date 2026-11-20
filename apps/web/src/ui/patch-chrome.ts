@@ -207,9 +207,11 @@ export function patchLiveChrome(
     '[data-testid="idle-pause"]',
   );
   if (idle) idle.hidden = !session.idlePaused;
-  const copyInvite = root.querySelector<HTMLButtonElement>("[data-copy-invite]");
-  if (copyInvite) copyInvite.disabled = state.busy;
+  root.querySelectorAll<HTMLButtonElement>("[data-copy-invite]").forEach((button) => {
+    button.disabled = state.busy;
+  });
   patchMessagesBadge(root, view);
+  syncPhoneMore(root);
 
   // Keep empire rail labels in sync without remounting chips.
   for (const p of view.ownedPlanets) {
@@ -228,27 +230,47 @@ export function patchLiveChrome(
   return true;
 }
 
-function patchMessagesBadge(root: HTMLElement, view: PlayerView): void {
+/** Apply the phone More sheet from session so a patch paint cannot leave it stale. */
+export function syncPhoneMore(root: ParentNode): void {
+  const sheet = root.querySelector<HTMLElement>('[data-testid="phone-more"]');
+  if (sheet) sheet.toggleAttribute("hidden", !session.phoneMoreOpen);
+  const button = root.querySelector<HTMLElement>('[data-testid="phone-bottom-more"]');
+  if (button) {
+    button.setAttribute("aria-expanded", session.phoneMoreOpen ? "true" : "false");
+  }
+}
+
+function paintUnreadBadge(
+  link: HTMLElement,
+  unread: number,
+  badgeTestId: string,
+): void {
+  const existing = link.querySelector<HTMLElement>(
+    `[data-testid="${badgeTestId}"]`,
+  );
+  if (unread > 0) {
+    if (existing) {
+      existing.textContent = fmt(unread);
+    } else {
+      const badge = document.createElement("span");
+      badge.className = "nav-badge";
+      badge.dataset.testid = badgeTestId;
+      badge.textContent = fmt(unread);
+      link.append(badge);
+    }
+  } else if (existing) {
+    existing.remove();
+  }
+}
+
+export function patchMessagesBadge(root: HTMLElement, view: PlayerView): void {
   const unread = inboxUnreadCount(view);
   const link = root.querySelector<HTMLElement>('[data-testid="nav-messages"]');
-  if (link) {
-    const existing = link.querySelector<HTMLElement>(
-      '[data-testid="nav-messages-badge"]',
-    );
-    if (unread > 0) {
-      if (existing) {
-        existing.textContent = fmt(unread);
-      } else {
-        const badge = document.createElement("span");
-        badge.className = "nav-badge";
-        badge.dataset.testid = "nav-messages-badge";
-        badge.textContent = fmt(unread);
-        link.append(badge);
-      }
-    } else if (existing) {
-      existing.remove();
-    }
-  }
+  if (link) paintUnreadBadge(link, unread, "nav-messages-badge");
+  const phone = root.querySelector<HTMLElement>(
+    '[data-testid="phone-nav-messages"]',
+  );
+  if (phone) paintUnreadBadge(phone, unread, "phone-nav-messages-badge");
 
   const option = root.querySelector<HTMLOptionElement>(
     '[data-testid="nav-dropdown"] option[value="messages"]',
