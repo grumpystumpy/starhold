@@ -291,9 +291,9 @@ function buildingsPage(view: PlayerView, busy: boolean): string {
           : ""
       }
       <h3 class="subhead">Extraction &amp; storage</h3>
-      ${resourceIds.map((id) => buildingRow(id, planet, view.player, universe.speed, now, busy, buildMods, view.economy.energy)).join("")}
+      ${resourceIds.map((id) => buildingRow(id, planet, view.player, universe.speed, now, busy, buildMods, view.economy.energy, view.economy)).join("")}
       <h3 class="subhead">${isMini ? "Structures &amp; anomaly specials" : "Structures"}</h3>
-      ${facilityIds.map((id) => buildingRow(id, planet, view.player, universe.speed, now, busy, buildMods, view.economy.energy)).join("")}
+      ${facilityIds.map((id) => buildingRow(id, planet, view.player, universe.speed, now, busy, buildMods, view.economy.energy, view.economy)).join("")}
       ${
         buildQueueHtml(planet, now) ||
         (isMini
@@ -387,7 +387,7 @@ export function shipyardPage(view: PlayerView, busy: boolean): string {
           ? `<p class="hint" data-testid="shipyard-need-class">Choose a class on Overview to unlock class-exclusive hulls.</p>`
           : ""
       }
-      ${buildable.map((id) => shipRow(id, planet, busy, mods.shipCostMult, mods.shipTimeMult, view.universe.speed, view.player.research)).join("")}
+      ${buildable.map((id) => shipRow(id, planet, busy, mods.shipCostMult, mods.shipTimeMult, view.universe.speed, view.player.research, { productionPerHour: view.economy?.productionPerHour, storage: view.economy?.storage, now })).join("")}
       ${
         shipQueueHtml(planet, now) ||
         `<p class="hint">Raise the Shipyard facility to unlock hulls.</p>`
@@ -423,7 +423,7 @@ export function defensesPage(view: PlayerView, busy: boolean): string {
   return `
     <section class="panel" data-testid="defenses-panel">
       <h2>Defenses</h2>
-      ${WEAKEST_FIRST_DEFENSES.map((id) => defenseRow(id, planet, busy, mods.defenseTimeMult, view.universe.speed)).join("")}
+      ${WEAKEST_FIRST_DEFENSES.map((id) => defenseRow(id, planet, busy, mods.defenseTimeMult, view.universe.speed, { productionPerHour: view.economy?.productionPerHour, storage: view.economy?.storage, now })).join("")}
       ${
         defenseQueueHtml(planet, now) ||
         `<p class="hint">Static guns fight with your hangar on raids.</p>`
