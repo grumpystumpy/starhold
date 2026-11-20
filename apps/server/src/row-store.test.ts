@@ -1523,6 +1523,55 @@ describe("row save review fixes", () => {
     assert.equal(Number((raw.prepare("SELECT COUNT(*) AS n FROM save_messages WHERE id LIKE 'synthetic-report-%'").get() as { n: number }).n), 2_800);
   });
 
+  it("preserves unresolved pirate raids and does not restore resolved fleets", async () => {
+    const source = fixture();
+    const home = Object.values(source.planets).find((planet) => planet.ownerPlayerId) ?? Object.values(source.planets)[0]!;
+    const now = Date.now();
+    const unresolvedId = "pir:missing-target-raid";
+    const resolvedId = "plyr:resolved-maintenance-fleet";
+    source.fleets[unresolvedId] = {
+      id: unresolvedId,
+      ownerPlayerId: "npc_pirates",
+      originPlanetId: "",
+      originPirateBaseId: "pir:missing-origin",
+      targetPlanetId: "plyr:unloaded-target",
+      targetPlayerId: null,
+      targetCoords: { ...home.coords },
+      mission: "raid",
+      ships: {},
+      cargo: { metal: 0, crystal: 0, deuterium: 0 },
+      departedAt: now - 2,
+      arrivesAt: now - 1,
+      phase: "outbound",
+      reportId: null,
+    };
+    source.fleets[resolvedId] = {
+      id: resolvedId,
+      ownerPlayerId: home.ownerPlayerId,
+      originPlanetId: home.id,
+      targetPlanetId: home.id,
+      targetPlayerId: home.ownerPlayerId,
+      targetCoords: { ...home.coords },
+      mission: "deploy",
+      ships: { scout: 1 },
+      cargo: { metal: 0, crystal: 0, deuterium: 0 },
+      departedAt: now - 2,
+      arrivesAt: now - 1,
+      phase: "outbound",
+      reportId: null,
+    };
+    const { db, raw } = sqliteD1();
+    await migrateAll(db, source);
+    const store = createD1Store(db);
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "POST", cpuMs: 0, budget: maintenanceTickBudget() },
+      () => withUniverse((universe) => advanceUniverse(universe, now), { maintenance: true }),
+    );
+    const saved = await db.prepare("SELECT id FROM save_fleets WHERE id IN (?, ?)").bind(unresolvedId, resolvedId).all<{ id: string }>();
+    assert.deepEqual(saved.results?.map((row) => row.id), [unresolvedId]);
+    assert.equal(Number((raw.prepare("SELECT COUNT(*) AS n FROM save_fleets WHERE id = ?").get(unresolvedId) as { n: number }).n), 1);
+  });
+
   it("loads an old row save through the NPC page without resetting progress", async () => {
     const raw = JSON.parse(
       readFileSync(fileURLToPath(new URL("./fixtures/pre-row-save.json", import.meta.url)), "utf8"),

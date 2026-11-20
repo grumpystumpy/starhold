@@ -39,8 +39,8 @@ const db: D1Like = {
 };
 
 async function pass(label: string, npc: boolean): Promise<void> {
-  const scope = { kv: createD1Store(db), db, mode: "d1" as const, method: "POST", budget: npc ? npcJobBudget() : maintenanceTickBudget(), cpuMs: 0 };
   const started = performance.now();
+  const scope = { kv: createD1Store(db), db, mode: "d1" as const, method: "POST", budget: npc ? npcJobBudget(started) : maintenanceTickBudget(started), cpuMs: 0 };
   await runWithScope(scope, () => withUniverse((universe) => {
     if (npc) tickPirates(universe, Date.now());
     else advanceUniverse(universe, Date.now());

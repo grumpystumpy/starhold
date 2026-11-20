@@ -2972,9 +2972,10 @@ function planetResolved(loaded: LoadedRows, id: string): boolean {
 /** A fleet deleted only because its planet was not in this working set goes back. */
 export function restoreUnresolvedFleets(loaded: LoadedRows): void {
   const fleets = loaded.universe.fleets;
+  const resolved = currentScope()?.budget?.resolvedFleetIds;
   for (const [id, fleet] of loaded.fleetSnapshots) {
     if (fleets[id]) continue;
-    if (fleet.ownerPlayerId === "npc_pirates") continue;
+    if (resolved?.has(id)) continue;
     const originOk = Boolean(fleet.originPlanetId) && planetResolved(loaded, fleet.originPlanetId);
     const targetOk = !fleet.targetPlanetId || planetResolved(loaded, fleet.targetPlanetId);
     if (!originOk || !targetOk) fleets[id] = fleet;
@@ -3909,6 +3910,11 @@ async function runGame<T>(
   fn: (universe: UniverseState) => T | Promise<T>,
 ): Promise<T> {
   const started = performance.now();
+  const scope = currentScope();
+  if (scope?.budget?.timeBudgetMs != null) {
+    scope.budget.timeBudgetCpuMs = scope.cpuMs;
+    scope.budget.timeBudgetStartedAt = started;
+  }
   try {
     return await fn(universe);
   } finally {

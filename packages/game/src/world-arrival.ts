@@ -92,6 +92,7 @@ import {
 import {
   bindPlanetSync,
   consumeTickBudget,
+  markTickFleetResolved,
   tickBudget,
 } from "./tick-budget.js";
 import { continueUniverseSeed } from "./world-seed.js";
@@ -454,10 +455,29 @@ export function advanceFleets(universe: UniverseState, now: number): void {
     .filter((f) => f.arrivesAt <= now)
     .sort((a, b) => a.arrivesAt - b.arrivesAt || a.id.localeCompare(b.id));
   for (const fleet of due) {
+    if (
+      fleet.ownerPlayerId === "npc_pirates" &&
+      fleet.targetPlanetId &&
+      !universe.planets[fleet.targetPlanetId]
+    ) {
+      continue;
+    }
     if (!consumeTickBudget("fleets")) break;
     const live = universe.fleets[fleet.id];
     if (!live || live.arrivesAt > now) continue;
     resolveFleetArrival(universe, live, now);
+    const originLoaded =
+      live.ownerPlayerId === "npc_pirates"
+        ? !live.targetPlanetId || Boolean(
+            universe.pirateBases?.[live.originPirateBaseId ?? live.originPlanetId ?? ""],
+          )
+        : !live.originPlanetId || Boolean(universe.planets[live.originPlanetId]);
+    if (
+      originLoaded &&
+      (!live.targetPlanetId || universe.planets[live.targetPlanetId])
+    ) {
+      markTickFleetResolved(live.id);
+    }
   }
 }
 

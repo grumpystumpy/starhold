@@ -1726,6 +1726,7 @@ export const WORKERS_TICK_RAID_BUDGET = 2;
 export const WORKERS_TICK_LEVELUP_BUDGET = 40;
 export const WORKERS_TICK_FLEET_BUDGET = 2;
 export const MAINTENANCE_TICK_FLEET_BUDGET = 24;
+export const SCHEDULED_TICK_TIME_BUDGET_MS = 425;
 export const WORKERS_TICK_DRIFT_BUDGET = 8;
 /** Systems of asteroids + minis visited per Workers request. */
 export const WORKERS_TICK_SEED_SYSTEMS = 8;

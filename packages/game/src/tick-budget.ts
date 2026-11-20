@@ -10,7 +10,7 @@ import {
   WORKERS_TICK_SEED_PIRATES,
   WORKERS_TICK_SEED_SYSTEMS,
 } from "./catalog.js";
-import { MAINTENANCE_TICK_FLEET_BUDGET } from "./data/tuning.js";
+import { MAINTENANCE_TICK_FLEET_BUDGET, SCHEDULED_TICK_TIME_BUDGET_MS } from "./data/tuning.js";
 import type { UniverseState } from "./types.js";
 
 /**
@@ -28,6 +28,10 @@ export interface TickBudget {
   seedPirates: number;
   /** Skip unowned bodies. Owned planets and due queues still advance. */
   lazyPlanets: boolean;
+  timeBudgetStartedAt?: number;
+  timeBudgetMs?: number;
+  timeBudgetCpuMs?: number;
+  resolvedFleetIds?: Set<string>;
 }
 
 type PlanetSync = (
@@ -46,6 +50,10 @@ export function bindTickBudget(reader: () => TickBudget | undefined): void {
 
 export function tickBudget(): TickBudget | undefined {
   return readBudget();
+}
+
+export function markTickFleetResolved(id: string): void {
+  readBudget()?.resolvedFleetIds?.add(id);
 }
 
 export function bindPlanetSync(fn: PlanetSync): void {
@@ -71,9 +79,18 @@ export function consumeTickBudget(
 ): boolean {
   const budget = readBudget();
   if (!budget) return true;
+  if (tickTimeBudgetExpired(budget)) return false;
   if (budget[kind] <= 0) return false;
   budget[kind] -= 1;
   return true;
+}
+
+export function tickTimeBudgetExpired(budget = readBudget()): boolean {
+  return Boolean(
+    budget?.timeBudgetStartedAt != null &&
+      budget.timeBudgetMs != null &&
+      (budget.timeBudgetCpuMs ?? 0) + performance.now() - budget.timeBudgetStartedAt >= budget.timeBudgetMs,
+  );
 }
 
 /** Fresh budget object for one Workers request. */
@@ -87,6 +104,7 @@ export function workersTickBudget(): TickBudget {
     seedMinis: WORKERS_TICK_SEED_MINIS,
     seedPirates: WORKERS_TICK_SEED_PIRATES,
     lazyPlanets: true,
+    resolvedFleetIds: new Set(),
   };
 }
 
@@ -96,12 +114,19 @@ export function requestTickBudget(): TickBudget {
 }
 
 /** Arrival backlog budget for the wide thirty-minute maintenance pass. */
-export function maintenanceTickBudget(): TickBudget {
-  return { ...workersTickBudget(), fleets: MAINTENANCE_TICK_FLEET_BUDGET };
+export function maintenanceTickBudget(startedAt?: number): TickBudget {
+  return {
+    ...workersTickBudget(),
+    fleets: MAINTENANCE_TICK_FLEET_BUDGET,
+    resolvedFleetIds: new Set(),
+    ...(startedAt == null
+      ? {}
+      : { timeBudgetStartedAt: startedAt, timeBudgetMs: SCHEDULED_TICK_TIME_BUDGET_MS }),
+  };
 }
 
 /** Budget for the 10-minute pirate and alien job. Not used on page loads. */
-export function npcJobBudget(): TickBudget {
+export function npcJobBudget(startedAt?: number): TickBudget {
   return {
     raids: NPC_JOB_RAID_BUDGET,
     levelUps: NPC_JOB_LEVELUP_BUDGET,
@@ -111,5 +136,9 @@ export function npcJobBudget(): TickBudget {
     seedMinis: 0,
     seedPirates: 0,
     lazyPlanets: true,
+    resolvedFleetIds: new Set(),
+    ...(startedAt == null
+      ? {}
+      : { timeBudgetStartedAt: startedAt, timeBudgetMs: SCHEDULED_TICK_TIME_BUDGET_MS }),
   };
 }

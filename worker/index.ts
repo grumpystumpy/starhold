@@ -129,6 +129,7 @@ const worker = {
     applyEnv(env);
     const npc = event.cron === "*/10 * * * *";
     const scheduledAt = Date.now();
+    const budgetStartedAt = performance.now();
     const store = createD1Store(env.DB);
     ctx.waitUntil(
       runWithScope(
@@ -137,7 +138,7 @@ const worker = {
           db: env.DB,
           mode: "d1",
           method: "POST",
-          budget: npc ? npcJobBudget() : maintenanceTickBudget(),
+          budget: npc ? npcJobBudget(budgetStartedAt) : maintenanceTickBudget(budgetStartedAt),
           cpuMs: 0,
         },
         () =>
