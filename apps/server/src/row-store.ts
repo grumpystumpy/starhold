@@ -2658,12 +2658,26 @@ async function loadNpcBasesForNpc(db: D1Like, loaded: LoadedRows): Promise<void>
     loaded.npcBasesComplete = true;
     return;
   }
-  const wreck = await first<{ kind: string }>(
+  const wreck = await first<{ galaxy: number }>(
     db,
-    "SELECT kind FROM save_npc_bases WHERE destroyed = 1 LIMIT 1",
+    "SELECT galaxy FROM save_npc_bases WHERE destroyed = 1 ORDER BY galaxy LIMIT 1",
   );
   if (wreck) {
-    await loadAllNpcBases(db, loaded);
+    const galaxies = new Set<number>([wreck.galaxy]);
+    const bossGalaxy = galaxyOfBaseId(loaded.universe.pirateBossBaseId);
+    if (bossGalaxy) galaxies.add(bossGalaxy);
+    const list = [...galaxies];
+    const rows = await all<NpcGalaxyRow>(
+      db,
+      `${NPC_BASE_SELECT} WHERE galaxy IN (${list.map(() => "?").join(", ")}) ORDER BY kind, galaxy`,
+      ...list,
+    );
+    applyNpcGalaxyRows(loaded, rows);
+    loaded.npcBaseGalaxy = wreck.galaxy;
+    loaded.npcBasePhase = npcBasePhase(Date.now());
+    const cursorKey = loaded.npcBasePhase === "raid" ? "aiRaidCatchUpCursor" : "aiCatchUpCursor";
+    loaded.npcCursorBefore = loaded.universe[cursorKey] ?? null;
+    loaded.npcSimAtBefore = loaded.universe.lastAiSimAt ?? 0;
     return;
   }
   const galaxy = npcPageGalaxy(loaded.universe);

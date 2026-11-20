@@ -1363,6 +1363,62 @@ describe("row save review fixes", () => {
     assert.equal(stored.universe.planets[alpha.homePlanetId]?.resources.metal, 4321);
   });
 
+  it("loads wrecked NPC bases one galaxy per cron tick", async () => {
+    const { db } = sqliteD1();
+    const source = fixture();
+    const bases: Record<string, PirateBase> = {};
+    for (let galaxy = 1; galaxy <= MAP_GALAXIES; galaxy += 1) {
+      const base = createPirateBase(source.seed ?? source.id, galaxy, 1, 15, Date.now());
+      if (galaxy === 1) base.destroyedAt = Date.now();
+      bases[base.id] = base;
+    }
+    source.pirateBases = bases;
+    await migrateAll(db, source);
+
+    const page = await loadWorkingSet(db, { npc: true });
+    assert.deepEqual(
+      Object.values(page.universe.pirateBases ?? {}).map((base) => base.coords.galaxy),
+      [1],
+    );
+    assert.equal(page.npcBaseGalaxy, 1);
+  });
+
+  it("keeps large scheduled passes under the local CPU target", async () => {
+    const source = fixture();
+    const now = Date.now();
+    for (let i = 0; i < 38; i += 1) joinUniverse(source, `CronPilot${i}`, now + i);
+    const report = Object.values(source.reports)[0]!;
+    for (let i = 0; i < 500; i += 1) {
+      source.reports[`cron-report-${i}`] = { ...report, id: `cron-report-${i}`, at: now - i };
+    }
+    const bases: Record<string, PirateBase> = {};
+    for (let galaxy = 1; galaxy <= MAP_GALAXIES; galaxy += 1) {
+      const base = createPirateBase(source.seed ?? source.id, galaxy, 1, 15, now);
+      if (galaxy === 1) base.destroyedAt = now;
+      bases[base.id] = base;
+    }
+    source.pirateBases = bases;
+    const { db } = sqliteD1();
+    await migrateAll(db, source);
+    const store = createD1Store(db);
+    const cpu: Record<string, { attributed: number; elapsed: number }> = {};
+    const npcScope = { kv: store, db, mode: "d1" as const, method: "POST", cpuMs: 0, budget: npcJobBudget() };
+    const npcStarted = performance.now();
+    await runWithScope(npcScope, async () => {
+      await withUniverse((universe) => tickPirates(universe, now), { npc: true });
+    });
+    cpu.npc = { attributed: npcScope.cpuMs, elapsed: performance.now() - npcStarted };
+    const maintenanceScope = { ...npcScope, cpuMs: 0, budget: workersTickBudget() };
+    const maintenanceStarted = performance.now();
+    await runWithScope(maintenanceScope, async () => {
+      await withUniverse((universe) => advanceUniverse(universe, now), { maintenance: true });
+    });
+    cpu.maintenance = { attributed: maintenanceScope.cpuMs, elapsed: performance.now() - maintenanceStarted };
+    console.log(`scheduled cpu ms target=500 ${JSON.stringify(cpu)}`);
+    assert.ok(cpu.npc.elapsed < 500, `NPC scheduled elapsed ${cpu.npc.elapsed}ms`);
+    assert.ok(cpu.maintenance.elapsed < 500, `maintenance scheduled elapsed ${cpu.maintenance.elapsed}ms`);
+  });
+
   it("loads an old row save through the NPC page without resetting progress", async () => {
     const raw = JSON.parse(
       readFileSync(fileURLToPath(new URL("./fixtures/pre-row-save.json", import.meta.url)), "utf8"),
