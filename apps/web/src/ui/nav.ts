@@ -17,6 +17,19 @@ export const NAV_PAGES = [
 ] as const;
 
 export type NavPage = (typeof NAV_PAGES)[number];
+
+/** Fixed phone bar. The rest of NAV_PAGES live under More. */
+export const PHONE_BAR_PAGES = [
+  "overview",
+  "fleet",
+  "galaxy",
+  "messages",
+] as const satisfies readonly NavPage[];
+
+export const PHONE_MORE_PAGES: NavPage[] = NAV_PAGES.filter(
+  (page) => !(PHONE_BAR_PAGES as readonly string[]).includes(page),
+);
+
 export type ShopTab = "items" | "resources" | "officers" | "skills" | "market";
 
 export const SHOP_TABS: readonly ShopTab[] = [

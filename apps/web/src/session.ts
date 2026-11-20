@@ -94,6 +94,8 @@ export const session = {
   inviteShareUrl: null as string | null,
   /** A 5xx or network failure must not offer a new commander. */
   holdJoin: false,
+  /** Phone More sheet. A 30s state repaint must not close it. */
+  phoneMoreOpen: false,
 };
 
 let paintImpl: () => void = () => {};

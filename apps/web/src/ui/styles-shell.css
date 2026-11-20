@@ -625,3 +625,157 @@
     font-size: 1.1rem;
   }
 }
+
+/* Phone bar is hidden at 640px and up. Below that, it replaces the wrapped side-nav strip. */
+.phone-bottom-nav,
+.phone-more {
+  display: none;
+}
+
+@media (max-width: 639px) {
+  body {
+    height: 100dvh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    /* The fixed bar sits in this padding so it does not cover the page. */
+    padding-bottom: calc(3.5rem + env(safe-area-inset-bottom));
+  }
+
+  #pwa-chrome {
+    flex: none;
+  }
+
+  #app {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+    overflow: auto;
+  }
+
+  .side-nav {
+    display: none;
+  }
+
+  .phone-bottom-nav {
+    display: flex;
+    position: fixed;
+    z-index: 40;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: calc(3.5rem + env(safe-area-inset-bottom));
+    padding: 0 0.15rem env(safe-area-inset-bottom);
+    box-sizing: border-box;
+    background: color-mix(in srgb, var(--bg1) 96%, black);
+    border-top: 1px solid var(--line);
+  }
+
+  .phone-nav-link {
+    position: relative;
+    display: flex;
+    flex: 1 1 0;
+    align-items: center;
+    justify-content: center;
+    gap: 0.15rem;
+    min-width: 0;
+    min-height: 2.75rem;
+    padding: 0.25rem 0.1rem;
+    background: transparent;
+    color: var(--text);
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    font: inherit;
+    font-weight: 600;
+    font-size: 0.72rem;
+    line-height: 1.15;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .phone-nav-link.active {
+    color: var(--accent);
+  }
+
+  .phone-bottom-nav .nav-badge {
+    position: absolute;
+    top: 0.15rem;
+    right: 0.05rem;
+    margin-left: 0;
+    min-width: 0.95rem;
+    padding: 0 0.22rem;
+    font-size: 0.62rem;
+    line-height: 1.25;
+  }
+
+  .phone-more:not([hidden]) {
+    display: block;
+  }
+
+  .phone-more-backdrop {
+    position: fixed;
+    z-index: 45;
+    inset: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: color-mix(in srgb, #000 55%, transparent);
+    color: transparent;
+    box-shadow: none;
+  }
+
+  .phone-more-sheet {
+    position: fixed;
+    z-index: 46;
+    left: 0;
+    right: 0;
+    bottom: calc(3.5rem + env(safe-area-inset-bottom));
+    max-height: min(70dvh, calc(100dvh - 4.5rem - env(safe-area-inset-bottom)));
+    overflow: auto;
+    padding: 0.35rem 0 calc(0.4rem + env(safe-area-inset-bottom));
+    background: color-mix(in srgb, var(--bg1) 96%, black);
+    border-top: 1px solid var(--line);
+  }
+
+  .phone-more-sheet ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .phone-more-sheet .nav-link {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    text-align: left;
+    text-decoration: none;
+    background: transparent;
+    color: var(--text);
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    padding: 0.7rem 0.9rem;
+    min-height: 2.75rem;
+    font: inherit;
+    font-weight: 500;
+    font-size: 0.95rem;
+  }
+
+  .phone-more-sheet .nav-link.active {
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .phone-more-sheet input.invite-link-fallback {
+    display: block;
+    width: calc(100% - 1.2rem);
+    max-width: calc(100% - 1.2rem);
+    min-width: 0;
+    margin: 0.2rem 0.6rem 0.55rem;
+    box-sizing: border-box;
+    font-size: 16px;
+  }
+}

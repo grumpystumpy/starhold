@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   NAV_PAGES,
+  PHONE_BAR_PAGES,
+  PHONE_MORE_PAGES,
   SHOP_TABS,
   pageFromPath,
   pathForPage,
@@ -71,5 +73,28 @@ describe("nav routes", () => {
     for (const page of NAV_PAGES) {
       assert.equal(pageFromPath(pathForPage(page)), page);
     }
+  });
+
+  it("splits the phone bar and More into every nav page once", () => {
+    const combined = [...PHONE_BAR_PAGES, ...PHONE_MORE_PAGES];
+    assert.equal(new Set(combined).size, combined.length);
+    assert.equal(combined.length, NAV_PAGES.length);
+    assert.deepEqual([...combined].sort(), [...NAV_PAGES].sort());
+    for (const page of NAV_PAGES) {
+      assert.equal(combined.includes(page), true);
+    }
+    assert.deepEqual([...PHONE_BAR_PAGES], ["overview", "fleet", "galaxy", "messages"]);
+    assert.deepEqual(PHONE_MORE_PAGES, [
+      "goals",
+      "buildings",
+      "defenses",
+      "shipyard",
+      "research",
+      "simulator",
+      "shop",
+      "highscore",
+      "alliances",
+      "seasons",
+    ]);
   });
 });
