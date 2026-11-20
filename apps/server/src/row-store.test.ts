@@ -2786,7 +2786,7 @@ describe("row save review fixes", () => {
     const coldRead = await readOnce();
     const worldVersionAfterCold = await worldVersion();
     const readSamples: number[] = [];
-    for (let i = 0; i < 21; i++) readSamples.push(await readOnce());
+    for (let i = 0; i < 41; i++) readSamples.push(await readOnce());
     assert.equal(
       await worldVersion(),
       worldVersionAfterCold,
@@ -2794,7 +2794,7 @@ describe("row save review fixes", () => {
     );
     await writeOnce();
     const writeSamples: number[] = [];
-    for (let i = 0; i < 21; i++) writeSamples.push(await writeOnce());
+    for (let i = 0; i < 41; i++) writeSamples.push(await writeOnce());
     const after = {
       read: {
         median: Number(pick(readSamples, 50).toFixed(2)),
