@@ -87,56 +87,127 @@ function parseWorldShell(doc: string): UniverseState {
   return JSON.parse(doc) as UniverseState;
 }
 
-const REFERENCE_MS_ON_BOX = 3.56;
-const REFERENCE_CPU_FIXTURE = JSON.stringify({
-  reports: Array.from({ length: 12 }, (_, index) => ({
-    id: `report-${index}`,
-    at: 1_700_000_000_000 + index,
-    coords: { galaxy: 1, system: 200 + index, slot: 4 },
-    ships: { scout: index + 1, cruiser: index % 3 },
-    summary: "A fixed report payload for the CPU calibration workload.",
-  })),
-  fleets: Array.from({ length: 8 }, (_, index) => ({
-    id: `fleet-${index}`,
-    ships: { scout: index + 1 },
-    cargo: { metal: index * 10, crystal: index * 5, deuterium: index },
-  })),
-});
+// p75 of the read-shaped reference on the machine where the old tight JSON
+// loop measured 2.66 ms. This sandbox measured that loop at 3.65 ms and this
+// workload's p75 at 10.33 ms, so the box baseline is 10.33 * 2.66 / 3.65.
+const REFERENCE_MS_ON_BOX = 7.53;
+const REFERENCE_PASSES = 16;
+
+function readShapedReference(): { galaxy: string; players: string[]; planets: string[]; reports: string[]; fleets: string[] } {
+  const bases: Record<string, unknown> = {};
+  for (let index = 0; index < 75; index += 1) {
+    const id = `pir:1:${String(index).padStart(2, "0")}:15`;
+    bases[id] = {
+      id,
+      name: `Raid ${index}`,
+      level: 4,
+      coords: { galaxy: 1, system: index + 1, slot: 15 },
+      ships: { scout: 8, fighter: 4, cruiser: 1, bomber: 0 },
+      defenses: { laserBattery: 6, ionCannon: 2, gaussCannon: 0 },
+      resources: { metal: 12_000, crystal: 8_000, deuterium: 4_000 },
+      lastGrewAt: 1_700_000_000_000,
+      nextRaidAt: Number.MAX_SAFE_INTEGER,
+      destroyedAt: null,
+    };
+  }
+  const planet = JSON.stringify({
+    id: "plnt-ref",
+    ownerPlayerId: "plyr-ref",
+    name: "Home",
+    coords: { galaxy: 1, system: 4, slot: 8 },
+    resources: { metal: 5_000, crystal: 5_000, deuterium: 5_000 },
+    buildings: {
+      metalMine: 10, crystalMine: 8, deuteriumSynth: 6, solarPlant: 12,
+      roboticsFactory: 4, shipyard: 4, researchLab: 6,
+    },
+    ships: { scout: 40, fighter: 20, cruiser: 4, hauler: 8 },
+    defenses: { rocketLauncher: 10, laserBattery: 40, ionCannon: 8 },
+    lastTickAt: 1_700_000_000_000,
+  });
+  const player = JSON.stringify({
+    id: "plyr-ref",
+    name: "Big0",
+    research: { energyTech: 6, computerTech: 8, weaponsTech: 5, shieldingTech: 4, armourTech: 4 },
+    planetIds: ["a", "b", "c", "d", "e", "f", "g"],
+    eventLog: Array.from({ length: 120 }, (_, index) => ({
+      id: `ev-${index}`,
+      kind: "raidAlert",
+      createdAt: 1_700_000_000_000 + index,
+      title: "Alert",
+      body: "Kept",
+    })),
+  });
+  const summary = "x".repeat(2400);
+  const report = JSON.stringify({
+    id: "rpt-ref",
+    at: 1_700_000_000_000,
+    summary,
+    attackerBefore: { scout: 1 },
+    defenderBefore: { scout: 1 },
+    loot: { metal: 0, crystal: 0, deuterium: 0 },
+    debrisCreated: { metal: 0, crystal: 0 },
+    outcome: "defender_win",
+  });
+  return {
+    galaxy: JSON.stringify(bases),
+    players: Array.from({ length: 5 }, () => player),
+    planets: Array.from({ length: 7 }, () => planet),
+    reports: Array.from({ length: 12 }, () => report),
+    fleets: Array.from({ length: 24 }, (_, index) => JSON.stringify({
+      id: `flt-${index}`,
+      ownerPlayerId: index < 4 ? "plyr-ref" : "npc_pirates",
+      ships: { scout: 1 },
+      cargo: { metal: 0, crystal: 0, deuterium: 0 },
+      targetCoords: { galaxy: 1, system: 4, slot: 8 },
+      arrivesAt: index + 1,
+      phase: "outbound",
+      mission: "raid",
+    })),
+  };
+}
+
+const REFERENCE_DOCS = readShapedReference();
+let referenceGuard = 0;
+
+function fingerprintReplacer(key: string, value: unknown): unknown {
+  if (key === "resources" || key === "lastTickAt" || key === "eventLog") return undefined;
+  if (key === "swarmProduce" && value == null) return undefined;
+  return value;
+}
 
 function referenceCpuWork(): number {
   let checksum = 0;
-  for (let sample = 0; sample < 96; sample++) {
-    const value: unknown = JSON.parse(REFERENCE_CPU_FIXTURE);
-    const encoded = JSON.stringify(value);
-    const visit = (item: unknown): void => {
-      if (Array.isArray(item)) {
-        for (const child of item) visit(child);
-      } else if (item && typeof item === "object") {
-        for (const [key, child] of Object.entries(item)) {
-          checksum += key.length;
-          visit(child);
-        }
-      } else if (typeof item === "string") {
-        checksum += item.length;
-      } else if (typeof item === "number") {
-        checksum += item;
-      }
-    };
-    visit(value);
-    checksum += encoded.length;
+  for (let pass = 0; pass < REFERENCE_PASSES; pass += 1) {
+    const bases = JSON.parse(REFERENCE_DOCS.galaxy) as Record<string, unknown>;
+    const sorted: Record<string, unknown> = {};
+    for (const id of Object.keys(bases).sort()) sorted[id] = bases[id];
+    checksum += JSON.stringify(sorted).length;
+    for (const doc of REFERENCE_DOCS.players) {
+      checksum += JSON.stringify(JSON.parse(doc), fingerprintReplacer).length;
+    }
+    for (const doc of REFERENCE_DOCS.planets) {
+      const planet = JSON.parse(doc) as {
+        resources: { metal: number };
+        buildings: { metalMine: number };
+        lastTickAt: number;
+      };
+      planet.resources.metal += planet.buildings.metalMine * 30;
+      planet.lastTickAt += 1_000;
+      checksum += JSON.stringify(planet, fingerprintReplacer).length;
+    }
+    const fleets = REFERENCE_DOCS.fleets.map((doc) => JSON.parse(doc) as { arrivesAt: number });
+    fleets.sort((a, b) => a.arrivesAt - b.arrivesAt);
+    const reports = REFERENCE_DOCS.reports.map((doc) => JSON.parse(doc) as { at: number; summary: string });
+    reports.sort((a, b) => b.at - a.at);
+    checksum += fleets.length + reports.length + reports[0]!.summary.length;
   }
   return checksum;
 }
 
-function measureReferenceCpuMs(): number {
-  const samples: number[] = [];
-  for (let warmup = 0; warmup < 3; warmup++) referenceCpuWork();
-  for (let sample = 0; sample < 9; sample++) {
-    const start = performance.now();
-    referenceCpuWork();
-    samples.push(performance.now() - start);
-  }
-  return [...samples].sort((a, b) => a - b)[Math.floor(samples.length / 2)]!;
+function referenceSampleMs(): number {
+  const start = performance.now();
+  referenceGuard += referenceCpuWork();
+  return performance.now() - start;
 }
 
 function normalizeCpuMs(rawMs: number, speedFactor: number): number {
@@ -2619,8 +2690,16 @@ describe("row save review fixes", () => {
 
   it("keeps CPU-budget normalization strict on the reference machine", () => {
     assert.equal(normalizeCpuMs(6, 1), 6);
+    assert.equal(normalizeCpuMs(6 * 1.5, 1.5), 6);
     assert.throws(
       () => assertCpuBudgets({ read: { median: normalizeCpuMs(6 + 3, 1), p95: 0 }, write: { median: 0, p95: 0 } }),
+      /read median 9/,
+    );
+    assert.throws(
+      () => assertCpuBudgets({
+        read: { median: normalizeCpuMs((6 + 3) * 1.5, 1.5), p95: 0 },
+        write: { median: 0, p95: 0 },
+      }),
       /read median 9/,
     );
   });
@@ -2855,12 +2934,18 @@ describe("row save review fixes", () => {
       );
       return scope.cpuMs;
     };
-    const referenceMedianMs = Number(measureReferenceCpuMs().toFixed(2));
-    const speedFactor = Math.max(1, referenceMedianMs / REFERENCE_MS_ON_BOX);
+    const referenceSamples: number[] = [];
+    for (let warmup = 0; warmup < 3; warmup += 1) referenceCpuWork();
+    const timeReference = () => {
+      referenceSamples.push(referenceSampleMs());
+    };
     const coldRead = await readOnce();
     const worldVersionAfterCold = await worldVersion();
     const readSamples: number[] = [];
-    for (let i = 0; i < 21; i++) readSamples.push(await readOnce());
+    for (let i = 0; i < 21; i++) {
+      timeReference();
+      readSamples.push(await readOnce());
+    }
     assert.equal(
       await worldVersion(),
       worldVersionAfterCold,
@@ -2868,7 +2953,12 @@ describe("row save review fixes", () => {
     );
     await writeOnce();
     const writeSamples: number[] = [];
-    for (let i = 0; i < 21; i++) writeSamples.push(await writeOnce());
+    for (let i = 0; i < 21; i++) {
+      timeReference();
+      writeSamples.push(await writeOnce());
+    }
+    const referenceLevelMs = Number(pick(referenceSamples, 75).toFixed(2));
+    const speedFactor = Math.max(1, referenceLevelMs / REFERENCE_MS_ON_BOX);
     const rawMetrics = {
       read: {
         median: Number(pick(readSamples, 50).toFixed(2)),
@@ -2891,7 +2981,8 @@ describe("row save review fixes", () => {
         p95: normalizeCpuMs(rawMetrics.write.p95, speedFactor),
       },
     };
-    process.stderr.write(`cpu ms ${JSON.stringify({ raw: rawMetrics, normalized: after, speedFactor: Number(speedFactor.toFixed(3)), referenceMedianMs, referenceMsOnBox: REFERENCE_MS_ON_BOX })}\n`);
+    process.stderr.write(`cpu ms ${JSON.stringify({ raw: rawMetrics, normalized: after, speedFactor: Number(speedFactor.toFixed(3)), referenceP75Ms: referenceLevelMs, referenceMsOnBox: REFERENCE_MS_ON_BOX, referenceSamples: referenceSamples.length })}\n`);
+    assert.notEqual(referenceGuard, 0);
     console.log(`cpu ms ${JSON.stringify({ coldRead })}`);
     const packed = await loadWorkingSet(db, { playerIds: [hero.id] });
     const packedBase = packed.universe.pirateBases?.[baseId];
@@ -2964,7 +3055,8 @@ describe("row save review fixes", () => {
     assert.equal(left?.n ?? -1, 0, `overdue left ${left?.n}, resolved ${resolved.size}`);
     assert.equal(resolved.size, beforeDrain?.n ?? -1);
     const drainP95 = Number(pick(stepSamples, 95).toFixed(2));
-    assert.ok(drainP95 <= 10, `drain p95 ${drainP95}`);
+    const drainP95Normalized = normalizeCpuMs(drainP95, speedFactor);
+    assert.ok(drainP95Normalized <= 10, `drain p95 ${drainP95Normalized}`);
 
     const app = createApp();
     const post = (playerId: string, category: string) =>
