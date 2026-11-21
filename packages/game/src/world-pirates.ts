@@ -142,7 +142,7 @@ import {
 import { noteAchievementCount } from "./world-achievements.js";
 import { noteGoalMetric } from "./world-goals.js";
 import { emptyCargo, planetAtCoords } from "./world-bootstrap.js";
-import { consumeTickBudget, syncPlanetForTick, tickBudget } from "./tick-budget.js";
+import { consumeTickBudget, syncPlanetForTick, tickBudget, tickTimeBudgetExpired } from "./tick-budget.js";
 import {
   payBossParticipation,
   recordBossDamage,
@@ -2608,17 +2608,25 @@ export function tickPirates(universe: UniverseState, now: number): void {
         : "raid";
   if (!universe.pirateBases) universe.pirateBases = {};
   if (!universe.alienBases) universe.alienBases = {};
+  if (tickTimeBudgetExpired()) return;
   cullExcessPirateBases(universe, now);
+  if (tickTimeBudgetExpired()) return;
   tickSeasonalPirateBoss(universe, now, false);
+  if (tickTimeBudgetExpired()) return;
   // Page loads skip raids, but a destroyed base still has to come back and a
   // short universe still has to fill to the living cap when this request loaded occupancy.
   if (universe.skipNpcRaids) {
     ensureAlienDailySeed(universe, now);
+    if (tickTimeBudgetExpired()) return;
     if (!universe.skipPirateTopUp) {
       respawnDestroyedPirates(universe, now);
+      if (tickTimeBudgetExpired()) return;
       ensurePiratePopulation(universe, now);
+      if (tickTimeBudgetExpired()) return;
       tickSeasonalPirateBoss(universe, now, true);
+      if (tickTimeBudgetExpired()) return;
       cullExcessPirateBases(universe, now);
+      if (tickTimeBudgetExpired()) return;
     }
     universe.lastAiSimAt = now;
     return;
@@ -2633,9 +2641,13 @@ export function tickPirates(universe: UniverseState, now: number): void {
       ? savedCursor!.slice(separator + 1)
       : savedCursor;
   ensureAlienDailySeed(universe, targetAt);
+  if (tickTimeBudgetExpired()) return;
   respawnDestroyedPirates(universe, targetAt);
+  if (tickTimeBudgetExpired()) return;
   ensurePiratePopulation(universe, targetAt);
+  if (tickTimeBudgetExpired()) return;
   tickSeasonalPirateBoss(universe, now, !universe.skipPirateTopUp);
+  if (tickTimeBudgetExpired()) return;
   cullExcessPirateBases(universe, targetAt);
   const entries = [
     ...Object.values(universe.pirateBases).map((base) => ({
@@ -2656,6 +2668,10 @@ export function tickPirates(universe: UniverseState, now: number): void {
   let processed = 0;
   let resumeId: string | null = null;
   for (let index = startAt; index < entries.length && processed < maxSteps; index++) {
+    if (tickTimeBudgetExpired()) {
+      resumeId = entries[index]!.id;
+      break;
+    }
     const entry = entries[index]!;
     if (entry.faction === "pirate") {
       const base = entry.base;

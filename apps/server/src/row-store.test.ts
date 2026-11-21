@@ -19,6 +19,8 @@ import {
   graduateNewbieProtection,
   HIGHSCORE_RANK_HISTORY_DAYS,
   joinUniverse,
+  maintenanceTickBudget,
+  MAINTENANCE_TICK_FLEET_BUDGET,
   launchFleet,
   migrateOrResetUniverse,
   MAP_GALAXIES,
@@ -495,8 +497,8 @@ describe("row save migration", () => {
         assert.equal(batchSql.length, 2, "scheduled load uses one core and one follow-up D1 batch");
         assert.deepEqual(batchSql[0], coreReads);
         assert.ok(batchSql[1]?.some((sql) => sql.includes("FROM save_systems")));
-        assert.ok(batchSql[1]?.some((sql) => sql.includes("FROM save_fleets")));
-        assert.ok(batchSql[1]?.some((sql) => sql.includes("FROM save_messages")));
+        assert.equal(batchSql[1]?.some((sql) => sql.includes("FROM save_fleets")), false);
+        assert.equal(batchSql[1]?.some((sql) => sql.includes("FROM save_messages")), false);
       } else {
         assert.equal(seenSql.includes("SELECT id, version, doc FROM save_players"), false);
         assert.equal(seenSql.includes(npcPlayerPageSql), true);
@@ -1361,6 +1363,223 @@ describe("row save review fixes", () => {
     assert.equal(stored.universe.npcPlayerPageCursor, firstPage[firstPage.length - 1]);
     assert.equal(stored.universe.fleets["fleet-old"]?.ships.scout, 1);
     assert.equal(stored.universe.planets[alpha.homePlanetId]?.resources.metal, 4321);
+  });
+
+  it("loads the NPC roster when a wreck makes cross-galaxy respawns possible", async () => {
+    const { db } = sqliteD1();
+    const source = fixture();
+    const bases: Record<string, PirateBase> = {};
+    for (let galaxy = 1; galaxy <= MAP_GALAXIES; galaxy += 1) {
+      const base = createPirateBase(source.seed ?? source.id, galaxy, 1, 15, Date.now());
+      if (galaxy === 1) base.destroyedAt = Date.now();
+      bases[base.id] = base;
+    }
+    source.pirateBases = bases;
+    await migrateAll(db, source);
+
+    const page = await loadWorkingSet(db, { npc: true });
+    assert.equal(Object.keys(page.universe.pirateBases ?? {}).length, MAP_GALAXIES);
+    assert.equal(page.npcBasesComplete, true);
+    assert.equal(page.npcBaseGalaxy, 1);
+  });
+
+  it("keeps pirate caps when an NPC pass loads one wreck galaxy", async () => {
+    const { db } = sqliteD1();
+    const source = fixture();
+    const now = Date.now();
+    const bases: Record<string, PirateBase> = {};
+    for (let galaxy = 1; galaxy <= MAP_GALAXIES; galaxy += 1) {
+      for (let system = 1; system <= PIRATE_BASES_PER_GALAXY; system += 1) {
+        const base = createPirateBase(source.seed ?? source.id, galaxy, system, 15, now);
+        bases[base.id] = base;
+      }
+    }
+    const wreck = createPirateBase(source.seed ?? source.id, 1, PIRATE_BASES_PER_GALAXY + 1, 15, now);
+    wreck.destroyedAt = now - 40 * 24 * 60 * 60 * 1000;
+    bases[wreck.id] = wreck;
+    source.pirateBases = bases;
+    await migrateAll(db, source);
+    const store = createD1Store(db);
+    const scope = { kv: store, db, mode: "d1" as const, method: "POST", cpuMs: 0, budget: npcJobBudget() };
+    await runWithScope(scope, () => withUniverse(
+      (universe) => tickPirates(universe, now),
+      { npc: true },
+    ));
+
+    const loaded = await loadWorkingSet(db, { full: true });
+    const living = activePirateBases(loaded.universe);
+    assert.equal(living.length, PIRATE_TARGET_BASE_COUNT);
+    const galaxyCounts = new Map<number, number>();
+    const slots = new Set<string>();
+    for (const base of Object.values(loaded.universe.pirateBases ?? {})) {
+      const slot = `${base.coords.galaxy}:${base.coords.system}:${base.coords.slot}`;
+      assert.equal(slots.has(slot), false, `duplicate pirate slot ${slot}`);
+      slots.add(slot);
+      if (base.destroyedAt == null && !base.seasonalBoss) {
+        galaxyCounts.set(base.coords.galaxy, (galaxyCounts.get(base.coords.galaxy) ?? 0) + 1);
+      }
+    }
+    for (const count of galaxyCounts.values()) assert.ok(count <= PIRATE_BASES_PER_GALAXY);
+  });
+
+  it("keeps large scheduled passes under the local CPU target", async () => {
+    const source = fixture();
+    const now = Date.now();
+    for (let i = 0; i < 38; i += 1) joinUniverse(source, `CronPilot${i}`, now + i);
+    const report = Object.values(source.reports)[0]!;
+    for (let i = 0; i < 500; i += 1) {
+      source.reports[`cron-report-${i}`] = { ...report, id: `cron-report-${i}`, at: now - i };
+    }
+    const bases: Record<string, PirateBase> = {};
+    for (let galaxy = 1; galaxy <= MAP_GALAXIES; galaxy += 1) {
+      const base = createPirateBase(source.seed ?? source.id, galaxy, 1, 15, now);
+      if (galaxy === 1) base.destroyedAt = now;
+      bases[base.id] = base;
+    }
+    source.pirateBases = bases;
+    const { db } = sqliteD1();
+    await migrateAll(db, source);
+    const store = createD1Store(db);
+    const cpu: Record<string, { attributed: number; elapsed: number }> = {};
+    const npcScope = { kv: store, db, mode: "d1" as const, method: "POST", cpuMs: 0, budget: npcJobBudget() };
+    const npcStarted = performance.now();
+    await runWithScope(npcScope, async () => {
+      await withUniverse((universe) => tickPirates(universe, now), { npc: true });
+    });
+    cpu.npc = { attributed: npcScope.cpuMs, elapsed: performance.now() - npcStarted };
+    const maintenanceScope = { ...npcScope, cpuMs: 0, budget: maintenanceTickBudget() };
+    const maintenanceStarted = performance.now();
+    await runWithScope(maintenanceScope, async () => {
+      await withUniverse((universe) => advanceUniverse(universe, now), { maintenance: true });
+    });
+    cpu.maintenance = { attributed: maintenanceScope.cpuMs, elapsed: performance.now() - maintenanceStarted };
+    console.log(`scheduled cpu ms target=500 ${JSON.stringify(cpu)}`);
+    assert.ok(cpu.npc.elapsed < 500, `NPC scheduled elapsed ${cpu.npc.elapsed}ms`);
+    assert.ok(cpu.maintenance.elapsed < 500, `maintenance scheduled elapsed ${cpu.maintenance.elapsed}ms`);
+  });
+
+  it("bounds maintenance on a large pirate arrival and report backlog", async () => {
+    const { db, raw } = sqliteD1();
+    await migrateAll(db, fixture());
+    const now = Date.now();
+    const fleetInsert = raw.prepare(
+      "INSERT INTO save_fleets (id, owner_id, target_owner_id, version, doc) VALUES (?, 'npc_pirates', '', 1, ?)",
+    );
+    for (let index = 0; index < 1_400; index += 1) {
+      const id = `synthetic-pirate-${String(index).padStart(4, "0")}`;
+      fleetInsert.run(id, JSON.stringify({
+        id,
+        ownerPlayerId: "npc_pirates",
+        originPlanetId: "",
+        originPirateBaseId: "missing-base",
+        targetPlanetId: null,
+        targetPlayerId: null,
+        targetCoords: { galaxy: 1, system: 1, slot: 1 },
+        mission: "raid",
+        ships: {},
+        cargo: { metal: 0, crystal: 0, deuterium: 0 },
+        departedAt: now - 2,
+        arrivesAt: now - 1,
+        phase: "outbound",
+        reportId: null,
+      }));
+    }
+    const messageInsert = raw.prepare(
+      "INSERT INTO save_messages (id, owner_id, defender_id, kind, version, doc) VALUES (?, 'npc_pirates', 'plyr_target', 'report', 1, ?)",
+    );
+    for (let index = 0; index < 2_800; index += 1) {
+      const id = `synthetic-report-${String(index).padStart(4, "0")}`;
+      messageInsert.run(id, JSON.stringify({ id, attackerPlayerId: "npc_pirates", defenderPlayerId: "plyr_target" }));
+    }
+    const store = createD1Store(db);
+    const dueCount = () => Number((raw.prepare(
+      "SELECT COUNT(*) AS n FROM save_fleets WHERE json_extract(doc, '$.arrivesAt') <= ?",
+    ).get(now) as { n: number }).n);
+    const boardBefore = raw.prepare("SELECT built_at, doc FROM save_highscores WHERE id = 'board'").get() as
+      | { built_at: number; doc: string }
+      | undefined;
+    const before = dueCount();
+    const resolved = new Set<string>();
+    const batch = MAINTENANCE_TICK_FLEET_BUDGET;
+    for (let pass = 0; pass < 3; pass += 1) {
+      const priorIds = new Set((raw.prepare(
+        "SELECT id FROM save_fleets WHERE id LIKE 'synthetic-pirate-%'",
+      ).all() as Array<{ id: string }>).map((row) => row.id));
+      const scope = { kv: store, db, mode: "d1" as const, method: "POST", cpuMs: 0, budget: maintenanceTickBudget(performance.now()) };
+      await runWithScope(scope, () => withUniverse(
+        (universe) => advanceUniverse(universe, now),
+        { maintenance: true },
+      ));
+      assert.ok(scope.cpuMs < 300, `maintenance CPU ${scope.cpuMs}ms`);
+      const after = dueCount();
+      assert.equal(before - after, (pass + 1) * batch);
+      const nextIds = new Set((raw.prepare(
+        "SELECT id FROM save_fleets WHERE id LIKE 'synthetic-pirate-%'",
+      ).all() as Array<{ id: string }>).map((row) => row.id));
+      const thisPass = [...priorIds].filter((id) => !nextIds.has(id));
+      assert.equal(thisPass.length, batch);
+      for (const id of thisPass) {
+        assert.equal(resolved.has(id), false, `fleet ${id} resolved twice`);
+        resolved.add(id);
+      }
+    }
+    assert.equal(resolved.size, 3 * batch);
+    assert.equal(dueCount(), 1_400 - 3 * batch);
+    assert.equal(Number((raw.prepare("SELECT COUNT(*) AS n FROM save_messages WHERE id LIKE 'synthetic-report-%'").get() as { n: number }).n), 2_800);
+    const boardAfter = raw.prepare("SELECT built_at, doc FROM save_highscores WHERE id = 'board'").get() as
+      | { built_at: number; doc: string }
+      | undefined;
+    assert.equal(boardAfter?.built_at, boardBefore?.built_at);
+    assert.equal(boardAfter?.doc, boardBefore?.doc);
+  });
+
+  it("preserves unresolved pirate raids and does not restore resolved fleets", async () => {
+    const source = fixture();
+    const home = Object.values(source.planets).find((planet) => planet.ownerPlayerId) ?? Object.values(source.planets)[0]!;
+    const now = Date.now();
+    const unresolvedId = "pir:missing-target-raid";
+    const resolvedId = "plyr:resolved-maintenance-fleet";
+    source.fleets[unresolvedId] = {
+      id: unresolvedId,
+      ownerPlayerId: "npc_pirates",
+      originPlanetId: "",
+      originPirateBaseId: "pir:missing-origin",
+      targetPlanetId: "plyr:unloaded-target",
+      targetPlayerId: null,
+      targetCoords: { ...home.coords },
+      mission: "raid",
+      ships: {},
+      cargo: { metal: 0, crystal: 0, deuterium: 0 },
+      departedAt: now - 2,
+      arrivesAt: now - 1,
+      phase: "outbound",
+      reportId: null,
+    };
+    source.fleets[resolvedId] = {
+      id: resolvedId,
+      ownerPlayerId: home.ownerPlayerId,
+      originPlanetId: home.id,
+      targetPlanetId: home.id,
+      targetPlayerId: home.ownerPlayerId,
+      targetCoords: { ...home.coords },
+      mission: "deploy",
+      ships: { scout: 1 },
+      cargo: { metal: 0, crystal: 0, deuterium: 0 },
+      departedAt: now - 2,
+      arrivesAt: now - 1,
+      phase: "outbound",
+      reportId: null,
+    };
+    const { db, raw } = sqliteD1();
+    await migrateAll(db, source);
+    const store = createD1Store(db);
+    await runWithScope(
+      { kv: store, db, mode: "d1", method: "POST", cpuMs: 0, budget: maintenanceTickBudget() },
+      () => withUniverse((universe) => advanceUniverse(universe, now), { maintenance: true }),
+    );
+    const saved = await db.prepare("SELECT id FROM save_fleets WHERE id IN (?, ?)").bind(unresolvedId, resolvedId).all<{ id: string }>();
+    assert.deepEqual(saved.results?.map((row) => row.id), [unresolvedId]);
+    assert.equal(Number((raw.prepare("SELECT COUNT(*) AS n FROM save_fleets WHERE id = ?").get(unresolvedId) as { n: number }).n), 1);
   });
 
   it("loads an old row save through the NPC page without resetting progress", async () => {
