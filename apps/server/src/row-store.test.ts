@@ -20,6 +20,7 @@ import {
   HIGHSCORE_RANK_HISTORY_DAYS,
   joinUniverse,
   maintenanceTickBudget,
+  MAINTENANCE_TICK_FLEET_BUDGET,
   launchFleet,
   migrateOrResetUniverse,
   MAP_GALAXIES,
@@ -1494,8 +1495,12 @@ describe("row save review fixes", () => {
     const dueCount = () => Number((raw.prepare(
       "SELECT COUNT(*) AS n FROM save_fleets WHERE json_extract(doc, '$.arrivesAt') <= ?",
     ).get(now) as { n: number }).n);
+    const boardBefore = raw.prepare("SELECT built_at, doc FROM save_highscores WHERE id = 'board'").get() as
+      | { built_at: number; doc: string }
+      | undefined;
     const before = dueCount();
     const resolved = new Set<string>();
+    const batch = MAINTENANCE_TICK_FLEET_BUDGET;
     for (let pass = 0; pass < 3; pass += 1) {
       const priorIds = new Set((raw.prepare(
         "SELECT id FROM save_fleets WHERE id LIKE 'synthetic-pirate-%'",
@@ -1507,20 +1512,25 @@ describe("row save review fixes", () => {
       ));
       assert.ok(scope.cpuMs < 300, `maintenance CPU ${scope.cpuMs}ms`);
       const after = dueCount();
-      assert.equal(before - after, (pass + 1) * 24);
+      assert.equal(before - after, (pass + 1) * batch);
       const nextIds = new Set((raw.prepare(
         "SELECT id FROM save_fleets WHERE id LIKE 'synthetic-pirate-%'",
       ).all() as Array<{ id: string }>).map((row) => row.id));
       const thisPass = [...priorIds].filter((id) => !nextIds.has(id));
-      assert.equal(thisPass.length, 24);
+      assert.equal(thisPass.length, batch);
       for (const id of thisPass) {
         assert.equal(resolved.has(id), false, `fleet ${id} resolved twice`);
         resolved.add(id);
       }
     }
-    assert.equal(resolved.size, 72);
-    assert.equal(dueCount(), 1_400 - 72);
+    assert.equal(resolved.size, 3 * batch);
+    assert.equal(dueCount(), 1_400 - 3 * batch);
     assert.equal(Number((raw.prepare("SELECT COUNT(*) AS n FROM save_messages WHERE id LIKE 'synthetic-report-%'").get() as { n: number }).n), 2_800);
+    const boardAfter = raw.prepare("SELECT built_at, doc FROM save_highscores WHERE id = 'board'").get() as
+      | { built_at: number; doc: string }
+      | undefined;
+    assert.equal(boardAfter?.built_at, boardBefore?.built_at);
+    assert.equal(boardAfter?.doc, boardBefore?.doc);
   });
 
   it("preserves unresolved pirate raids and does not restore resolved fleets", async () => {

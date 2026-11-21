@@ -106,6 +106,11 @@ export interface UniverseWork {
   catalog?: boolean;
   /** Cron: every owned planet, refresh highscores when due. Does not raid. */
   maintenance?: boolean;
+  /**
+   * Set by withRowUniverse when a maintenance pass still has a due-fleet
+   * backlog. Loads only that batch and skips the highscore rebuild.
+   */
+  fleetDrain?: boolean;
   /** 10-minute cron: pirate and alien catch-up. Page loads leave this unset. */
   npc?: boolean;
   /** Rollback: every planet, fleet, message, and system. */
@@ -182,6 +187,8 @@ interface LoadedRows {
   messageRefs: Map<string, object>;
   /** Set when a purge must hit D1 even if the loaded window did not change. */
   forceSave: boolean;
+  /** Drain pass: leave cached highscore boards untouched. */
+  deferScores: boolean;
   /** Report ids a purge removes, including rows outside the loaded window. */
   purgeReportIds: string[];
   messagePurge?: { playerId: string; category: MessageCategory };
@@ -2749,8 +2756,9 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
   const requestedIds = [...new Set((work?.playerIds ?? []).filter(Boolean))] as string[];
   const planetIds = [...new Set((work?.planetIds ?? []).filter((id): id is string => Boolean(id)))];
   const wide =
-    Boolean(work?.maintenance || work?.full) ||
-    (requestedIds.length === 0 && !work?.catalog && !work?.npc);
+    !work?.fleetDrain &&
+    (Boolean(work?.maintenance || work?.full) ||
+      (requestedIds.length === 0 && !work?.catalog && !work?.npc));
   // Maintenance and other wide reads still take every player.
   // The NPC cron pages by id so it does not scan every player doc at once.
   const pageNpc = Boolean(work?.npc) && !wide;
@@ -2811,6 +2819,7 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
     messageOwners: new Map(),
     messageRefs: new Map(),
     forceSave: false,
+    deferScores: false,
     purgeReportIds: [],
     npcBaseVersions: new Map(),
     npcBasesComplete: false,
@@ -2858,6 +2867,42 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
     occupancyLoaded = placePirates;
     await loadNpcBasesForNpc(db, loaded);
     // Raids need the owned bodies on this page. Placement still needs occupied slots.
+  } else if (work?.fleetDrain) {
+    const ownerIds = [...new Set((work.playerIds ?? []).filter(Boolean))] as string[];
+    if (ownerIds.length) {
+      const rows = await allInList<{ id: string; version: number; doc: string }>(
+        db,
+        ownerIds,
+        (list) => `SELECT id, version, doc FROM save_players WHERE id IN (${list.clause})`,
+      );
+      applyPlayerRows(loaded, rows);
+    }
+    const drainPlanets = [...new Set((work.planetIds ?? []).filter((id): id is string => Boolean(id)))];
+    if (drainPlanets.length) {
+      const rows = await allInList<{ id: string; version: number; doc: string }>(
+        db,
+        drainPlanets,
+        (list) => `SELECT id, version, doc FROM save_planets WHERE id IN (${list.clause})`,
+      );
+      applyPlanetRows(loaded, rows, drainPlanets);
+    }
+    const fleetIds = [...new Set(work.dueFleetIds ?? [])];
+    if (fleetIds.length) {
+      const rows = await allInList<{ id: string; version: number; doc: string }>(
+        db,
+        fleetIds,
+        (list) => `SELECT id, version, doc FROM save_fleets WHERE id IN (${list.clause})`,
+      );
+      applyFleetRows(loaded, rows);
+    }
+    await loadAllNpcBases(db, loaded);
+    const systems = new Map<string, [number, number]>();
+    for (const pair of work.extraSystems ?? []) systems.set(`${pair[0]}:${pair[1]}`, pair);
+    for (const pair of systemPairs(Object.values(loaded.universe.planets))) {
+      systems.set(`${pair[0]}:${pair[1]}`, pair);
+    }
+    if (systems.size) await loadSystems(db, loaded, [...systems.values()]);
+    loaded.deferScores = true;
   } else if (work?.catalog) {
     const stubs = await all<{
       id: string;
@@ -2946,12 +2991,16 @@ export async function loadWorkingSet(db: D1Like, work: UniverseWork | undefined)
   }
 
   if (!work?.npc) loaded.universe.skipNpcRaids = true;
-  if (!placePirates) placePirates = pirateSitesNeeded(loaded.universe);
-  if (work?.npc && !loaded.npcBasesComplete) loaded.universe.skipPirateTopUp = true;
-  else if (placePirates) {
-    if (!occupancyLoaded) await loadOccupancy(db, loaded);
-  } else {
+  if (work?.fleetDrain) {
     loaded.universe.skipPirateTopUp = true;
+  } else {
+    if (!placePirates) placePirates = pirateSitesNeeded(loaded.universe);
+    if (work?.npc && !loaded.npcBasesComplete) loaded.universe.skipPirateTopUp = true;
+    else if (placePirates) {
+      if (!occupancyLoaded) await loadOccupancy(db, loaded);
+    } else {
+      loaded.universe.skipPirateTopUp = true;
+    }
   }
   const now = Date.now();
   if (!work?.npc && !work?.full) {
@@ -3545,7 +3594,10 @@ async function saveWorkingSet(db: D1Like, loaded: LoadedRows, rebuildScores: boo
   let allianceJson: string | null = null;
   let categoryDocs: CategoryHighscores | null = null;
   let boardAt = 0;
-  if (rebuildScores) {
+  if (loaded.deferScores) {
+    // A drain pass does not rebuild or merge the boards. The next pass that
+    // finishes the backlog scores every player.
+  } else if (rebuildScores) {
     const now = Date.now();
     const previousRows = currentScope()?.priorHighscoreRows;
     const cache = buildHighscoreCache(universe, false, previousRows, now);
@@ -3888,7 +3940,7 @@ function npcBasesChanged(loaded: LoadedRows): boolean {
 async function attachBoard(db: D1Like, work: UniverseWork | undefined): Promise<void> {
   const scope = currentScope();
   if (scope) scope.rowSave = true;
-  if (work?.npc) return;
+  if (work?.npc || work?.fleetDrain) return;
   const cached = await readScoreCache(db);
   const board = cached.board;
   if (!scope) return;
@@ -4017,6 +4069,91 @@ async function prepareMessagePurge(db: D1Like, loaded: LoadedRows): Promise<void
   loaded.purgeReportIds = drop;
 }
 
+function realCommanderId(id: string | null | undefined): id is string {
+  return Boolean(id) && id !== "npc_pirates" && id !== "npc_aliens";
+}
+
+/**
+ * When more due fleets remain than this pass can finish, load only that
+ * batch. A pass that can clear the backlog stays on the full maintenance read
+ * so highscores still rebuild.
+ */
+async function maintenanceDrainPlan(db: D1Like): Promise<{
+  fleetIds: string[];
+  planetIds: string[];
+  owners: string[];
+  systems: Array<[number, number]>;
+} | null> {
+  const limit = dueFleetLimit();
+  if (limit == null || limit <= 0) return null;
+  const now = Date.now();
+  const rows = await all<{
+    id: string;
+    origin_planet_id: string | null;
+    target_planet_id: string | null;
+    owner_id: string | null;
+    target_player_id: string | null;
+    galaxy: number | null;
+    system: number | null;
+  }>(
+    db,
+    `SELECT id,
+        json_extract(doc, '$.originPlanetId') AS origin_planet_id,
+        json_extract(doc, '$.targetPlanetId') AS target_planet_id,
+        json_extract(doc, '$.ownerPlayerId') AS owner_id,
+        json_extract(doc, '$.targetPlayerId') AS target_player_id,
+        json_extract(doc, '$.targetCoords.galaxy') AS galaxy,
+        json_extract(doc, '$.targetCoords.system') AS system
+      FROM save_fleets
+      WHERE json_extract(doc, '$.arrivesAt') <= ?
+        AND (
+          json_extract(doc, '$.targetPlanetId') IS NULL
+          OR json_extract(doc, '$.targetPlanetId') = ''
+          OR EXISTS (
+            SELECT 1 FROM save_planets AS planet
+            WHERE planet.id = json_extract(doc, '$.targetPlanetId')
+          )
+        )
+      ORDER BY json_extract(doc, '$.arrivesAt') ASC, id ASC
+      LIMIT ?`,
+    now,
+    limit + 1,
+  );
+  if (rows.length <= limit) return null;
+  const chosen = rows.slice(0, limit);
+  const planetIds = new Set<string>();
+  const systems = new Map<string, [number, number]>();
+  const owners = new Set<string>();
+  for (const fleet of chosen) {
+    if (fleet.origin_planet_id) planetIds.add(fleet.origin_planet_id);
+    if (fleet.target_planet_id) planetIds.add(fleet.target_planet_id);
+    if (realCommanderId(fleet.owner_id)) owners.add(fleet.owner_id);
+    if (realCommanderId(fleet.target_player_id)) owners.add(fleet.target_player_id);
+    if (fleet.galaxy && fleet.system) {
+      systems.set(`${fleet.galaxy}:${fleet.system}`, [Number(fleet.galaxy), Number(fleet.system)]);
+    }
+  }
+  if (planetIds.size) {
+    const planets = await allInList<{ owner_id: string; galaxy: number; system: number }>(
+      db,
+      [...planetIds],
+      (list) => `SELECT owner_id, galaxy, system FROM save_planets WHERE id IN (${list.clause})`,
+    );
+    for (const planet of planets) {
+      if (realCommanderId(planet.owner_id)) owners.add(planet.owner_id);
+      if (planet.galaxy && planet.system) {
+        systems.set(`${planet.galaxy}:${planet.system}`, [planet.galaxy, planet.system]);
+      }
+    }
+  }
+  return {
+    fleetIds: chosen.map((fleet) => fleet.id),
+    planetIds: [...planetIds],
+    owners: [...owners],
+    systems: [...systems.values()],
+  };
+}
+
 /**
  * Writes lock the named players (or the world, when the action is global)
  * and reject a stale row version. Reads never wait on a lock.
@@ -4032,24 +4169,40 @@ export async function withRowUniverse<T>(
   if (!(await migrationDone(db))) {
     throw new Error("Row save is not migrated.");
   }
-  const broad = Boolean(work?.maintenance || work?.catalog || work?.npc || work?.full);
-  const requested = [...new Set((work?.playerIds ?? []).filter(Boolean))] as string[];
+  let job = work;
+  if (work?.maintenance && !work.full && !work.fleetDrain) {
+    const drain = await maintenanceDrainPlan(db);
+    if (drain) {
+      job = {
+        ...work,
+        fleetDrain: true,
+        playerIds: drain.owners,
+        planetIds: drain.planetIds,
+        extraSystems: [...(work.extraSystems ?? []), ...drain.systems],
+        dueFleetIds: drain.fleetIds,
+      };
+    }
+  }
+  const broad = Boolean(
+    (job?.maintenance && !job.fleetDrain) || job?.catalog || job?.npc || job?.full,
+  );
+  const requested = [...new Set((job?.playerIds ?? []).filter(Boolean))] as string[];
   const due =
     broad || requested.length === 0
       ? { planetIds: [] as string[], owners: [] as string[], systems: [] as Array<[number, number]>, fleetIds: [] as string[] }
       : await expandDueFleets(db, requested);
 
   const merged: UniverseWork = {
-    ...work,
+    ...job,
     playerIds: [...new Set([...requested, ...due.owners])],
-    planetIds: [...new Set([...(work?.planetIds ?? []), ...due.planetIds])],
-    extraSystems: [...(work?.extraSystems ?? []), ...due.systems],
-    dueFleetIds: due.fleetIds,
+    planetIds: [...new Set([...(job?.planetIds ?? []), ...due.planetIds])],
+    extraSystems: [...(job?.extraSystems ?? []), ...due.systems],
+    dueFleetIds: job?.fleetDrain ? job.dueFleetIds : due.fleetIds,
   };
   const playerIds = [
-    ...new Set([...(await resolvePlayerIds(db, work)), ...due.owners]),
+    ...new Set([...(await resolvePlayerIds(db, job)), ...due.owners]),
   ].sort();
-  const locks = broad || playerIds.length === 0 ? ["__world__"] : playerIds;
+  const locks = broad || job?.fleetDrain || playerIds.length === 0 ? ["__world__"] : playerIds;
   const loadWork: UniverseWork = {
     ...merged,
     playerIds: playerIds.length ? playerIds : merged.playerIds,
@@ -4057,17 +4210,17 @@ export async function withRowUniverse<T>(
 
   const play = async () => {
     const loaded = await loadWorkingSet(db, loadWork);
-    if (work?.npc && loaded.legacyWorldFormat) loaded.forceSave = true;
-    await attachBoard(db, work);
+    if (job?.npc && loaded.legacyWorldFormat) loaded.forceSave = true;
+    await attachBoard(db, job);
     const result = await runGame(loaded.universe, fn);
-    if (work?.messagePurge) {
-      loaded.messagePurge = work.messagePurge;
+    if (job?.messagePurge) {
+      loaded.messagePurge = job.messagePurge;
       await prepareMessagePurge(db, loaded);
     }
-    if (work?.npc) continueNpcBasePage(loaded);
+    if (job?.npc) continueNpcBasePage(loaded);
     restoreUnresolvedFleets(loaded);
     loaded.pendingSystems = await planSystemWrites(db, loaded);
-    const scoresDue = Boolean(work?.maintenance);
+    const scoresDue = Boolean(job?.maintenance && !job.fleetDrain);
     return { loaded, result, scoresDue };
   };
 
